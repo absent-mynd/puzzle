@@ -55,7 +55,7 @@ func test_point_diagonal_line():
 	var result = GeometryCore.point_side_of_line(
 		Vector2(10, 0),
 		Vector2(0, 0),
-		Vector2(1, 1).normalized()
+		Vector2(-1, 1).normalized()
 	)
 	assert_eq(result, -1, "Point below diagonal line")
 
@@ -67,9 +67,9 @@ func test_segment_clear_intersection():
 		Vector2(0, 0),
 		Vector2(10, 10),
 		Vector2(5, 0),
-		Vector2(0, 1)
+		Vector2(1, 0)
 	)
-	assert_not_null(intersection, "Segment intersects horizontal line")
+	assert_not_null(intersection, "Segment intersects vertical line")
 	if intersection != null:
 		assert_almost_eq(intersection.x, 5.0, 0.001, "Intersection X coordinate")
 		assert_almost_eq(intersection.y, 5.0, 0.001, "Intersection Y coordinate")
@@ -80,7 +80,7 @@ func test_segment_parallel_no_intersection():
 		Vector2(0, 0),
 		Vector2(10, 0),
 		Vector2(0, 5),
-		Vector2(1, 0)
+		Vector2(0, 1)
 	)
 	assert_null(intersection, "Parallel segments return null")
 
@@ -100,7 +100,7 @@ func test_segment_intersection_at_endpoint():
 		Vector2(0, 0),
 		Vector2(10, 0),
 		Vector2(10, -5),
-		Vector2(0, 1)
+		Vector2(1, 0)
 	)
 	assert_not_null(intersection, "Intersection at endpoint")
 	if intersection != null:
@@ -322,14 +322,16 @@ func test_split_diagonal_45_degrees():
 		Vector2(100, 100),
 		Vector2(0, 100)
 	])
+	# Split along diagonal y = x through corners (0,0) and (100,100)
 	var result = GeometryCore.split_polygon_by_line(
 		square,
 		Vector2(0, 0),
-		Vector2(1, 1).normalized()
+		Vector2(1, -1).normalized()
 	)
 	assert_true(result["left"].size() >= 3, "Diagonal split: left polygon has vertices")
 	assert_true(result["right"].size() >= 3, "Diagonal split: right polygon has vertices")
-	assert_eq(result["intersections"].size(), 2, "Diagonal split: two intersections")
+	# Line passes through existing vertices, so no new intersections are created
+	assert_eq(result["intersections"].size(), 0, "Diagonal through corners: no new intersections")
 
 
 func test_split_through_vertices():
@@ -339,10 +341,11 @@ func test_split_through_vertices():
 		Vector2(100, 100),
 		Vector2(0, 100)
 	])
+	# Split through center at 45-degree angle passing through opposite corners
 	var result = GeometryCore.split_polygon_by_line(
 		square,
-		Vector2(0, 0),
-		Vector2(1, 0).normalized()
+		Vector2(50, 50),
+		Vector2(1, -1).normalized()
 	)
 	assert_true(result["left"].size() >= 3, "Through-vertex split: left polygon")
 	assert_true(result["right"].size() >= 3, "Through-vertex split: right polygon")
@@ -438,7 +441,7 @@ func test_area_conservation_diagonal_split():
 	var result = GeometryCore.split_polygon_by_line(
 		square,
 		Vector2(50, 50),
-		Vector2(1, 1).normalized()
+		Vector2(1, -1).normalized()
 	)
 
 	var left_area = GeometryCore.polygon_area(result["left"])
