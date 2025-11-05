@@ -170,13 +170,15 @@ func get_grid_bounds() -> Rect2:
 ## Anchor Selection Methods (for Issue 6)
 
 ## Handle input for cell selection and hover
-func _unhandled_input(event: InputEvent) -> void:
+## Using _input() instead of _unhandled_input() to ensure mouse events are received
+func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			var world_pos = get_global_mouse_position()
 			var cell = get_cell_at_world_pos(world_pos)
 			if cell:
 				select_cell(cell.grid_position)
+				get_viewport().set_input_as_handled()  # Mark input as handled
 
 	elif event is InputEventMouseMotion:
 		var world_pos = get_global_mouse_position()
