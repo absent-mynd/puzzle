@@ -15,6 +15,9 @@ class_name FoldSystem
 ## Reference to the GridManager
 var grid_manager: GridManager
 
+## Reference to the Player (optional - for fold validation)
+var player: Player = null
+
 ## History of fold operations (for undo system later)
 var fold_history: Array[Dictionary] = []
 
@@ -27,6 +30,13 @@ var next_fold_id: int = 0
 ## @param grid: The GridManager instance to operate on
 func initialize(grid: GridManager):
 	grid_manager = grid
+
+
+## Set the player reference for fold validation
+##
+## @param p: The Player instance
+func set_player(p: Player):
+	player = p
 
 
 ## Fold Detection Methods
@@ -164,6 +174,48 @@ func validate_minimum_distance(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 ## @return: true if fold is horizontal or vertical
 func validate_same_row_or_column(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 	return is_horizontal_fold(anchor1, anchor2) or is_vertical_fold(anchor1, anchor2)
+
+
+## Player Validation Methods
+
+## Validate fold with respect to player position
+##
+## Checks if the fold would affect the player in any way:
+## 1. Player is in the region that would be removed (between anchors)
+## 2. Player's cell would be split by the fold seam (Phase 4+ only)
+##
+## For Phase 3, we only check rule #1 since cells aren't split.
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: Dictionary with keys {valid: bool, reason: String}
+func validate_fold_with_player(anchor1: Vector2i, anchor2: Vector2i) -> Dictionary:
+	# If no player reference, validation passes
+	if not player:
+		return {valid = true, reason = ""}
+
+	# Check if player is in removed region
+	if is_player_in_removed_region(anchor1, anchor2):
+		return {valid = false, reason = "Cannot fold - player in the way"}
+
+	# Future (Phase 4): Check if player's cell would be split
+	# if would_split_player_cell(anchor1, anchor2):
+	#     return {valid = false, reason = "Cannot fold - player's cell would be split"}
+
+	return {valid = true, reason = ""}
+
+
+## Check if player is in the region that would be removed by the fold
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true if player's position is in the removed region
+func is_player_in_removed_region(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	if not player:
+		return false
+
+	var removed_cells = calculate_removed_cells(anchor1, anchor2)
+	return player.grid_position in removed_cells
 
 
 ## Helper Methods
@@ -418,11 +470,18 @@ func execute_fold(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 		push_error("FoldSystem: GridManager not initialized")
 		return false
 
-	# Validate fold before execution
+	# Validate fold before execution (basic validation)
 	var validation = validate_fold(anchor1, anchor2)
 
 	if not validation.valid:
 		push_warning("FoldSystem: Fold validation failed: " + validation.reason)
+		return false
+
+	# Validate with player position
+	var player_validation = validate_fold_with_player(anchor1, anchor2)
+
+	if not player_validation.valid:
+		push_warning("FoldSystem: Player validation failed: " + player_validation.reason)
 		return false
 
 	var orientation = get_fold_orientation(anchor1, anchor2)
