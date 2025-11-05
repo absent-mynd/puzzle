@@ -1,0 +1,349 @@
+## Space-Folding Puzzle Game - FoldSystem Class
+##
+## Handles axis-aligned (horizontal and vertical) folding operations.
+## This is the foundation for the full geometric folding system.
+##
+## @author: Space-Folding Puzzle Team
+## @version: 1.0
+## @phase: 3 - Simple Axis-Aligned Folding
+
+extends Node
+class_name FoldSystem
+
+## Properties
+
+## Reference to the GridManager
+var grid_manager: GridManager
+
+## History of fold operations (for undo system later)
+var fold_history: Array[Dictionary] = []
+
+## Next fold ID counter
+var next_fold_id: int = 0
+
+
+## Initialize the FoldSystem with a reference to GridManager
+##
+## @param grid: The GridManager instance to operate on
+func initialize(grid: GridManager):
+	grid_manager = grid
+
+
+## Fold Detection Methods
+
+## Check if the fold between two anchors is horizontal
+##
+## A fold is horizontal if both anchors have the same Y coordinate.
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true if fold is horizontal
+func is_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	return anchor1.y == anchor2.y
+
+
+## Check if the fold between two anchors is vertical
+##
+## A fold is vertical if both anchors have the same X coordinate.
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true if fold is vertical
+func is_vertical_fold(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	return anchor1.x == anchor2.x
+
+
+## Get the orientation of a fold
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: "horizontal", "vertical", or "diagonal"
+func get_fold_orientation(anchor1: Vector2i, anchor2: Vector2i) -> String:
+	if is_horizontal_fold(anchor1, anchor2):
+		return "horizontal"
+	elif is_vertical_fold(anchor1, anchor2):
+		return "vertical"
+	else:
+		return "diagonal"
+
+
+## Helper Methods
+
+## Calculate which cells will be removed by a fold
+##
+## Returns the grid positions of all cells between the two anchors
+## (not including the anchor cells themselves).
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: Array of grid positions that will be removed
+func calculate_removed_cells(anchor1: Vector2i, anchor2: Vector2i) -> Array[Vector2i]:
+	var removed_cells: Array[Vector2i] = []
+
+	if is_horizontal_fold(anchor1, anchor2):
+		# Ensure anchor1 is leftmost
+		var left = min(anchor1.x, anchor2.x)
+		var right = max(anchor1.x, anchor2.x)
+		var y = anchor1.y
+
+		# Add all cells between anchors (exclusive)
+		for x in range(left + 1, right):
+			removed_cells.append(Vector2i(x, y))
+
+	elif is_vertical_fold(anchor1, anchor2):
+		# Ensure anchor1 is topmost
+		var top = min(anchor1.y, anchor2.y)
+		var bottom = max(anchor1.y, anchor2.y)
+		var x = anchor1.x
+
+		# Add all cells between anchors (exclusive)
+		for y in range(top + 1, bottom):
+			removed_cells.append(Vector2i(x, y))
+
+	return removed_cells
+
+
+## Get the distance between two anchors (number of cells between them)
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: Number of cells between anchors
+func get_fold_distance(anchor1: Vector2i, anchor2: Vector2i) -> int:
+	if is_horizontal_fold(anchor1, anchor2):
+		return abs(anchor2.x - anchor1.x) - 1
+	elif is_vertical_fold(anchor1, anchor2):
+		return abs(anchor2.y - anchor1.y) - 1
+	else:
+		return -1  # Invalid for diagonal folds
+
+
+## Create a fold record for the history system
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @param removed_cells: Array of cells that were removed
+## @param orientation: Fold orientation ("horizontal" or "vertical")
+## @return: Dictionary containing fold metadata
+func create_fold_record(anchor1: Vector2i, anchor2: Vector2i, removed_cells: Array[Vector2i], orientation: String) -> Dictionary:
+	var record = {
+		"fold_id": next_fold_id,
+		"anchor1": anchor1,
+		"anchor2": anchor2,
+		"removed_cells": removed_cells.duplicate(),
+		"orientation": orientation,
+		"timestamp": Time.get_ticks_msec()
+	}
+
+	next_fold_id += 1
+	return record
+
+
+## Horizontal Fold Implementation
+
+## Execute a horizontal fold between two anchors
+##
+## Algorithm:
+## 1. Normalize anchor order (ensure anchor1 is leftmost)
+## 2. Calculate removed region
+## 3. Remove cells
+## 4. Shift cells to the right of anchor2
+## 5. Update world positions
+## 6. Create merged anchor point
+## 7. Record fold operation
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
+	# 1. Normalize anchor order (ensure anchor1 is leftmost)
+	var left_anchor = anchor1 if anchor1.x < anchor2.x else anchor2
+	var right_anchor = anchor2 if anchor1.x < anchor2.x else anchor1
+
+	var y = left_anchor.y  # Row where fold occurs
+
+	# 2. Calculate removed region
+	var removed_cells = calculate_removed_cells(left_anchor, right_anchor)
+
+	# 3. Remove cells from grid
+	for pos in removed_cells:
+		var cell = grid_manager.get_cell(pos)
+		if cell:
+			# Remove from dictionary first
+			grid_manager.cells.erase(pos)
+			# Remove from scene tree
+			if cell.get_parent():
+				cell.get_parent().remove_child(cell)
+			# Free the cell
+			cell.queue_free()
+
+	# 4. Shift cells to the right of right_anchor
+	var shift_distance = right_anchor.x - left_anchor.x
+
+	# Collect cells that need to be shifted
+	var cells_to_shift: Array[Dictionary] = []
+	for x in range(right_anchor.x + 1, grid_manager.grid_size.x):
+		var old_pos = Vector2i(x, y)
+		var cell = grid_manager.get_cell(old_pos)
+		if cell:
+			var new_x = x - shift_distance
+			var new_pos = Vector2i(new_x, y)
+			cells_to_shift.append({
+				"cell": cell,
+				"old_pos": old_pos,
+				"new_pos": new_pos
+			})
+
+	# Actually move the cells
+	for data in cells_to_shift:
+		var cell = data.cell
+		var old_pos = data.old_pos
+		var new_pos = data.new_pos
+
+		# Update cell's grid position
+		cell.grid_position = new_pos
+
+		# Update world position (recalculate geometry)
+		var new_world_pos = grid_manager.grid_to_world(new_pos)
+		var cell_size = grid_manager.cell_size
+		cell.geometry = PackedVector2Array([
+			new_world_pos,
+			new_world_pos + Vector2(cell_size, 0),
+			new_world_pos + Vector2(cell_size, cell_size),
+			new_world_pos + Vector2(0, cell_size)
+		])
+		cell.update_visual()
+
+		# Update grid manager's dictionary
+		grid_manager.cells.erase(old_pos)
+		grid_manager.cells[new_pos] = cell
+
+	# 6. Record fold operation
+	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
+	fold_history.append(fold_record)
+
+
+## Vertical Fold Implementation
+
+## Execute a vertical fold between two anchors
+##
+## Algorithm:
+## 1. Normalize anchor order (ensure anchor1 is topmost)
+## 2. Calculate removed region
+## 3. Remove cells
+## 4. Shift cells below anchor2
+## 5. Update world positions
+## 6. Create merged anchor point
+## 7. Record fold operation
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
+	# 1. Normalize anchor order (ensure anchor1 is topmost)
+	var top_anchor = anchor1 if anchor1.y < anchor2.y else anchor2
+	var bottom_anchor = anchor2 if anchor1.y < anchor2.y else anchor1
+
+	var x = top_anchor.x  # Column where fold occurs
+
+	# 2. Calculate removed region
+	var removed_cells = calculate_removed_cells(top_anchor, bottom_anchor)
+
+	# 3. Remove cells from grid
+	for pos in removed_cells:
+		var cell = grid_manager.get_cell(pos)
+		if cell:
+			# Remove from dictionary first
+			grid_manager.cells.erase(pos)
+			# Remove from scene tree
+			if cell.get_parent():
+				cell.get_parent().remove_child(cell)
+			# Free the cell
+			cell.queue_free()
+
+	# 4. Shift cells below bottom_anchor
+	var shift_distance = bottom_anchor.y - top_anchor.y
+
+	# Collect cells that need to be shifted
+	var cells_to_shift: Array[Dictionary] = []
+	for y in range(bottom_anchor.y + 1, grid_manager.grid_size.y):
+		var old_pos = Vector2i(x, y)
+		var cell = grid_manager.get_cell(old_pos)
+		if cell:
+			var new_y = y - shift_distance
+			var new_pos = Vector2i(x, new_y)
+			cells_to_shift.append({
+				"cell": cell,
+				"old_pos": old_pos,
+				"new_pos": new_pos
+			})
+
+	# Actually move the cells
+	for data in cells_to_shift:
+		var cell = data.cell
+		var old_pos = data.old_pos
+		var new_pos = data.new_pos
+
+		# Update cell's grid position
+		cell.grid_position = new_pos
+
+		# Update world position (recalculate geometry)
+		var new_world_pos = grid_manager.grid_to_world(new_pos)
+		var cell_size = grid_manager.cell_size
+		cell.geometry = PackedVector2Array([
+			new_world_pos,
+			new_world_pos + Vector2(cell_size, 0),
+			new_world_pos + Vector2(cell_size, cell_size),
+			new_world_pos + Vector2(0, cell_size)
+		])
+		cell.update_visual()
+
+		# Update grid manager's dictionary
+		grid_manager.cells.erase(old_pos)
+		grid_manager.cells[new_pos] = cell
+
+	# 6. Record fold operation
+	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
+	fold_history.append(fold_record)
+
+
+## Main Fold Execution Method
+
+## Execute a fold between two anchor points
+##
+## This is the main entry point for fold execution. It determines the
+## fold orientation and routes to the appropriate handler.
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true on success, false on failure
+func execute_fold(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	if not grid_manager:
+		push_error("FoldSystem: GridManager not initialized")
+		return false
+
+	var orientation = get_fold_orientation(anchor1, anchor2)
+
+	match orientation:
+		"horizontal":
+			execute_horizontal_fold(anchor1, anchor2)
+			return true
+		"vertical":
+			execute_vertical_fold(anchor1, anchor2)
+			return true
+		"diagonal":
+			push_warning("FoldSystem: Diagonal folds not yet supported (Phase 3 limitation)")
+			return false
+		_:
+			push_error("FoldSystem: Unknown fold orientation")
+			return false
+
+
+## Get the fold history
+##
+## @return: Array of fold records
+func get_fold_history() -> Array[Dictionary]:
+	return fold_history
+
+
+## Clear fold history (useful for testing)
+func clear_fold_history():
+	fold_history.clear()
+	next_fold_id = 0
