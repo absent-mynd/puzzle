@@ -10,6 +10,11 @@
 extends CharacterBody2D
 class_name Player
 
+## Signals
+
+## Emitted when player reaches a goal cell
+signal goal_reached
+
 ## Properties
 
 ## Current grid position
@@ -20,6 +25,9 @@ var target_position: Vector2
 
 ## Whether player is currently moving
 var is_moving: bool = false
+
+## Whether player input is enabled
+var input_enabled: bool = true
 
 ## Movement speed in pixels per second (only used for backup non-tween movement)
 var movement_speed: float = 300.0
@@ -70,6 +78,10 @@ func _process(delta: float) -> void:
 
 ## Handle keyboard input for movement
 func handle_input() -> void:
+	# Don't accept input if disabled
+	if not input_enabled:
+		return
+
 	var input_direction := Vector2i.ZERO
 
 	# Check for WASD or Arrow keys
@@ -196,7 +208,3 @@ func set_grid_position(new_pos: Vector2i) -> void:
 	if cell:
 		position = cell.get_center()
 		target_position = position
-
-
-## Signal emitted when player reaches goal
-signal goal_reached

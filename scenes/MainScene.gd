@@ -11,6 +11,14 @@ extends Node2D
 ## Starting position for player
 var player_start_position := Vector2i(5, 5)
 
+## Game state
+var is_level_complete: bool = false
+
+## UI elements
+var win_ui: Control = null
+var win_label: Label = null
+var restart_button: Button = null
+
 
 func _ready() -> void:
 	# Wait for grid to be ready
@@ -19,6 +27,9 @@ func _ready() -> void:
 	# Initialize player with grid manager
 	if player and grid_manager:
 		player.initialize(grid_manager, player_start_position)
+
+		# Connect to player signals
+		player.goal_reached.connect(_on_player_goal_reached)
 
 		# Optional: Set up some test walls
 		setup_test_level()
@@ -69,3 +80,68 @@ func setup_test_level() -> void:
 	var water2 = grid_manager.get_cell(Vector2i(3, 6))
 	if water2:
 		water2.set_cell_type(2)
+
+
+## Handle player reaching goal
+func _on_player_goal_reached() -> void:
+	if is_level_complete:
+		return  # Already won, don't trigger again
+
+	is_level_complete = true
+
+	# Disable player input
+	if player:
+		player.input_enabled = false
+
+	show_win_ui()
+
+
+## Display win UI
+func show_win_ui() -> void:
+	# Create UI container
+	win_ui = Control.new()
+	win_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(win_ui)
+
+	# Create semi-transparent background
+	var bg = ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.7)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	win_ui.add_child(bg)
+
+	# Create center container
+	var center_container = VBoxContainer.new()
+	center_container.custom_minimum_size = Vector2(400, 200)
+	center_container.position = Vector2(440, 260)  # Centered on 1280x720
+	win_ui.add_child(center_container)
+
+	# Add win message
+	win_label = Label.new()
+	win_label.text = "LEVEL COMPLETE!"
+	win_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	win_label.add_theme_font_size_override("font_size", 48)
+	win_label.add_theme_color_override("font_color", Color.GREEN)
+	center_container.add_child(win_label)
+
+	# Add spacing
+	var spacer = Control.new()
+	spacer.custom_minimum_size = Vector2(0, 30)
+	center_container.add_child(spacer)
+
+	# Add restart button
+	restart_button = Button.new()
+	restart_button.text = "Restart Level"
+	restart_button.custom_minimum_size = Vector2(200, 50)
+	restart_button.pressed.connect(_on_restart_pressed)
+	center_container.add_child(restart_button)
+
+
+## Handle restart button press
+func _on_restart_pressed() -> void:
+	# Reload the scene
+	get_tree().reload_current_scene()
+
+
+## Check if level is complete (for testing)
+func check_win_condition() -> bool:
+	return is_level_complete
