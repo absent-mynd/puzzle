@@ -21,6 +21,13 @@ func before_each():
 
 func after_each():
 	if grid_manager:
+		# Free all cells first to avoid memory leaks
+		for cell in grid_manager.cells.values():
+			if cell:
+				cell.free()
+		grid_manager.cells.clear()
+
+		# Then free the grid manager
 		grid_manager.free()
 	grid_manager = null
 

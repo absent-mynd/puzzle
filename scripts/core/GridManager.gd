@@ -215,7 +215,8 @@ func clear_selection() -> void:
 			cell.clear_visual_feedback()
 
 	selected_anchors.clear()
-	preview_line.visible = false
+	if preview_line:
+		preview_line.visible = false
 
 
 ## Get selected anchor positions
@@ -248,6 +249,9 @@ func clear_all_hover_effects() -> void:
 
 ## Update preview line between anchors
 func update_preview_line() -> void:
+	if not preview_line:
+		return
+
 	if selected_anchors.size() == 2:
 		var cell1 = get_cell(selected_anchors[0])
 		var cell2 = get_cell(selected_anchors[1])
