@@ -56,9 +56,11 @@ func create_grid() -> void:
 	for y in range(grid_size.y):
 		for x in range(grid_size.x):
 			var grid_pos = Vector2i(x, y)
-			var world_pos = grid_to_world(grid_pos)
+			# Use local position (relative to GridManager) not absolute world position
+			# since cells are children of GridManager and GridManager.position = grid_origin
+			var local_pos = Vector2(grid_pos) * cell_size
 
-			var cell = Cell.new(grid_pos, world_pos, cell_size)
+			var cell = Cell.new(grid_pos, local_pos, cell_size)
 			cells[grid_pos] = cell
 			add_child(cell)
 
@@ -81,21 +83,24 @@ func get_cell(grid_pos: Vector2i) -> Cell:
 
 
 ## Get cell at world position
-## @param world_pos: World coordinates
+## @param world_pos: World coordinates (global)
 ## @return: Cell at position, or null if none found
 func get_cell_at_world_pos(world_pos: Vector2) -> Cell:
+	# Convert global world position to local coordinates (relative to GridManager)
+	var local_pos = to_local(world_pos)
+
 	# First try simple grid lookup
 	var grid_pos = world_to_grid(world_pos)
 	var cell = get_cell(grid_pos)
 
 	# For cells that haven't been split, simple lookup works
-	if cell and cell.contains_point(world_pos):
+	if cell and cell.contains_point(local_pos):
 		return cell
 
 	# For partial cells, check all cells for containment
 	# (This becomes important after folding splits cells)
 	for c in cells.values():
-		if c.contains_point(world_pos):
+		if c.contains_point(local_pos):
 			return c
 
 	return null
@@ -260,12 +265,10 @@ func update_preview_line() -> void:
 		var cell2 = get_cell(selected_anchors[1])
 
 		if cell1 and cell2:
+			# Cell centers are already in GridManager's local coordinate space
+			# (since cell geometry is relative to GridManager)
 			var pos1 = cell1.get_center()
 			var pos2 = cell2.get_center()
-
-			# Convert to local coordinates
-			pos1 = to_local(pos1)
-			pos2 = to_local(pos2)
 
 			preview_line.points = PackedVector2Array([pos1, pos2])
 
