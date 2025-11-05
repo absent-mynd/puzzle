@@ -366,7 +366,7 @@ func test_execute_fold_horizontal():
 	# Store reference to a cell that should be removed
 	var cell_to_remove = grid_manager.get_cell(Vector2i(3, 5))
 
-	var result = fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	assert_true(result, "Horizontal fold should succeed")
 
@@ -386,7 +386,7 @@ func test_execute_fold_vertical():
 	# Store reference to a cell that should be removed
 	var cell_to_remove = grid_manager.get_cell(Vector2i(5, 3))
 
-	var result = fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	assert_true(result, "Vertical fold should succeed")
 
@@ -403,7 +403,7 @@ func test_execute_fold_diagonal_fails():
 	var anchor1 = Vector2i(2, 2)
 	var anchor2 = Vector2i(7, 7)
 
-	var result = fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	assert_false(result, "Diagonal fold should fail in Phase 3")
 
@@ -414,7 +414,7 @@ func test_fold_history_records_operation():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	fold_system.execute_fold(anchor1, anchor2)
+	await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	var history = fold_system.get_fold_history()
 	assert_eq(history.size(), 1, "Should have one fold in history")
@@ -429,8 +429,8 @@ func test_fold_history_records_operation():
 
 
 func test_fold_history_multiple_folds():
-	fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5))
-	fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4))
+	await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
+	await fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4), false)  # Use await since execute_fold is a coroutine
 
 	var history = fold_system.get_fold_history()
 	assert_eq(history.size(), 2, "Should have two folds in history")
@@ -440,8 +440,8 @@ func test_fold_history_multiple_folds():
 
 
 func test_fold_history_incrementing_ids():
-	fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5))
-	fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4))
+	await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
+	await fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4), false)  # Use await since execute_fold is a coroutine
 
 	var history = fold_system.get_fold_history()
 	assert_eq(history[0].fold_id, 0, "First fold should have ID 0")
@@ -502,10 +502,10 @@ func test_vertical_fold_at_grid_edge():
 
 func test_multiple_sequential_horizontal_folds():
 	# First fold
-	fold_system.execute_fold(Vector2i(1, 3), Vector2i(5, 3))
+	await fold_system.execute_fold(Vector2i(1, 3), Vector2i(5, 3), false)  # Use await since execute_fold is a coroutine
 
 	# Second fold on same row
-	fold_system.execute_fold(Vector2i(0, 3), Vector2i(2, 3))
+	await fold_system.execute_fold(Vector2i(0, 3), Vector2i(2, 3), false)  # Use await since execute_fold is a coroutine
 
 	# Verify history
 	var history = fold_system.get_fold_history()
@@ -514,10 +514,10 @@ func test_multiple_sequential_horizontal_folds():
 
 func test_multiple_sequential_vertical_folds():
 	# First fold
-	fold_system.execute_fold(Vector2i(4, 1), Vector2i(4, 5))
+	await fold_system.execute_fold(Vector2i(4, 1), Vector2i(4, 5), false)  # Use await since execute_fold is a coroutine
 
 	# Second fold on same column
-	fold_system.execute_fold(Vector2i(4, 0), Vector2i(4, 2))
+	await fold_system.execute_fold(Vector2i(4, 0), Vector2i(4, 2), false)  # Use await since execute_fold is a coroutine
 
 	# Verify history
 	var history = fold_system.get_fold_history()
@@ -526,10 +526,10 @@ func test_multiple_sequential_vertical_folds():
 
 func test_mixed_folds():
 	# Horizontal fold
-	fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5))
+	await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
 
 	# Vertical fold (different row/column)
-	fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4))
+	await fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4), false)  # Use await since execute_fold is a coroutine
 
 	# Both should succeed
 	var history = fold_system.get_fold_history()
@@ -537,7 +537,7 @@ func test_mixed_folds():
 
 
 func test_grid_remains_consistent_after_fold():
-	fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5))
+	await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
 
 	# Check that all remaining cells are valid
 	for pos in grid_manager.cells.keys():

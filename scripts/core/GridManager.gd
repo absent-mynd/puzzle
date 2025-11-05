@@ -33,12 +33,15 @@ var preview_line: Line2D
 ## Currently hovered cell
 var hovered_cell: Cell = null
 
+## Reference to FoldSystem for validation (set externally)
+var fold_system: FoldSystem = null
+
 
 ## Initialize grid on ready
 func _ready() -> void:
-	# Set up preview line
+	# Set up preview line (Issue #9: increased width for better visibility)
 	preview_line = Line2D.new()
-	preview_line.width = 3.0
+	preview_line.width = 5.0  # Increased from 3.0 for better visibility
 	preview_line.default_color = Color.CYAN
 	preview_line.visible = false
 	add_child(preview_line)
@@ -265,6 +268,17 @@ func update_preview_line() -> void:
 			pos2 = to_local(pos2)
 
 			preview_line.points = PackedVector2Array([pos1, pos2])
+
+			# Update color based on fold validation (Issue #9)
+			if fold_system:
+				var validation = fold_system.validate_fold(selected_anchors[0], selected_anchors[1])
+				if validation.valid:
+					preview_line.default_color = Color.GREEN  # Valid fold
+				else:
+					preview_line.default_color = Color.RED  # Invalid fold
+			else:
+				preview_line.default_color = Color.CYAN  # Default if no fold_system
+
 			preview_line.visible = true
 	else:
 		preview_line.visible = false

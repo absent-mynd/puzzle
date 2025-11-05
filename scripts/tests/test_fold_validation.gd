@@ -296,7 +296,7 @@ func test_execute_fold_respects_validation_for_valid_fold():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	var result = fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	assert_true(result, "execute_fold should succeed for valid fold")
 
@@ -309,7 +309,7 @@ func test_execute_fold_respects_validation_for_same_cell():
 	var anchor1 = Vector2i(5, 5)
 	var anchor2 = Vector2i(5, 5)
 
-	var result = fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	assert_false(result, "execute_fold should fail for same cell")
 
@@ -322,7 +322,7 @@ func test_execute_fold_respects_validation_for_adjacent_cells():
 	var anchor1 = Vector2i(5, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	var result = fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	assert_false(result, "execute_fold should fail for adjacent cells")
 
@@ -335,7 +335,7 @@ func test_execute_fold_respects_validation_for_diagonal():
 	var anchor1 = Vector2i(2, 2)
 	var anchor2 = Vector2i(7, 7)
 
-	var result = fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	assert_false(result, "execute_fold should fail for diagonal fold")
 
@@ -348,7 +348,7 @@ func test_execute_fold_respects_validation_for_out_of_bounds():
 	var anchor1 = Vector2i(-1, 5)
 	var anchor2 = Vector2i(5, 5)
 
-	var result = fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	assert_false(result, "execute_fold should fail for out of bounds anchor")
 
@@ -368,7 +368,7 @@ func test_execute_fold_respects_validation_for_removed_cell():
 	var anchor1 = removed_pos
 	var anchor2 = Vector2i(2, 5)
 
-	var result = fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
 	assert_false(result, "execute_fold should fail for removed cell")
 
