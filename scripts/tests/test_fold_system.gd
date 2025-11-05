@@ -17,25 +17,18 @@ var grid_manager: GridManager
 func before_each():
 	# Create a fresh GridManager for each test
 	grid_manager = GridManager.new()
+	add_child_autofree(grid_manager)
 	grid_manager.create_grid()
 
 	# Create and initialize FoldSystem
 	fold_system = FoldSystem.new()
+	add_child_autofree(fold_system)
 	fold_system.initialize(grid_manager)
 
 
 func after_each():
-	if fold_system:
-		fold_system.free()
+	# GUT's add_child_autofree() handles cleanup automatically
 	fold_system = null
-
-	if grid_manager:
-		# Free all cells first to avoid memory leaks
-		for cell in grid_manager.cells.values():
-			if cell:
-				cell.free()
-		grid_manager.cells.clear()
-		grid_manager.free()
 	grid_manager = null
 
 

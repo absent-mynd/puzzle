@@ -15,25 +15,18 @@ var grid_manager: GridManager
 func before_each():
 	# Create a fresh GridManager for each test
 	grid_manager = GridManager.new()
+	add_child_autofree(grid_manager)
 	grid_manager.create_grid()
 
 	# Create and initialize FoldSystem
 	fold_system = FoldSystem.new()
+	add_child_autofree(fold_system)
 	fold_system.initialize(grid_manager)
 
 
 func after_each():
-	if fold_system:
-		fold_system.free()
+	# GUT's add_child_autofree() handles cleanup automatically
 	fold_system = null
-
-	if grid_manager:
-		# Free all cells first to avoid memory leaks
-		for cell in grid_manager.cells.values():
-			if cell:
-				cell.free()
-		grid_manager.cells.clear()
-		grid_manager.free()
 	grid_manager = null
 
 
@@ -254,7 +247,7 @@ func test_validation_fails_for_removed_cell():
 	var cell_to_remove = grid_manager.get_cell(removed_pos)
 	if cell_to_remove:
 		grid_manager.cells.erase(removed_pos)
-		cell_to_remove.free()
+		cell_to_remove.queue_free()
 
 	# Try to use the removed cell as anchor
 	var anchor1 = removed_pos
@@ -273,7 +266,7 @@ func test_validate_anchors_exist_for_removed_cell():
 	var cell_to_remove = grid_manager.get_cell(removed_pos)
 	if cell_to_remove:
 		grid_manager.cells.erase(removed_pos)
-		cell_to_remove.free()
+		cell_to_remove.queue_free()
 
 	var anchor1 = removed_pos
 	var anchor2 = Vector2i(2, 5)
@@ -363,7 +356,7 @@ func test_execute_fold_respects_validation_for_removed_cell():
 	var cell_to_remove = grid_manager.get_cell(removed_pos)
 	if cell_to_remove:
 		grid_manager.cells.erase(removed_pos)
-		cell_to_remove.free()
+		cell_to_remove.queue_free()
 
 	var anchor1 = removed_pos
 	var anchor2 = Vector2i(2, 5)
@@ -443,7 +436,7 @@ func test_validation_message_for_removed_cell():
 	var cell_to_remove = grid_manager.get_cell(removed_pos)
 	if cell_to_remove:
 		grid_manager.cells.erase(removed_pos)
-		cell_to_remove.free()
+		cell_to_remove.queue_free()
 
 	var result = fold_system.validate_fold(removed_pos, Vector2i(2, 5))
 	assert_eq(result.reason, "One or both anchors are invalid",
