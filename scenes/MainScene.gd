@@ -21,6 +21,11 @@ var restart_button: Button = null
 
 
 func _ready() -> void:
+	# Fix background ColorRect to not block mouse input
+	var background = $ColorRect
+	if background:
+		background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 	# Wait for grid to be ready
 	await get_tree().process_frame
 
