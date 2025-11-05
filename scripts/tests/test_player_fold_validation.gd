@@ -272,7 +272,7 @@ func test_execute_fold_succeeds_when_player_not_in_way():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_true(result, "Fold should succeed when player not in the way")
 
@@ -288,7 +288,7 @@ func test_execute_fold_fails_when_player_in_removed_region():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_false(result, "Fold should fail when player in removed region")
 
@@ -304,7 +304,7 @@ func test_execute_fold_checks_player_validation_after_basic_validation():
 	var anchor1 = Vector2i(4, 5)
 	var anchor2 = Vector2i(5, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_false(result, "Should fail basic validation before checking player")
 
@@ -316,7 +316,7 @@ func test_execute_fold_with_player_at_anchor_succeeds():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_true(result, "Fold should succeed when player at anchor")
 
@@ -335,7 +335,7 @@ func test_execute_fold_minimum_distance_with_player_in_middle():
 	var anchor1 = Vector2i(3, 5)
 	var anchor2 = Vector2i(5, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_false(result, "Should fail when player in single removed cell")
 
@@ -347,7 +347,7 @@ func test_execute_fold_minimum_distance_with_player_not_in_middle():
 	var anchor1 = Vector2i(3, 5)
 	var anchor2 = Vector2i(5, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_true(result, "Should succeed when player not in removed cell")
 
@@ -362,7 +362,7 @@ func test_execute_fold_with_reversed_anchors_player_in_way():
 	var anchor1 = Vector2i(6, 5)
 	var anchor2 = Vector2i(2, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_false(result, "Should still block fold when anchors reversed")
 
@@ -375,7 +375,7 @@ func test_execute_fold_with_reversed_anchors_player_safe():
 	var anchor1 = Vector2i(6, 5)
 	var anchor2 = Vector2i(2, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_true(result, "Should still succeed when player safe and anchors reversed")
 
@@ -386,13 +386,13 @@ func test_multiple_folds_with_player_moving_between():
 	# First fold - player safe
 	player.set_grid_position(Vector2i(1, 1))
 
-	var result1 = await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5))
+	var result1 = await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)
 	assert_true(result1, "First fold should succeed")
 
 	# Move player to a position that would block second fold
 	player.set_grid_position(Vector2i(4, 7))
 
-	var result2 = await fold_system.execute_fold(Vector2i(2, 7), Vector2i(6, 7))
+	var result2 = await fold_system.execute_fold(Vector2i(2, 7), Vector2i(6, 7), false)
 	assert_false(result2, "Second fold should fail with player in the way")
 
 	# Verify only first fold was recorded
@@ -404,10 +404,10 @@ func test_multiple_folds_with_player_always_safe():
 	# Player in corner, safe from all folds
 	player.set_grid_position(Vector2i(0, 0))
 
-	var result1 = await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5))
+	var result1 = await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)
 	assert_true(result1, "First fold should succeed")
 
-	var result2 = await fold_system.execute_fold(Vector2i(5, 2), Vector2i(5, 4))
+	var result2 = await fold_system.execute_fold(Vector2i(5, 2), Vector2i(5, 4), false)
 	assert_true(result2, "Second fold should succeed")
 
 	# Verify both folds were recorded
@@ -424,7 +424,7 @@ func test_execute_vertical_fold_with_player_in_removed_region():
 	var anchor1 = Vector2i(5, 2)
 	var anchor2 = Vector2i(5, 6)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_false(result, "Vertical fold should fail when player in removed region")
 
@@ -436,7 +436,7 @@ func test_execute_vertical_fold_with_player_safe():
 	var anchor1 = Vector2i(5, 2)
 	var anchor2 = Vector2i(5, 6)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_true(result, "Vertical fold should succeed when player safe")
 
@@ -450,7 +450,7 @@ func test_fold_at_grid_edge_with_player_in_way():
 	var anchor1 = Vector2i(7, 5)
 	var anchor2 = Vector2i(9, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_false(result, "Edge fold should fail when player in the way")
 
@@ -462,7 +462,7 @@ func test_fold_at_grid_edge_with_player_safe():
 	var anchor1 = Vector2i(7, 5)
 	var anchor2 = Vector2i(9, 5)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2)
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_true(result, "Edge fold should succeed when player safe")
 
