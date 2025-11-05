@@ -1,0 +1,49 @@
+name: GUT Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  run-gut-tests:
+    name: Run GUT Tests (Godot 4.3)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Godot 4.3
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.3.0
+          use-dotnet: false
+
+      - name: Verify Godot installation
+        run: |
+          godot --version
+          godot --help
+
+      - name: Import project assets
+        run: |
+          echo "Importing project assets in headless mode..."
+          godot --headless --path . --import --quit
+          echo "Asset import complete"
+
+      - name: Run GUT tests
+        env:
+          GODOT_DISABLE_LEAK_CHECKS: "1"
+        run: |
+          echo "Running GUT tests..."
+          godot --headless -d --display-driver headless \
+            --audio-driver Dummy --disable-render-loop --path . \
+            -s res://addons/gut/gut_cmdln.gd \
+            -gdir=res://scripts/tests/ -ginclude_subdirs -gexit
+
+      - name: Test results summary
+        if: always()
+        run: |
+          echo "::notice::GUT tests completed. Check logs above for detailed results."

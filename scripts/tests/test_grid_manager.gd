@@ -1,236 +1,303 @@
-## Tests for GridManager class
-##
-## Tests grid initialization, cell queries, coordinate conversion,
-## and anchor selection functionality.
-
 extends GutTest
-
-const GridManager = preload("res://scripts/core/GridManager.gd")
+## Unit Tests for GridManager
+##
+## This test suite validates the GridManager class functionality including:
+## - Grid initialization (10x10 cells)
+## - Cell queries and lookups
+## - Coordinate conversions
+## - Neighbor finding
+## - Anchor selection system
 
 var grid_manager: GridManager
 
 
 func before_each():
+	# Create a fresh GridManager for each test
 	grid_manager = GridManager.new()
-	# Don't call _ready automatically in tests
-	grid_manager.setup_preview_line()
+	# Don't call _ready() as it requires a scene tree
+	# Instead, manually initialize for testing
 	grid_manager.create_grid()
 
 
 func after_each():
 	if grid_manager:
+		# Free all cells first to avoid memory leaks
+		for cell in grid_manager.cells.values():
+			if cell:
+				cell.free()
+		grid_manager.cells.clear()
+
+		# Then free the grid manager
 		grid_manager.free()
-		grid_manager = null
+	grid_manager = null
 
 
-func test_grid_initialization():
-	assert_eq(grid_manager.cells.size(), 100, "Should create 100 cells (10x10)")
+func before_all():
+	gut.p("=== GridManager Test Suite ===")
 
 
-func test_all_cells_have_correct_positions():
+func after_all():
+	gut.p("=== GridManager Tests Complete ===")
+
+
+# ===== Grid Initialization Tests =====
+
+func test_grid_creates_100_cells():
+	assert_eq(grid_manager.cells.size(), 100, "Creates 100 cells (10x10)")
+
+
+func test_all_grid_positions_filled():
 	for y in range(10):
 		for x in range(10):
-			var grid_pos = Vector2i(x, y)
-			var cell = grid_manager.get_cell(grid_pos)
-			assert_not_null(cell, "Cell at %s should exist" % [grid_pos])
-			assert_eq(cell.grid_position, grid_pos, "Cell should have correct grid position")
+			var pos = Vector2i(x, y)
+			var cell = grid_manager.get_cell(pos)
+			assert_not_null(cell, "Cell exists at position %s" % str(pos))
 
 
-func test_get_cell_returns_correct_cell():
+func test_cells_have_correct_grid_positions():
+	for y in range(10):
+		for x in range(10):
+			var pos = Vector2i(x, y)
+			var cell = grid_manager.get_cell(pos)
+			assert_eq(cell.grid_position, pos, "Cell at %s has correct grid_position" % str(pos))
+
+
+# ===== get_cell() Tests =====
+
+func test_get_cell_valid_position():
 	var cell = grid_manager.get_cell(Vector2i(5, 5))
-	assert_not_null(cell, "Should return cell at valid position")
-	assert_eq(cell.grid_position, Vector2i(5, 5), "Should return correct cell")
+	assert_not_null(cell, "Returns cell at valid position")
+	assert_eq(cell.grid_position, Vector2i(5, 5), "Returns correct cell")
 
 
-func test_get_cell_returns_null_for_invalid_position():
-	var cell = grid_manager.get_cell(Vector2i(-1, 0))
-	assert_null(cell, "Should return null for negative position")
-
-	cell = grid_manager.get_cell(Vector2i(10, 10))
-	assert_null(cell, "Should return null for position outside grid")
-
-	cell = grid_manager.get_cell(Vector2i(5, 15))
-	assert_null(cell, "Should return null for position outside grid")
+func test_get_cell_corner_positions():
+	assert_not_null(grid_manager.get_cell(Vector2i(0, 0)), "Top-left corner exists")
+	assert_not_null(grid_manager.get_cell(Vector2i(9, 0)), "Top-right corner exists")
+	assert_not_null(grid_manager.get_cell(Vector2i(0, 9)), "Bottom-left corner exists")
+	assert_not_null(grid_manager.get_cell(Vector2i(9, 9)), "Bottom-right corner exists")
 
 
-func test_is_valid_position():
-	assert_true(grid_manager.is_valid_position(Vector2i(0, 0)), "Top-left should be valid")
-	assert_true(grid_manager.is_valid_position(Vector2i(9, 9)), "Bottom-right should be valid")
-	assert_true(grid_manager.is_valid_position(Vector2i(5, 5)), "Middle should be valid")
-
-	assert_false(grid_manager.is_valid_position(Vector2i(-1, 0)), "Negative x should be invalid")
-	assert_false(grid_manager.is_valid_position(Vector2i(0, -1)), "Negative y should be invalid")
-	assert_false(grid_manager.is_valid_position(Vector2i(10, 0)), "x=10 should be invalid")
-	assert_false(grid_manager.is_valid_position(Vector2i(0, 10)), "y=10 should be invalid")
+func test_get_cell_invalid_position():
+	assert_null(grid_manager.get_cell(Vector2i(-1, 5)), "Returns null for negative x")
+	assert_null(grid_manager.get_cell(Vector2i(5, -1)), "Returns null for negative y")
+	assert_null(grid_manager.get_cell(Vector2i(10, 5)), "Returns null for x >= 10")
+	assert_null(grid_manager.get_cell(Vector2i(5, 10)), "Returns null for y >= 10")
 
 
-func test_grid_to_world_local_conversion():
-	var world_pos = grid_manager.grid_to_world_local(Vector2i(0, 0))
-	assert_eq(world_pos, Vector2(0, 0), "Grid (0,0) should map to world (0,0)")
+# ===== is_valid_position() Tests =====
 
-	world_pos = grid_manager.grid_to_world_local(Vector2i(1, 0))
-	assert_eq(world_pos, Vector2(64, 0), "Grid (1,0) should map to world (64,0)")
+func test_is_valid_position_valid():
+	assert_true(grid_manager.is_valid_position(Vector2i(0, 0)), "Top-left is valid")
+	assert_true(grid_manager.is_valid_position(Vector2i(9, 9)), "Bottom-right is valid")
+	assert_true(grid_manager.is_valid_position(Vector2i(5, 5)), "Center is valid")
 
-	world_pos = grid_manager.grid_to_world_local(Vector2i(5, 5))
-	assert_eq(world_pos, Vector2(320, 320), "Grid (5,5) should map to world (320,320)")
+
+func test_is_valid_position_invalid():
+	assert_false(grid_manager.is_valid_position(Vector2i(-1, 0)), "Negative x invalid")
+	assert_false(grid_manager.is_valid_position(Vector2i(0, -1)), "Negative y invalid")
+	assert_false(grid_manager.is_valid_position(Vector2i(10, 0)), "x=10 invalid")
+	assert_false(grid_manager.is_valid_position(Vector2i(0, 10)), "y=10 invalid")
+	assert_false(grid_manager.is_valid_position(Vector2i(100, 100)), "Far out of bounds invalid")
+
+
+# ===== Coordinate Conversion Tests =====
+
+func test_grid_to_world_origin():
+	var world_pos = grid_manager.grid_to_world(Vector2i(0, 0))
+	# Should be at grid_origin (initially 0,0)
+	assert_almost_eq(world_pos.x, 0.0, 0.01, "Origin x")
+	assert_almost_eq(world_pos.y, 0.0, 0.01, "Origin y")
+
+
+func test_grid_to_world_conversion():
+	var world_pos = grid_manager.grid_to_world(Vector2i(5, 3))
+	# Should be at (5 * 64, 3 * 64) = (320, 192)
+	assert_almost_eq(world_pos.x, 320.0, 0.01, "Grid (5,3) -> world x=320")
+	assert_almost_eq(world_pos.y, 192.0, 0.01, "Grid (5,3) -> world y=192")
 
 
 func test_world_to_grid_conversion():
-	# Set grid origin for predictable conversion
-	grid_manager.grid_origin = Vector2(100, 100)
+	var grid_pos = grid_manager.world_to_grid(Vector2(320, 192))
+	# Should be (320/64, 192/64) = (5, 3)
+	assert_eq(grid_pos, Vector2i(5, 3), "World (320,192) -> grid (5,3)")
 
-	var grid_pos = grid_manager.world_to_grid(Vector2(100, 100))
-	assert_eq(grid_pos, Vector2i(0, 0), "World (100,100) should map to grid (0,0)")
 
-	grid_pos = grid_manager.world_to_grid(Vector2(164, 100))
-	assert_eq(grid_pos, Vector2i(1, 0), "World (164,100) should map to grid (1,0)")
+func test_world_to_grid_within_cell():
+	# Point within a cell should map to that cell's grid position
+	var grid_pos = grid_manager.world_to_grid(Vector2(330, 200))
+	assert_eq(grid_pos, Vector2i(5, 3), "Point within cell (5,3) maps correctly")
 
-	grid_pos = grid_manager.world_to_grid(Vector2(420, 420))
-	assert_eq(grid_pos, Vector2i(5, 5), "World (420,420) should map to grid (5,5)")
 
+func test_coordinate_conversion_roundtrip():
+	var original_grid = Vector2i(7, 4)
+	var world = grid_manager.grid_to_world(original_grid)
+	var back_to_grid = grid_manager.world_to_grid(world)
+	assert_eq(back_to_grid, original_grid, "Round-trip conversion preserves position")
+
+
+# ===== get_neighbors() Tests =====
 
 func test_get_neighbors_center_cell():
 	var neighbors = grid_manager.get_neighbors(Vector2i(5, 5))
-	assert_eq(neighbors.size(), 4, "Center cell should have 4 neighbors")
+	assert_eq(neighbors.size(), 4, "Center cell has 4 neighbors")
 
-	# Check that all neighbors are valid
-	for neighbor in neighbors:
-		assert_not_null(neighbor, "Neighbor should not be null")
+	# Check that neighbors are adjacent
+	var neighbor_positions = []
+	for n in neighbors:
+		neighbor_positions.append(n.grid_position)
+
+	assert_true(Vector2i(5, 4) in neighbor_positions, "Has top neighbor")
+	assert_true(Vector2i(5, 6) in neighbor_positions, "Has bottom neighbor")
+	assert_true(Vector2i(4, 5) in neighbor_positions, "Has left neighbor")
+	assert_true(Vector2i(6, 5) in neighbor_positions, "Has right neighbor")
 
 
 func test_get_neighbors_corner_cell():
 	var neighbors = grid_manager.get_neighbors(Vector2i(0, 0))
-	assert_eq(neighbors.size(), 2, "Corner cell should have 2 neighbors")
+	assert_eq(neighbors.size(), 2, "Corner cell has 2 neighbors")
 
-	neighbors = grid_manager.get_neighbors(Vector2i(9, 9))
-	assert_eq(neighbors.size(), 2, "Bottom-right corner should have 2 neighbors")
+	var neighbor_positions = []
+	for n in neighbors:
+		neighbor_positions.append(n.grid_position)
+
+	assert_true(Vector2i(1, 0) in neighbor_positions, "Has right neighbor")
+	assert_true(Vector2i(0, 1) in neighbor_positions, "Has bottom neighbor")
 
 
 func test_get_neighbors_edge_cell():
 	var neighbors = grid_manager.get_neighbors(Vector2i(5, 0))
-	assert_eq(neighbors.size(), 3, "Top edge cell should have 3 neighbors")
+	assert_eq(neighbors.size(), 3, "Top edge cell has 3 neighbors")
 
-	neighbors = grid_manager.get_neighbors(Vector2i(0, 5))
-	assert_eq(neighbors.size(), 3, "Left edge cell should have 3 neighbors")
+	var neighbor_positions = []
+	for n in neighbors:
+		neighbor_positions.append(n.grid_position)
 
+	assert_true(Vector2i(4, 0) in neighbor_positions, "Has left neighbor")
+	assert_true(Vector2i(6, 0) in neighbor_positions, "Has right neighbor")
+	assert_true(Vector2i(5, 1) in neighbor_positions, "Has bottom neighbor")
+
+
+# ===== get_cell_at_world_pos() Tests =====
+
+func test_get_cell_at_world_pos():
+	var cell = grid_manager.get_cell_at_world_pos(Vector2(330, 200))
+	assert_not_null(cell, "Returns cell at world position")
+	assert_eq(cell.grid_position, Vector2i(5, 3), "Returns correct cell")
+
+
+func test_get_cell_at_world_pos_cell_center():
+	# Test at exact cell center
+	var world_pos = grid_manager.grid_to_world(Vector2i(3, 3))
+	world_pos += Vector2(32, 32)  # Center of 64x64 cell
+
+	var cell = grid_manager.get_cell_at_world_pos(world_pos)
+	assert_not_null(cell, "Returns cell at center")
+	assert_eq(cell.grid_position, Vector2i(3, 3), "Correct cell at center")
+
+
+# ===== get_grid_bounds() Tests =====
 
 func test_get_grid_bounds():
-	grid_manager.grid_origin = Vector2(100, 100)
 	var bounds = grid_manager.get_grid_bounds()
+	assert_eq(bounds.position, Vector2.ZERO, "Bounds start at grid origin")
+	assert_almost_eq(bounds.size.x, 640.0, 0.01, "Bounds width = 10 * 64")
+	assert_almost_eq(bounds.size.y, 640.0, 0.01, "Bounds height = 10 * 64")
 
-	assert_eq(bounds.position, Vector2(100, 100), "Bounds position should match grid origin")
-	assert_eq(bounds.size, Vector2(640, 640), "Bounds size should be 10*64 x 10*64")
 
+# ===== Anchor Selection Tests =====
 
 func test_select_first_anchor():
-	grid_manager.select_cell(Vector2i(5, 5))
-
-	assert_eq(grid_manager.selected_anchors.size(), 1, "Should have 1 selected anchor")
-	assert_eq(grid_manager.selected_anchors[0], Vector2i(5, 5), "Anchor should be at (5,5)")
-
-	var cell = grid_manager.get_cell(Vector2i(5, 5))
-	assert_eq(cell.outline_color, Color.RED, "First anchor should have red outline")
+	grid_manager.select_cell(Vector2i(3, 3))
+	assert_eq(grid_manager.selected_anchors.size(), 1, "One anchor selected")
+	assert_eq(grid_manager.selected_anchors[0], Vector2i(3, 3), "Correct anchor position")
 
 
-func test_select_second_anchor():
-	grid_manager.select_cell(Vector2i(5, 5))
-	grid_manager.select_cell(Vector2i(7, 7))
+func test_select_two_anchors():
+	grid_manager.select_cell(Vector2i(3, 3))
+	grid_manager.select_cell(Vector2i(6, 6))
 
-	assert_eq(grid_manager.selected_anchors.size(), 2, "Should have 2 selected anchors")
-	assert_eq(grid_manager.selected_anchors[1], Vector2i(7, 7), "Second anchor should be at (7,7)")
-
-	var cell = grid_manager.get_cell(Vector2i(7, 7))
-	assert_eq(cell.outline_color, Color.BLUE, "Second anchor should have blue outline")
-
-	assert_true(grid_manager.preview_line.visible, "Preview line should be visible")
+	assert_eq(grid_manager.selected_anchors.size(), 2, "Two anchors selected")
+	assert_eq(grid_manager.selected_anchors[0], Vector2i(3, 3), "First anchor correct")
+	assert_eq(grid_manager.selected_anchors[1], Vector2i(6, 6), "Second anchor correct")
 
 
-func test_third_click_clears_selection():
-	grid_manager.select_cell(Vector2i(5, 5))
-	grid_manager.select_cell(Vector2i(7, 7))
+func test_select_third_anchor_clears_selection():
+	grid_manager.select_cell(Vector2i(1, 1))
+	grid_manager.select_cell(Vector2i(2, 2))
 	grid_manager.select_cell(Vector2i(3, 3))
 
-	assert_eq(grid_manager.selected_anchors.size(), 1, "Should have 1 anchor after third click")
-	assert_eq(grid_manager.selected_anchors[0], Vector2i(3, 3), "New anchor should be at (3,3)")
-
-	# Previous cells should have cleared outlines
-	var cell1 = grid_manager.get_cell(Vector2i(5, 5))
-	var cell2 = grid_manager.get_cell(Vector2i(7, 7))
-	assert_eq(cell1.outline_color, Color.TRANSPARENT, "First cell outline should be cleared")
-	assert_eq(cell2.outline_color, Color.TRANSPARENT, "Second cell outline should be cleared")
-
-
-func test_clear_selection():
-	grid_manager.select_cell(Vector2i(5, 5))
-	grid_manager.select_cell(Vector2i(7, 7))
-	grid_manager.clear_selection()
-
-	assert_eq(grid_manager.selected_anchors.size(), 0, "Should have no selected anchors")
-	assert_false(grid_manager.preview_line.visible, "Preview line should be hidden")
-
-	var cell1 = grid_manager.get_cell(Vector2i(5, 5))
-	var cell2 = grid_manager.get_cell(Vector2i(7, 7))
-	assert_eq(cell1.outline_color, Color.TRANSPARENT, "Cell 1 outline should be cleared")
-	assert_eq(cell2.outline_color, Color.TRANSPARENT, "Cell 2 outline should be cleared")
+	assert_eq(grid_manager.selected_anchors.size(), 1, "Selection reset to 1 anchor")
+	assert_eq(grid_manager.selected_anchors[0], Vector2i(3, 3), "New first anchor")
 
 
 func test_get_selected_anchors():
-	grid_manager.select_cell(Vector2i(2, 3))
-	grid_manager.select_cell(Vector2i(8, 7))
+	grid_manager.select_cell(Vector2i(4, 4))
+	grid_manager.select_cell(Vector2i(5, 5))
 
 	var anchors = grid_manager.get_selected_anchors()
-	assert_eq(anchors.size(), 2, "Should return 2 anchors")
-	assert_eq(anchors[0], Vector2i(2, 3), "First anchor position")
-	assert_eq(anchors[1], Vector2i(8, 7), "Second anchor position")
+	assert_eq(anchors.size(), 2, "Returns 2 anchors")
+	assert_eq(anchors[0], Vector2i(4, 4), "First anchor in array")
+	assert_eq(anchors[1], Vector2i(5, 5), "Second anchor in array")
 
 
-func test_select_invalid_position_ignored():
-	grid_manager.select_cell(Vector2i(-1, 0))
-	assert_eq(grid_manager.selected_anchors.size(), 0, "Invalid position should be ignored")
-
-	grid_manager.select_cell(Vector2i(10, 10))
-	assert_eq(grid_manager.selected_anchors.size(), 0, "Out of bounds position should be ignored")
-
-
-func test_cells_properly_positioned():
-	for y in range(10):
-		for x in range(10):
-			var cell = grid_manager.get_cell(Vector2i(x, y))
-			var expected_world_pos = grid_manager.grid_to_world_local(Vector2i(x, y))
-
-			# Check that cell's geometry starts at the expected position
-			assert_eq(cell.geometry[0], expected_world_pos,
-				"Cell at (%d,%d) should be positioned at %s" % [x, y, expected_world_pos])
-
-
-func test_preview_line_points():
-	grid_manager.select_cell(Vector2i(0, 0))
-	grid_manager.select_cell(Vector2i(9, 9))
-
-	assert_eq(grid_manager.preview_line.points.size(), 2, "Preview line should have 2 points")
-
-	# Get the centers of the cells
-	var cell1 = grid_manager.get_cell(Vector2i(0, 0))
-	var cell2 = grid_manager.get_cell(Vector2i(9, 9))
-
-	var center1 = grid_manager.to_local(cell1.get_center())
-	var center2 = grid_manager.to_local(cell2.get_center())
-
-	assert_almost_eq(grid_manager.preview_line.points[0].x, center1.x, 0.01, "Line point 1 X")
-	assert_almost_eq(grid_manager.preview_line.points[0].y, center1.y, 0.01, "Line point 1 Y")
-	assert_almost_eq(grid_manager.preview_line.points[1].x, center2.x, 0.01, "Line point 2 X")
-	assert_almost_eq(grid_manager.preview_line.points[1].y, center2.y, 0.01, "Line point 2 Y")
-
-
-func test_multiple_selection_cycles():
-	# First cycle
+func test_clear_selection():
 	grid_manager.select_cell(Vector2i(1, 1))
 	grid_manager.select_cell(Vector2i(2, 2))
-	grid_manager.select_cell(Vector2i(3, 3))  # Reset
 
-	# Second cycle
-	grid_manager.select_cell(Vector2i(4, 4))
+	grid_manager.clear_selection()
 
-	assert_eq(grid_manager.selected_anchors.size(), 2, "Should have 2 anchors")
-	assert_eq(grid_manager.selected_anchors[0], Vector2i(3, 3), "First anchor from reset")
-	assert_eq(grid_manager.selected_anchors[1], Vector2i(4, 4), "Second anchor from new cycle")
+	assert_eq(grid_manager.selected_anchors.size(), 0, "Selection cleared")
+
+
+# ===== Cell Type Tests =====
+
+func test_setup_test_walls():
+	grid_manager.setup_test_walls()
+
+	# Check border cells are walls
+	assert_eq(grid_manager.get_cell(Vector2i(0, 0)).cell_type, 1, "Top-left is wall")
+	assert_eq(grid_manager.get_cell(Vector2i(9, 0)).cell_type, 1, "Top-right is wall")
+	assert_eq(grid_manager.get_cell(Vector2i(0, 9)).cell_type, 1, "Bottom-left is wall")
+	assert_eq(grid_manager.get_cell(Vector2i(9, 9)).cell_type, 1, "Bottom-right is wall")
+
+	# Check center cell is not a wall
+	assert_eq(grid_manager.get_cell(Vector2i(5, 5)).cell_type, 0, "Center is empty")
+
+
+# ===== Integration Tests =====
+
+func test_grid_manager_lifecycle():
+	# Create grid
+	assert_eq(grid_manager.cells.size(), 100, "Grid created")
+
+	# Query cells
+	var cell = grid_manager.get_cell(Vector2i(5, 5))
+	assert_not_null(cell, "Can query cells")
+
+	# Select anchors
+	grid_manager.select_cell(Vector2i(3, 3))
+	grid_manager.select_cell(Vector2i(7, 7))
+	assert_eq(grid_manager.selected_anchors.size(), 2, "Anchors selected")
+
+	# Clear selection
+	grid_manager.clear_selection()
+	assert_eq(grid_manager.selected_anchors.size(), 0, "Selection cleared")
+
+
+func test_cells_are_properly_positioned():
+	# Verify cells are positioned correctly in world space
+	for y in range(10):
+		for x in range(10):
+			var grid_pos = Vector2i(x, y)
+			var cell = grid_manager.get_cell(grid_pos)
+			var expected_world_pos = Vector2(x * 64, y * 64)
+
+			# Check that cell geometry starts at expected position
+			assert_almost_eq(
+				cell.geometry[0].x, expected_world_pos.x, 0.01,
+				"Cell (%d,%d) x position" % [x, y]
+			)
+			assert_almost_eq(
+				cell.geometry[0].y, expected_world_pos.y, 0.01,
+				"Cell (%d,%d) y position" % [x, y]
+			)

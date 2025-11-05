@@ -1,145 +1,249 @@
-## Tests for Cell class
+## Space-Folding Puzzle Game - Cell Tests
 ##
-## Tests cell initialization, geometry, cell types, visual feedback,
-## and other cell functionality.
+## Test suite for the Cell class covering initialization, geometry,
+## cell types, seam tracking, and visual feedback.
+##
+## @author: Space-Folding Puzzle Team
+## @version: 1.0
 
 extends GutTest
 
-const Cell = preload("res://scripts/core/Cell.gd")
-
-var cell: Cell
+const CELL_SIZE = 64.0
 
 
-func before_each():
-	# Create a cell at grid position (5, 5) with world position (100, 100) and size 64
-	cell = Cell.new(Vector2i(5, 5), Vector2(100, 100), 64.0)
-
-
-func after_each():
-	if cell:
-		cell.free()
-		cell = null
-
-
+## Test: Cell initialization with correct grid position
 func test_cell_initialization():
-	assert_eq(cell.grid_position, Vector2i(5, 5), "Grid position should be set correctly")
-	assert_eq(cell.cell_type, 0, "Cell type should default to 0 (empty)")
+	var grid_pos = Vector2i(5, 3)
+	var world_pos = Vector2(100, 200)
+	var cell = Cell.new(grid_pos, world_pos, CELL_SIZE)
+
+	assert_eq(cell.grid_position, grid_pos, "Grid position should match")
+	assert_eq(cell.cell_type, 0, "Default cell type should be 0 (empty)")
 	assert_false(cell.is_partial, "Cell should not be partial initially")
-	assert_eq(cell.seams.size(), 0, "Cell should have no seams initially")
+	assert_eq(cell.seams.size(), 0, "Seams array should be empty initially")
+	assert_not_null(cell.polygon_visual, "Polygon visual should be created")
+
+	cell.free()
 
 
-func test_square_geometry_creation():
-	assert_eq(cell.geometry.size(), 4, "Cell should have 4 vertices")
+## Test: Square geometry creation (4 vertices in correct positions)
+func test_square_geometry():
+	var world_pos = Vector2(100, 200)
+	var cell = Cell.new(Vector2i(0, 0), world_pos, CELL_SIZE)
 
-	# Check vertices are in correct positions
-	assert_eq(cell.geometry[0], Vector2(100, 100), "Top-left vertex")
-	assert_eq(cell.geometry[1], Vector2(164, 100), "Top-right vertex")
-	assert_eq(cell.geometry[2], Vector2(164, 164), "Bottom-right vertex")
-	assert_eq(cell.geometry[3], Vector2(100, 164), "Bottom-left vertex")
+	assert_eq(cell.geometry.size(), 4, "Square should have 4 vertices")
+
+	# Check each vertex position
+	assert_almost_eq(cell.geometry[0], world_pos, Vector2.ONE * 0.01, "Top-left vertex incorrect")
+	assert_almost_eq(cell.geometry[1], world_pos + Vector2(CELL_SIZE, 0), Vector2.ONE * 0.01, "Top-right vertex incorrect")
+	assert_almost_eq(cell.geometry[2], world_pos + Vector2(CELL_SIZE, CELL_SIZE), Vector2.ONE * 0.01, "Bottom-right vertex incorrect")
+	assert_almost_eq(cell.geometry[3], world_pos + Vector2(0, CELL_SIZE), Vector2.ONE * 0.01, "Bottom-left vertex incorrect")
+
+	cell.free()
 
 
+## Test: get_center() returns correct centroid
 func test_get_center():
+	var world_pos = Vector2(100, 200)
+	var cell = Cell.new(Vector2i(0, 0), world_pos, CELL_SIZE)
+
 	var center = cell.get_center()
-	assert_almost_eq(center.x, 132.0, 0.01, "Center X should be 132")
-	assert_almost_eq(center.y, 132.0, 0.01, "Center Y should be 132")
+	var expected_center = world_pos + Vector2(CELL_SIZE / 2, CELL_SIZE / 2)
+
+	assert_almost_eq(center, expected_center, Vector2.ONE * 0.01, "Center should be at middle of square")
+
+	cell.free()
 
 
-func test_contains_point_inside():
-	# Point inside the cell
-	assert_true(cell.contains_point(Vector2(132, 132)), "Should contain center point")
-	assert_true(cell.contains_point(Vector2(110, 110)), "Should contain point near top-left")
-	assert_true(cell.contains_point(Vector2(150, 150)), "Should contain point in middle")
+## Test: contains_point() for points inside/outside
+func test_contains_point():
+	var world_pos = Vector2(100, 200)
+	var cell = Cell.new(Vector2i(0, 0), world_pos, CELL_SIZE)
+
+	# Point inside
+	var point_inside = world_pos + Vector2(CELL_SIZE / 2, CELL_SIZE / 2)
+	assert_true(cell.contains_point(point_inside), "Point at center should be inside")
+
+	# Point outside
+	var point_outside = world_pos + Vector2(CELL_SIZE + 10, CELL_SIZE + 10)
+	assert_false(cell.contains_point(point_outside), "Point outside bounds should not be inside")
+
+	# Point on edge (should be inside due to polygon containment algorithm)
+	var point_on_edge = world_pos + Vector2(CELL_SIZE / 2, 0)
+	assert_true(cell.contains_point(point_on_edge), "Point on edge should be inside")
+
+	cell.free()
 
 
-func test_contains_point_outside():
-	# Points outside the cell
-	assert_false(cell.contains_point(Vector2(50, 50)), "Should not contain point to the left")
-	assert_false(cell.contains_point(Vector2(200, 200)), "Should not contain point to the right")
-	assert_false(cell.contains_point(Vector2(132, 50)), "Should not contain point above")
-	assert_false(cell.contains_point(Vector2(132, 200)), "Should not contain point below")
+## Test: Cell type changes update correctly
+func test_cell_type_changes():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
 
+	# Test empty (default)
+	assert_eq(cell.cell_type, 0, "Default should be empty")
+	assert_eq(cell.get_cell_color(), Color(0.8, 0.8, 0.8), "Empty color should be light gray")
 
-func test_contains_point_on_edge():
-	# Points on the edge (should be inside due to polygon algorithm)
-	assert_true(cell.contains_point(Vector2(100, 132)), "Point on left edge")
-	assert_true(cell.contains_point(Vector2(132, 100)), "Point on top edge")
-
-
-func test_is_square():
-	assert_true(cell.is_square(), "Initial geometry should be a perfect square")
-
-
-func test_is_not_square_after_modification():
-	# Modify geometry to make it not a square
-	cell.geometry[2] = Vector2(170, 164)  # Change one vertex
-	assert_false(cell.is_square(), "Modified geometry should not be a square")
-
-
-func test_set_cell_type():
+	# Test wall
 	cell.set_cell_type(1)
-	assert_eq(cell.cell_type, 1, "Cell type should update to 1 (wall)")
+	assert_eq(cell.cell_type, 1, "Cell type should be wall")
+	assert_eq(cell.get_cell_color(), Color(0.2, 0.2, 0.2), "Wall color should be dark gray")
 
+	# Test water
 	cell.set_cell_type(2)
-	assert_eq(cell.cell_type, 2, "Cell type should update to 2 (water)")
+	assert_eq(cell.cell_type, 2, "Cell type should be water")
+	assert_eq(cell.get_cell_color(), Color(0.2, 0.4, 1.0), "Water color should be blue")
 
+	# Test goal
 	cell.set_cell_type(3)
-	assert_eq(cell.cell_type, 3, "Cell type should update to 3 (goal)")
+	assert_eq(cell.cell_type, 3, "Cell type should be goal")
+	assert_eq(cell.get_cell_color(), Color(0.2, 1.0, 0.2), "Goal color should be green")
+
+	cell.free()
 
 
-func test_get_cell_color():
-	assert_eq(cell.get_cell_color(), Color(0.8, 0.8, 0.8), "Empty cell should be light gray")
+## Test: Seam data storage
+func test_seam_data_storage():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
 
-	cell.set_cell_type(1)
-	assert_eq(cell.get_cell_color(), Color(0.2, 0.2, 0.2), "Wall cell should be dark gray")
-
-	cell.set_cell_type(2)
-	assert_eq(cell.get_cell_color(), Color(0.2, 0.4, 1.0), "Water cell should be blue")
-
-	cell.set_cell_type(3)
-	assert_eq(cell.get_cell_color(), Color(0.2, 1.0, 0.2), "Goal cell should be green")
-
-
-func test_add_seam():
-	var seam_data = {
+	# Add first seam
+	var seam1 = {
 		"angle": 45.0,
-		"intersection_points": [Vector2(100, 100), Vector2(164, 164)],
+		"intersection_points": [Vector2(10, 10), Vector2(20, 20)],
 		"fold_id": 1
 	}
+	cell.add_seam(seam1)
 
-	cell.add_seam(seam_data)
-	assert_eq(cell.seams.size(), 1, "Should have 1 seam after adding")
-	assert_eq(cell.seams[0]["angle"], 45.0, "Seam data should be stored correctly")
+	assert_eq(cell.seams.size(), 1, "Should have 1 seam")
+	assert_true(cell.is_partial, "Cell should be marked as partial after adding seam")
+	assert_eq(cell.seams[0]["fold_id"], 1, "Seam data should be stored correctly")
+
+	# Add second seam
+	var seam2 = {
+		"angle": 90.0,
+		"intersection_points": [Vector2(30, 30), Vector2(40, 40)],
+		"fold_id": 2
+	}
+	cell.add_seam(seam2)
+
+	assert_eq(cell.seams.size(), 2, "Should have 2 seams")
+	assert_eq(cell.seams[1]["fold_id"], 2, "Second seam data should be stored correctly")
+
+	cell.free()
 
 
-func test_set_outline_color():
+## Test: Visual node creation and updates
+func test_visual_node():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
+
+	assert_not_null(cell.polygon_visual, "Polygon visual should exist")
+	assert_eq(cell.polygon_visual.polygon.size(), 4, "Visual polygon should have 4 vertices")
+
+	# Test visual update after cell type change
+	cell.set_cell_type(2)  # Water
+	assert_eq(cell.polygon_visual.color, Color(0.2, 0.4, 1.0), "Visual color should update with cell type")
+
+	cell.free()
+
+
+## Test: is_square() returns true for perfect square
+func test_is_square_perfect():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
+
+	assert_true(cell.is_square(), "Initial cell should be a perfect square")
+
+	cell.free()
+
+
+## Test: is_square() returns false for non-square geometry
+func test_is_square_modified():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
+
+	# Modify geometry to make it not a square (triangle)
+	cell.geometry = PackedVector2Array([
+		Vector2(0, 0),
+		Vector2(CELL_SIZE, 0),
+		Vector2(CELL_SIZE / 2, CELL_SIZE)
+	])
+
+	assert_false(cell.is_square(), "Triangle should not be a square")
+
+	cell.free()
+
+
+## Test: is_square() returns false for irregular quadrilateral
+func test_is_square_irregular():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
+
+	# Modify to irregular quadrilateral
+	cell.geometry = PackedVector2Array([
+		Vector2(0, 0),
+		Vector2(CELL_SIZE, 0),
+		Vector2(CELL_SIZE, CELL_SIZE),
+		Vector2(10, CELL_SIZE)  # Not aligned with first vertex
+	])
+
+	assert_false(cell.is_square(), "Irregular quadrilateral should not be a square")
+
+	cell.free()
+
+
+## Test: Visual feedback - outline color
+func test_visual_feedback_outline():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
+
+	assert_eq(cell.outline_color, Color.TRANSPARENT, "Outline should be transparent initially")
+
 	cell.set_outline_color(Color.RED)
 	assert_eq(cell.outline_color, Color.RED, "Outline color should be set to red")
 
-	cell.set_outline_color(Color.BLUE)
-	assert_eq(cell.outline_color, Color.BLUE, "Outline color should be set to blue")
+	cell.free()
 
 
-func test_set_hover_highlight():
+## Test: Visual feedback - hover highlight
+func test_visual_feedback_hover():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
+
+	assert_false(cell.is_hovered, "Should not be hovered initially")
+
 	cell.set_hover_highlight(true)
-	assert_true(cell.is_hovered, "Cell should be marked as hovered")
+	assert_true(cell.is_hovered, "Should be hovered after setting to true")
 
 	cell.set_hover_highlight(false)
-	assert_false(cell.is_hovered, "Cell should not be hovered")
+	assert_false(cell.is_hovered, "Should not be hovered after setting to false")
+
+	cell.free()
 
 
-func test_clear_visual_feedback():
+## Test: Visual feedback - clear all
+func test_visual_feedback_clear():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
+
+	# Set visual feedback
 	cell.set_outline_color(Color.RED)
 	cell.set_hover_highlight(true)
 
+	# Clear all
 	cell.clear_visual_feedback()
 
-	assert_eq(cell.outline_color, Color.TRANSPARENT, "Outline color should be transparent")
-	assert_false(cell.is_hovered, "Cell should not be hovered")
+	assert_eq(cell.outline_color, Color.TRANSPARENT, "Outline should be transparent after clear")
+	assert_false(cell.is_hovered, "Should not be hovered after clear")
+
+	cell.free()
 
 
-func test_multiple_seams():
-	cell.add_seam({"fold_id": 1})
-	cell.add_seam({"fold_id": 2})
-	cell.add_seam({"fold_id": 3})
+## Test: Multiple cells don't interfere with each other
+func test_multiple_cells_independence():
+	var cell1 = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
+	var cell2 = Cell.new(Vector2i(1, 0), Vector2(CELL_SIZE, 0), CELL_SIZE)
 
-	assert_eq(cell.seams.size(), 3, "Should track multiple seams")
+	cell1.set_cell_type(1)  # Wall
+	cell2.set_cell_type(2)  # Water
+
+	assert_eq(cell1.cell_type, 1, "Cell 1 should be wall")
+	assert_eq(cell2.cell_type, 2, "Cell 2 should be water")
+
+	assert_eq(cell1.grid_position, Vector2i(0, 0), "Cell 1 grid position should be (0, 0)")
+	assert_eq(cell2.grid_position, Vector2i(1, 0), "Cell 2 grid position should be (1, 0)")
+
+	cell1.free()
+	cell2.free()
