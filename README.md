@@ -19,6 +19,20 @@ This is a geometric puzzle game where players fold space to solve challenges. Th
 
 This project uses **GUT (Godot Unit Test)** v9.4.0 for automated testing.
 
+### Continuous Integration (CI/CD)
+
+[![GUT Tests](https://github.com/absent-mynd/puzzle/actions/workflows/gut-tests.yml/badge.svg)](https://github.com/absent-mynd/puzzle/actions/workflows/gut-tests.yml)
+
+All pull requests automatically run the full GUT test suite via GitHub Actions. Tests must pass before merging.
+
+**Workflow details:**
+- Runs on: Ubuntu 22.04
+- Godot version: 4.3.0
+- Test directory: `res://scripts/tests/`
+- Trigger: All PRs and pushes to `main`
+
+You can also manually trigger the workflow from the Actions tab in GitHub.
+
 #### Running Tests in Godot Editor
 1. Open the project in Godot 4
 2. Go to Project → Project Settings → Plugins
@@ -28,7 +42,7 @@ This project uses **GUT (Godot Unit Test)** v9.4.0 for automated testing.
 
 #### Running Tests from Command Line
 
-To run tests from the command line (useful for CI/CD):
+To run tests from the command line (useful for local CI/CD):
 
 ```bash
 # Run all tests
@@ -42,6 +56,18 @@ godot --path . --headless -s addons/gut/gut_cmdln.gd -gtest=res://scripts/tests/
 
 # Generate JUnit XML report for CI integration
 godot --path . --headless -s addons/gut/gut_cmdln.gd -gxml=test_results.xml
+```
+
+#### Running Tests Locally with Docker
+
+To run tests in the same environment as CI:
+
+```bash
+# Run tests using the same Docker image as GitHub Actions
+docker run --rm -v $(pwd):/workspace -w /workspace \
+  barichello/godot-ci:4.3 \
+  bash -c "godot --headless --import --quit && \
+           godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/ -gexit"
 ```
 
 #### Writing Tests
