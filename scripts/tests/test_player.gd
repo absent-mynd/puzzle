@@ -16,7 +16,7 @@ func before_each():
 	add_child_autofree(grid_manager)
 
 	# Wait for grid to initialize
-	await wait_frames(2)
+	await wait_physics_frames(2)
 
 	# Create player
 	player = Player.new()
@@ -26,7 +26,7 @@ func before_each():
 	start_position = Vector2i(5, 5)
 	player.initialize(grid_manager, start_position)
 
-	await wait_frames(1)
+	await wait_physics_frames(1)
 
 
 ## Test: Player initializes at correct grid position
@@ -52,7 +52,7 @@ func test_player_move_to_valid_cell():
 func test_player_blocked_by_boundary():
 	# Move player to edge
 	player.set_grid_position(Vector2i(9, 5))
-	await wait_frames(1)
+	await wait_physics_frames(1)
 
 	# Try to move beyond right boundary
 	var success = player.attempt_move(Vector2i(1, 0))
@@ -79,7 +79,7 @@ func test_player_blocked_by_wall():
 func test_player_four_direction_movement():
 	# Test up
 	player.set_grid_position(Vector2i(5, 5))
-	await wait_frames(1)
+	await wait_physics_frames(1)
 	assert_true(player.can_move_to(Vector2i(5, 4)), "Should be able to move up")
 
 	# Test down
@@ -166,22 +166,22 @@ func test_player_cannot_move_while_moving():
 func test_player_respects_all_boundaries():
 	# Test left boundary
 	player.set_grid_position(Vector2i(0, 5))
-	await wait_frames(1)
+	await wait_physics_frames(1)
 	assert_false(player.can_move_to(Vector2i(-1, 5)), "Cannot move left of grid")
 
 	# Test right boundary
 	player.set_grid_position(Vector2i(9, 5))
-	await wait_frames(1)
+	await wait_physics_frames(1)
 	assert_false(player.can_move_to(Vector2i(10, 5)), "Cannot move right of grid")
 
 	# Test top boundary
 	player.set_grid_position(Vector2i(5, 0))
-	await wait_frames(1)
+	await wait_physics_frames(1)
 	assert_false(player.can_move_to(Vector2i(5, -1)), "Cannot move above grid")
 
 	# Test bottom boundary
 	player.set_grid_position(Vector2i(5, 9))
-	await wait_frames(1)
+	await wait_physics_frames(1)
 	assert_false(player.can_move_to(Vector2i(5, 10)), "Cannot move below grid")
 
 
@@ -199,7 +199,7 @@ func test_player_movement_with_wall_maze():
 		maze_cell3.set_cell_type(1)
 
 	player.set_grid_position(Vector2i(3, 5))
-	await wait_frames(1)
+	await wait_physics_frames(1)
 
 	# Cannot move right (wall)
 	assert_false(player.can_move_to(Vector2i(4, 5)), "Cannot move into wall at (4,5)")
