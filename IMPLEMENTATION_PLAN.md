@@ -12,10 +12,16 @@
 - **CI/CD:** GitHub Actions configured with GUT test automation
 - **Pre-push hooks:** Available for local test execution
 
-### Next Steps
+### Next Steps (Updated Phase Structure - Now 11 Phases)
 - **Phase 3:** Simple Axis-Aligned Folding (horizontal/vertical folds)
-- **Phase 7:** Player Character (recommended before complex geometric folding)
 - **Phase 4:** Geometric Folding (most complex - diagonal folds at arbitrary angles)
+- **Phase 5:** Multi-Seam Handling
+- **Phase 6:** Undo System
+- **Phase 7:** Player Character (recommended before complex geometric folding)
+- **Phase 8:** Cell Types & Core Visual Elements
+- **Phase 9:** Level Management System (NEW - storing, creating, editing, transitioning)
+- **Phase 10:** Graphics, GUI & Audio Polish (NEW - comprehensive UI and audio)
+- **Phase 11:** Testing & Validation
 
 ---
 
@@ -61,15 +67,32 @@ SpaceFoldingPuzzle/
 │   ├── main.tscn
 │   ├── grid/
 │   ├── player/
-│   └── ui/
+│   └── ui/                      # UI scenes (menus, HUD, etc.)
+│       ├── MainMenu.tscn
+│       ├── LevelSelect.tscn
+│       ├── LevelEditor.tscn
+│       ├── HUD.tscn
+│       ├── PauseMenu.tscn
+│       ├── LevelComplete.tscn
+│       └── Settings.tscn
 ├── scripts/
-│   ├── core/           # Cell, Grid, Fold classes
-│   ├── systems/        # FoldSystem, UndoManager
-│   ├── utils/          # GeometryCore, math utilities
-│   └── tests/          # Unit and integration tests
-└── assets/
-    ├── sprites/
-    └── shaders/
+│   ├── core/                    # Cell, Grid, Fold, Player, LevelData classes
+│   ├── systems/                 # FoldSystem, UndoManager, LevelManager, AudioManager
+│   ├── ui/                      # UI controller scripts
+│   ├── utils/                   # GeometryCore, math utilities
+│   └── tests/                   # Unit and integration tests
+├── assets/
+│   ├── sprites/                 # Player, cell textures, icons
+│   ├── shaders/                 # Visual effects for folding
+│   ├── audio/
+│   │   ├── music/              # Background music tracks
+│   │   └── sfx/                # Sound effects
+│   ├── fonts/                  # UI fonts
+│   └── themes/                 # UI theme resources
+└── levels/                      # Level data files
+    ├── campaign/               # Main campaign levels
+    ├── custom/                 # User-created levels
+    └── level_packs/            # Community level packs
 ```
 
 ### 1.2 Implement GeometryCore Utility Class ✅
@@ -504,7 +527,7 @@ These are **optional** enhancements for level validation.
 
 ---
 
-## Phase 8: Cell Types & Visual Polish (Week 8)
+## Phase 8: Cell Types & Core Visual Elements (Week 8)
 **Estimated Time: 3-4 hours**
 
 ### 8.1 Implement Cell Type System
@@ -530,47 +553,651 @@ When different types merge:
 - Use shaders for smooth blending
 - Maintain gameplay properties (merged wall still blocks)
 
-### 8.3 Polish Elements
+### 8.3 Goal Detection and Win Condition
+- Detect when player reaches goal cell
+- Handle win condition (level complete)
+- Prepare for level transition system
+
+### 8.4 Basic Animation System
 - Smooth fold animations with easing
-- Particle effects at seam creation
-- Sound effects (fold, cell selection, player movement)
-- Better visual style for cells (textures, colors)
-- UI elements (fold counter, undo button, level info)
+- Cell movement tweening
+- Basic particle effects at seam creation
+
+**Tests:**
+- Cell type behaviors work correctly
+- Goal detection triggers properly
+- Cell type merging preserves gameplay rules
+- Animations complete without errors
 
 ---
 
-## Phase 9: Testing & Validation (Week 9)
-**Estimated Time: 3-4 hours**
+## Phase 9: Level Management System (Week 9)
+**Estimated Time: 5-6 hours**
 
-### 9.1 Unit Test Suite
+### 9.1 Level Data Structure
+**File:** `scripts/core/LevelData.gd`
+
+```gdscript
+class_name LevelData
+extends Resource
+
+@export var level_id: String
+@export var level_name: String
+@export var grid_size: Vector2i = Vector2i(10, 10)
+@export var cell_size: float = 64.0
+@export var player_start_position: Vector2i
+@export var cell_data: Dictionary = {}  # Vector2i -> CellType
+@export var difficulty: int = 1  # 1-5 rating
+@export var max_folds: int = -1  # -1 = unlimited
+@export var par_folds: int = -1  # Target fold count for "perfect"
+@export var description: String = ""
+@export var metadata: Dictionary = {}  # Author, tags, etc.
+```
+
+### 9.2 Level Serialization System
+**File:** `scripts/systems/LevelManager.gd`
+
+```gdscript
+class_name LevelManager
+extends Node
+
+func save_level(level_data: LevelData, file_path: String) -> bool:
+    # Serialize level to JSON or .tres (Godot resource)
+    # Include: grid layout, cell types, player start, metadata
+
+func load_level(file_path: String) -> LevelData:
+    # Deserialize level from file
+    # Validate structure and data integrity
+
+func get_level_list() -> Array[String]:
+    # Return list of available level files in levels/ directory
+```
+
+**Level File Formats:**
+- **Option A:** `.tres` files (Godot's native resource format)
+  - Pros: Easy integration, built-in editor support
+  - Cons: Binary format, harder to version control
+- **Option B:** `.json` files (custom JSON format)
+  - Pros: Human-readable, easy to version control, web-friendly
+  - Cons: Need custom serialization/deserialization
+- **Recommended:** Use JSON for portability and version control
+
+**Level Directory Structure:**
+```
+levels/
+├── campaign/
+│   ├── 01_introduction.json
+│   ├── 02_basic_folding.json
+│   ├── 03_diagonal_challenge.json
+│   └── ...
+├── custom/
+│   └── user_created_levels/
+└── level_packs/
+    └── community_pack_01/
+```
+
+### 9.3 Level Loading and Initialization
+```gdscript
+func initialize_level(level_data: LevelData):
+    # Clear current grid
+    grid_manager.clear()
+
+    # Set grid dimensions
+    grid_manager.grid_size = level_data.grid_size
+    grid_manager.cell_size = level_data.cell_size
+
+    # Populate cells with types
+    for grid_pos in level_data.cell_data:
+        var cell = grid_manager.get_cell(grid_pos)
+        cell.cell_type = level_data.cell_data[grid_pos]
+
+    # Position player at start
+    player.set_grid_position(level_data.player_start_position)
+
+    # Reset game state
+    undo_manager.clear_history()
+    fold_count = 0
+```
+
+### 9.4 Level Editor System
+**File:** `scenes/ui/LevelEditor.tscn` and `scripts/ui/LevelEditor.gd`
+
+**Features:**
+- Grid size configuration (5x5 to 20x20)
+- Paint tool for cell types (empty, wall, water, goal)
+- Player start position placement
+- Level metadata editor (name, description, par folds)
+- Save/Load level files
+- Play-test current level in editor
+
+**UI Components:**
+- Toolbar with cell type selection
+- Grid view with click-to-paint
+- Properties panel for level settings
+- File operations (new, open, save, save as)
+- Preview mode to test level
+
+**Implementation:**
+```gdscript
+class_name LevelEditor
+extends Control
+
+var current_level: LevelData
+var selected_cell_type: int = CellType.EMPTY
+var paint_mode: bool = false
+
+func _on_grid_cell_clicked(grid_pos: Vector2i):
+    if paint_mode:
+        paint_cell(grid_pos, selected_cell_type)
+
+func save_current_level():
+    var file_path = level_save_dialog.current_path
+    level_manager.save_level(current_level, file_path)
+
+func load_level_for_editing(file_path: String):
+    current_level = level_manager.load_level(file_path)
+    refresh_editor_grid()
+```
+
+### 9.5 Level Transition System
+**File:** `scripts/systems/LevelTransitionManager.gd`
+
+```gdscript
+class_name LevelTransitionManager
+extends Node
+
+signal level_started(level_id: String)
+signal level_completed(level_id: String, stats: Dictionary)
+signal level_failed(level_id: String)
+
+var current_level_id: String
+var campaign_progress: Dictionary = {}  # level_id -> completed/stars/etc
+
+func start_level(level_id: String):
+    var level_data = level_manager.load_level_by_id(level_id)
+    initialize_level(level_data)
+    current_level_id = level_id
+    level_started.emit(level_id)
+
+func complete_level(stats: Dictionary):
+    # Stats: fold_count, time_elapsed, par_achieved, etc.
+    level_completed.emit(current_level_id, stats)
+    update_campaign_progress(current_level_id, stats)
+    show_level_complete_screen(stats)
+
+func go_to_next_level():
+    var next_level = get_next_campaign_level(current_level_id)
+    if next_level:
+        start_level(next_level)
+    else:
+        show_campaign_complete_screen()
+
+func restart_level():
+    start_level(current_level_id)
+
+func return_to_menu():
+    get_tree().change_scene_to_file("res://scenes/ui/MainMenu.tscn")
+```
+
+### 9.6 Campaign Progress System
+**File:** `scripts/systems/ProgressManager.gd`
+
+```gdscript
+class_name ProgressManager
+extends Node
+
+const SAVE_FILE = "user://campaign_progress.json"
+
+var campaign_data: Dictionary = {
+    "levels_completed": [],
+    "levels_unlocked": ["01_introduction"],
+    "total_folds": 0,
+    "best_times": {},  # level_id -> best_time
+    "stars_earned": {}  # level_id -> stars (0-3)
+}
+
+func save_progress():
+    var file = FileAccess.open(SAVE_FILE, FileAccess.WRITE)
+    file.store_string(JSON.stringify(campaign_data))
+
+func load_progress():
+    if FileAccess.file_exists(SAVE_FILE):
+        var file = FileAccess.open(SAVE_FILE, FileAccess.READ)
+        var json_string = file.get_as_text()
+        campaign_data = JSON.parse_string(json_string)
+
+func mark_level_complete(level_id: String, stats: Dictionary):
+    if level_id not in campaign_data.levels_completed:
+        campaign_data.levels_completed.append(level_id)
+
+    # Calculate stars (3 = par or better, 2 = under 1.5x par, 1 = completed)
+    var stars = calculate_stars(stats)
+    campaign_data.stars_earned[level_id] = max(
+        stars,
+        campaign_data.stars_earned.get(level_id, 0)
+    )
+
+    # Unlock next level
+    unlock_next_level(level_id)
+    save_progress()
+
+func unlock_next_level(completed_level_id: String):
+    var next_level = get_sequential_next_level(completed_level_id)
+    if next_level and next_level not in campaign_data.levels_unlocked:
+        campaign_data.levels_unlocked.append(next_level)
+```
+
+### 9.7 Level Validation System
+**File:** `scripts/systems/LevelValidator.gd`
+
+```gdscript
+class_name LevelValidator
+extends Node
+
+func validate_level(level_data: LevelData) -> Dictionary:
+    var errors = []
+    var warnings = []
+
+    # Check for required elements
+    if not has_player_start(level_data):
+        errors.append("No player start position defined")
+
+    if not has_goal(level_data):
+        errors.append("No goal cell defined")
+
+    # Check for accessibility
+    if not is_goal_reachable(level_data):
+        warnings.append("Goal may not be reachable from start")
+
+    # Check for reasonable difficulty
+    if level_data.max_folds > 0 and level_data.max_folds < 2:
+        warnings.append("Max folds seems very restrictive")
+
+    return {
+        "valid": errors.size() == 0,
+        "errors": errors,
+        "warnings": warnings
+    }
+
+func is_goal_reachable(level_data: LevelData) -> bool:
+    # Simple pathfinding check (BFS/DFS)
+    # Returns true if goal is reachable from start
+    # without considering folds
+```
+
+### 9.8 Level Selection UI
+**Scene:** `scenes/ui/LevelSelect.tscn`
+
+**Features:**
+- Grid or list view of campaign levels
+- Show level status: locked, unlocked, completed
+- Display stars earned per level
+- Show level name, difficulty, par folds
+- Filter by difficulty or completion status
+- "Play" and "Edit" buttons for each level
+
+**Tests:**
+- Level saves correctly to JSON
+- Level loads with all properties intact
+- Level editor can create valid levels
+- Campaign progress saves and loads
+- Level transitions work smoothly
+- Invalid levels are caught by validator
+- Progress unlocks next levels correctly
+
+---
+
+## Phase 10: Graphics, GUI & Audio Polish (Week 10)
+**Estimated Time: 6-8 hours**
+
+### 10.1 Visual Style and Graphics
+
+#### Cell Visuals
+- Design distinct textures/colors for each cell type:
+  - Empty: Light gray with subtle grid pattern
+  - Wall: Dark stone texture with highlights
+  - Water: Animated flowing water shader
+  - Goal: Glowing/pulsing effect
+- Add border outlines for cell clarity
+- Implement proper lighting and shadows
+
+#### Fold Animation Polish
+```gdscript
+func animate_fold(cells_to_move: Array, target_positions: Array):
+    var tween = create_tween()
+    tween.set_parallel(true)
+
+    for i in cells_to_move.size():
+        tween.tween_property(
+            cells_to_move[i],
+            "position",
+            target_positions[i],
+            0.6
+        ).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_CUBIC)
+
+    # Particle effects
+    spawn_fold_particles(fold_line)
+
+    # Camera shake
+    camera.apply_shake(0.3, 5.0)
+```
+
+#### Seam Visuals
+- Glowing animated lines for seams
+- Color-code seams by age (newest = bright, older = faded)
+- Add "stitching" effect along seam lines
+- Particle trails when seams form
+
+#### Player Character Design
+- Animated sprite with idle, walk animations
+- Directional sprites for 4-way movement
+- Footstep particles
+- Shadow underneath character
+
+### 10.2 User Interface System
+
+#### Main Menu
+**Scene:** `scenes/ui/MainMenu.tscn`
+
+**Components:**
+- Title screen with game logo
+- Buttons:
+  - Play Campaign
+  - Level Select
+  - Level Editor
+  - Settings
+  - Credits
+  - Quit
+- Background animation (subtle fold effect)
+- Menu transition animations
+
+#### HUD (Heads-Up Display)
+**Scene:** `scenes/ui/HUD.tscn`
+
+**Elements:**
+- Fold counter: "Folds: 5 / 8" (current / par)
+- Undo button with count
+- Pause menu button
+- Level name display
+- Timer (optional, for speedruns)
+- Hint button (optional)
+
+#### Pause Menu
+**Scene:** `scenes/ui/PauseMenu.tscn`
+
+**Options:**
+- Resume
+- Restart Level
+- Level Select
+- Settings
+- Main Menu
+
+#### Level Complete Screen
+**Scene:** `scenes/ui/LevelComplete.tscn`
+
+**Display:**
+- "Level Complete!" message
+- Stars earned (based on fold efficiency)
+- Statistics:
+  - Folds used
+  - Par folds
+  - Time elapsed
+- Buttons:
+  - Next Level
+  - Retry (for better score)
+  - Level Select
+
+#### Settings Menu
+**Scene:** `scenes/ui/Settings.tscn`
+
+**Options:**
+- Audio:
+  - Master volume
+  - Music volume
+  - SFX volume
+- Graphics:
+  - Fullscreen toggle
+  - VSync toggle
+  - Particle effects on/off
+- Controls:
+  - Key remapping (future)
+- Accessibility:
+  - Colorblind mode
+  - Animation speed
+  - Grid lines on/off
+
+### 10.3 Audio System
+**File:** `scripts/systems/AudioManager.gd`
+
+```gdscript
+class_name AudioManager
+extends Node
+
+var music_bus_index: int
+var sfx_bus_index: int
+
+var current_music: AudioStreamPlayer
+var music_tracks: Dictionary = {}
+
+func _ready():
+    music_bus_index = AudioServer.get_bus_index("Music")
+    sfx_bus_index = AudioServer.get_bus_index("SFX")
+
+    # Load audio resources
+    load_audio_resources()
+
+func play_music(track_name: String, fade_in: bool = true):
+    if current_music and current_music.playing:
+        fade_out_music()
+
+    current_music = music_tracks[track_name]
+
+    if fade_in:
+        var tween = create_tween()
+        current_music.volume_db = -80
+        current_music.play()
+        tween.tween_property(current_music, "volume_db", 0, 2.0)
+    else:
+        current_music.play()
+
+func play_sfx(sound_name: String, pitch_variation: float = 0.1):
+    var player = AudioStreamPlayer.new()
+    add_child(player)
+    player.stream = load("res://assets/audio/sfx/" + sound_name + ".ogg")
+    player.bus = "SFX"
+
+    # Add slight pitch variation for variety
+    player.pitch_scale = 1.0 + randf_range(-pitch_variation, pitch_variation)
+
+    player.play()
+    player.finished.connect(func(): player.queue_free())
+
+func set_music_volume(volume: float):
+    AudioServer.set_bus_volume_db(music_bus_index, linear_to_db(volume))
+
+func set_sfx_volume(volume: float):
+    AudioServer.set_bus_volume_db(sfx_bus_index, linear_to_db(volume))
+```
+
+#### Sound Effects Needed
+- **Player Actions:**
+  - Footstep (4 variations)
+  - Bump into wall
+  - Reach goal (victory jingle)
+- **Fold System:**
+  - Cell selection (click)
+  - Anchor placed (confirmation beep)
+  - Fold execute (whoosh + spatial warp sound)
+  - Fold invalid (error beep)
+  - Undo fold (reverse whoosh)
+- **UI:**
+  - Button hover
+  - Button click
+  - Menu open/close
+  - Level complete fanfare
+  - Star earned (3 variations)
+
+#### Music Tracks
+- Main menu theme (ambient, mysterious)
+- Gameplay background music (calm, thinking music)
+- Level complete jingle
+- Final level / boss puzzle music (optional)
+
+**Audio Format:** `.ogg` (Vorbis) for compatibility and size
+
+### 10.4 Particle Effects System
+
+#### Fold Particles
+```gdscript
+var fold_particles = CPUParticles2D.new()
+fold_particles.amount = 50
+fold_particles.lifetime = 1.0
+fold_particles.explosiveness = 0.8
+fold_particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_LINE
+# Spawn along fold line
+fold_particles.position = fold_line_center
+fold_particles.rotation = fold_angle
+```
+
+**Effects to Implement:**
+- Sparkles along seam creation
+- Grid "tear" effect when removing cells
+- Dust particles when cells move
+- Glow effect on merged anchor points
+- Victory particles when reaching goal
+
+### 10.5 Camera System
+**File:** `scripts/core/GameCamera.gd`
+
+```gdscript
+class_name GameCamera
+extends Camera2D
+
+func follow_player(player: Player):
+    # Smooth camera follow
+    var tween = create_tween()
+    tween.tween_property(self, "position", player.position, 0.3)
+
+func zoom_to_fit_grid(grid_size: Vector2i, cell_size: float):
+    # Automatically adjust zoom to fit grid on screen
+    var viewport_size = get_viewport_rect().size
+    var grid_pixel_size = Vector2(grid_size) * cell_size
+    var zoom_factor = min(
+        viewport_size.x / grid_pixel_size.x,
+        viewport_size.y / grid_pixel_size.y
+    ) * 0.9  # 90% to add padding
+
+    zoom = Vector2(zoom_factor, zoom_factor)
+
+func apply_shake(duration: float, intensity: float):
+    # Camera shake effect for impactful moments
+    var original_offset = offset
+    var shake_tween = create_tween()
+
+    for i in range(int(duration * 60)):  # 60 FPS
+        var shake_offset = Vector2(
+            randf_range(-intensity, intensity),
+            randf_range(-intensity, intensity)
+        )
+        shake_tween.tween_property(
+            self, "offset",
+            original_offset + shake_offset,
+            1.0/60.0
+        )
+
+    shake_tween.tween_property(self, "offset", original_offset, 0.1)
+```
+
+### 10.6 Theme and Styling
+
+#### UI Theme Resource
+Create `assets/themes/main_theme.tres`:
+- Button styles (normal, hover, pressed, disabled)
+- Label fonts and sizes
+- Panel backgrounds
+- Color palette:
+  - Primary: #4A90E2 (blue)
+  - Secondary: #7B68EE (purple)
+  - Success: #50C878 (green)
+  - Warning: #FFB347 (orange)
+  - Error: #E74C3C (red)
+  - Background: #2C3E50 (dark blue-gray)
+  - Text: #ECF0F1 (light gray)
+
+#### Fonts
+- Heading: Bold, large font (e.g., Montserrat Bold)
+- Body: Regular, readable font (e.g., Roboto Regular)
+- Monospace: For counters and numbers (e.g., Courier New)
+
+### 10.7 Visual Feedback Systems
+
+#### Hover Effects
+- Cell hover: Subtle highlight
+- Button hover: Color change + scale up slightly
+- Anchor preview: Show fold line before committing
+
+#### Selection Indicators
+- Selected anchors: Colored outlines (red for first, blue for second)
+- Player cell: Subtle glow
+- Goal cell: Pulsing animation
+- Seam lines: Animated dashed lines
+
+#### Transition Animations
+- Scene transitions: Fade to black
+- Level start: Grid builds from center
+- Level complete: Zoom and particle burst
+
+**Tests:**
+- Audio plays correctly without clicks/pops
+- Volume controls work for music and SFX
+- UI elements are responsive and accessible
+- Animations run at 60 FPS
+- Camera follows player smoothly
+- Particle effects don't cause performance issues
+- UI theme is consistent across all screens
+
+---
+
+## Phase 11: Testing & Validation (Week 11)
+**Estimated Time: 4-5 hours**
+
+### 11.1 Unit Test Suite
 Create tests for:
 - Geometric utilities (point-line, intersections, splits)
 - Cell operations (splitting, merging)
 - Grid operations (fold, undo)
 - Player movement logic
+- Level loading and saving
+- Audio system
 
 **Test Framework:** GUT (Godot Unit Test) or built-in testing
 
-### 9.2 Integration Tests
+### 11.2 Integration Tests
 - Full fold-undo cycles
 - Multiple sequential folds
 - Player interaction with folds
-- Save/load state
+- Level save/load cycles
+- Campaign progression flow
+- UI navigation and transitions
 
-### 9.3 Edge Case Validation
+### 11.3 Edge Case Validation
 Run all scenarios from `test_scenarios_and_validation.md`:
 - Cut through vertex
 - Near-parallel cuts
 - Minimum distance validation
 - Triple seam intersection
 - Dependent undo blocking
+- Level loading edge cases (corrupted files, missing data)
+- Audio edge cases (multiple sounds, quick succession)
 
-### 9.4 Performance Tests
+### 11.4 Performance Tests
 **Targets:**
 - Fold operation: < 100ms for 20x20 grid
 - Animation: 60 FPS
 - Memory: < 50MB for complex states
 - Undo operation: < 50ms
+- Level load time: < 500ms
+- UI responsiveness: < 16ms input latency
 
 **Optimization Strategy:**
 - Pre-calculate cell centroids
@@ -578,14 +1205,17 @@ Run all scenarios from `test_scenarios_and_validation.md`:
 - Batch visual updates
 - Object pooling for split cells
 - Consider MultiMesh for rendering
+- Optimize audio loading (stream vs. preload)
 
-### 9.5 Debug Visualization Tools
+### 11.5 Debug Visualization Tools
 Create debug overlays:
 - Show cell vertices and indices
 - Visualize cut lines before folding
 - Display fold operation data
 - Show seam hierarchy
 - Cell type color coding
+- FPS counter and performance stats
+- Memory usage display
 
 ---
 
@@ -651,11 +1281,20 @@ for cell in cells_to_remove:
 5. **Week 7:** Phase 6 (Undo System)
    - Build on stable fold implementation
 
-6. **Week 8:** Phase 8 (Polish)
-   - Make it look good
+6. **Week 8:** Phase 8 (Cell Types & Core Visuals)
+   - Implement gameplay elements
 
-7. **Week 9:** Phase 9 (Testing & Optimization)
+7. **Week 9:** Phase 9 (Level Management)
+   - Add level loading, saving, editor
+   - Critical for creating content
+
+8. **Week 10:** Phase 10 (Graphics, GUI & Audio)
+   - Polish the look and feel
+   - Implement full UI system
+
+9. **Week 11:** Phase 11 (Testing & Optimization)
    - Validate everything
+   - Final performance optimization
 
 ---
 
@@ -682,7 +1321,15 @@ for cell in cells_to_remove:
    - May need optimization
    - **Mitigation:** Profile early, implement spatial partitioning if needed
 
-5. **Visual Polish (Phase 8)**
+5. **Level Editor (Phase 9)**
+   - UI complexity and feature creep
+   - **Mitigation:** Start with minimal viable editor, add features iteratively
+
+6. **Audio System (Phase 10)**
+   - Timing, synchronization, resource loading
+   - **Mitigation:** Use proven patterns, test early and often
+
+7. **Visual Polish (Phase 10)**
    - Can be time-consuming
    - **Mitigation:** Start simple, iterate based on feedback
 
@@ -698,6 +1345,12 @@ for cell in cells_to_remove:
 ✅ Multiple seams handled correctly
 ✅ Undo system respects dependencies
 ✅ **Fold validation prevents player conflicts (removed region or split cell)**
+✅ Level system loads and saves correctly
+✅ Level editor creates valid levels
+✅ Campaign progression tracks properly
+✅ UI is intuitive and responsive
+✅ Audio plays without glitches
+✅ Graphics are polished and consistent
 ✅ All edge cases handled
 ✅ Performance targets met
 ✅ Visual representation is clear
@@ -716,16 +1369,29 @@ for cell in cells_to_remove:
 7. Level win condition: just reach goal, or collect items too?
 8. Should water cells have special mechanics?
 9. Should folds that remove the goal cell be prevented?
+10. Should level files be JSON or .tres format? **RECOMMENDED:** JSON for portability
+11. Should the level editor be in-game or separate tool?
+12. How should campaign unlocking work? Linear or branching paths?
+13. Should there be a tutorial system?
+14. What audio style: ambient/mysterious vs. upbeat/puzzle?
+15. Should there be a hint system for stuck players?
+16. Should levels have a time limit or timer?
+17. Should there be achievements/trophies?
+18. Should custom levels be shareable (export/import)?
 
 ---
 
 ## Next Steps
 
-1. Set up Godot 4 project with folder structure
-2. Implement GeometryCore.gd (critical foundation)
-3. Create basic Cell and GridManager classes
-4. Implement simple grid rendering
-5. Add anchor selection
+1. ✅ Set up Godot 4 project with folder structure
+2. ✅ Implement GeometryCore.gd (critical foundation)
+3. ✅ Create basic Cell and GridManager classes
+4. ✅ Implement simple grid rendering
+5. ✅ Add anchor selection
 6. Start with Phase 3 (simple folding)
+7. Continue through phases 4-11 as outlined
+8. Create initial level content as systems become available
+9. Iterate on UI/UX based on playtesting
+10. Polish and optimize before release
 
-**Ready to begin implementation!**
+**Ready to continue implementation!**
