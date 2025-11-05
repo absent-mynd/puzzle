@@ -11,6 +11,9 @@ extends Node2D
 ## Starting position for player
 var player_start_position := Vector2i(5, 5)
 
+## Fold system for grid transformations
+var fold_system: FoldSystem = null
+
 ## Game state
 var is_level_complete: bool = false
 
@@ -24,9 +27,20 @@ func _ready() -> void:
 	# Wait for grid to be ready
 	await get_tree().process_frame
 
+	# Initialize FoldSystem (Issue #9)
+	fold_system = FoldSystem.new()
+	fold_system.initialize(grid_manager)
+	add_child(fold_system)
+
 	# Initialize player with grid manager
 	if player and grid_manager:
 		player.initialize(grid_manager, player_start_position)
+
+		# Connect FoldSystem to player for validation
+		fold_system.set_player(player)
+
+		# Wire GridManager to FoldSystem for preview line validation
+		grid_manager.fold_system = fold_system
 
 		# Connect to player signals
 		player.goal_reached.connect(_on_player_goal_reached)
@@ -145,3 +159,38 @@ func _on_restart_pressed() -> void:
 ## Check if level is complete (for testing)
 func check_win_condition() -> bool:
 	return is_level_complete
+
+
+## Handle input for fold execution (Issue #9)
+func _unhandled_input(event: InputEvent) -> void:
+	# Block input if level is complete
+	if is_level_complete:
+		return
+
+	# Execute fold when ENTER/SPACE is pressed
+	if event.is_action_pressed("ui_accept"):
+		execute_fold()
+
+
+## Execute fold with selected anchors
+func execute_fold() -> void:
+	if not fold_system or not grid_manager:
+		return
+
+	# Check if we have exactly 2 anchors selected
+	var anchors = grid_manager.get_selected_anchors()
+	if anchors.size() != 2:
+		print("Select exactly 2 anchor cells to fold")
+		return
+
+	# Execute the fold (with animation)
+	var success = await fold_system.execute_fold(anchors[0], anchors[1], true)
+
+	# Clear selection after fold (whether successful or not)
+	if grid_manager:
+		grid_manager.clear_selection()
+
+	if success:
+		print("Fold executed successfully!")
+	else:
+		print("Fold failed - check validation messages")
