@@ -38,6 +38,11 @@ GODOT_VERSION=$("$GODOT_BIN" --version | head -n 1)
 echo "Using Godot: $GODOT_VERSION"
 echo ""
 
+# Import project first (required for GUT classes to be recognized)
+echo "Importing project..."
+"$GODOT_BIN" --path . --headless --import --quit
+echo ""
+
 # Run tests
 echo "Running GUT tests..."
 echo "===================="
