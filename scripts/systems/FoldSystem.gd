@@ -67,6 +67,105 @@ func get_fold_orientation(anchor1: Vector2i, anchor2: Vector2i) -> String:
 		return "diagonal"
 
 
+## Validation Methods
+
+## Minimum fold distance constant (at least 1 cell between anchors)
+const MIN_FOLD_DISTANCE = 1
+
+## Validate a fold before execution
+##
+## Checks all validation rules and returns a result dictionary.
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: Dictionary with keys {valid: bool, reason: String}
+func validate_fold(anchor1: Vector2i, anchor2: Vector2i) -> Dictionary:
+	# Check anchors exist
+	if not validate_anchors_exist(anchor1, anchor2):
+		return {valid = false, reason = "One or both anchors are invalid"}
+
+	# Check not same cell
+	if not validate_not_same_cell(anchor1, anchor2):
+		return {valid = false, reason = "Cannot fold a cell onto itself"}
+
+	# Check axis-aligned (Phase 3 only) - Must come before minimum distance
+	# because minimum distance check returns wrong error for diagonals
+	if not validate_same_row_or_column(anchor1, anchor2):
+		return {valid = false, reason = "Only horizontal and vertical folds supported (for now)"}
+
+	# Check minimum distance
+	if not validate_minimum_distance(anchor1, anchor2):
+		return {valid = false, reason = "Anchors must have at least one cell between them"}
+
+	return {valid = true, reason = ""}
+
+
+## Check if both anchors exist and are within grid bounds
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true if both anchors are valid
+func validate_anchors_exist(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	# Check if grid_manager is initialized
+	if not grid_manager:
+		return false
+
+	# Check if anchors are within grid bounds
+	if anchor1.x < 0 or anchor1.x >= grid_manager.grid_size.x:
+		return false
+	if anchor1.y < 0 or anchor1.y >= grid_manager.grid_size.y:
+		return false
+	if anchor2.x < 0 or anchor2.x >= grid_manager.grid_size.x:
+		return false
+	if anchor2.y < 0 or anchor2.y >= grid_manager.grid_size.y:
+		return false
+
+	# Check if anchor cells exist
+	if not grid_manager.get_cell(anchor1):
+		return false
+	if not grid_manager.get_cell(anchor2):
+		return false
+
+	return true
+
+
+## Check if anchors are not the same cell
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true if anchors are different cells
+func validate_not_same_cell(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	return anchor1 != anchor2
+
+
+## Check if anchors meet minimum distance requirement
+##
+## Anchors must have at least MIN_FOLD_DISTANCE cells between them.
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true if minimum distance is met
+func validate_minimum_distance(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	var distance = get_fold_distance(anchor1, anchor2)
+
+	# get_fold_distance returns -1 for invalid (diagonal) folds
+	if distance < 0:
+		return false
+
+	return distance >= MIN_FOLD_DISTANCE
+
+
+## Check if fold is axis-aligned (horizontal or vertical)
+##
+## For Phase 3, only axis-aligned folds are supported.
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true if fold is horizontal or vertical
+func validate_same_row_or_column(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	return is_horizontal_fold(anchor1, anchor2) or is_vertical_fold(anchor1, anchor2)
+
+
 ## Helper Methods
 
 ## Calculate which cells will be removed by a fold
@@ -308,8 +407,8 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 
 ## Execute a fold between two anchor points
 ##
-## This is the main entry point for fold execution. It determines the
-## fold orientation and routes to the appropriate handler.
+## This is the main entry point for fold execution. It validates the fold,
+## determines the fold orientation, and routes to the appropriate handler.
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
@@ -317,6 +416,13 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 func execute_fold(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 	if not grid_manager:
 		push_error("FoldSystem: GridManager not initialized")
+		return false
+
+	# Validate fold before execution
+	var validation = validate_fold(anchor1, anchor2)
+
+	if not validation.valid:
+		push_warning("FoldSystem: Fold validation failed: " + validation.reason)
 		return false
 
 	var orientation = get_fold_orientation(anchor1, anchor2)
