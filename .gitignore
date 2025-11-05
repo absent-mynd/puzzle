@@ -3,6 +3,9 @@
 *.translation
 *.import
 
+# Local Godot binary (decompressed from godot.gz)
+tools/godot/godot
+
 # Mono-specific ignores
 .mono/
 data_*/
