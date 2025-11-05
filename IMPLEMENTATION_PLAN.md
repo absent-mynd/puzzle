@@ -12,6 +12,26 @@ This plan synthesizes information from:
 
 ---
 
+## Key Design Decisions
+
+These architectural decisions shape the entire implementation:
+
+✅ **Hybrid Grid-Polygon System** - Start with simple grid cells, convert to polygons only when split (memory efficient, easier level creation)
+
+✅ **Tessellation for Multi-Seams** - When seams intersect, subdivide cells into convex regions (most robust for complex cases)
+
+✅ **Bounded Grid Model** - Folds clip at grid boundaries, don't create cells outside grid (most intuitive for players)
+
+✅ **Player Fold Validation** - **CRITICAL:** Folds are blocked if player is in the removed region OR on a cell that would be split (simplifies player logic, prevents edge cases)
+
+✅ **Shader + Mesh Visuals** - Combine shaders for cell blending with Line2D nodes for seam lines
+
+✅ **Strict Undo Ordering** - Can only undo a fold if it's the newest fold affecting all its cells (simpler than partial resolution)
+
+✅ **Sutherland-Hodgman Polygon Splitting** - Industry-standard algorithm for reliable polygon clipping
+
+---
+
 ## Phase 1: Project Setup & Foundation (Week 1)
 **Estimated Time: 2-3 hours**
 
@@ -136,13 +156,39 @@ func execute_fold(anchor1: Vector2, anchor2: Vector2, grid: GridManager):
 ```
 
 **Algorithm for Horizontal Fold:**
-1. Identify all cells between anchors
-2. Remove those cells from grid
-3. Shift cells to the right of anchor2 to be adjacent to anchor1
-4. Update world positions
-5. Create merged anchor point
+1. **Validate fold with player position** (see 3.2)
+2. Identify all cells between anchors
+3. Remove those cells from grid
+4. Shift cells to the right of anchor2 to be adjacent to anchor1
+5. Update world positions
+6. Create merged anchor point
 
-### 3.2 Visual Feedback System
+### 3.2 Fold Validation with Player Position
+**CRITICAL CONSTRAINT:** Folds are not permitted if:
+1. Player is in the region that would be removed (between anchors)
+2. Player is on a cell that would be split by the fold seam
+
+```gdscript
+func validate_fold_with_player(anchor1: Vector2, anchor2: Vector2, player: Player) -> bool:
+    # Check if player is in removed region
+    var removed_cells = calculate_removed_cells(anchor1, anchor2)
+    if player.grid_position in removed_cells:
+        return false  # Fold blocked - player in removed region
+
+    # Check if player's cell would be split
+    var player_cell = grid.get_cell(player.grid_position)
+    if would_cell_be_split(player_cell, anchor1, anchor2):
+        return false  # Fold blocked - player on split cell
+
+    return true  # Fold allowed
+```
+
+**Visual Feedback:**
+- Show red preview line if fold is blocked by player
+- Show green preview line if fold is valid
+- Display message: "Cannot fold - player in the way"
+
+### 3.3 Visual Feedback System
 - Preview line between anchors before fold
 - 0.5 second animation for grid sections moving
 - Seam line visualization after fold
@@ -153,6 +199,9 @@ func execute_fold(anchor1: Vector2, anchor2: Vector2, grid: GridManager):
 - Vertical fold removes correct cells
 - Cells maintain relative positions
 - Fold operations are stored correctly
+- **Fold blocked when player in removed region**
+- **Fold blocked when player on cell that would be split**
+- **Visual feedback shows red for blocked folds**
 
 ---
 
@@ -229,6 +278,29 @@ When anchors are nearly aligned:
 - Don't create cells outside grid
 - More intuitive for players
 
+#### Edge Case 5: Player Position Validation
+**CRITICAL:** Must validate before any fold:
+- Check if player is in removed region (between cut lines)
+- Check if player's cell would be split by either cut line
+- Use `GeometryCore.split_polygon_by_line()` to test if player cell intersects
+- Block fold and show visual feedback if invalid
+
+```gdscript
+func would_cell_be_split(cell: Cell, anchor1: Vector2, anchor2: Vector2) -> bool:
+    var cut_lines = calculate_cut_lines(anchor1, anchor2)
+
+    # Check both perpendicular cut lines
+    var split1 = GeometryCore.split_polygon_by_line(
+        cell.geometry, cut_lines.line1.point, cut_lines.line1.normal
+    )
+    var split2 = GeometryCore.split_polygon_by_line(
+        cell.geometry, cut_lines.line2.point, cut_lines.line2.normal
+    )
+
+    # Cell is split if either line divides it
+    return split1.intersections.size() > 0 or split2.intersections.size() > 0
+```
+
 **Tests:**
 - Polygon splitting at 45 degrees
 - Corner intersection cases
@@ -236,6 +308,8 @@ When anchors are nearly aligned:
 - Seam data stored correctly
 - Near-horizontal folds (89 degrees)
 - Very short fold distances
+- **Player position validation blocks folds correctly**
+- **Diagonal fold blocked when player cell would be split**
 
 ---
 
@@ -373,32 +447,41 @@ var is_moving: bool = false
 - Simple tween animation for smooth movement
 
 ### 7.3 Player-Fold Interaction
-**Decision:** Proportional Positioning
-If player is X% along the distance between anchors, place at X% along the resulting seam.
+**SIMPLIFIED DESIGN:** Folds that affect the player are prevented entirely.
 
-**Algorithm:**
+Since fold validation (Phase 3.2 and Phase 4.5) blocks any fold where:
+- Player is in the removed region
+- Player's cell would be split
+
+**No special player relocation logic is needed!**
+
+The fold system simply calls the validation function before executing:
 ```gdscript
-func handle_player_during_fold(player, anchor1, anchor2, removed_region):
-    if player.position in removed_region:
-        var t = calculate_position_ratio(player.position, anchor1, anchor2)
-        player.position = lerp(anchor1, anchor2, t)
-    elif player.cell is split:
-        # Keep in remaining portion
-        if not point_in_polygon(player.position, player.cell.geometry):
-            player.position = player.cell.get_center()
+func attempt_fold(anchor1: Vector2, anchor2: Vector2):
+    if not validate_fold_with_player(anchor1, anchor2, player):
+        show_error_message("Cannot fold - player in the way")
+        show_red_preview_line(anchor1, anchor2)
+        return false
+
+    execute_fold(anchor1, anchor2)
+    return true
 ```
 
-### 7.4 Fold Validation with Player
-Optional: Prevent folds that would:
-- Trap player with no valid moves
-- Remove goal cell
-- Create unreachable regions
+### 7.4 Optional: Advanced Validation
+For additional puzzle design constraints, you may also want to prevent folds that:
+- Remove the goal cell
+- Create unreachable regions (trap player)
+- Leave player with no valid moves
+
+These are **optional** enhancements for level validation.
 
 **Tests:**
-- Player movement validation
-- Player position after fold in removed area
-- Player position after fold on split cell
-- Fold prevention when it would trap player (if implemented)
+- Player movement in four directions
+- Movement blocked by walls
+- **Fold attempt blocked when player in removed region**
+- **Fold attempt blocked when player on cell that would split**
+- **Error message displays correctly**
+- **Preview line shows red for invalid folds**
 
 ---
 
@@ -595,7 +678,7 @@ for cell in cells_to_remove:
 ✅ Cells split and merge properly
 ✅ Multiple seams handled correctly
 ✅ Undo system respects dependencies
-✅ Player interacts correctly with folds
+✅ **Fold validation prevents player conflicts (removed region or split cell)**
 ✅ All edge cases handled
 ✅ Performance targets met
 ✅ Visual representation is clear
@@ -606,13 +689,14 @@ for cell in cells_to_remove:
 ## Design Questions to Resolve During Implementation
 
 1. Should fold animations be interruptible?
-2. What happens if player tries to move during fold?
+2. ~~What happens if player tries to move during fold?~~ **RESOLVED:** Player movement during animation can be blocked.
 3. Should cells remember original position for undo?
 4. How should diagonal movement work for player?
 5. Should there be a maximum number of folds per level?
 6. Should we show fold count/undo count in UI?
 7. Level win condition: just reach goal, or collect items too?
 8. Should water cells have special mechanics?
+9. Should folds that remove the goal cell be prevented?
 
 ---
 
