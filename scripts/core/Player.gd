@@ -63,11 +63,12 @@ func initialize(manager: GridManager, start_pos: Vector2i) -> void:
 	grid_position = start_pos
 
 	# Set world position to center of starting cell
+	# Cell centers are in GridManager's local space, so convert to global
 	if grid_manager:
 		var cell = grid_manager.get_cell(grid_position)
 		if cell:
-			position = cell.get_center()
-			target_position = position
+			global_position = grid_manager.to_global(cell.get_center())
+			target_position = global_position
 
 
 ## Process input and update position
@@ -146,11 +147,12 @@ func execute_move(new_grid_pos: Vector2i) -> void:
 	grid_position = new_grid_pos
 
 	# Get target cell and calculate world position
+	# Cell centers are in GridManager's local space, so convert to global
 	var target_cell = grid_manager.get_cell(new_grid_pos)
 	if not target_cell:
 		return
 
-	target_position = target_cell.get_center()
+	target_position = grid_manager.to_global(target_cell.get_center())
 
 	# Start movement animation
 	start_move_tween()
@@ -169,8 +171,8 @@ func start_move_tween() -> void:
 	move_tween.set_ease(Tween.EASE_IN_OUT)
 	move_tween.set_trans(Tween.TRANS_CUBIC)
 
-	# Animate position
-	move_tween.tween_property(self, "position", target_position, move_duration)
+	# Animate global_position since target_position is in global coordinates
+	move_tween.tween_property(self, "global_position", target_position, move_duration)
 
 	# Connect to finished signal
 	move_tween.finished.connect(_on_move_finished)
@@ -204,7 +206,8 @@ func set_grid_position(new_pos: Vector2i) -> void:
 		return
 
 	grid_position = new_pos
+	# Cell centers are in GridManager's local space, so convert to global
 	var cell = grid_manager.get_cell(grid_position)
 	if cell:
-		position = cell.get_center()
-		target_position = position
+		global_position = grid_manager.to_global(cell.get_center())
+		target_position = global_position

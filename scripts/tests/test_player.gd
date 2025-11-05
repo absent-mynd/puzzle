@@ -131,10 +131,11 @@ func test_player_cannot_walk_through_walls():
 ## Test: Player position snaps to cell center
 func test_player_position_snaps_to_center():
 	var cell = grid_manager.get_cell(start_position)
-	var expected_center = cell.get_center()
+	# Convert cell center to global coordinates for comparison
+	var expected_center = grid_manager.to_global(cell.get_center())
 
 	# Allow small epsilon for floating point comparison
-	var distance = player.position.distance_to(expected_center)
+	var distance = player.global_position.distance_to(expected_center)
 	assert_lt(distance, 0.1, "Player should be at cell center")
 
 
@@ -225,12 +226,13 @@ func test_get_grid_position():
 func test_world_position_updates_after_move():
 	var target_grid_pos = start_position + Vector2i(1, 0)
 	var target_cell = grid_manager.get_cell(target_grid_pos)
-	var expected_world_pos = target_cell.get_center()
+	# Convert cell center to global coordinates for comparison
+	var expected_world_pos = grid_manager.to_global(target_cell.get_center())
 
 	player.attempt_move(Vector2i(1, 0))
 
 	# Wait for tween to complete
 	await wait_seconds(0.3)
 
-	var distance = player.position.distance_to(expected_world_pos)
+	var distance = player.global_position.distance_to(expected_world_pos)
 	assert_lt(distance, 1.0, "Player world position should be at target cell center")
