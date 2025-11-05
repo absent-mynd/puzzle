@@ -33,6 +33,39 @@ All pull requests automatically run the full GUT test suite via GitHub Actions. 
 
 You can also manually trigger the workflow from the Actions tab in GitHub.
 
+### Pre-Push Hook (Optional but Recommended)
+
+A pre-push hook is available to run GUT tests locally before pushing to remote. This provides early feedback and catches issues before CI runs.
+
+**Benefits:**
+- ✅ Catches test failures before pushing to remote
+- ✅ Runs 3-5 times per day (vs. CI-only approach)
+- ✅ Gracefully handles missing Godot installation
+- ✅ Takes 1-3 minutes per push (acceptable for most workflows)
+- ✅ Can be bypassed with `--no-verify` if needed
+
+**Installation:**
+
+```bash
+# Run the setup script
+./setup-hooks.sh
+
+# Or manually install
+cp .githooks/pre-push .git/hooks/pre-push
+chmod +x .git/hooks/pre-push
+```
+
+**Requirements:**
+- Godot 4.3+ installed and available in your PATH
+- Download from: https://godotengine.org/download
+
+**Usage:**
+The hook runs automatically on `git push`. If tests fail:
+- Fix the failing tests and push again (recommended)
+- Use `git push --no-verify` to bypass (not recommended)
+
+**Note:** If Godot is not installed, the hook will skip gracefully with a warning, and tests will still run in CI.
+
 #### Running Tests in Godot Editor
 1. Open the project in Godot 4
 2. Go to Project → Project Settings → Plugins
