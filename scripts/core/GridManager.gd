@@ -306,3 +306,14 @@ func setup_test_walls() -> void:
 		var right_cell = get_cell(Vector2i(grid_size.x - 1, y))
 		if right_cell:
 			right_cell.set_cell_type(1)
+
+
+## Set a cell as the goal cell
+## @param grid_pos: Grid position to set as goal
+## @return: true if successful, false if cell doesn't exist
+func set_goal_cell(grid_pos: Vector2i) -> bool:
+	var cell = get_cell(grid_pos)
+	if cell:
+		cell.set_cell_type(3)  # Goal type
+		return true
+	return false
