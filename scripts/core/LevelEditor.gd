@@ -34,8 +34,13 @@ const PLAYER_MARKER_COLOR = Color(1.0, 0.0, 1.0, 0.8)  # Magenta
 
 ## File dialog state
 var save_filename: String = "custom_level"
-var input_mode: String = "edit"  # "edit", "save_input", "load_input"
+var input_mode: String = "edit"  # "edit", "save_input", "load_input", "browse"
 var input_buffer: String = ""
+
+## Browse mode state
+var custom_level_files: Array[String] = []
+var browse_selection_index: int = 0
+var browse_label: Label
 
 
 ## Initialize the level editor
@@ -105,8 +110,16 @@ Arrow Keys: Move cursor
 0: Empty  1: Wall  2: Water  3: Goal
 P: Set player start
 S: Save level  L: Load level  N: New level
+B: Browse levels  T: Test level
 ESC: Exit editor"""
 	add_child(help_label)
+
+	# Browse label (for browse mode, initially hidden)
+	browse_label = Label.new()
+	browse_label.position = Vector2(10, 150)
+	browse_label.add_theme_font_size_override("font_size", 18)
+	browse_label.visible = false
+	add_child(browse_label)
 
 
 ## Handle keyboard input
@@ -120,6 +133,9 @@ func _input(event: InputEvent) -> void:
 		return
 	elif input_mode == "load_input":
 		handle_load_input(event)
+		return
+	elif input_mode == "browse":
+		handle_browse_input(event)
 		return
 
 	# Normal edit mode
@@ -148,6 +164,10 @@ func _input(event: InputEvent) -> void:
 			start_load_input()
 		KEY_N:
 			new_level()
+		KEY_B:
+			start_browse_mode()
+		KEY_T:
+			test_level()
 		KEY_ESCAPE:
 			exit_editor()
 
@@ -387,6 +407,131 @@ func new_level() -> void:
 	update_cursor_visual()
 	update_player_marker()
 	update_status()
+
+
+## Start browse mode
+func start_browse_mode() -> void:
+	# Get list of custom level files
+	var levels_dir = "user://levels/"
+	custom_level_files = get_custom_level_files(levels_dir)
+
+	if custom_level_files.is_empty():
+		status_label.text = "No custom levels found!\nPress any key to continue..."
+		await get_tree().create_timer(2.0).timeout
+		update_status()
+		return
+
+	input_mode = "browse"
+	browse_selection_index = 0
+	browse_label.visible = true
+	cursor_visual.visible = false
+	player_start_marker.visible = false
+	update_browse_display()
+
+
+## Get list of custom level files
+func get_custom_level_files(directory: String) -> Array[String]:
+	var files: Array[String] = []
+
+	if not DirAccess.dir_exists_absolute(directory):
+		return files
+
+	var dir = DirAccess.open(directory)
+	if dir == null:
+		return files
+
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+
+	while file_name != "":
+		if not dir.current_is_dir() and file_name.ends_with(".json"):
+			files.append(file_name.replace(".json", ""))
+		file_name = dir.get_next()
+
+	dir.list_dir_end()
+	files.sort()
+
+	return files
+
+
+## Handle browse mode input
+func handle_browse_input(event: InputEventKey) -> void:
+	if event.keycode == KEY_UP:
+		browse_selection_index = max(0, browse_selection_index - 1)
+		update_browse_display()
+	elif event.keycode == KEY_DOWN:
+		browse_selection_index = min(custom_level_files.size() - 1, browse_selection_index + 1)
+		update_browse_display()
+	elif event.keycode == KEY_ENTER:
+		# Load selected level for editing
+		save_filename = custom_level_files[browse_selection_index]
+		exit_browse_mode()
+		load_level()
+	elif event.keycode == KEY_T:
+		# Test/play selected level
+		save_filename = custom_level_files[browse_selection_index]
+		exit_browse_mode()
+		test_level()
+	elif event.keycode == KEY_ESCAPE:
+		exit_browse_mode()
+
+
+## Update browse display
+func update_browse_display() -> void:
+	if not browse_label:
+		return
+
+	var display_text = "=== Browse Custom Levels ===\n\n"
+	display_text += "Use UP/DOWN to select\n"
+	display_text += "ENTER to edit, T to test/play\n"
+	display_text += "ESC to cancel\n\n"
+
+	for i in range(custom_level_files.size()):
+		var prefix = "  "
+		if i == browse_selection_index:
+			prefix = "> "
+		display_text += prefix + custom_level_files[i] + "\n"
+
+	browse_label.text = display_text
+	status_label.text = "Browse Mode"
+
+
+## Exit browse mode
+func exit_browse_mode() -> void:
+	input_mode = "edit"
+	browse_label.visible = false
+	cursor_visual.visible = true
+	player_start_marker.visible = true
+	update_status()
+
+
+## Test/play the current level
+func test_level() -> void:
+	# Save the current level temporarily
+	current_level.player_start_position = player_start_position
+
+	# Create levels directory if it doesn't exist
+	var levels_dir = "user://levels/"
+	if not DirAccess.dir_exists_absolute(levels_dir):
+		DirAccess.make_dir_recursive_absolute(levels_dir)
+
+	var file_path = levels_dir + save_filename + ".json"
+	var success = level_manager.save_level(current_level, file_path)
+
+	if not success:
+		status_label.text = "Failed to save level for testing!"
+		await get_tree().create_timer(2.0).timeout
+		update_status()
+		return
+
+	# Store the file path in GameManager to load it
+	GameManager.current_level_id = ""
+	GameManager.current_level_data = current_level.clone()
+	GameManager.fold_count = 0
+	GameManager.level_start_time = Time.get_ticks_msec() / 1000.0
+
+	# Load the game scene
+	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 
 ## Exit the editor

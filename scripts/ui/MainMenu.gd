@@ -29,6 +29,11 @@ func _on_level_select_button_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/LevelSelect.tscn")
 
 
+## Open custom level select screen
+func _on_custom_levels_button_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/ui/CustomLevelSelect.tscn")
+
+
 ## Open level editor
 func _on_editor_button_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/LevelEditor.tscn")
