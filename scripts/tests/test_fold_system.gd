@@ -448,13 +448,18 @@ func test_execute_fold_vertical():
 	assert_false(found, "Original cell should be removed")
 
 
-func test_execute_fold_diagonal_fails():
+func test_execute_fold_diagonal_succeeds():
+	# Phase 4: Diagonal folds are now supported!
 	var anchor1 = Vector2i(2, 2)
 	var anchor2 = Vector2i(7, 7)
 
+	# Place player away from fold area
+	if player:
+		player.grid_position = Vector2i(0, 0)
+
 	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
-	assert_false(result, "Diagonal fold should fail in Phase 3")
+	assert_true(result, "Diagonal fold should succeed in Phase 4")
 
 
 # ===== Fold History Tests =====

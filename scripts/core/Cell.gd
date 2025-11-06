@@ -184,3 +184,66 @@ func _draw():
 		var outline_points = geometry.duplicate()
 		outline_points.append(geometry[0])
 		draw_polyline(outline_points, outline_color, 4.0)
+
+
+## ============================================================================
+## PHASE 4: POLYGON SPLITTING SUPPORT
+## ============================================================================
+
+## Split this cell into two cells along a line
+##
+## Updates this cell's geometry to one half and creates a new cell for the other half.
+## Both cells are marked as partial and store seam information.
+##
+## @param split_result: Result from GeometryCore.split_polygon_by_line()
+## @param line_point: Point on the splitting line
+## @param line_normal: Normal vector of the splitting line
+## @param keep_side: Which side to keep in this cell ("left" or "right")
+## @return: New Cell containing the other half, or null if split failed
+func apply_split(split_result: Dictionary, line_point: Vector2, line_normal: Vector2, keep_side: String) -> Cell:
+	# Validate split result
+	if split_result.intersections.size() == 0:
+		push_error("apply_split called with no intersections")
+		return null
+
+	# Determine which geometry to keep and which to create new cell with
+	var kept_geometry: PackedVector2Array
+	var new_geometry: PackedVector2Array
+
+	if keep_side == "left":
+		kept_geometry = split_result.left
+		new_geometry = split_result.right
+	else:
+		kept_geometry = split_result.right
+		new_geometry = split_result.left
+
+	# Validate geometries
+	if kept_geometry.size() < 3 or new_geometry.size() < 3:
+		push_error("apply_split resulted in degenerate polygon")
+		return null
+
+	# Update this cell's geometry
+	geometry = kept_geometry
+	is_partial = true
+
+	# Create seam data
+	var seam_data = {
+		"line_point": line_point,
+		"line_normal": line_normal,
+		"intersection_points": split_result.intersections,
+		"timestamp": Time.get_ticks_msec()
+	}
+	add_seam(seam_data)
+
+	# Update visual
+	update_visual()
+
+	# Create new cell for the other half
+	var new_cell = Cell.new(grid_position, Vector2.ZERO, 0)  # Temporary values
+	new_cell.geometry = new_geometry
+	new_cell.cell_type = cell_type
+	new_cell.is_partial = true
+	new_cell.add_seam(seam_data)
+	new_cell.update_visual()
+
+	return new_cell

@@ -145,17 +145,18 @@ func test_validate_minimum_distance_for_valid_vertical():
 		"Valid vertical distance should pass minimum distance check")
 
 
-# ===== Diagonal Fold Tests (Phase 3 Limitation) =====
+# ===== Diagonal Fold Tests (Phase 4: Now Supported!) =====
 
-func test_validation_fails_for_diagonal_fold():
+func test_validation_succeeds_for_diagonal_fold():
+	# Phase 4: Diagonal folds are now supported!
 	var anchor1 = Vector2i(2, 2)
 	var anchor2 = Vector2i(7, 7)
 
 	var result = fold_system.validate_fold(anchor1, anchor2)
 
-	assert_false(result.valid, "Diagonal fold should fail validation in Phase 3")
-	assert_eq(result.reason, "Only horizontal and vertical folds supported (for now)",
-		"Should provide correct error message for diagonal fold")
+	assert_true(result.valid, "Diagonal fold should pass validation in Phase 4")
+	assert_eq(result.reason, "",
+		"Should have empty reason for valid diagonal fold")
 
 
 func test_validate_same_row_or_column_for_diagonal():
@@ -325,16 +326,21 @@ func test_execute_fold_respects_validation_for_adjacent_cells():
 
 
 func test_execute_fold_respects_validation_for_diagonal():
+	# Phase 4: Diagonal folds are now supported!
 	var anchor1 = Vector2i(2, 2)
 	var anchor2 = Vector2i(7, 7)
 
+	# Place player away from fold area
+	if player:
+		player.grid_position = Vector2i(0, 0)
+
 	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
-	assert_false(result, "execute_fold should fail for diagonal fold")
+	assert_true(result, "execute_fold should succeed for diagonal fold in Phase 4")
 
-	# Verify fold was NOT executed
+	# Verify fold WAS executed
 	var history = fold_system.get_fold_history()
-	assert_eq(history.size(), 0, "Invalid fold should not be recorded")
+	assert_eq(history.size(), 1, "Valid diagonal fold should be recorded")
 
 
 func test_execute_fold_respects_validation_for_out_of_bounds():
@@ -419,9 +425,10 @@ func test_validation_message_for_adjacent_cells():
 
 
 func test_validation_message_for_diagonal():
+	# Phase 4: Diagonal folds are now supported!
 	var result = fold_system.validate_fold(Vector2i(2, 2), Vector2i(7, 7))
-	assert_eq(result.reason, "Only horizontal and vertical folds supported (for now)",
-		"Should have correct message for diagonal fold")
+	assert_eq(result.reason, "",
+		"Should have empty message for valid diagonal fold in Phase 4")
 
 
 func test_validation_message_for_out_of_bounds():
