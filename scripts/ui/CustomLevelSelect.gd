@@ -21,7 +21,7 @@ func populate_levels() -> void:
 
 	# Get all custom levels
 	var levels_dir = GameManager.CUSTOM_LEVELS_DIR
-	var level_files = get_custom_level_files(levels_dir)
+	var level_files = FileUtils.get_custom_level_files(levels_dir)
 
 	if level_files.is_empty():
 		# Show "no levels" message
@@ -37,31 +37,6 @@ func populate_levels() -> void:
 		var level_data = GameManager.level_manager.load_level(level_path)
 		if level_data:
 			create_level_button(level_data, level_path)
-
-
-## Get list of custom level files
-func get_custom_level_files(directory: String) -> Array[String]:
-	var files: Array[String] = []
-
-	if not DirAccess.dir_exists_absolute(directory):
-		return files
-
-	var dir = DirAccess.open(directory)
-	if dir == null:
-		return files
-
-	dir.list_dir_begin()
-	var file_name = dir.get_next()
-
-	while file_name != "":
-		if not dir.current_is_dir() and file_name.ends_with(".json"):
-			files.append(file_name.replace(".json", ""))
-		file_name = dir.get_next()
-
-	dir.list_dir_end()
-	files.sort()
-
-	return files
 
 
 ## Creates a button for a custom level
