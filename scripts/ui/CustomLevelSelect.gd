@@ -20,7 +20,7 @@ func populate_levels() -> void:
 		child.queue_free()
 
 	# Get all custom levels
-	var levels_dir = "user://levels/"
+	var levels_dir = GameManager.CUSTOM_LEVELS_DIR
 	var level_files = get_custom_level_files(levels_dir)
 
 	if level_files.is_empty():
