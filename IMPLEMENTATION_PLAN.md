@@ -180,10 +180,32 @@ var selected_anchors: Array[Vector2i] = []
 
 ---
 
-## Phase 3: Simple Axis-Aligned Folding (Week 2)
-**Estimated Time: 3-4 hours**
+## Phase 3: Simple Axis-Aligned Folding ✅ COMPLETE
+**Status:** Fully implemented with 63 FoldSystem tests + 32 validation tests passing
 
-### 3.1 Implement Basic FoldSystem
+**CRITICAL IMPLEMENTATION NOTES FOR NEXT PHASES:**
+
+**Coordinate System (MOST IMPORTANT):**
+- Cells use LOCAL coordinates (relative to GridManager.position)
+- Formula: `local_pos = Vector2(grid_pos) * cell_size` (NOT grid_to_world!)
+- Player uses WORLD coordinates: `grid_manager.to_global(local_pos)`
+- Seam lines (Line2D) are children of GridManager: use LOCAL coordinates
+- WHY: Cells and Line2D nodes inherit GridManager's position transform
+
+**Folding Behavior:**
+- Cells OVERLAP at anchor (merge behavior, not adjacent)
+- Shift distance: `anchor2 - anchor1` (full overlap)
+- MIN_FOLD_DISTANCE = 0 (adjacent anchors allowed)
+- Must FREE overlapped cells to prevent memory leaks
+
+**Player Integration:**
+- Player shifts with grid during folds
+- Update both grid_position AND world position
+- Always use `to_global()` when setting player.position
+
+**See CLAUDE.md for complete implementation details and FoldSystem algorithm**
+
+### 3.1 Implement Basic FoldSystem ✅
 **File:** `scripts/systems/FoldSystem.gd`
 
 ```gdscript
@@ -248,9 +270,22 @@ func validate_fold_with_player(anchor1: Vector2, anchor2: Vector2, player: Playe
 
 ---
 
-## Phase 4: Geometric Folding (Weeks 3-4)
+## Phase 4: Geometric Folding (Weeks 3-4) ← NEXT PRIORITY
 **Estimated Time: 6-8 hours**
 **⚠️ MOST COMPLEX PHASE - Proceed carefully**
+
+**CRITICAL: Apply Phase 3 Lessons**
+- ALL cell geometry operations MUST use LOCAL coordinates
+- When splitting cells: new polygons are still in LOCAL coordinates
+- Player position updates MUST use `to_global()` conversion
+- Seam lines at arbitrary angles: still use LOCAL coordinates for Line2D points
+- Cell merging/overlapping: same pattern as Phase 3 (free overlapped cells)
+- Coordinate formula: `local_pos = Vector2(grid_pos) * cell_size`
+
+**Key Challenge:**
+- Sutherland-Hodgman algorithm already implemented in GeometryCore
+- But must ensure all inputs/outputs are in LOCAL coordinate space
+- Test coordinate conversions extensively!
 
 ### 4.1 Refactor Cell to Support Polygon Geometry
 **Changes to Cell class:**

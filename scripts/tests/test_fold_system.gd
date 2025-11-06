@@ -188,9 +188,13 @@ func test_horizontal_fold_keeps_anchor_cells():
 
 	fold_system.execute_horizontal_fold(anchor1, anchor2)
 
-	# Anchor cells should still exist
-	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain")
-	assert_not_null(grid_manager.get_cell(anchor2), "Anchor2 cell should remain")
+	# Left anchor should remain at original position
+	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain at original position")
+	# Right anchor should have shifted to left anchor's position (overlapping/merged)
+	assert_null(grid_manager.get_cell(anchor2), "Anchor2 should have moved from original position")
+	# The cell at left anchor position is the merged result
+	var merged_cell = grid_manager.get_cell(anchor1)
+	assert_not_null(merged_cell, "Merged cell should exist at left anchor position")
 
 
 func test_horizontal_fold_shifts_cells_correctly():
@@ -235,15 +239,16 @@ func test_horizontal_fold_updates_world_positions():
 	# Execute fold
 	fold_system.execute_horizontal_fold(anchor1, anchor2)
 
-	# Check that shifted cells have correct world positions
+	# Check that shifted cells have correct local positions
+	# (Cells are children of GridManager, so geometry is in local coordinates)
 	var shifted_cell = grid_manager.get_cell(Vector2i(3, 5))
 	if shifted_cell:
-		var expected_world_pos = grid_manager.grid_to_world(Vector2i(3, 5))
+		var expected_local_pos = Vector2(Vector2i(3, 5)) * grid_manager.cell_size
 		var actual_center = shifted_cell.get_center()
 		var cell_size = grid_manager.cell_size
 
-		# Center should be at expected_world_pos + half cell_size
-		var expected_center = expected_world_pos + Vector2(cell_size / 2, cell_size / 2)
+		# Center should be at expected_local_pos + half cell_size
+		var expected_center = expected_local_pos + Vector2(cell_size / 2, cell_size / 2)
 
 		assert_almost_eq(actual_center.x, expected_center.x, 1.0,
 			"Shifted cell X position should be correct")
@@ -310,9 +315,13 @@ func test_vertical_fold_keeps_anchor_cells():
 
 	fold_system.execute_vertical_fold(anchor1, anchor2)
 
-	# Anchor cells should still exist
-	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain")
-	assert_not_null(grid_manager.get_cell(anchor2), "Anchor2 cell should remain")
+	# Top anchor should remain at original position
+	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain at original position")
+	# Bottom anchor should have shifted to top anchor's position (overlapping/merged)
+	assert_null(grid_manager.get_cell(anchor2), "Anchor2 should have moved from original position")
+	# The cell at top anchor position is the merged result
+	var merged_cell = grid_manager.get_cell(anchor1)
+	assert_not_null(merged_cell, "Merged cell should exist at top anchor position")
 
 
 func test_vertical_fold_shifts_cells_correctly():
@@ -357,15 +366,16 @@ func test_vertical_fold_updates_world_positions():
 	# Execute fold
 	fold_system.execute_vertical_fold(anchor1, anchor2)
 
-	# Check that shifted cells have correct world positions
+	# Check that shifted cells have correct local positions
+	# (Cells are children of GridManager, so geometry is in local coordinates)
 	var shifted_cell = grid_manager.get_cell(Vector2i(5, 3))
 	if shifted_cell:
-		var expected_world_pos = grid_manager.grid_to_world(Vector2i(5, 3))
+		var expected_local_pos = Vector2(Vector2i(5, 3)) * grid_manager.cell_size
 		var actual_center = shifted_cell.get_center()
 		var cell_size = grid_manager.cell_size
 
-		# Center should be at expected_world_pos + half cell_size
-		var expected_center = expected_world_pos + Vector2(cell_size / 2, cell_size / 2)
+		# Center should be at expected_local_pos + half cell_size
+		var expected_center = expected_local_pos + Vector2(cell_size / 2, cell_size / 2)
 
 		assert_almost_eq(actual_center.x, expected_center.x, 1.0,
 			"Shifted cell X position should be correct")
@@ -521,8 +531,10 @@ func test_horizontal_fold_at_grid_edge():
 	# Should remove entire column 8 (all rows)
 	for y in range(10):
 		assert_null(grid_manager.get_cell(Vector2i(8, y)), "Cell (8," + str(y) + ") should be removed")
-	assert_not_null(grid_manager.get_cell(anchor1), "Anchor cells should remain")
-	assert_not_null(grid_manager.get_cell(anchor2), "Anchor cells should remain")
+	# Left anchor should remain at original position
+	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain at original position")
+	# Right anchor should have moved from its original position
+	assert_null(grid_manager.get_cell(anchor2), "Anchor2 should have moved from original position")
 
 
 func test_vertical_fold_at_grid_edge():
@@ -535,8 +547,10 @@ func test_vertical_fold_at_grid_edge():
 	# Should remove entire row 8 (all columns)
 	for x in range(10):
 		assert_null(grid_manager.get_cell(Vector2i(x, 8)), "Cell (" + str(x) + ",8) should be removed")
-	assert_not_null(grid_manager.get_cell(anchor1), "Anchor cells should remain")
-	assert_not_null(grid_manager.get_cell(anchor2), "Anchor cells should remain")
+	# Top anchor should remain at original position
+	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain at original position")
+	# Bottom anchor should have moved from its original position
+	assert_null(grid_manager.get_cell(anchor2), "Anchor2 should have moved from original position")
 
 
 # ===== Integration Tests =====

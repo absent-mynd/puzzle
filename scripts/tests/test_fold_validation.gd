@@ -102,31 +102,31 @@ func test_validate_not_same_cell_returns_true():
 # ===== Minimum Distance Tests =====
 
 func test_validation_fails_for_adjacent_cells():
-	# Adjacent cells have 0 distance between them
+	# Adjacent cells have 0 distance between them - THIS IS NOW ALLOWED
 	var anchor1 = Vector2i(5, 5)
 	var anchor2 = Vector2i(6, 5)
 
 	var result = fold_system.validate_fold(anchor1, anchor2)
 
-	assert_false(result.valid, "Adjacent cells should fail validation")
-	assert_eq(result.reason, "Anchors must have at least one cell between them",
-		"Should provide correct error message for adjacent cells")
+	assert_true(result.valid, "Adjacent cells should now pass validation (MIN_FOLD_DISTANCE=0)")
+	assert_eq(result.reason, "",
+		"Should have no error message for adjacent cells")
 
 
 func test_validate_minimum_distance_for_adjacent_horizontal():
 	var anchor1 = Vector2i(5, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	assert_false(fold_system.validate_minimum_distance(anchor1, anchor2),
-		"Adjacent horizontal cells should fail minimum distance check")
+	assert_true(fold_system.validate_minimum_distance(anchor1, anchor2),
+		"Adjacent horizontal cells should now pass minimum distance check")
 
 
 func test_validate_minimum_distance_for_adjacent_vertical():
 	var anchor1 = Vector2i(5, 5)
 	var anchor2 = Vector2i(5, 6)
 
-	assert_false(fold_system.validate_minimum_distance(anchor1, anchor2),
-		"Adjacent vertical cells should fail minimum distance check")
+	assert_true(fold_system.validate_minimum_distance(anchor1, anchor2),
+		"Adjacent vertical cells should now pass minimum distance check")
 
 
 func test_validate_minimum_distance_for_valid_horizontal():
@@ -317,11 +317,11 @@ func test_execute_fold_respects_validation_for_adjacent_cells():
 
 	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 
-	assert_false(result, "execute_fold should fail for adjacent cells")
+	assert_true(result, "execute_fold should now succeed for adjacent cells (MIN_FOLD_DISTANCE=0)")
 
-	# Verify fold was NOT executed
+	# Verify fold WAS executed
 	var history = fold_system.get_fold_history()
-	assert_eq(history.size(), 0, "Invalid fold should not be recorded")
+	assert_eq(history.size(), 1, "Valid fold should be recorded")
 
 
 func test_execute_fold_respects_validation_for_diagonal():
@@ -414,8 +414,8 @@ func test_validation_message_for_same_cell():
 
 func test_validation_message_for_adjacent_cells():
 	var result = fold_system.validate_fold(Vector2i(5, 5), Vector2i(6, 5))
-	assert_eq(result.reason, "Anchors must have at least one cell between them",
-		"Should have correct message for adjacent cells")
+	assert_eq(result.reason, "",
+		"Should have no error message for adjacent cells (they are now valid)")
 
 
 func test_validation_message_for_diagonal():
