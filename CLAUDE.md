@@ -13,13 +13,13 @@ The game allows players to fold space by selecting two anchor points, removing t
 
 ## Current Project Status
 
-**Last Updated**: 2025-11-06
+**Last Updated**: 2025-11-06 (Post-Phase 3 Implementation)
 
 ### Completed Phases
 - **Phase 1**: Project Setup & Foundation - All core geometry utilities implemented and tested ✅
 - **Phase 2**: Basic Grid System - Cell and GridManager classes fully functional with anchor selection ✅
-- **Phase 3**: Simple Axis-Aligned Folding - Horizontal and vertical folds with validation and animations ✅
-- **Phase 7**: Player Character - Grid-based movement, fold validation, goal detection ✅
+- **Phase 3**: Simple Axis-Aligned Folding - Horizontal and vertical folds with validation, animations, and overlapping merge behavior ✅
+- **Phase 7**: Player Character - Grid-based movement, fold validation, goal detection, position updates during folds ✅
 
 ### Test Status
 - **225 tests passing** (GeometryCore: 41, Cell: 14, GridManager: 27, FoldSystem: 63, Player: 36, FoldValidation: 32, WinCondition: 12)
@@ -31,6 +31,31 @@ The game allows players to fold space by selecting two anchor points, removing t
 1. **Phase 4**: Geometric Folding (most complex - diagonal folds at arbitrary angles)
 2. **Phase 5**: Multi-Seam Handling (cells with multiple intersecting seams)
 3. **Phase 6**: Undo System (with dependency checking)
+
+### Phase 3 Implementation Notes (CRITICAL FOR NEXT PHASES)
+
+**Coordinate System** (MOST IMPORTANT):
+- Cells store geometry in **LOCAL coordinates** (relative to GridManager's position)
+- GridManager is positioned at `grid_origin` (centered on screen)
+- When creating geometry: use `Vector2(grid_pos) * cell_size` (LOCAL, not world)
+- Player uses **WORLD coordinates**: convert with `grid_manager.to_global(local_pos)`
+- Seam lines (Line2D) are children of GridManager: use LOCAL coordinates
+
+**Folding Behavior**:
+- Cells **OVERLAP/MERGE** at anchor positions (not adjacent)
+- Right/bottom anchor shifts to left/top anchor position
+- `MIN_FOLD_DISTANCE = 0` - adjacent anchors are allowed
+- Overlapped cells are properly freed to prevent memory leaks
+
+**Player Integration**:
+- Player shifts with grid during folds
+- Both `grid_position` and world `position` updated
+- Uses `grid_manager.to_global()` for coordinate conversion
+
+**Seam Line Management**:
+- Seam lines in removed regions are deleted
+- Remaining seam lines shift with cells
+- Positioned at center of merged cell (left/top anchor)
 
 ## Project Structure
 
@@ -149,12 +174,65 @@ var grid_size := Vector2i(10, 10)    # Default 10x10 grid
 var cell_size := 64.0                # 64 pixels per cell
 var cells: Dictionary = {}           # Vector2i -> Cell mapping
 var selected_anchors: Array[Vector2i] = []  # Max 2 anchors
+var grid_origin: Vector2              # Offset for centering grid
 ```
 
 **Key Methods**:
 - `select_cell(grid_pos)` - Handle anchor selection (max 2)
 - `get_cell_at_world_pos(pos)` - World to grid coordinate conversion
 - `validate_selection()` - Check if fold can be executed
+- `grid_to_world(grid_pos)` - Convert grid position to world coordinates
+- `to_global(local_pos)` - Convert local coordinates to world coordinates
+- `to_local(world_pos)` - Convert world coordinates to local coordinates
+
+**Coordinate System**:
+- GridManager.position is set to grid_origin (centered on screen)
+- ALL child cells and seam lines use LOCAL coordinates
+- Player is NOT a child, uses WORLD coordinates
+
+### FoldSystem (`scripts/systems/FoldSystem.gd`)
+**Status**: ✅ Complete (63 tests passing)
+
+Manages all folding operations:
+```gdscript
+class_name FoldSystem extends Node
+
+const MIN_FOLD_DISTANCE = 0          # Adjacent anchors allowed
+var grid_manager: GridManager
+var player: Player                   # Optional player reference
+var seam_lines: Array[Line2D] = []   # Visual seam indicators
+var fold_history: Array[Dictionary] = []
+```
+
+**Key Methods**:
+- `execute_horizontal_fold(anchor1, anchor2)` - Horizontal fold (cells overlap at left anchor)
+- `execute_vertical_fold(anchor1, anchor2)` - Vertical fold (cells overlap at top anchor)
+- `execute_horizontal_fold_animated(...)` - With visual animations
+- `execute_vertical_fold_animated(...)` - With visual animations
+- `validate_fold(anchor1, anchor2)` - Check all validation rules
+- `validate_fold_with_player(...)` - Check if player blocks fold
+
+**Fold Algorithm** (Horizontal example):
+1. Normalize anchors (left/right)
+2. Calculate removed cells (between anchors, exclusive)
+3. Remove cells from grid and free nodes
+4. Remove seam lines in removed region
+5. Shift cells from right_anchor onwards LEFT by shift_distance
+6. For each shifted cell:
+   - Update grid_position
+   - Recalculate geometry using LOCAL coordinates
+   - FREE any existing cell at target position (merging)
+   - Update dictionary
+7. Update player position if in shifted region (use to_global!)
+8. Create seam line at merged position (LOCAL coordinates)
+9. Record fold in history
+
+**Critical Implementation Details**:
+- Shift distance: `right_anchor.x - left_anchor.x` (full overlap)
+- Geometry: Always use LOCAL coordinates (`Vector2(pos) * cell_size`)
+- Player position: Always use WORLD coordinates (`to_global(local_center)`)
+- Cell cleanup: Must free overlapped cells to prevent memory leaks
+- Seam positioning: Center of left/top anchor (where merge happens)
 
 ## Testing Framework
 
@@ -209,11 +287,30 @@ const EPSILON = 0.0001
 if abs(point.x - 5.0) < EPSILON:
 ```
 
-### 2. Coordinate System Confusion
+### 2. Coordinate System Confusion (CRITICAL!)
 Always be clear about which coordinate system you're using:
 - **Grid coordinates** (`Vector2i`): Discrete grid positions (0-9 for 10x10 grid)
-- **World coordinates** (`Vector2`): Pixel positions in the game world
-- **Local cell coordinates** (`Vector2`): Relative to cell's position
+- **Local coordinates** (`Vector2`): Relative to GridManager's position (used for cell geometry and seam lines)
+- **World coordinates** (`Vector2`): Absolute pixel positions in the game world (used for player position)
+
+**CRITICAL RULES**:
+```gdscript
+# ❌ WRONG - Using world coordinates for cell geometry
+var world_pos = grid_manager.grid_to_world(grid_pos)
+cell.geometry = create_square(world_pos, size)  // Double offset!
+
+# ✅ CORRECT - Using local coordinates for cell geometry
+var local_pos = Vector2(grid_pos) * grid_manager.cell_size
+cell.geometry = create_square(local_pos, size)
+
+# ❌ WRONG - Using local coordinates for player
+player.position = cell.get_center()  // Player in wrong location!
+
+# ✅ CORRECT - Converting to world coordinates for player
+player.position = grid_manager.to_global(cell.get_center())
+```
+
+**Why**: Cells and Line2D seam lines are children of GridManager, so they inherit its position. Player is NOT a child of GridManager, so it needs world coordinates.
 
 ### 3. Array Modifications During Iteration
 ```gdscript
@@ -242,7 +339,30 @@ if cell.polygon_visual:
 cells.erase(key)  # Allows garbage collection
 ```
 
-### 5. Writing Tests Before Implementation
+### 5. Cell Merging and Memory Leaks (CRITICAL!)
+When cells shift to overlap during folds, the old cell at the target position MUST be freed:
+
+```gdscript
+# ❌ WRONG - Overwrites dictionary but leaves old cell in scene tree
+grid_manager.cells.erase(old_pos)
+grid_manager.cells[new_pos] = shifted_cell  // Memory leak!
+
+# ✅ CORRECT - Free old cell before assigning new one
+grid_manager.cells.erase(old_pos)
+
+var existing_cell = grid_manager.cells.get(new_pos)
+if existing_cell:
+    grid_manager.cells.erase(new_pos)
+    if existing_cell.get_parent():
+        existing_cell.get_parent().remove_child(existing_cell)
+    existing_cell.queue_free()
+
+grid_manager.cells[new_pos] = shifted_cell
+```
+
+**Why**: Dictionary assignment doesn't free Node2D objects. Old cells accumulate in scene tree.
+
+### 6. Writing Tests Before Implementation
 **Required**: Always write tests for new features BEFORE implementing them (TDD approach)
 - Tests define the expected behavior
 - Tests catch regressions
@@ -330,23 +450,43 @@ godot --path . --headless -s addons/gut/gut_cmdln.gd -gtest=res://scripts/tests/
 
 ## Phase-Specific Notes
 
-### Phase 3: Simple Axis-Aligned Folding (Next Up)
-**Focus**: Horizontal and vertical folds only
-- Implement `FoldSystem` class
-- Validate with player position (CRITICAL)
-- Add visual feedback (preview lines, animations)
-- Store fold operations for future undo system
+### Phase 3: Simple Axis-Aligned Folding ✅ COMPLETE
+**Status**: Fully implemented and tested (63 tests passing)
 
-**Key File**: `scripts/systems/FoldSystem.gd` (to be created)
+**Key Implementations**:
+- `FoldSystem` class with horizontal and vertical folds
+- Player position validation and shifting during folds
+- Animated and non-animated fold variants
+- Seam line creation, removal, and shifting
+- Overlapping/merging behavior at anchors
+- Memory-safe cell cleanup during merges
 
-### Phase 4: Geometric Folding (Most Complex)
+**Key Files**:
+- `scripts/systems/FoldSystem.gd` - Complete fold implementation
+- `scripts/tests/test_fold_system.gd` - 63 passing tests
+- `scripts/tests/test_fold_validation.gd` - 32 passing tests
+
+**Critical Lessons Learned**:
+1. **Coordinate Systems**: LOCAL for cells/seams (children of GridManager), WORLD for player
+2. **Cell Merging**: Always free overlapped cells to prevent memory leaks
+3. **Player Shifting**: Update both grid_position and world position during folds
+4. **Seam Management**: Remove seams in deleted regions, shift remaining seams
+
+### Phase 4: Geometric Folding (Next Priority)
 **Warning**: This is the most complex phase (6-8 hours estimated)
 - Arbitrary angle folds
 - Cell polygon splitting using `GeometryCore.split_polygon_by_line()`
 - Many edge cases (vertex intersections, near-parallel cuts, boundary conditions)
 - Requires extensive testing
 
-**Do NOT start Phase 4 until Phase 3 is completely solid**
+**Prerequisites**: Phase 3 is solid ✅
+
+**Key Considerations for Phase 4**:
+- Coordinate system: ALL geometry operations must use LOCAL coordinates
+- When splitting cells, new geometry is still in LOCAL coordinates
+- Player position updates will need `to_global()` conversion
+- Seam lines at arbitrary angles: still use LOCAL coordinates for Line2D points
+- Overlapped cell cleanup: same pattern as Phase 3
 
 ### Phase 7: Player Character (Recommended Before Phase 4)
 **Why Before Phase 4**: Testing gameplay feel early is valuable
@@ -370,10 +510,15 @@ godot --path . --headless -s addons/gut/gut_cmdln.gd -gtest=res://scripts/tests/
 2. ❌ Using `==` for float comparisons
 3. ❌ Modifying arrays during iteration
 4. ❌ Calling `free()` directly on nodes (use `queue_free()`)
-5. ❌ Mixing coordinate systems without conversion
+5. ❌ **Mixing coordinate systems without conversion** (MOST COMMON BUG!)
+   - Using world coordinates for cell geometry (causes double offset)
+   - Using local coordinates for player position (causes wrong location)
+   - Always verify: "Is this node a child of GridManager?"
 6. ❌ Skipping validation (player position, fold boundaries, etc.)
 7. ❌ Creating cells outside grid boundaries
 8. ❌ Assuming square cells (they become polygons when split!)
+9. ❌ **Overwriting dictionary entries without freeing old nodes** (memory leak!)
+10. ❌ Forgetting to update player position during grid transformations
 
 ## Godot-Specific Gotchas
 
