@@ -1,0 +1,27 @@
+{
+	"level_id": "13_minimal",
+	"level_name": "Tiny World",
+	"description": "Minimal 3x3 grid. Tests edge cases with very small grids.",
+	"grid_size": {
+		"x": 3,
+		"y": 3
+	},
+	"cell_size": 64.0,
+	"player_start_position": {
+		"x": 0,
+		"y": 0
+	},
+	"cell_data": {
+		"(2, 2)": 3,
+		"(1, 1)": 1
+	},
+	"difficulty": 1,
+	"max_folds": -1,
+	"par_folds": 2,
+	"metadata": {
+		"author": "Test Campaign",
+		"version": "1.0",
+		"tags": ["test", "minimal", "edge-case", "small-grid"],
+		"test_purpose": "Tests behavior on minimal grid size"
+	}
+}

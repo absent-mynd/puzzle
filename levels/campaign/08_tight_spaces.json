@@ -1,0 +1,48 @@
+{
+	"level_id": "08_tight_spaces",
+	"level_name": "Narrow Passage",
+	"description": "Navigate through tight corridors. Tests single-cell width pathways.",
+	"grid_size": {
+		"x": 11,
+		"y": 7
+	},
+	"cell_size": 64.0,
+	"player_start_position": {
+		"x": 0,
+		"y": 3
+	},
+	"cell_data": {
+		"(2, 0)": 1,
+		"(2, 1)": 1,
+		"(2, 2)": 1,
+		"(2, 4)": 1,
+		"(2, 5)": 1,
+		"(2, 6)": 1,
+		"(4, 1)": 1,
+		"(4, 2)": 1,
+		"(4, 3)": 1,
+		"(4, 4)": 1,
+		"(4, 5)": 1,
+		"(6, 0)": 1,
+		"(6, 1)": 1,
+		"(6, 2)": 1,
+		"(6, 4)": 1,
+		"(6, 5)": 1,
+		"(6, 6)": 1,
+		"(8, 1)": 1,
+		"(8, 2)": 1,
+		"(8, 3)": 1,
+		"(8, 4)": 1,
+		"(8, 5)": 1,
+		"(10, 3)": 3
+	},
+	"difficulty": 2,
+	"max_folds": -1,
+	"par_folds": 5,
+	"metadata": {
+		"author": "Test Campaign",
+		"version": "1.0",
+		"tags": ["test", "corridors", "pathfinding"],
+		"test_purpose": "Tests navigation through single-cell-wide corridors"
+	}
+}
