@@ -1,0 +1,80 @@
+[gd_scene load_steps=2 format=3 uid="uid://c8k9m3n7p4q2"]
+
+[ext_resource type="Script" path="res://scripts/ui/HUD.gd" id="1_hud"]
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="TopBar" type="MarginContainer" parent="."]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 80.0
+grow_horizontal = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="TopBar"]
+layout_mode = 2
+theme_override_constants/separation = 40
+
+[node name="LevelInfo" type="VBoxContainer" parent="TopBar/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LevelName" type="Label" parent="TopBar/HBoxContainer/LevelInfo"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Level 1: Introduction"
+
+[node name="FoldCounter" type="Label" parent="TopBar/HBoxContainer/LevelInfo"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Folds: 0 / 5"
+
+[node name="ControlButtons" type="HBoxContainer" parent="TopBar/HBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="UndoButton" type="Button" parent="TopBar/HBoxContainer/ControlButtons"]
+custom_minimum_size = Vector2(120, 50)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+disabled = true
+text = "Undo (U)"
+
+[node name="RestartButton" type="Button" parent="TopBar/HBoxContainer/ControlButtons"]
+custom_minimum_size = Vector2(120, 50)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Restart (R)"
+
+[node name="PauseButton" type="Button" parent="TopBar/HBoxContainer/ControlButtons"]
+custom_minimum_size = Vector2(120, 50)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Pause"
+
+[node name="Instructions" type="MarginContainer" parent="."]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -100.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="InstructionsLabel" type="Label" parent="Instructions"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Arrow Keys: Move | Click: Select Anchors (2) | Enter: Execute Fold | ESC: Pause"
+horizontal_alignment = 1
+
+[connection signal="pressed" from="TopBar/HBoxContainer/ControlButtons/UndoButton" to="." method="_on_undo_button_pressed"]
+[connection signal="pressed" from="TopBar/HBoxContainer/ControlButtons/RestartButton" to="." method="_on_restart_button_pressed"]
+[connection signal="pressed" from="TopBar/HBoxContainer/ControlButtons/PauseButton" to="." method="_on_pause_button_pressed"]
