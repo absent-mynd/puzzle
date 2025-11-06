@@ -1014,6 +1014,9 @@ func clear_fold_history():
 ## For diagonal folds, we create two perpendicular lines at the anchor points.
 ## These lines define the region to be removed.
 ##
+## The cut lines should be PERPENDICULAR to the fold axis (the line connecting the anchors).
+## For a line to be perpendicular to the fold axis, its normal should point along the fold axis.
+##
 ## @param anchor1: First anchor position (LOCAL coordinates - relative to GridManager)
 ## @param anchor2: Second anchor position (LOCAL coordinates - relative to GridManager)
 ## @return: Dictionary with line1, line2, and fold_axis information
@@ -1021,13 +1024,15 @@ func calculate_cut_lines(anchor1: Vector2, anchor2: Vector2) -> Dictionary:
 	# Fold axis vector (direction between anchors)
 	var fold_vector = anchor2 - anchor1
 
-	# Perpendicular vector (rotate 90 degrees counter-clockwise)
-	# For vector (x, y), perpendicular is (-y, x)
-	var perpendicular = Vector2(-fold_vector.y, fold_vector.x).normalized()
+	# A line with normal n consists of points where (p - point)·n = 0.
+	# This constraint defines a line perpendicular to the normal n.
+	# Therefore, to create cut lines perpendicular to the fold axis, we use the fold vector as the normal, ensuring the resulting lines are perpendicular to that direction.
+	# So if we want a line perpendicular to fold_vector, we use fold_vector as the normal
+	var fold_normal = fold_vector.normalized()
 
 	return {
-		"line1": {"point": anchor1, "normal": perpendicular},
-		"line2": {"point": anchor2, "normal": perpendicular},
+		"line1": {"point": anchor1, "normal": fold_normal},
+		"line2": {"point": anchor2, "normal": fold_normal},
 		"fold_axis": {"start": anchor1, "end": anchor2}
 	}
 
@@ -1159,8 +1164,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			cell.geometry, cut_lines.line1.point, cut_lines.line1.normal
 		)
 		if split_result.intersections.size() > 0:
-			# Keep the left half (before line1)
-			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "left")
+			# Keep the right half (negative side of normal, away from removed region)
+			# Line1 is at the start of the removed region, so we keep the side opposite the normal
+			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "right")
 			if new_cell:
 				# New cell goes to removed region
 				new_cell.queue_free()
@@ -1170,8 +1176,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			cell.geometry, cut_lines.line2.point, cut_lines.line2.normal
 		)
 		if split_result.intersections.size() > 0:
-			# Keep the right half (after line2)
-			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "right")
+			# Keep the left half (positive side of normal, away from removed region)
+			# Line2 is at the end of the removed region, so we keep the side in direction of normal
+			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "left")
 			if new_cell:
 				# New cell goes to removed region
 				new_cell.queue_free()
