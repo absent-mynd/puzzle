@@ -576,6 +576,15 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 
 		# Update grid manager's dictionary
 		grid_manager.cells.erase(old_pos)
+
+		# Remove any existing cell at the target position (overlapping/merging)
+		var existing_cell = grid_manager.cells.get(new_pos)
+		if existing_cell:
+			grid_manager.cells.erase(new_pos)
+			if existing_cell.get_parent():
+				existing_cell.get_parent().remove_child(existing_cell)
+			existing_cell.queue_free()
+
 		grid_manager.cells[new_pos] = cell
 
 	# 5. Update player position if in shifted region
@@ -671,6 +680,15 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 
 		# Update grid manager's dictionary
 		grid_manager.cells.erase(old_pos)
+
+		# Remove any existing cell at the target position (overlapping/merging)
+		var existing_cell = grid_manager.cells.get(new_pos)
+		if existing_cell:
+			grid_manager.cells.erase(new_pos)
+			if existing_cell.get_parent():
+				existing_cell.get_parent().remove_child(existing_cell)
+			existing_cell.queue_free()
+
 		grid_manager.cells[new_pos] = cell
 
 	# 5. Update player position if in shifted region
@@ -763,6 +781,15 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 
 		# Update grid manager's dictionary
 		grid_manager.cells.erase(old_pos)
+
+		# Remove any existing cell at the target position (overlapping/merging)
+		var existing_cell = grid_manager.cells.get(new_pos)
+		if existing_cell:
+			grid_manager.cells.erase(new_pos)
+			if existing_cell.get_parent():
+				existing_cell.get_parent().remove_child(existing_cell)
+			existing_cell.queue_free()
+
 		grid_manager.cells[new_pos] = cell
 
 	# 8. Update player position if in shifted region
@@ -858,6 +885,15 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 
 		# Update grid manager's dictionary
 		grid_manager.cells.erase(old_pos)
+
+		# Remove any existing cell at the target position (overlapping/merging)
+		var existing_cell = grid_manager.cells.get(new_pos)
+		if existing_cell:
+			grid_manager.cells.erase(new_pos)
+			if existing_cell.get_parent():
+				existing_cell.get_parent().remove_child(existing_cell)
+			existing_cell.queue_free()
+
 		grid_manager.cells[new_pos] = cell
 
 	# 8. Update player position if in shifted region
