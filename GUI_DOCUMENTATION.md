@@ -1,7 +1,8 @@
 # GUI System Documentation
 
 **Implementation Date:** 2025-11-06
-**Status:** Phase 10 - Complete
+**Last Updated:** 2025-11-06 (Phase 9 Integration)
+**Status:** Phase 10 - Complete & Integrated with Phase 9
 **Related Implementation Plan:** Phase 10 (Graphics, GUI & Audio Polish)
 
 ---
@@ -340,17 +341,37 @@ scenes/ui/
 ├── HUD.tscn               # In-game HUD
 ├── PauseMenu.tscn         # Pause overlay
 ├── LevelComplete.tscn     # Victory screen
+├── LevelSelect.tscn       # Level selection screen ⭐ NEW
 └── Settings.tscn          # Settings menu
 
 scripts/ui/
-├── MainMenu.gd            # Main menu logic
+├── MainMenu.gd            # Main menu logic (integrated with GameManager)
 ├── HUD.gd                 # HUD controller
 ├── PauseMenu.gd           # Pause menu controller
-├── LevelComplete.gd       # Level complete controller
+├── LevelComplete.gd       # Level complete controller (integrated with ProgressManager)
+├── LevelSelect.gd         # Level select controller ⭐ NEW
 └── Settings.gd            # Settings controller
+
+scripts/core/
+├── GameManager.gd         # Global level/progress manager singleton ⭐ NEW
+├── LevelData.gd           # Level data resource (Phase 9)
+├── Cell.gd                # Cell class
+├── GridManager.gd         # Grid management
+└── Player.gd              # Player character
+
+scripts/systems/
+├── LevelManager.gd        # Level loading/saving (Phase 9)
+├── ProgressManager.gd     # Campaign progress tracking (Phase 9)
+├── LevelValidator.gd      # Level validation (Phase 9)
+└── FoldSystem.gd          # Fold execution
 
 assets/themes/
 └── main_theme.tres        # UI theme resource
+
+levels/campaign/
+├── 01_introduction.json   # First level (Phase 9)
+├── 02_basic_folding.json  # Second level (Phase 9)
+└── 03_diagonal_challenge.json  # Third level (Phase 9)
 ```
 
 ---
@@ -391,11 +412,116 @@ assets/themes/
 
 ---
 
-**Status**: GUI foundation complete. Ready for integration with Level Management System (Phase 9) and Undo System (Phase 6).
+**Status**: GUI foundation complete and integrated with Phase 9 (Level Management System).
 
-**Next Steps**:
-1. Implement Level Select screen (requires Phase 9)
-2. Implement Level Editor UI (requires Phase 9)
-3. Connect audio volume controls to audio buses (requires audio system)
-4. Apply custom theme styling
-5. Add transitions and animations for polish
+---
+
+## Phase 9 Integration (Updated 2025-11-06)
+
+The GUI has been fully integrated with the Level Management System from Phase 9.
+
+### New Components
+
+#### GameManager Autoload (`scripts/core/GameManager.gd`)
+
+Global singleton managing the level and progress systems:
+
+```gdscript
+# Start a level
+GameManager.start_level("01_introduction")
+
+# Complete current level (saves progress)
+GameManager.complete_level()
+
+# Get next level in sequence
+var next_id = GameManager.get_next_level_id()
+
+# Restart current level
+GameManager.restart_level()
+
+# Return to main menu
+GameManager.return_to_main_menu()
+
+# Increment fold count
+GameManager.increment_fold_count()
+
+# Check level status
+var unlocked = GameManager.is_level_unlocked("02_basic_folding")
+var completed = GameManager.is_level_completed("01_introduction")
+var stars = GameManager.get_stars_for_level("01_introduction")
+```
+
+#### Level Select Screen (`scenes/ui/LevelSelect.tscn`)
+
+Grid-based level selection screen showing:
+- All campaign levels from `levels/campaign/`
+- Lock status (🔒 locked, ✓ unlocked, ★ stars for completed)
+- Star rating for completed levels
+- Par fold count for each level
+- Color-coded buttons (gold=completed, green=unlocked, gray=locked)
+
+**Navigation:**
+- Click level button to start that level
+- Back button returns to main menu
+
+### Integration Changes
+
+#### Main Scene (`scenes/MainScene.gd`)
+- Now loads levels from `GameManager.current_level_data`
+- Applies grid size, cell data, and player start position from LevelData
+- Tracks fold count in GameManager
+- Completes level and saves progress when goal reached
+- Uses GameManager for navigation (restart, next level, main menu)
+
+#### Main Menu (`scripts/ui/MainMenu.gd`)
+- "Play Campaign" starts first unlocked level via GameManager
+- "Level Select" navigates to Level Select screen
+- "Settings" opens Settings menu as overlay
+
+#### Level Complete Screen (`scripts/ui/LevelComplete.gd`)
+- "Next Level" loads next sequential level from ProgressManager
+- Saves completion stats (fold count, stars, time) to ProgressManager
+- Shows star rating based on par performance
+
+### Progress Tracking
+
+Campaign progress is automatically saved to `user://campaign_progress.json`:
+
+```json
+{
+  "levels_completed": ["01_introduction"],
+  "levels_unlocked": ["01_introduction", "02_basic_folding"],
+  "total_folds": 3,
+  "stars_earned": {
+    "01_introduction": 3
+  },
+  "best_times": {
+    "01_introduction": 45.2
+  }
+}
+```
+
+### Campaign Levels
+
+Three tutorial levels included:
+1. **First Steps** (`01_introduction`) - 8x8 grid, simple horizontal fold
+2. **Basic Folding** (`02_basic_folding`) - 10x10 grid, practice folds
+3. **Diagonal Challenge** (`03_diagonal_challenge`) - Requires Phase 4
+
+### Testing
+
+All 298 tests passing after integration:
+- 225 original tests (Phases 1-3, 7)
+- 73 Phase 9 tests (LevelData, LevelManager, LevelValidator, ProgressManager)
+
+---
+
+## Next Steps
+
+1. ✅ ~~Implement Level Select screen~~ - **COMPLETE**
+2. ✅ ~~Connect GUI to Level Management System~~ - **COMPLETE**
+3. Implement Level Editor UI
+4. Connect audio volume controls to audio buses (requires audio system)
+5. Apply custom theme styling
+6. Add transitions and animations for polish
+7. Connect Undo button to Undo System (Phase 6)

@@ -13,16 +13,20 @@ func _ready() -> void:
 
 ## Start the campaign from the first level
 func _on_play_button_pressed() -> void:
-	# TODO: Load first campaign level when level system is implemented
-	# For now, just start the main game scene
-	get_tree().change_scene_to_file("res://scenes/main.tscn")
+	# Start the first unlocked campaign level
+	var unlocked_levels = GameManager.progress_manager.campaign_data["levels_unlocked"]
+	if unlocked_levels.size() > 0:
+		var first_unlocked = unlocked_levels[0]
+		GameManager.start_level(first_unlocked)
+	else:
+		push_warning("MainMenu: No levels unlocked!")
+		# Fallback: start first level anyway
+		GameManager.start_level("01_introduction")
 
 
 ## Open level select screen
 func _on_level_select_button_pressed() -> void:
-	# TODO: Implement level select screen
-	print("Level Select not yet implemented")
-	# get_tree().change_scene_to_file("res://scenes/ui/LevelSelect.tscn")
+	get_tree().change_scene_to_file("res://scenes/ui/LevelSelect.tscn")
 
 
 ## Open level editor
@@ -34,10 +38,18 @@ func _on_editor_button_pressed() -> void:
 
 ## Open settings menu
 func _on_settings_button_pressed() -> void:
-	# TODO: Implement settings as overlay or separate scene
-	print("Settings not yet implemented")
-	# var settings = load("res://scenes/ui/Settings.tscn").instantiate()
-	# add_child(settings)
+	var settings_scene = load("res://scenes/ui/Settings.tscn")
+	if settings_scene:
+		var settings = settings_scene.instantiate()
+		add_child(settings)
+		settings.show_settings()
+		settings.settings_closed.connect(_on_settings_closed.bind(settings))
+
+
+## Handle settings closed
+func _on_settings_closed(settings_node: Node) -> void:
+	settings_node.queue_free()
+	$CenterContainer/VBoxContainer/PlayButton.grab_focus()
 
 
 ## Quit the game

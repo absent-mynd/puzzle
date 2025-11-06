@@ -8,9 +8,6 @@ extends Node2D
 @onready var grid_manager: GridManager = $GridManager
 @onready var player: Player = $Player
 
-## Starting position for player
-var player_start_position := Vector2i(5, 5)
-
 ## Fold system for grid transformations
 var fold_system: FoldSystem = null
 
@@ -22,9 +19,6 @@ var hud: CanvasLayer = null
 var pause_menu: Control = null
 var level_complete: Control = null
 
-## Fold counter
-var fold_count: int = 0
-
 
 func _ready() -> void:
 	# Fix background ColorRect to not block mouse input
@@ -35,15 +29,20 @@ func _ready() -> void:
 	# Wait for grid to be ready
 	await get_tree().process_frame
 
-	# Initialize FoldSystem (Issue #9)
+	# Load level from GameManager
+	if GameManager.current_level_data == null:
+		push_warning("MainScene: No level loaded in GameManager, using fallback test level")
+		setup_fallback_level()
+	else:
+		load_level(GameManager.current_level_data)
+
+	# Initialize FoldSystem
 	fold_system = FoldSystem.new()
 	fold_system.initialize(grid_manager)
 	add_child(fold_system)
 
 	# Initialize player with grid manager
 	if player and grid_manager:
-		player.initialize(grid_manager, player_start_position)
-
 		# Connect FoldSystem to player for validation
 		fold_system.set_player(player)
 
@@ -53,58 +52,50 @@ func _ready() -> void:
 		# Connect to player signals
 		player.goal_reached.connect(_on_player_goal_reached)
 
-		# Optional: Set up some test walls
-		setup_test_level()
-
 	# Initialize GUI
 	setup_gui()
 
 
-## Set up a simple test level with some walls and a goal
-func setup_test_level() -> void:
-	# Create border walls (top and bottom)
-	for x in range(10):
-		var top_cell = grid_manager.get_cell(Vector2i(x, 0))
-		if top_cell:
-			top_cell.set_cell_type(1)  # Wall
+## Loads a level from LevelData
+func load_level(level_data: LevelData) -> void:
+	# Set grid size
+	grid_manager.grid_size = level_data.grid_size
+	grid_manager.cell_size = level_data.cell_size
 
-		var bottom_cell = grid_manager.get_cell(Vector2i(x, 9))
-		if bottom_cell:
-			bottom_cell.set_cell_type(1)  # Wall
+	# Regenerate grid with new size
+	grid_manager.initialize_grid()
 
-	# Create border walls (left and right)
-	for y in range(10):
-		var left_cell = grid_manager.get_cell(Vector2i(0, y))
-		if left_cell:
-			left_cell.set_cell_type(1)  # Wall
+	# Apply cell data
+	for pos in level_data.cell_data:
+		var cell = grid_manager.get_cell(pos)
+		if cell:
+			cell.set_cell_type(level_data.cell_data[pos])
 
-		var right_cell = grid_manager.get_cell(Vector2i(9, y))
-		if right_cell:
-			right_cell.set_cell_type(1)  # Wall
+	# Initialize player at start position
+	if player:
+		player.initialize(grid_manager, level_data.player_start_position)
 
-	# Add some internal walls for testing
-	var wall1 = grid_manager.get_cell(Vector2i(3, 3))
-	if wall1:
-		wall1.set_cell_type(1)
-	var wall2 = grid_manager.get_cell(Vector2i(4, 3))
-	if wall2:
-		wall2.set_cell_type(1)
-	var wall3 = grid_manager.get_cell(Vector2i(5, 3))
-	if wall3:
-		wall3.set_cell_type(1)
+
+## Fallback level for testing without GameManager
+func setup_fallback_level() -> void:
+	# Create a simple fallback level
+	var fallback_data = LevelData.new()
+	fallback_data.level_id = "fallback_test"
+	fallback_data.level_name = "Test Level"
+	fallback_data.grid_size = Vector2i(10, 10)
+	fallback_data.cell_size = 64.0
+	fallback_data.player_start_position = Vector2i(5, 5)
+	fallback_data.par_folds = 5
 
 	# Add a goal cell
-	var goal_cell = grid_manager.get_cell(Vector2i(7, 7))
-	if goal_cell:
-		goal_cell.set_cell_type(3)
+	fallback_data.cell_data[Vector2i(7, 7)] = 3  # Goal
 
-	# Add some water cells (optional)
-	var water1 = grid_manager.get_cell(Vector2i(2, 6))
-	if water1:
-		water1.set_cell_type(2)
-	var water2 = grid_manager.get_cell(Vector2i(3, 6))
-	if water2:
-		water2.set_cell_type(2)
+	# Set as current level in GameManager
+	GameManager.current_level_data = fallback_data
+	GameManager.current_level_id = "fallback_test"
+
+	# Load the level
+	load_level(fallback_data)
 
 
 ## Handle player reaching goal
@@ -128,7 +119,11 @@ func setup_gui() -> void:
 	if hud_scene:
 		hud = hud_scene.instantiate()
 		add_child(hud)
-		hud.set_level_info("Test Level", 5)  # Par of 5 folds
+		# Use level data from GameManager
+		var level_name = GameManager.current_level_data.level_name if GameManager.current_level_data else "Unknown Level"
+		var par_folds = GameManager.current_level_data.par_folds if GameManager.current_level_data else -1
+		hud.set_level_info(level_name, par_folds)
+		hud.set_fold_count(GameManager.fold_count)
 		hud.pause_requested.connect(_on_pause_requested)
 		hud.restart_requested.connect(_on_restart_requested)
 		hud.undo_requested.connect(_on_undo_requested)
@@ -156,7 +151,12 @@ func setup_gui() -> void:
 ## Display level complete UI
 func show_win_ui() -> void:
 	if level_complete:
-		level_complete.show_complete(fold_count, 5)  # Par of 5 folds
+		# Complete the level in GameManager
+		GameManager.complete_level()
+
+		# Show level complete screen with current stats
+		var par_folds = GameManager.current_level_data.par_folds if GameManager.current_level_data else -1
+		level_complete.show_complete(GameManager.fold_count, par_folds)
 
 
 ## Handle pause request
@@ -174,7 +174,7 @@ func _on_resume_requested() -> void:
 ## Handle restart request
 func _on_restart_requested() -> void:
 	get_tree().paused = false  # Ensure game is unpaused
-	get_tree().reload_current_scene()
+	GameManager.restart_level()
 
 
 ## Handle undo request
@@ -186,21 +186,27 @@ func _on_undo_requested() -> void:
 ## Handle main menu request
 func _on_main_menu_requested() -> void:
 	get_tree().paused = false  # Ensure game is unpaused
-	get_tree().change_scene_to_file("res://scenes/ui/MainMenu.tscn")
+	GameManager.return_to_main_menu()
 
 
 ## Handle next level request
 func _on_next_level_requested() -> void:
-	# TODO: Load next level when level system is implemented
-	print("Next level not yet implemented")
-	_on_restart_requested()
+	get_tree().paused = false  # Ensure game is unpaused
+	var next_level_id = GameManager.get_next_level_id()
+	if not next_level_id.is_empty():
+		GameManager.start_level(next_level_id)
+	else:
+		# No more levels, return to menu
+		print("No more levels! Returning to main menu.")
+		GameManager.return_to_main_menu()
 
 
 ## Handle level select request
 func _on_level_select_requested() -> void:
-	# TODO: Open level select screen
+	get_tree().paused = false  # Ensure game is unpaused
+	# TODO: Open level select screen when created
 	print("Level select not yet implemented")
-	_on_main_menu_requested()
+	GameManager.return_to_main_menu()
 
 
 ## Check if level is complete (for testing)
@@ -238,9 +244,13 @@ func execute_fold() -> void:
 		grid_manager.clear_selection()
 
 	if success:
-		fold_count += 1
+		# Update fold count in GameManager
+		GameManager.increment_fold_count()
+
+		# Update HUD
 		if hud:
-			hud.set_fold_count(fold_count)
-		print("Fold executed successfully! Total folds: %d" % fold_count)
+			hud.set_fold_count(GameManager.fold_count)
+
+		print("Fold executed successfully! Total folds: %d" % GameManager.fold_count)
 	else:
 		print("Fold failed - check validation messages")
