@@ -1,11 +1,71 @@
 #!/bin/bash
 # Test runner script for Space Folding Puzzle Game
 # This script runs all GUT tests using the Godot engine
+#
+# Usage:
+#   ./run_tests.sh                           # Run all tests
+#   ./run_tests.sh test_file_name            # Run specific test file (e.g., test_fold_system)
+#   ./run_tests.sh path/to/test_file.gd      # Run specific test file by path
+#   ./run_tests.sh -h, --help                # Show help message
+#
+# You can also pass GUT command line options directly:
+#   ./run_tests.sh -gtest=res://scripts/tests/test_fold_system.gd
 
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOCAL_GODOT="${SCRIPT_DIR}/tools/godot/godot"
 LOCAL_GODOT_GZ="${SCRIPT_DIR}/tools/godot/godot.gz"
+
+# Function to show help message
+show_help() {
+    echo "Space Folding Puzzle Game - Test Runner"
+    echo ""
+    echo "Usage:"
+    echo "  ./run_tests.sh                           # Run all tests"
+    echo "  ./run_tests.sh test_file_name            # Run specific test file"
+    echo "  ./run_tests.sh path/to/test_file.gd      # Run specific test file by path"
+    echo "  ./run_tests.sh -h, --help                # Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  ./run_tests.sh                           # Run all tests"
+    echo "  ./run_tests.sh test_fold_system          # Run test_fold_system.gd"
+    echo "  ./run_tests.sh test_geometry_core        # Run test_geometry_core.gd"
+    echo "  ./run_tests.sh scripts/tests/test_fold_system.gd"
+    echo ""
+    echo "Advanced (GUT command line options):"
+    echo "  ./run_tests.sh -gtest=res://scripts/tests/test_fold_system.gd"
+    echo "  ./run_tests.sh -gdir=res://scripts/tests/"
+    echo ""
+    exit 0
+}
+
+# Parse command line arguments
+TEST_ARGS=""
+if [ $# -eq 0 ]; then
+    # No arguments - run all tests (default behavior)
+    TEST_ARGS=""
+elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    show_help
+elif [ "${1:0:1}" == "-" ]; then
+    # Argument starts with '-' - pass through to GUT directly
+    TEST_ARGS="$@"
+else
+    # Argument doesn't start with '-' - treat as test file name or selection string
+    TEST_SELECTOR="$1"
+
+    # Remove .gd extension if present
+    TEST_SELECTOR="${TEST_SELECTOR%.gd}"
+    # Remove test_ prefix if present
+    TEST_SELECTOR="${TEST_SELECTOR#test_}"
+    # Remove path components if present
+    TEST_SELECTOR="${TEST_SELECTOR##*/}"
+
+    # Use -gselect to run tests matching the selector
+    # -gselect will filter scripts that contain the selector string in their filename
+    TEST_ARGS="-gselect=$TEST_SELECTOR"
+    echo "Running tests matching: $TEST_SELECTOR"
+    echo ""
+fi
 
 # Decompress Godot if needed
 if [ ! -f "$LOCAL_GODOT" ] && [ -f "$LOCAL_GODOT_GZ" ]; then
@@ -46,7 +106,11 @@ echo ""
 # Run tests
 echo "Running GUT tests..."
 echo "===================="
-"$GODOT_BIN" --path . --headless -s addons/gut/gut_cmdln.gd "$@"
+if [ -z "$TEST_ARGS" ]; then
+    "$GODOT_BIN" --path . --headless -s addons/gut/gut_cmdln.gd
+else
+    "$GODOT_BIN" --path . --headless -s addons/gut/gut_cmdln.gd $TEST_ARGS
+fi
 
 # Capture exit code
 EXIT_CODE=$?
