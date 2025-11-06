@@ -1014,6 +1014,9 @@ func clear_fold_history():
 ## For diagonal folds, we create two perpendicular lines at the anchor points.
 ## These lines define the region to be removed.
 ##
+## The cut lines should be PERPENDICULAR to the fold axis (the line connecting the anchors).
+## For a line to be perpendicular to the fold axis, its normal should point along the fold axis.
+##
 ## @param anchor1: First anchor position (LOCAL coordinates - relative to GridManager)
 ## @param anchor2: Second anchor position (LOCAL coordinates - relative to GridManager)
 ## @return: Dictionary with line1, line2, and fold_axis information
@@ -1021,13 +1024,15 @@ func calculate_cut_lines(anchor1: Vector2, anchor2: Vector2) -> Dictionary:
 	# Fold axis vector (direction between anchors)
 	var fold_vector = anchor2 - anchor1
 
-	# Perpendicular vector (rotate 90 degrees counter-clockwise)
-	# For vector (x, y), perpendicular is (-y, x)
-	var perpendicular = Vector2(-fold_vector.y, fold_vector.x).normalized()
+	# For cut lines perpendicular to fold axis, the normal should be along the fold axis
+	# A line with normal n consists of points where (p - point)·n = 0
+	# This means the line is perpendicular to n
+	# So if we want a line perpendicular to fold_vector, we use fold_vector as the normal
+	var fold_normal = fold_vector.normalized()
 
 	return {
-		"line1": {"point": anchor1, "normal": perpendicular},
-		"line2": {"point": anchor2, "normal": perpendicular},
+		"line1": {"point": anchor1, "normal": fold_normal},
+		"line2": {"point": anchor2, "normal": fold_normal},
 		"fold_axis": {"start": anchor1, "end": anchor2}
 	}
 
