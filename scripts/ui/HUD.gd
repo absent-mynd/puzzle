@@ -79,16 +79,25 @@ func update_display() -> void:
 
 ## Handle undo button press
 func _on_undo_button_pressed() -> void:
+	# Play button click sound (or undo sound when undo is implemented)
+	AudioManager.play_sfx("button_click")
+
 	undo_requested.emit()
 
 
 ## Handle restart button press
 func _on_restart_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	restart_requested.emit()
 
 
 ## Handle pause button press
 func _on_pause_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	pause_requested.emit()
 
 

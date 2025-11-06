@@ -92,24 +92,36 @@ func update_stars() -> void:
 
 ## Handle next level button
 func _on_next_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	next_level_requested.emit()
 	hide()
 
 
 ## Handle retry button
 func _on_retry_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	retry_requested.emit()
 	hide()
 
 
 ## Handle level select button
 func _on_level_select_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	level_select_requested.emit()
 	hide()
 
 
 ## Handle main menu button
 func _on_main_menu_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	main_menu_requested.emit()
 	hide()
 

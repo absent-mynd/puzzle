@@ -9,6 +9,10 @@ extends Control
 
 
 func _ready() -> void:
+	# Start menu music (if not already playing)
+	if AudioManager.current_music_track != "menu":
+		AudioManager.play_music("menu", true)
+
 	populate_levels()
 	back_button.grab_focus()
 
@@ -80,9 +84,15 @@ func create_star_display(stars: int) -> String:
 
 ## Handle level button press
 func _on_level_button_pressed(level_id: String) -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	GameManager.start_level(level_id)
 
 
 ## Handle back button
 func _on_back_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	get_tree().change_scene_to_file("res://scenes/ui/MainMenu.tscn")

@@ -35,18 +35,27 @@ func hide_pause_menu() -> void:
 
 ## Resume the game
 func _on_resume_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	hide_pause_menu()
 	resume_requested.emit()
 
 
 ## Restart the current level
 func _on_restart_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	hide_pause_menu()
 	restart_requested.emit()
 
 
 ## Open settings (overlay on pause menu)
 func _on_settings_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	# TODO: Show settings overlay
 	print("Settings not yet implemented")
 	# var settings = load("res://scenes/ui/Settings.tscn").instantiate()
@@ -55,5 +64,8 @@ func _on_settings_button_pressed() -> void:
 
 ## Return to main menu
 func _on_main_menu_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	hide_pause_menu()
 	main_menu_requested.emit()
