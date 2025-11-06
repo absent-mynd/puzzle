@@ -1166,23 +1166,23 @@ func shift_cell_geometry(cell: Cell, shift_vector: Vector2) -> void:
 
 ## Check if two cells should merge after a diagonal fold
 ##
-## Two cells should merge if they're close to each other (within sqrt(2) grid cells)
-## This accounts for split cells having offset centers that round to different positions.
+## Two cells should merge if they're at the same grid position after shifting
+## and their geometries are adjacent or overlapping.
 ##
 ## @param cell1: First cell
 ## @param cell2: Second cell
 ## @return: true if cells should merge
 func should_merge_cells(cell1: Cell, cell2: Cell) -> bool:
+	# Must be at same grid position (after shifting)
+	if cell1.grid_position != cell2.grid_position:
+		return false
+
 	# Must not be the same cell
 	if cell1 == cell2:
 		return false
 
-	# Check if cells are within distance of sqrt(2) grid cells
-	# Split cells from line1 and line2 should be close after shifting
-	var distance = Vector2(cell1.grid_position - cell2.grid_position).length()
-	var max_distance = 1.5  # Allow cells within 1.5 grid cells to merge
-
-	return distance <= max_distance
+	# Cells at same grid position should merge
+	return true
 
 
 ## Merge two cells that have been brought together by a fold
@@ -1394,19 +1394,12 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	# 8. Merge split halves that are now at the same position
 	# line1_split_halves are still at their original positions
 	# line2_split_halves have been shifted to align with line1_split_halves
-	var merged_right_halves: Array[Cell] = []  # Track which right halves have been merged
-
 	for left_half in line1_split_halves:
 		for right_half in line2_split_halves:
-			# Skip if this right_half has already been merged
-			if right_half in merged_right_halves:
-				continue
-
 			if should_merge_cells(left_half, right_half):
 				var merged = merge_cells(left_half, right_half, cut_lines.line1, next_fold_id)
 				# Update grid_manager's reference
 				grid_manager.cells[merged.grid_position] = merged
-				merged_right_halves.append(right_half)  # Mark as merged
 				break  # Only merge once per left_half
 
 	# If there are line1_split_halves that didn't merge, add them back to grid
