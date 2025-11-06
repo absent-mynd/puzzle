@@ -17,6 +17,7 @@ var cell_type: int = 0             # 0=empty, 1=wall, 2=water, 3=goal
 var is_partial: bool = false       # True if cell has been split
 var seams: Array[Dictionary] = []  # Track seam information
 var polygon_visual: Polygon2D      # Visual representation
+var border_line: Line2D            # Cell border/outline
 
 ## Visual feedback properties (for anchor selection system - Issue #6)
 var outline_color: Color = Color.TRANSPARENT
@@ -44,6 +45,13 @@ func _init(pos: Vector2i, local_pos: Vector2, size: float):
 	# Set up visual representation
 	polygon_visual = Polygon2D.new()
 	add_child(polygon_visual)
+
+	# Set up border/outline
+	border_line = Line2D.new()
+	border_line.width = 2.0
+	border_line.closed = true  # Makes it a closed loop
+	add_child(border_line)
+
 	update_visual()
 
 
@@ -80,11 +88,18 @@ func set_cell_type(type: int):
 ## Update the visual representation of the cell
 ##
 ## Refreshes the Polygon2D node with current geometry and applies
-## the appropriate color based on cell_type.
+## the appropriate color based on cell_type. Also updates the border
+## outline to follow the cell's perimeter.
 func update_visual():
 	if polygon_visual:
 		polygon_visual.polygon = geometry
-		polygon_visual.color = get_cell_color()
+		var cell_color = get_cell_color()
+		polygon_visual.color = cell_color
+
+		# Update border outline
+		if border_line:
+			border_line.points = geometry
+			border_line.default_color = darken_color(cell_color, 0.6)
 
 
 ## Get the color for the current cell type
@@ -97,6 +112,15 @@ func get_cell_color() -> Color:
 		2: return Color(0.2, 0.4, 1.0)  # Water - blue
 		3: return Color(0.2, 1.0, 0.2)  # Goal - green
 		_: return Color(1.0, 1.0, 1.0)  # Default - white
+
+
+## Darken a color by a given factor
+##
+## @param color: The color to darken
+## @param factor: How much to darken (0.0 = black, 1.0 = unchanged)
+## @return: Darkened color
+func darken_color(color: Color, factor: float = 0.7) -> Color:
+	return Color(color.r * factor, color.g * factor, color.b * factor, color.a)
 
 
 ## Check if a point is inside the cell geometry
