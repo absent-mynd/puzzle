@@ -782,6 +782,8 @@ func execute_fold(anchor1: Vector2i, anchor2: Vector2i, animated: bool = true) -
 
 	if not validation.valid:
 		push_warning("FoldSystem: Fold validation failed: " + validation.reason)
+		# Play error sound
+		AudioManager.play_sfx("error")
 		return false
 
 	# Validate with player position
@@ -789,6 +791,8 @@ func execute_fold(anchor1: Vector2i, anchor2: Vector2i, animated: bool = true) -
 
 	if not player_validation.valid:
 		push_warning("FoldSystem: Player validation failed: " + player_validation.reason)
+		# Play error sound
+		AudioManager.play_sfx("error")
 		return false
 
 	var orientation = get_fold_orientation(anchor1, anchor2)
@@ -796,6 +800,9 @@ func execute_fold(anchor1: Vector2i, anchor2: Vector2i, animated: bool = true) -
 	# Set animating flag if using animations
 	if animated:
 		is_animating = true
+
+	# Play fold sound effect
+	AudioManager.play_sfx("fold")
 
 	match orientation:
 		"horizontal":

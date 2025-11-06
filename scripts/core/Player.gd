@@ -162,6 +162,9 @@ func execute_move(new_grid_pos: Vector2i) -> void:
 func start_move_tween() -> void:
 	is_moving = true
 
+	# Play footstep sound with pitch variation
+	AudioManager.play_sfx("footstep", true)
+
 	# Kill existing tween if any
 	if move_tween:
 		move_tween.kill()
@@ -190,6 +193,8 @@ func _on_move_finished() -> void:
 func check_goal() -> void:
 	var current_cell = grid_manager.get_cell(grid_position)
 	if current_cell and current_cell.cell_type == 3:  # Goal
+		# Play victory sound
+		AudioManager.play_sfx("victory")
 		emit_signal("goal_reached")
 
 
