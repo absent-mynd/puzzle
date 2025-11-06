@@ -23,7 +23,7 @@ func before_each():
 	grid_manager = GridManager.new()
 	grid_manager.grid_size = Vector2i(10, 10)
 	grid_manager.cell_size = 64.0
-	grid_manager.initialize_grid()
+	grid_manager.create_grid()  # FIX: Use create_grid() not initialize_grid()
 	add_child_autofree(grid_manager)
 
 	fold_system = FoldSystem.new()

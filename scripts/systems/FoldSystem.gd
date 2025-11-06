@@ -595,7 +595,7 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		var new_cell = grid_manager.get_cell(player.grid_position)
 		if new_cell:
 			# Convert from local coordinates (relative to GridManager) to world coordinates
-			player.position = grid_manager.to_global(new_cell.get_center())
+			player.global_position = grid_manager.to_global(new_cell.get_center())
 
 	# 6. Record fold operation
 	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
@@ -699,7 +699,7 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 		var new_cell = grid_manager.get_cell(player.grid_position)
 		if new_cell:
 			# Convert from local coordinates (relative to GridManager) to world coordinates
-			player.position = grid_manager.to_global(new_cell.get_center())
+			player.global_position = grid_manager.to_global(new_cell.get_center())
 
 	# 6. Record fold operation
 	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
@@ -800,7 +800,7 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 		var new_cell = grid_manager.get_cell(player.grid_position)
 		if new_cell:
 			# Convert from local coordinates (relative to GridManager) to world coordinates
-			player.position = grid_manager.to_global(new_cell.get_center())
+			player.global_position = grid_manager.to_global(new_cell.get_center())
 
 	# 9. Create seam visualization
 	create_seam_visual(left_anchor, right_anchor, "horizontal")
@@ -904,7 +904,7 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 		var new_cell = grid_manager.get_cell(player.grid_position)
 		if new_cell:
 			# Convert from local coordinates (relative to GridManager) to world coordinates
-			player.position = grid_manager.to_global(new_cell.get_center())
+			player.global_position = grid_manager.to_global(new_cell.get_center())
 
 	# 9. Create seam visualization
 	create_seam_visual(top_anchor, bottom_anchor, "vertical")
