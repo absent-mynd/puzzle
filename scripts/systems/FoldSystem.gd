@@ -334,6 +334,7 @@ func fade_out_cells(cell_positions: Array[Vector2i], duration: float) -> void:
 func shift_cells_animated(cells_to_shift: Array[Dictionary], duration: float) -> void:
 	var tweens: Array[Tween] = []
 
+	# Start all tweens in parallel
 	for data in cells_to_shift:
 		var cell = data.cell
 		var new_pos = data.new_pos
@@ -342,11 +343,7 @@ func shift_cells_animated(cells_to_shift: Array[Dictionary], duration: float) ->
 		var new_world_pos = grid_manager.grid_to_world(new_pos)
 		var cell_size = grid_manager.cell_size
 
-		# Calculate center of new cell position (for visual reference)
-		var target_center = new_world_pos + Vector2(cell_size / 2, cell_size / 2)
-
-		# We need to tween the cell's polygon geometry, not just position
-		# For now, we'll calculate the new geometry and tween each vertex
+		# Calculate new geometry
 		var new_geometry = PackedVector2Array([
 			new_world_pos,
 			new_world_pos + Vector2(cell_size, 0),
@@ -354,32 +351,28 @@ func shift_cells_animated(cells_to_shift: Array[Dictionary], duration: float) ->
 			new_world_pos + Vector2(0, cell_size)
 		])
 
+		# Store start and end geometry for interpolation
+		var start_geometry = cell.geometry.duplicate()
+
 		# Create tween for this cell
 		var tween = create_tween()
 		tween.set_ease(Tween.EASE_IN_OUT)
 		tween.set_trans(Tween.TRANS_CUBIC)
 
-		# Tween the geometry by interpolating each vertex
-		# We'll use a property tweener with a custom interpolation
-		var start_geometry = cell.geometry.duplicate()
-		var steps = int(duration * 60)  # 60 FPS approximation
-
-		# Simple approach: directly update geometry over time
-		for i in range(steps + 1):
-			var t = float(i) / float(steps)
-			await get_tree().create_timer(duration / steps).timeout
-
-			# Interpolate geometry
+		# Use a method callback to update geometry over time
+		# Create a callable that captures the necessary variables
+		var interpolate_geometry = func(t: float):
 			var interpolated = PackedVector2Array()
 			for j in range(start_geometry.size()):
 				interpolated.append(start_geometry[j].lerp(new_geometry[j], t))
-
 			cell.geometry = interpolated
 			cell.update_visual()
 
+		tween.tween_method(interpolate_geometry, 0.0, 1.0, duration)
+
 		tweens.append(tween)
 
-	# Wait for all tweens to complete
+	# Wait for all tweens to complete (in parallel)
 	for tween in tweens:
 		if tween:
 			await tween.finished
@@ -468,13 +461,13 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			# Free the cell
 			cell.queue_free()
 
-	# 4. Shift ALL cells to the right of right_anchor (across ALL rows)
+	# 4. Shift ALL cells from right_anchor onwards (across ALL rows)
 	var shift_distance = right_anchor.x - left_anchor.x
 
 	# Collect cells that need to be shifted
 	var cells_to_shift: Array[Dictionary] = []
 	for y in range(grid_manager.grid_size.y):
-		for x in range(right_anchor.x + 1, grid_manager.grid_size.x):
+		for x in range(right_anchor.x, grid_manager.grid_size.x):
 			var old_pos = Vector2i(x, y)
 			var cell = grid_manager.get_cell(old_pos)
 			if cell:
@@ -549,13 +542,13 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 			# Free the cell
 			cell.queue_free()
 
-	# 4. Shift ALL cells below bottom_anchor (across ALL columns)
+	# 4. Shift ALL cells from bottom_anchor onwards (across ALL columns)
 	var shift_distance = bottom_anchor.y - top_anchor.y
 
 	# Collect cells that need to be shifted
 	var cells_to_shift: Array[Dictionary] = []
 	for x in range(grid_manager.grid_size.x):
-		for y in range(bottom_anchor.y + 1, grid_manager.grid_size.y):
+		for y in range(bottom_anchor.y, grid_manager.grid_size.y):
 			var old_pos = Vector2i(x, y)
 			var cell = grid_manager.get_cell(old_pos)
 			if cell:
@@ -614,7 +607,7 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 	var shift_distance = right_anchor.x - left_anchor.x
 	var cells_to_shift: Array[Dictionary] = []
 	for y in range(grid_manager.grid_size.y):
-		for x in range(right_anchor.x + 1, grid_manager.grid_size.x):
+		for x in range(right_anchor.x, grid_manager.grid_size.x):
 			var old_pos = Vector2i(x, y)
 			var cell = grid_manager.get_cell(old_pos)
 			if cell:
@@ -694,7 +687,7 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 	var shift_distance = bottom_anchor.y - top_anchor.y
 	var cells_to_shift: Array[Dictionary] = []
 	for x in range(grid_manager.grid_size.x):
-		for y in range(bottom_anchor.y + 1, grid_manager.grid_size.y):
+		for y in range(bottom_anchor.y, grid_manager.grid_size.y):
 			var old_pos = Vector2i(x, y)
 			var cell = grid_manager.get_cell(old_pos)
 			if cell:
