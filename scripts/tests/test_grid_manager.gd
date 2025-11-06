@@ -292,12 +292,13 @@ func test_cells_are_properly_positioned():
 			var cell = grid_manager.get_cell(grid_pos)
 			var expected_world_pos = Vector2(x * 64, y * 64)
 
-			# Check that cell geometry starts at expected position
+			# Check that cell node is positioned at expected location
+			# (geometry is relative to cell position, so check cell.position instead)
 			assert_almost_eq(
-				cell.geometry[0].x, expected_world_pos.x, 0.01,
+				cell.position.x, expected_world_pos.x, 0.01,
 				"Cell (%d,%d) x position" % [x, y]
 			)
 			assert_almost_eq(
-				cell.geometry[0].y, expected_world_pos.y, 0.01,
+				cell.position.y, expected_world_pos.y, 0.01,
 				"Cell (%d,%d) y position" % [x, y]
 			)

@@ -484,16 +484,11 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		# Update cell's grid position
 		cell.grid_position = new_pos
 
-		# Update world position (recalculate geometry)
+		# Update cell's world position (geometry stays relative, just move the cell node)
 		var new_world_pos = grid_manager.grid_to_world(new_pos)
-		var cell_size = grid_manager.cell_size
-		cell.geometry = PackedVector2Array([
-			new_world_pos,
-			new_world_pos + Vector2(cell_size, 0),
-			new_world_pos + Vector2(cell_size, cell_size),
-			new_world_pos + Vector2(0, cell_size)
-		])
-		cell.update_visual()
+		cell.position = new_world_pos
+		# No need to update geometry - it's already relative to cell position
+		# Geometry stays as: [Vector2.ZERO, Vector2(size,0), Vector2(size,size), Vector2(0,size)]
 
 		# Update grid manager's dictionary
 		grid_manager.cells.erase(old_pos)
@@ -567,16 +562,11 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 		# Update cell's grid position
 		cell.grid_position = new_pos
 
-		# Update world position (recalculate geometry)
+		# Update cell's world position (geometry stays relative, just move the cell node)
 		var new_world_pos = grid_manager.grid_to_world(new_pos)
-		var cell_size = grid_manager.cell_size
-		cell.geometry = PackedVector2Array([
-			new_world_pos,
-			new_world_pos + Vector2(cell_size, 0),
-			new_world_pos + Vector2(cell_size, cell_size),
-			new_world_pos + Vector2(0, cell_size)
-		])
-		cell.update_visual()
+		cell.position = new_world_pos
+		# No need to update geometry - it's already relative to cell position
+		# Geometry stays as: [Vector2.ZERO, Vector2(size,0), Vector2(size,size), Vector2(0,size)]
 
 		# Update grid manager's dictionary
 		grid_manager.cells.erase(old_pos)
@@ -642,16 +632,10 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 		# Update cell's grid position
 		cell.grid_position = new_pos
 
-		# Update final geometry
+		# Update final position (geometry stays relative)
 		var new_world_pos = grid_manager.grid_to_world(new_pos)
-		var cell_size = grid_manager.cell_size
-		cell.geometry = PackedVector2Array([
-			new_world_pos,
-			new_world_pos + Vector2(cell_size, 0),
-			new_world_pos + Vector2(cell_size, cell_size),
-			new_world_pos + Vector2(0, cell_size)
-		])
-		cell.update_visual()
+		cell.position = new_world_pos
+		# Geometry is already relative, no need to update
 
 		# Reset modulate (in case it was changed)
 		cell.modulate = Color.WHITE
@@ -723,16 +707,10 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 		# Update cell's grid position
 		cell.grid_position = new_pos
 
-		# Update final geometry
+		# Update final position (geometry stays relative)
 		var new_world_pos = grid_manager.grid_to_world(new_pos)
-		var cell_size = grid_manager.cell_size
-		cell.geometry = PackedVector2Array([
-			new_world_pos,
-			new_world_pos + Vector2(cell_size, 0),
-			new_world_pos + Vector2(cell_size, cell_size),
-			new_world_pos + Vector2(0, cell_size)
-		])
-		cell.update_visual()
+		cell.position = new_world_pos
+		# Geometry is already relative, no need to update
 
 		# Reset modulate (in case it was changed)
 		cell.modulate = Color.WHITE

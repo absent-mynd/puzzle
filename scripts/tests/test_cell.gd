@@ -33,11 +33,14 @@ func test_square_geometry():
 
 	assert_eq(cell.geometry.size(), 4, "Square should have 4 vertices")
 
-	# Check each vertex position
-	assert_almost_eq(cell.geometry[0], world_pos, Vector2.ONE * 0.01, "Top-left vertex incorrect")
-	assert_almost_eq(cell.geometry[1], world_pos + Vector2(CELL_SIZE, 0), Vector2.ONE * 0.01, "Top-right vertex incorrect")
-	assert_almost_eq(cell.geometry[2], world_pos + Vector2(CELL_SIZE, CELL_SIZE), Vector2.ONE * 0.01, "Bottom-right vertex incorrect")
-	assert_almost_eq(cell.geometry[3], world_pos + Vector2(0, CELL_SIZE), Vector2.ONE * 0.01, "Bottom-left vertex incorrect")
+	# Verify cell is positioned at world_pos
+	assert_almost_eq(cell.position, world_pos, Vector2.ONE * 0.01, "Cell position should be at world_pos")
+
+	# Check each vertex position (geometry is now relative to cell position)
+	assert_almost_eq(cell.geometry[0], Vector2.ZERO, Vector2.ONE * 0.01, "Top-left vertex incorrect")
+	assert_almost_eq(cell.geometry[1], Vector2(CELL_SIZE, 0), Vector2.ONE * 0.01, "Top-right vertex incorrect")
+	assert_almost_eq(cell.geometry[2], Vector2(CELL_SIZE, CELL_SIZE), Vector2.ONE * 0.01, "Bottom-right vertex incorrect")
+	assert_almost_eq(cell.geometry[3], Vector2(0, CELL_SIZE), Vector2.ONE * 0.01, "Bottom-left vertex incorrect")
 
 	cell.free()
 

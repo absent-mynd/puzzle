@@ -32,12 +32,16 @@ var is_hovered: bool = false
 func _init(pos: Vector2i, world_pos: Vector2, size: float):
 	grid_position = pos
 
-	# Create square geometry (counter-clockwise winding)
+	# Position the Cell node at the world position
+	position = world_pos
+
+	# Create square geometry RELATIVE to cell position (counter-clockwise winding)
+	# This is important for _draw() to work correctly
 	geometry = PackedVector2Array([
-		world_pos,                          # Top-left
-		world_pos + Vector2(size, 0),       # Top-right
-		world_pos + Vector2(size, size),    # Bottom-right
-		world_pos + Vector2(0, size)        # Bottom-left
+		Vector2.ZERO,              # Top-left
+		Vector2(size, 0),          # Top-right
+		Vector2(size, size),       # Bottom-right
+		Vector2(0, size)           # Bottom-left
 	])
 
 	# Set up visual representation
@@ -51,9 +55,10 @@ func _init(pos: Vector2i, world_pos: Vector2, size: float):
 ## Uses GeometryCore.polygon_centroid() to calculate the geometric center
 ## of the cell's polygon geometry.
 ##
-## @return: Center point of cell geometry
+## @return: Center point of cell in parent's coordinate space (GridManager local space)
 func get_center() -> Vector2:
-	return GeometryCore.polygon_centroid(geometry)
+	# Geometry is relative to cell position, so add position to get center in parent space
+	return GeometryCore.polygon_centroid(geometry) + position
 
 
 ## Add seam information to the cell
@@ -103,10 +108,12 @@ func get_cell_color() -> Color:
 ## Uses polygon containment test to determine if a point is within
 ## the cell's boundaries. Useful for mouse interaction.
 ##
-## @param point: Point to test in world coordinates
+## @param point: Point to test in parent's coordinate space (GridManager local space)
 ## @return: true if point is inside cell, false otherwise
 func contains_point(point: Vector2) -> bool:
-	return GeometryCore.point_in_polygon(point, geometry)
+	# Convert point from parent space to cell-relative space
+	var relative_point = point - position
+	return GeometryCore.point_in_polygon(relative_point, geometry)
 
 
 ## Check if the cell is still a perfect square

@@ -44,6 +44,7 @@ func _ready() -> void:
 	preview_line.width = 5.0  # Increased from 3.0 for better visibility
 	preview_line.default_color = Color.CYAN
 	preview_line.visible = false
+	preview_line.z_index = 1  # Draw on top of cells
 	add_child(preview_line)
 
 	# Create the grid
