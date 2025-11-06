@@ -453,9 +453,7 @@ func test_execute_fold_diagonal_succeeds():
 	var anchor1 = Vector2i(2, 2)
 	var anchor2 = Vector2i(7, 7)
 
-	# Place player away from fold area
-	if player:
-		player.grid_position = Vector2i(0, 0)
+	# No player validation needed for this test (player-specific tests are in test_player_fold_validation.gd)
 
 	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
 

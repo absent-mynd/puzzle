@@ -24,20 +24,21 @@ var is_hovered: bool = false
 
 
 ## Constructor
-## Initializes cell with grid position, world position, and size
+## Initializes cell with grid position, local position, and size
 ##
 ## @param pos: Grid position (e.g., Vector2i(0, 0) for top-left cell)
-## @param world_pos: World position (top-left corner in world space)
+## @param local_pos: Local position relative to GridManager (top-left corner in local space)
 ## @param size: Size of the cell (width and height)
-func _init(pos: Vector2i, world_pos: Vector2, size: float):
+func _init(pos: Vector2i, local_pos: Vector2, size: float):
 	grid_position = pos
 
-	# Create square geometry (counter-clockwise winding)
+	# Create square geometry using LOCAL coordinates (relative to GridManager)
+	# Cells are children of GridManager, so geometry is in local space
 	geometry = PackedVector2Array([
-		world_pos,                          # Top-left
-		world_pos + Vector2(size, 0),       # Top-right
-		world_pos + Vector2(size, size),    # Bottom-right
-		world_pos + Vector2(0, size)        # Bottom-left
+		local_pos,                          # Top-left
+		local_pos + Vector2(size, 0),       # Top-right
+		local_pos + Vector2(size, size),    # Bottom-right
+		local_pos + Vector2(0, size)        # Bottom-left
 	])
 
 	# Set up visual representation
@@ -103,7 +104,7 @@ func get_cell_color() -> Color:
 ## Uses polygon containment test to determine if a point is within
 ## the cell's boundaries. Useful for mouse interaction.
 ##
-## @param point: Point to test in world coordinates
+## @param point: Point to test in LOCAL coordinates (relative to GridManager)
 ## @return: true if point is inside cell, false otherwise
 func contains_point(point: Vector2) -> bool:
 	return GeometryCore.point_in_polygon(point, geometry)
