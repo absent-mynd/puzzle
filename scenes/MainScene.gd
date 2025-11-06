@@ -21,6 +21,9 @@ var level_complete: Control = null
 
 
 func _ready() -> void:
+	# Start background music
+	AudioManager.play_music("gameplay", true)
+
 	# Fix background ColorRect to not block mouse input
 	var background = $ColorRect
 	if background:

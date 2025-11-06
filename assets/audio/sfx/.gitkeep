@@ -1,0 +1,10 @@
+# This file ensures the sfx directory is tracked by Git
+# Place .ogg sound effect files here:
+# - fold.ogg (Fold execution sound)
+# - selection.ogg (Anchor selection sound)
+# - error.ogg (Invalid action sound)
+# - victory.ogg (Goal reached sound)
+# - footstep.ogg (Player movement sound)
+# - button_click.ogg (UI button click sound)
+# - button_hover.ogg (UI button hover sound)
+# - undo.ogg (Undo operation sound)
