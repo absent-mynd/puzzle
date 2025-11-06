@@ -157,7 +157,7 @@ func play_music(track_name: String, fade_in: bool = true) -> void:
 
 	# Play with fade in
 	if fade_in:
-		music_player.volume_db = linear_to_db(0.0)
+		music_player.volume_db = linear_to_db(0.0001) # Use epsilon instead of 0.0 to avoid -INF
 		music_player.play()
 		_fade_music_to(music_volume, FADE_DURATION)
 	else:
