@@ -5,6 +5,9 @@ extends Node
 ## Global singleton managing level system, progress tracking, and game state.
 ## Accessible from any script via GameManager global variable.
 
+## Constants
+const CUSTOM_LEVELS_DIR = "user://levels/"
+
 ## Level management
 var level_manager: LevelManager = null
 var progress_manager: ProgressManager = null
