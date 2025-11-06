@@ -1164,8 +1164,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			cell.geometry, cut_lines.line1.point, cut_lines.line1.normal
 		)
 		if split_result.intersections.size() > 0:
-			# Keep the left half (before line1)
-			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "left")
+			# Keep the right half (negative side of normal, away from removed region)
+			# Line1 is at the start of the removed region, so we keep the side opposite the normal
+			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "right")
 			if new_cell:
 				# New cell goes to removed region
 				new_cell.queue_free()
@@ -1175,8 +1176,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			cell.geometry, cut_lines.line2.point, cut_lines.line2.normal
 		)
 		if split_result.intersections.size() > 0:
-			# Keep the right half (after line2)
-			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "right")
+			# Keep the left half (positive side of normal, away from removed region)
+			# Line2 is at the end of the removed region, so we keep the side in direction of normal
+			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "left")
 			if new_cell:
 				# New cell goes to removed region
 				new_cell.queue_free()
