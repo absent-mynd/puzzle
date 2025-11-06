@@ -1024,14 +1024,15 @@ func calculate_cut_lines(anchor1: Vector2, anchor2: Vector2) -> Dictionary:
 	# Fold axis vector (direction between anchors)
 	var fold_vector = anchor2 - anchor1
 
-	# For cut lines PERPENDICULAR to fold axis, we need a normal perpendicular to fold_vector
-	# Rotate fold_vector by 90 degrees counter-clockwise
-	# For vector (x, y), perpendicular is (-y, x)
-	var perpendicular = Vector2(-fold_vector.y, fold_vector.x).normalized()
+	# A line with normal n consists of points where (p - point)·n = 0.
+	# This constraint defines a line perpendicular to the normal n.
+	# Therefore, to create cut lines perpendicular to the fold axis, we use the fold vector as the normal, ensuring the resulting lines are perpendicular to that direction.
+	# So if we want a line perpendicular to fold_vector, we use fold_vector as the normal
+	var fold_normal = fold_vector.normalized()
 
 	return {
-		"line1": {"point": anchor1, "normal": perpendicular},
-		"line2": {"point": anchor2, "normal": perpendicular},
+		"line1": {"point": anchor1, "normal": fold_normal},
+		"line2": {"point": anchor2, "normal": fold_normal},
 		"fold_axis": {"start": anchor1, "end": anchor2}
 	}
 
