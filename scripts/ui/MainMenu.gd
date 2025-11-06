@@ -31,9 +31,7 @@ func _on_level_select_button_pressed() -> void:
 
 ## Open level editor
 func _on_editor_button_pressed() -> void:
-	# TODO: Implement level editor
-	print("Level Editor not yet implemented")
-	# get_tree().change_scene_to_file("res://scenes/ui/LevelEditor.tscn")
+	get_tree().change_scene_to_file("res://scenes/ui/LevelEditor.tscn")
 
 
 ## Open settings menu
