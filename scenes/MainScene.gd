@@ -18,9 +18,12 @@ var fold_system: FoldSystem = null
 var is_level_complete: bool = false
 
 ## UI elements
-var win_ui: Control = null
-var win_label: Label = null
-var restart_button: Button = null
+var hud: CanvasLayer = null
+var pause_menu: Control = null
+var level_complete: Control = null
+
+## Fold counter
+var fold_count: int = 0
 
 
 func _ready() -> void:
@@ -52,6 +55,9 @@ func _ready() -> void:
 
 		# Optional: Set up some test walls
 		setup_test_level()
+
+	# Initialize GUI
+	setup_gui()
 
 
 ## Set up a simple test level with some walls and a goal
@@ -115,50 +121,86 @@ func _on_player_goal_reached() -> void:
 	show_win_ui()
 
 
-## Display win UI
+## Set up GUI components
+func setup_gui() -> void:
+	# Load and instantiate HUD
+	var hud_scene = load("res://scenes/ui/HUD.tscn")
+	if hud_scene:
+		hud = hud_scene.instantiate()
+		add_child(hud)
+		hud.set_level_info("Test Level", 5)  # Par of 5 folds
+		hud.pause_requested.connect(_on_pause_requested)
+		hud.restart_requested.connect(_on_restart_requested)
+		hud.undo_requested.connect(_on_undo_requested)
+
+	# Load and instantiate Pause Menu
+	var pause_scene = load("res://scenes/ui/PauseMenu.tscn")
+	if pause_scene:
+		pause_menu = pause_scene.instantiate()
+		add_child(pause_menu)
+		pause_menu.resume_requested.connect(_on_resume_requested)
+		pause_menu.restart_requested.connect(_on_restart_requested)
+		pause_menu.main_menu_requested.connect(_on_main_menu_requested)
+
+	# Load and instantiate Level Complete screen
+	var complete_scene = load("res://scenes/ui/LevelComplete.tscn")
+	if complete_scene:
+		level_complete = complete_scene.instantiate()
+		add_child(level_complete)
+		level_complete.next_level_requested.connect(_on_next_level_requested)
+		level_complete.retry_requested.connect(_on_restart_requested)
+		level_complete.level_select_requested.connect(_on_level_select_requested)
+		level_complete.main_menu_requested.connect(_on_main_menu_requested)
+
+
+## Display level complete UI
 func show_win_ui() -> void:
-	# Create UI container
-	win_ui = Control.new()
-	win_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(win_ui)
-
-	# Create semi-transparent background
-	var bg = ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.7)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	win_ui.add_child(bg)
-
-	# Create center container
-	var center_container = VBoxContainer.new()
-	center_container.custom_minimum_size = Vector2(400, 200)
-	center_container.position = Vector2(440, 260)  # Centered on 1280x720
-	win_ui.add_child(center_container)
-
-	# Add win message
-	win_label = Label.new()
-	win_label.text = "LEVEL COMPLETE!"
-	win_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	win_label.add_theme_font_size_override("font_size", 48)
-	win_label.add_theme_color_override("font_color", Color.GREEN)
-	center_container.add_child(win_label)
-
-	# Add spacing
-	var spacer = Control.new()
-	spacer.custom_minimum_size = Vector2(0, 30)
-	center_container.add_child(spacer)
-
-	# Add restart button
-	restart_button = Button.new()
-	restart_button.text = "Restart Level"
-	restart_button.custom_minimum_size = Vector2(200, 50)
-	restart_button.pressed.connect(_on_restart_pressed)
-	center_container.add_child(restart_button)
+	if level_complete:
+		level_complete.show_complete(fold_count, 5)  # Par of 5 folds
 
 
-## Handle restart button press
-func _on_restart_pressed() -> void:
-	# Reload the scene
+## Handle pause request
+func _on_pause_requested() -> void:
+	if pause_menu:
+		pause_menu.show_pause_menu()
+
+
+## Handle resume request
+func _on_resume_requested() -> void:
+	# Game automatically resumes when pause menu hides
+	pass
+
+
+## Handle restart request
+func _on_restart_requested() -> void:
+	get_tree().paused = false  # Ensure game is unpaused
 	get_tree().reload_current_scene()
+
+
+## Handle undo request
+func _on_undo_requested() -> void:
+	# TODO: Implement undo system (Phase 6)
+	print("Undo not yet implemented")
+
+
+## Handle main menu request
+func _on_main_menu_requested() -> void:
+	get_tree().paused = false  # Ensure game is unpaused
+	get_tree().change_scene_to_file("res://scenes/ui/MainMenu.tscn")
+
+
+## Handle next level request
+func _on_next_level_requested() -> void:
+	# TODO: Load next level when level system is implemented
+	print("Next level not yet implemented")
+	_on_restart_requested()
+
+
+## Handle level select request
+func _on_level_select_requested() -> void:
+	# TODO: Open level select screen
+	print("Level select not yet implemented")
+	_on_main_menu_requested()
 
 
 ## Check if level is complete (for testing)
@@ -196,6 +238,9 @@ func execute_fold() -> void:
 		grid_manager.clear_selection()
 
 	if success:
-		print("Fold executed successfully!")
+		fold_count += 1
+		if hud:
+			hud.set_fold_count(fold_count)
+		print("Fold executed successfully! Total folds: %d" % fold_count)
 	else:
 		print("Fold failed - check validation messages")
