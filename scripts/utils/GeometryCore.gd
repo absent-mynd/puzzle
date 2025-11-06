@@ -298,7 +298,11 @@ static func split_polygon_by_line(vertices: PackedVector2Array,
 		if current_side <= 0:  # On line or negative side
 			right_verts.append(current)
 
-		# Check if edge crosses the line
+		# If current vertex is exactly on the line, count it as an intersection
+		if current_side == 0:
+			intersections.append(current)
+
+		# Check if edge crosses the line (vertices on strictly opposite sides)
 		if current_side * next_side < 0:  # Different sides (not including 0)
 			var intersection = segment_line_intersection(current, next, line_point, line_normal)
 			if intersection != null:
