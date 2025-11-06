@@ -413,7 +413,7 @@ func new_level() -> void:
 func start_browse_mode() -> void:
 	# Get list of custom level files
 	var levels_dir = "user://levels/"
-	custom_level_files = get_custom_level_files(levels_dir)
+	custom_level_files = FileUtils.get_custom_level_files(levels_dir)
 
 	if custom_level_files.is_empty():
 		status_label.text = "No custom levels found!\nPress any key to continue..."
@@ -427,31 +427,6 @@ func start_browse_mode() -> void:
 	cursor_visual.visible = false
 	player_start_marker.visible = false
 	update_browse_display()
-
-
-## Get list of custom level files
-func get_custom_level_files(directory: String) -> Array[String]:
-	var files: Array[String] = []
-
-	if not DirAccess.dir_exists_absolute(directory):
-		return files
-
-	var dir = DirAccess.open(directory)
-	if dir == null:
-		return files
-
-	dir.list_dir_begin()
-	var file_name = dir.get_next()
-
-	while file_name != "":
-		if not dir.current_is_dir() and file_name.ends_with(".json"):
-			files.append(file_name.replace(".json", ""))
-		file_name = dir.get_next()
-
-	dir.list_dir_end()
-	files.sort()
-
-	return files
 
 
 ## Handle browse mode input
