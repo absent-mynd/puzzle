@@ -1,0 +1,26 @@
+{
+	"level_id": "18_no_obstacles",
+	"level_name": "Empty Space",
+	"description": "No walls or hazards - just empty space. Tests pure folding mechanics.",
+	"grid_size": {
+		"x": 10,
+		"y": 10
+	},
+	"cell_size": 64.0,
+	"player_start_position": {
+		"x": 0,
+		"y": 0
+	},
+	"cell_data": {
+		"(9, 9)": 3
+	},
+	"difficulty": 1,
+	"max_folds": -1,
+	"par_folds": 2,
+	"metadata": {
+		"author": "Test Campaign",
+		"version": "1.0",
+		"tags": ["test", "edge-case", "empty", "pure-folding"],
+		"test_purpose": "Tests folding without any obstacles"
+	}
+}
