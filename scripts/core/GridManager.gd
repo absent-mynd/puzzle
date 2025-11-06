@@ -60,7 +60,20 @@ func create_grid() -> void:
 			# since cells are children of GridManager and GridManager.position = grid_origin
 			var local_pos = Vector2(grid_pos) * cell_size
 
-			var cell = Cell.new(grid_pos, local_pos, cell_size)
+			# Create CompoundCell (replaces old Cell)
+			var cell = CompoundCell.new(grid_pos, 0)  # Type 0 = empty
+
+			# Create initial square fragment
+			var square_geometry = PackedVector2Array([
+				local_pos,                              # Top-left
+				local_pos + Vector2(cell_size, 0),      # Top-right
+				local_pos + Vector2(cell_size, cell_size), # Bottom-right
+				local_pos + Vector2(0, cell_size)       # Bottom-left
+			])
+
+			var initial_fragment = CellFragment.new(square_geometry, -1)  # -1 = original
+			cell.add_fragment(initial_fragment)
+
 			cells[grid_pos] = cell
 			add_child(cell)
 
@@ -77,15 +90,15 @@ func center_grid_on_screen() -> void:
 
 ## Get cell at grid position
 ## @param grid_pos: Grid coordinates
-## @return: Cell at position, or null if out of bounds
-func get_cell(grid_pos: Vector2i) -> Cell:
+## @return: CompoundCell at position, or null if out of bounds
+func get_cell(grid_pos: Vector2i) -> CompoundCell:
 	return cells.get(grid_pos, null)
 
 
 ## Get cell at world position
 ## @param world_pos: World coordinates (global)
-## @return: Cell at position, or null if none found
-func get_cell_at_world_pos(world_pos: Vector2) -> Cell:
+## @return: CompoundCell at position, or null if none found
+func get_cell_at_world_pos(world_pos: Vector2) -> CompoundCell:
 	# Convert global world position to local coordinates (relative to GridManager)
 	var local_pos = to_local(world_pos)
 
@@ -117,8 +130,8 @@ func is_valid_position(grid_pos: Vector2i) -> bool:
 ## Get adjacent cells (up, down, left, right)
 ## @param grid_pos: Grid coordinates
 ## @return: Array of neighboring cells
-func get_neighbors(grid_pos: Vector2i) -> Array[Cell]:
-	var neighbors: Array[Cell] = []
+func get_neighbors(grid_pos: Vector2i) -> Array[CompoundCell]:
+	var neighbors: Array[CompoundCell] = []
 
 	# Check all four directions
 	var directions = [
@@ -325,3 +338,19 @@ func set_goal_cell(grid_pos: Vector2i) -> bool:
 		cell.set_cell_type(3)  # Goal type
 		return true
 	return false
+
+
+## Remove a cell from the grid
+## Properly frees the node and clears references
+##
+## @param grid_pos: Position of cell to remove
+func remove_cell(grid_pos: Vector2i):
+	var cell = cells.get(grid_pos)
+	if cell:
+		cells.erase(grid_pos)
+
+		# Important: Clear fragments to free Polygon2D nodes
+		cell.clear_fragments()
+
+		# Queue free the CompoundCell node
+		cell.queue_free()
