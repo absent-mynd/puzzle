@@ -46,7 +46,7 @@ func _on_custom_levels_button_pressed() -> void:
 ## Open level editor
 func _on_editor_button_pressed() -> void:
   # Play button click sound
-  AudioManager.play_sfx("button_click")
+	AudioManager.play_sfx("button_click")
 
 	get_tree().change_scene_to_file("res://scenes/ui/LevelEditor.tscn")
 
