@@ -105,7 +105,8 @@ func test_play_nonexistent_music():
 func test_play_nonexistent_sfx():
 	# This should generate a warning but not crash
 	audio_manager.play_sfx("nonexistent_sound")
-	# No assertion needed - just verify it doesn't crash
+	# Verify it completes without crashing
+	assert_true(true, "Playing non-existent SFX should not crash")
 
 
 ## Test 11: Check music track exists
