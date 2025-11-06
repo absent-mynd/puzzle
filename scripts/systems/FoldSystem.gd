@@ -1138,9 +1138,141 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 	seam_lines.append(seam_line2)
 
 
+## Shift a cell's geometry by a vector
+##
+## Updates both the geometry coordinates and recalculates the grid position
+## based on the new center.
+##
+## @param cell: The cell to shift
+## @param shift_vector: The translation vector (in local coordinates)
+func shift_cell_geometry(cell: Cell, shift_vector: Vector2) -> void:
+	# Shift all geometry vertices
+	var new_geometry = PackedVector2Array()
+	for vertex in cell.geometry:
+		new_geometry.append(vertex + shift_vector)
+	cell.geometry = new_geometry
+
+	# Recalculate grid position based on new center
+	var new_center = cell.get_center()
+	var cell_size = grid_manager.cell_size
+	cell.grid_position = Vector2i(
+		round(new_center.x / cell_size),
+		round(new_center.y / cell_size)
+	)
+
+	# Update visual
+	cell.update_visual()
+
+
+## Check if two cells should merge after a diagonal fold
+##
+## Two cells should merge if they're at the same grid position after shifting
+## and their geometries are adjacent or overlapping.
+##
+## @param cell1: First cell
+## @param cell2: Second cell
+## @return: true if cells should merge
+func should_merge_cells(cell1: Cell, cell2: Cell) -> bool:
+	# Must be at same grid position (after shifting)
+	if cell1.grid_position != cell2.grid_position:
+		return false
+
+	# Must not be the same cell
+	if cell1 == cell2:
+		return false
+
+	# Cells at same grid position should merge
+	return true
+
+
+## Merge two cells that have been brought together by a fold
+##
+## Combines their geometries and metadata, creating a merged cell.
+## The merge is performed in-place on cell1, and cell2 is freed.
+##
+## @param cell1: First cell (will become the merged result)
+## @param cell2: Second cell (will be freed)
+## @param merge_line: The line where cells merge (from cut_lines.line1)
+## @param fold_id: ID of the fold creating this merge
+## @return: The merged cell (same as cell1)
+func merge_cells(cell1: Cell, cell2: Cell, merge_line: Dictionary, fold_id: int) -> Cell:
+	# Safety checks
+	if not cell1 or not cell2:
+		push_error("merge_cells called with null cell")
+		return cell1 if cell1 else null
+	if cell1 == cell2:
+		push_error("merge_cells called with same cell twice")
+		return cell1
+	# For now, use simple geometry union: take all unique vertices
+	# In the future, this could use proper polygon union algorithms
+	var merged_geometry = cell1.geometry.duplicate()
+
+	# Add vertices from cell2 that aren't already in merged_geometry
+	var epsilon = 0.001
+	for vertex in cell2.geometry:
+		var is_duplicate = false
+		for existing in merged_geometry:
+			if vertex.distance_to(existing) < epsilon:
+				is_duplicate = true
+				break
+		if not is_duplicate:
+			merged_geometry.append(vertex)
+
+	# Sort vertices by angle from centroid to create proper polygon
+	var centroid = Vector2.ZERO
+	for v in merged_geometry:
+		centroid += v
+	centroid /= merged_geometry.size()
+
+	# Sort by angle - convert to Array first since PackedVector2Array doesn't have sort_custom
+	var vertices_array: Array = []
+	for v in merged_geometry:
+		vertices_array.append(v)
+
+	vertices_array.sort_custom(func(a, b):
+		var angle_a = (a - centroid).angle()
+		var angle_b = (b - centroid).angle()
+		return angle_a < angle_b
+	)
+
+	# Convert back to PackedVector2Array
+	var sorted_vertices = PackedVector2Array()
+	for v in vertices_array:
+		sorted_vertices.append(v)
+
+	# Determine merged cell type (prioritize non-empty types)
+	var merged_type = max(cell1.cell_type, cell2.cell_type)
+
+	# Create merge metadata for undo support
+	var merge_metadata = {
+		"type": "merge",
+		"fold_id": fold_id,
+		"merged_from": [cell1.grid_position, cell2.grid_position],
+		"left_type": cell1.cell_type,
+		"right_type": cell2.cell_type,
+		"merge_line": merge_line,
+		"timestamp": Time.get_ticks_msec()
+	}
+
+	# Update cell1 to be the merged result
+	cell1.geometry = sorted_vertices
+	cell1.cell_type = merged_type
+	cell1.add_seam(merge_metadata)
+	cell1.update_visual()
+
+	# Remove cell2 from grid
+	grid_manager.cells.erase(cell2.grid_position)
+	if cell2.get_parent():
+		cell2.get_parent().remove_child(cell2)
+	cell2.queue_free()
+
+	return cell1
+
+
 ## Execute a diagonal fold (Phase 4)
 ##
 ## This is the most complex fold operation, handling arbitrary angles.
+## Implements full cell merging and grid shifting.
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
@@ -1169,33 +1301,37 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			var region = classify_cell_region(cell, cut_lines)
 			cells_by_region[region].append(cell)
 
-	# 3. Process split cells
-	# For now, we'll handle splits by keeping the appropriate half
-	# Full merging logic will be added in a future iteration
+	# 3. Process split cells and store halves for merging
+	var line1_split_halves: Array[Cell] = []  # Will merge with line2 halves
+	var line2_split_halves: Array[Cell] = []  # Will merge with line1 halves
 
 	for cell in cells_by_region.split_line1:
 		var split_result = GeometryCore.split_polygon_by_line(
 			cell.geometry, cut_lines.line1.point, cut_lines.line1.normal
 		)
 		if split_result.intersections.size() > 0:
-			# Keep the right half (negative side of normal, away from removed region)
-			# Line1 is at the start of the removed region, so we keep the side opposite the normal
-			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "right")
+			# Keep the left half (negative side of normal, away from removed region)
+			# Line1 is at the start of the removed region
+			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "left")
 			if new_cell:
-				# New cell goes to removed region
+				# New cell (right half) goes to removed region
 				new_cell.queue_free()
+			# Cell now contains left half - store for merging
+			line1_split_halves.append(cell)
 
 	for cell in cells_by_region.split_line2:
 		var split_result = GeometryCore.split_polygon_by_line(
 			cell.geometry, cut_lines.line2.point, cut_lines.line2.normal
 		)
 		if split_result.intersections.size() > 0:
-			# Keep the left half (positive side of normal, away from removed region)
-			# Line2 is at the end of the removed region, so we keep the side in direction of normal
-			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "left")
+			# Keep the right half (positive side of normal, away from removed region)
+			# Line2 is at the end of the removed region
+			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "right")
 			if new_cell:
-				# New cell goes to removed region
+				# New cell (left half) goes to removed region
 				new_cell.queue_free()
+			# Cell now contains right half - store for merging
+			line2_split_halves.append(cell)
 
 	# 4. Remove cells in removed region
 	var removed_cells: Array[Vector2i] = []
@@ -1206,13 +1342,76 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			cell.get_parent().remove_child(cell)
 		cell.queue_free()
 
-	# 5. For diagonal folds, we don't shift cells spatially (complex geometry)
-	# Instead, cells remain in their grid positions but their visual geometry
-	# has been updated by the splits
+	# 5. Calculate shift vector to collapse the removed region
+	# We bring line2 to line1 by shifting along the fold vector
+	var shift_vector = -(anchor2_local - anchor1_local)
 
-	# 6. Create seam visualization
-	create_diagonal_seam_visual(cut_lines)
+	# 6. Apply shift to kept_right region (including line2 split halves)
+	# Store old positions before shifting to avoid dictionary iteration issues
+	var cells_to_shift: Array[Dictionary] = []
+	for cell in cells_by_region.kept_right:
+		cells_to_shift.append({"cell": cell, "old_pos": cell.grid_position})
+	for cell in line2_split_halves:
+		cells_to_shift.append({"cell": cell, "old_pos": cell.grid_position})
 
-	# 7. Record fold operation
+	# Now shift all cells
+	for data in cells_to_shift:
+		var cell = data.cell
+		var old_pos = data.old_pos
+
+		# Remove from old position
+		grid_manager.cells.erase(old_pos)
+
+		# Apply shift
+		shift_cell_geometry(cell, shift_vector)
+
+		# Handle collision at new position
+		var existing_cell = grid_manager.cells.get(cell.grid_position)
+		if existing_cell and existing_cell != cell:
+			# Free the existing cell - it will be replaced
+			grid_manager.cells.erase(cell.grid_position)
+			if existing_cell.get_parent():
+				existing_cell.get_parent().remove_child(existing_cell)
+			existing_cell.queue_free()
+
+		# Add to new position
+		grid_manager.cells[cell.grid_position] = cell
+
+	# 7. Merge split halves that are now at the same position
+	for left_half in line1_split_halves:
+		for right_half in line2_split_halves:
+			if should_merge_cells(left_half, right_half):
+				var merged = merge_cells(left_half, right_half, cut_lines.line1, next_fold_id)
+				# Update grid_manager's reference
+				grid_manager.cells[merged.grid_position] = merged
+				break  # Only merge once per left_half
+
+	# 8. Update player position if in shifted region
+	if player:
+		var player_local = grid_manager.to_local(player.global_position)
+		var player_side = GeometryCore.point_side_of_line(player_local, cut_lines.line2.point, cut_lines.line2.normal)
+		if player_side > 0:  # Player is in shifted region
+			player.global_position = grid_manager.to_global(player_local + shift_vector)
+			# Recalculate grid position
+			var player_center_local = grid_manager.to_local(player.global_position)
+			player.grid_position = Vector2i(
+				round(player_center_local.x / cell_size),
+				round(player_center_local.y / cell_size)
+			)
+
+	# 9. Create seam visualization at merge line (line1, where line2 was brought to)
+	var seam_line = Line2D.new()
+	seam_line.width = 2.0
+	seam_line.default_color = Color.CYAN
+
+	# Draw seam along fold axis at line1 position
+	var seam_start = cut_lines.line1.point - cut_lines.line1.normal * 1000
+	var seam_end = cut_lines.line1.point + cut_lines.line1.normal * 1000
+	seam_line.points = PackedVector2Array([seam_start, seam_end])
+
+	grid_manager.add_child(seam_line)
+	seam_lines.append(seam_line)
+
+	# 10. Record fold operation
 	var fold_record = create_fold_record(anchor1, anchor2, removed_cells, "diagonal")
 	fold_history.append(fold_record)
