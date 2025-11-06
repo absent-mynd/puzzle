@@ -1166,23 +1166,23 @@ func shift_cell_geometry(cell: Cell, shift_vector: Vector2) -> void:
 
 ## Check if two cells should merge after a diagonal fold
 ##
-## Two cells should merge if they're at the same grid position after shifting
-## and their geometries are adjacent or overlapping.
+## Two cells should merge if they're close to each other (within sqrt(2) grid cells)
+## This accounts for split cells having offset centers that round to different positions.
 ##
 ## @param cell1: First cell
 ## @param cell2: Second cell
 ## @return: true if cells should merge
 func should_merge_cells(cell1: Cell, cell2: Cell) -> bool:
-	# Must be at same grid position (after shifting)
-	if cell1.grid_position != cell2.grid_position:
-		return false
-
 	# Must not be the same cell
 	if cell1 == cell2:
 		return false
 
-	# Cells at same grid position should merge
-	return true
+	# Check if cells are within distance of sqrt(2) grid cells
+	# Split cells from line1 and line2 should be close after shifting
+	var distance = Vector2(cell1.grid_position - cell2.grid_position).length()
+	var max_distance = 1.5  # Allow cells within 1.5 grid cells to merge
+
+	return distance <= max_distance
 
 
 ## Merge two cells that have been brought together by a fold
@@ -1260,8 +1260,12 @@ func merge_cells(cell1: Cell, cell2: Cell, merge_line: Dictionary, fold_id: int)
 	cell1.add_seam(merge_metadata)
 	cell1.update_visual()
 
-	# Remove cell2 from grid
-	grid_manager.cells.erase(cell2.grid_position)
+	# Remove cell2 from grid ONLY if it's actually there
+	# (It might have been replaced by a kept_right cell that shifted to the same position)
+	if grid_manager.cells.get(cell2.grid_position) == cell2:
+		grid_manager.cells.erase(cell2.grid_position)
+
+	# Free cell2
 	if cell2.get_parent():
 		cell2.get_parent().remove_child(cell2)
 	cell2.queue_free()
@@ -1344,11 +1348,19 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			cell.get_parent().remove_child(cell)
 		cell.queue_free()
 
-	# 5. Calculate shift vector to collapse the removed region
+	# 5. CRITICAL: Remove split halves from grid temporarily
+	# This prevents them from being overwritten during the shift phase.
+	# We'll merge them and add the merged cells back later.
+	for cell in line1_split_halves:
+		grid_manager.cells.erase(cell.grid_position)
+	for cell in line2_split_halves:
+		grid_manager.cells.erase(cell.grid_position)
+
+	# 6. Calculate shift vector to collapse the removed region
 	# We bring line2 to line1 by shifting along the fold vector
 	var shift_vector = -(anchor2_local - anchor1_local)
 
-	# 6. Apply shift to kept_right region (including line2 split halves)
+	# 7. Apply shift to kept_right region (including line2 split halves)
 	# Store old positions before shifting to avoid dictionary iteration issues
 	var cells_to_shift: Array[Dictionary] = []
 	for cell in cells_by_region.kept_right:
@@ -1379,16 +1391,30 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		# Add to new position
 		grid_manager.cells[cell.grid_position] = cell
 
-	# 7. Merge split halves that are now at the same position
+	# 8. Merge split halves that are now at the same position
+	# line1_split_halves are still at their original positions
+	# line2_split_halves have been shifted to align with line1_split_halves
+	var merged_right_halves: Array[Cell] = []  # Track which right halves have been merged
+
 	for left_half in line1_split_halves:
 		for right_half in line2_split_halves:
+			# Skip if this right_half has already been merged
+			if right_half in merged_right_halves:
+				continue
+
 			if should_merge_cells(left_half, right_half):
 				var merged = merge_cells(left_half, right_half, cut_lines.line1, next_fold_id)
 				# Update grid_manager's reference
 				grid_manager.cells[merged.grid_position] = merged
+				merged_right_halves.append(right_half)  # Mark as merged
 				break  # Only merge once per left_half
 
-	# 8. Update player position if in shifted region
+	# If there are line1_split_halves that didn't merge, add them back to grid
+	for left_half in line1_split_halves:
+		if not grid_manager.cells.has(left_half.grid_position):
+			grid_manager.cells[left_half.grid_position] = left_half
+
+	# 9. Update player position if in shifted region
 	if player:
 		var player_local = grid_manager.to_local(player.global_position)
 		var player_side = GeometryCore.point_side_of_line(player_local, cut_lines.line2.point, cut_lines.line2.normal)
@@ -1401,7 +1427,7 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 				round(player_center_local.y / cell_size)
 			)
 
-	# 9. Create seam visualization at merge line (line1, where line2 was brought to)
+	# 10. Create seam visualization at merge line (line1, where line2 was brought to)
 	var seam_line = Line2D.new()
 	seam_line.width = 2.0
 	seam_line.default_color = Color.CYAN
@@ -1414,6 +1440,6 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	grid_manager.add_child(seam_line)
 	seam_lines.append(seam_line)
 
-	# 10. Record fold operation
+	# 11. Record fold operation
 	var fold_record = create_fold_record(anchor1, anchor2, removed_cells, "diagonal")
 	fold_history.append(fold_record)
