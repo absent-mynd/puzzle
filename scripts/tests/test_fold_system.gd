@@ -190,9 +190,9 @@ func test_horizontal_fold_keeps_anchor_cells():
 
 	# Left anchor should remain at original position
 	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain at original position")
-	# Right anchor should have shifted to left anchor's position (merged)
+	# Right anchor should have shifted to left anchor's position (overlapping/merged)
 	assert_null(grid_manager.get_cell(anchor2), "Anchor2 should have moved from original position")
-	# There should be a cell at the left anchor's position (the merged result)
+	# The cell at left anchor position is the merged result
 	var merged_cell = grid_manager.get_cell(anchor1)
 	assert_not_null(merged_cell, "Merged cell should exist at left anchor position")
 
@@ -317,9 +317,9 @@ func test_vertical_fold_keeps_anchor_cells():
 
 	# Top anchor should remain at original position
 	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain at original position")
-	# Bottom anchor should have shifted to top anchor's position (merged)
+	# Bottom anchor should have shifted to top anchor's position (overlapping/merged)
 	assert_null(grid_manager.get_cell(anchor2), "Anchor2 should have moved from original position")
-	# There should be a cell at the top anchor's position (the merged result)
+	# The cell at top anchor position is the merged result
 	var merged_cell = grid_manager.get_cell(anchor1)
 	assert_not_null(merged_cell, "Merged cell should exist at top anchor position")
 

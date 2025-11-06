@@ -89,8 +89,8 @@ func get_fold_orientation(anchor1: Vector2i, anchor2: Vector2i) -> String:
 
 ## Validation Methods
 
-## Minimum fold distance constant (at least 1 cell between anchors)
-const MIN_FOLD_DISTANCE = 1
+## Minimum fold distance constant (anchors can be adjacent - no cell required between them)
+const MIN_FOLD_DISTANCE = 0
 
 ## Validate a fold before execution
 ##
@@ -393,29 +393,30 @@ func create_seam_visual(anchor1: Vector2i, anchor2: Vector2i, orientation: Strin
 	var cell_size = grid_manager.cell_size
 
 	# For axis-aligned folds, draw perpendicular line spanning the entire grid
+	# Use LOCAL coordinates since Line2D is a child of GridManager
 	if orientation == "horizontal":
-		# Horizontal fold: draw VERTICAL line at the merged point spanning full grid height
-		# The seam is at the left anchor's x position (since columns were removed)
+		# Horizontal fold: draw VERTICAL line at the merged point (center of left anchor)
 		var left_anchor = anchor1 if anchor1.x < anchor2.x else anchor2
-		var seam_x = grid_manager.grid_to_world(left_anchor).x + cell_size / 2
+		# Seam is at the center of the left anchor (where cells overlap/merge)
+		var seam_x = left_anchor.x * cell_size + cell_size / 2
 
-		# Span from top to bottom of grid
-		var top_y = grid_manager.grid_origin.y
-		var bottom_y = grid_manager.grid_origin.y + grid_manager.grid_size.y * cell_size
+		# Span from top to bottom of grid (local coordinates)
+		var top_y = 0.0
+		var bottom_y = grid_manager.grid_size.y * cell_size
 
 		seam_line.points = PackedVector2Array([
 			Vector2(seam_x, top_y),
 			Vector2(seam_x, bottom_y)
 		])
 	elif orientation == "vertical":
-		# Vertical fold: draw HORIZONTAL line at the merged point spanning full grid width
-		# The seam is at the top anchor's y position (since rows were removed)
+		# Vertical fold: draw HORIZONTAL line at the merged point (center of top anchor)
 		var top_anchor = anchor1 if anchor1.y < anchor2.y else anchor2
-		var seam_y = grid_manager.grid_to_world(top_anchor).y + cell_size / 2
+		# Seam is at the center of the top anchor (where cells overlap/merge)
+		var seam_y = top_anchor.y * cell_size + cell_size / 2
 
-		# Span from left to right of grid
-		var left_x = grid_manager.grid_origin.x
-		var right_x = grid_manager.grid_origin.x + grid_manager.grid_size.x * cell_size
+		# Span from left to right of grid (local coordinates)
+		var left_x = 0.0
+		var right_x = grid_manager.grid_size.x * cell_size
 
 		seam_line.points = PackedVector2Array([
 			Vector2(left_x, seam_y),
@@ -534,6 +535,7 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	remove_seams_in_removed_region(left_anchor.x, right_anchor.x, "vertical")
 
 	# 4. Shift ALL cells from right_anchor onwards (across ALL rows)
+	# Cells overlap at the left anchor (merging behavior)
 	var shift_distance = right_anchor.x - left_anchor.x
 
 	# Collect cells that need to be shifted
@@ -576,7 +578,15 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		grid_manager.cells.erase(old_pos)
 		grid_manager.cells[new_pos] = cell
 
-	# 5. Record fold operation
+	# 5. Update player position if in shifted region
+	if player and player.grid_position.x >= right_anchor.x:
+		player.grid_position.x -= shift_distance
+		# Update player's world position to match new grid position
+		var new_cell = grid_manager.get_cell(player.grid_position)
+		if new_cell:
+			player.position = new_cell.get_center()
+
+	# 6. Record fold operation
 	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
 	fold_history.append(fold_record)
 
@@ -619,6 +629,7 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 	remove_seams_in_removed_region(top_anchor.y, bottom_anchor.y, "horizontal")
 
 	# 4. Shift ALL cells from bottom_anchor onwards (across ALL columns)
+	# Cells overlap at the top anchor (merging behavior)
 	var shift_distance = bottom_anchor.y - top_anchor.y
 
 	# Collect cells that need to be shifted
@@ -661,7 +672,15 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 		grid_manager.cells.erase(old_pos)
 		grid_manager.cells[new_pos] = cell
 
-	# 5. Record fold operation
+	# 5. Update player position if in shifted region
+	if player and player.grid_position.y >= bottom_anchor.y:
+		player.grid_position.y -= shift_distance
+		# Update player's world position to match new grid position
+		var new_cell = grid_manager.get_cell(player.grid_position)
+		if new_cell:
+			player.position = new_cell.get_center()
+
+	# 6. Record fold operation
 	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
 	fold_history.append(fold_record)
 
@@ -681,6 +700,7 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 	var removed_cells = calculate_removed_cells(left_anchor, right_anchor)
 
 	# 3. Collect ALL cells that need to be shifted (across ALL rows)
+	# Cells overlap at the left anchor (merging behavior)
 	var shift_distance = right_anchor.x - left_anchor.x
 	var cells_to_shift: Array[Dictionary] = []
 	for y in range(grid_manager.grid_size.y):
@@ -743,10 +763,18 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 		grid_manager.cells.erase(old_pos)
 		grid_manager.cells[new_pos] = cell
 
-	# 8. Create seam visualization
+	# 8. Update player position if in shifted region
+	if player and player.grid_position.x >= right_anchor.x:
+		player.grid_position.x -= shift_distance
+		# Update player's world position to match new grid position
+		var new_cell = grid_manager.get_cell(player.grid_position)
+		if new_cell:
+			player.position = new_cell.get_center()
+
+	# 9. Create seam visualization
 	create_seam_visual(left_anchor, right_anchor, "horizontal")
 
-	# 9. Record fold operation
+	# 10. Record fold operation
 	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
 	fold_history.append(fold_record)
 
@@ -766,6 +794,7 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 	var removed_cells = calculate_removed_cells(top_anchor, bottom_anchor)
 
 	# 3. Collect ALL cells that need to be shifted (across ALL columns)
+	# Cells overlap at the top anchor (merging behavior)
 	var shift_distance = bottom_anchor.y - top_anchor.y
 	var cells_to_shift: Array[Dictionary] = []
 	for x in range(grid_manager.grid_size.x):
@@ -828,10 +857,18 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 		grid_manager.cells.erase(old_pos)
 		grid_manager.cells[new_pos] = cell
 
-	# 8. Create seam visualization
+	# 8. Update player position if in shifted region
+	if player and player.grid_position.y >= bottom_anchor.y:
+		player.grid_position.y -= shift_distance
+		# Update player's world position to match new grid position
+		var new_cell = grid_manager.get_cell(player.grid_position)
+		if new_cell:
+			player.position = new_cell.get_center()
+
+	# 9. Create seam visualization
 	create_seam_visual(top_anchor, bottom_anchor, "vertical")
 
-	# 9. Record fold operation
+	# 10. Record fold operation
 	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
 	fold_history.append(fold_record)
 

@@ -303,15 +303,15 @@ func test_execute_fold_fails_when_player_in_removed_region():
 
 
 func test_execute_fold_checks_player_validation_after_basic_validation():
-	# Invalid fold (adjacent cells) should fail basic validation first
+	# Invalid fold (diagonal) should fail basic validation first
 	player.set_grid_position(Vector2i(5, 5))
 
-	var anchor1 = Vector2i(4, 5)
-	var anchor2 = Vector2i(5, 5)
+	var anchor1 = Vector2i(2, 2)
+	var anchor2 = Vector2i(7, 7)
 
 	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
-	assert_false(result, "Should fail basic validation before checking player")
+	assert_false(result, "Should fail basic validation for diagonal fold before checking player")
 
 
 func test_execute_fold_with_player_at_anchor_succeeds():
