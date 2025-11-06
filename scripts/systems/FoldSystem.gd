@@ -232,8 +232,13 @@ func is_player_in_removed_region(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 
 ## Calculate which cells will be removed by a fold
 ##
-## Returns the grid positions of all cells between the two anchors
-## (not including the anchor cells themselves).
+## Returns the grid positions of all cells in the ENTIRE RECTANGULAR REGION
+## between the two perpendicular lines at the anchors (not including the anchor lines themselves).
+##
+## For horizontal folds: Two vertical lines at anchor1.x and anchor2.x
+##   - Remove ALL cells where left < x < right (across all rows)
+## For vertical folds: Two horizontal lines at anchor1.y and anchor2.y
+##   - Remove ALL cells where top < y < bottom (across all columns)
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
@@ -242,24 +247,26 @@ func calculate_removed_cells(anchor1: Vector2i, anchor2: Vector2i) -> Array[Vect
 	var removed_cells: Array[Vector2i] = []
 
 	if is_horizontal_fold(anchor1, anchor2):
+		# Horizontal fold: perpendicular lines are VERTICAL
 		# Ensure anchor1 is leftmost
 		var left = min(anchor1.x, anchor2.x)
 		var right = max(anchor1.x, anchor2.x)
-		var y = anchor1.y
 
-		# Add all cells between anchors (exclusive)
-		for x in range(left + 1, right):
-			removed_cells.append(Vector2i(x, y))
+		# Remove entire rectangular region between the two vertical lines
+		for y in range(grid_manager.grid_size.y):
+			for x in range(left + 1, right):
+				removed_cells.append(Vector2i(x, y))
 
 	elif is_vertical_fold(anchor1, anchor2):
+		# Vertical fold: perpendicular lines are HORIZONTAL
 		# Ensure anchor1 is topmost
 		var top = min(anchor1.y, anchor2.y)
 		var bottom = max(anchor1.y, anchor2.y)
-		var x = anchor1.x
 
-		# Add all cells between anchors (exclusive)
-		for y in range(top + 1, bottom):
-			removed_cells.append(Vector2i(x, y))
+		# Remove entire rectangular region between the two horizontal lines
+		for x in range(grid_manager.grid_size.x):
+			for y in range(top + 1, bottom):
+				removed_cells.append(Vector2i(x, y))
 
 	return removed_cells
 
@@ -380,6 +387,8 @@ func shift_cells_animated(cells_to_shift: Array[Dictionary], duration: float) ->
 
 ## Create visual seam line after fold completion
 ##
+## Seam spans the entire grid perpendicular to the fold direction
+##
 ## @param anchor1: First anchor position
 ## @param anchor2: Second anchor position
 ## @param orientation: Fold orientation ("horizontal" or "vertical")
@@ -388,32 +397,36 @@ func create_seam_visual(anchor1: Vector2i, anchor2: Vector2i, orientation: Strin
 	seam_line.width = 2.0
 	seam_line.default_color = Color.CYAN
 
-	# Get world positions of anchor points
-	var pos1 = grid_manager.grid_to_world(anchor1)
-	var pos2 = grid_manager.grid_to_world(anchor2)
-
-	# Adjust to center of cells
 	var cell_size = grid_manager.cell_size
-	var offset = Vector2(cell_size / 2, cell_size / 2)
-	pos1 += offset
-	pos2 += offset
 
-	# For axis-aligned folds, draw perpendicular line at fold point
+	# For axis-aligned folds, draw perpendicular line spanning the entire grid
 	if orientation == "horizontal":
-		# Draw vertical line at the merged point
-		var fold_x = pos1.x
-		var y = pos1.y
+		# Horizontal fold: draw VERTICAL line at the merged point spanning full grid height
+		# The seam is at the left anchor's x position (since columns were removed)
+		var left_anchor = anchor1 if anchor1.x < anchor2.x else anchor2
+		var seam_x = grid_manager.grid_to_world(left_anchor).x + cell_size / 2
+
+		# Span from top to bottom of grid
+		var top_y = grid_manager.grid_origin.y
+		var bottom_y = grid_manager.grid_origin.y + grid_manager.grid_size.y * cell_size
+
 		seam_line.points = PackedVector2Array([
-			Vector2(fold_x, y - cell_size / 2),
-			Vector2(fold_x, y + cell_size / 2)
+			Vector2(seam_x, top_y),
+			Vector2(seam_x, bottom_y)
 		])
 	elif orientation == "vertical":
-		# Draw horizontal line at the merged point
-		var x = pos1.x
-		var fold_y = pos1.y
+		# Vertical fold: draw HORIZONTAL line at the merged point spanning full grid width
+		# The seam is at the top anchor's y position (since rows were removed)
+		var top_anchor = anchor1 if anchor1.y < anchor2.y else anchor2
+		var seam_y = grid_manager.grid_to_world(top_anchor).y + cell_size / 2
+
+		# Span from left to right of grid
+		var left_x = grid_manager.grid_origin.x
+		var right_x = grid_manager.grid_origin.x + grid_manager.grid_size.x * cell_size
+
 		seam_line.points = PackedVector2Array([
-			Vector2(x - cell_size / 2, fold_y),
-			Vector2(x + cell_size / 2, fold_y)
+			Vector2(left_x, seam_y),
+			Vector2(right_x, seam_y)
 		])
 
 	# Add to scene tree
@@ -427,12 +440,11 @@ func create_seam_visual(anchor1: Vector2i, anchor2: Vector2i, orientation: Strin
 ##
 ## Algorithm:
 ## 1. Normalize anchor order (ensure anchor1 is leftmost)
-## 2. Calculate removed region
+## 2. Calculate removed region (entire rectangular region between vertical lines)
 ## 3. Remove cells
-## 4. Shift cells to the right of anchor2
+## 4. Shift ALL cells to the right of right_anchor (across ALL rows)
 ## 5. Update world positions
-## 6. Create merged anchor point
-## 7. Record fold operation
+## 6. Record fold operation
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
@@ -441,9 +453,7 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	var left_anchor = anchor1 if anchor1.x < anchor2.x else anchor2
 	var right_anchor = anchor2 if anchor1.x < anchor2.x else anchor1
 
-	var y = left_anchor.y  # Row where fold occurs
-
-	# 2. Calculate removed region
+	# 2. Calculate removed region (entire rectangular region)
 	var removed_cells = calculate_removed_cells(left_anchor, right_anchor)
 
 	# 3. Remove cells from grid
@@ -458,22 +468,23 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			# Free the cell
 			cell.queue_free()
 
-	# 4. Shift cells to the right of right_anchor
+	# 4. Shift ALL cells to the right of right_anchor (across ALL rows)
 	var shift_distance = right_anchor.x - left_anchor.x
 
 	# Collect cells that need to be shifted
 	var cells_to_shift: Array[Dictionary] = []
-	for x in range(right_anchor.x + 1, grid_manager.grid_size.x):
-		var old_pos = Vector2i(x, y)
-		var cell = grid_manager.get_cell(old_pos)
-		if cell:
-			var new_x = x - shift_distance
-			var new_pos = Vector2i(new_x, y)
-			cells_to_shift.append({
-				"cell": cell,
-				"old_pos": old_pos,
-				"new_pos": new_pos
-			})
+	for y in range(grid_manager.grid_size.y):
+		for x in range(right_anchor.x + 1, grid_manager.grid_size.x):
+			var old_pos = Vector2i(x, y)
+			var cell = grid_manager.get_cell(old_pos)
+			if cell:
+				var new_x = x - shift_distance
+				var new_pos = Vector2i(new_x, y)
+				cells_to_shift.append({
+					"cell": cell,
+					"old_pos": old_pos,
+					"new_pos": new_pos
+				})
 
 	# Actually move the cells
 	for data in cells_to_shift:
@@ -499,7 +510,7 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		grid_manager.cells.erase(old_pos)
 		grid_manager.cells[new_pos] = cell
 
-	# 6. Record fold operation
+	# 5. Record fold operation
 	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
 	fold_history.append(fold_record)
 
@@ -510,12 +521,11 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 ##
 ## Algorithm:
 ## 1. Normalize anchor order (ensure anchor1 is topmost)
-## 2. Calculate removed region
+## 2. Calculate removed region (entire rectangular region between horizontal lines)
 ## 3. Remove cells
-## 4. Shift cells below anchor2
+## 4. Shift ALL cells below bottom_anchor (across ALL columns)
 ## 5. Update world positions
-## 6. Create merged anchor point
-## 7. Record fold operation
+## 6. Record fold operation
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
@@ -524,9 +534,7 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 	var top_anchor = anchor1 if anchor1.y < anchor2.y else anchor2
 	var bottom_anchor = anchor2 if anchor1.y < anchor2.y else anchor1
 
-	var x = top_anchor.x  # Column where fold occurs
-
-	# 2. Calculate removed region
+	# 2. Calculate removed region (entire rectangular region)
 	var removed_cells = calculate_removed_cells(top_anchor, bottom_anchor)
 
 	# 3. Remove cells from grid
@@ -541,22 +549,23 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 			# Free the cell
 			cell.queue_free()
 
-	# 4. Shift cells below bottom_anchor
+	# 4. Shift ALL cells below bottom_anchor (across ALL columns)
 	var shift_distance = bottom_anchor.y - top_anchor.y
 
 	# Collect cells that need to be shifted
 	var cells_to_shift: Array[Dictionary] = []
-	for y in range(bottom_anchor.y + 1, grid_manager.grid_size.y):
-		var old_pos = Vector2i(x, y)
-		var cell = grid_manager.get_cell(old_pos)
-		if cell:
-			var new_y = y - shift_distance
-			var new_pos = Vector2i(x, new_y)
-			cells_to_shift.append({
-				"cell": cell,
-				"old_pos": old_pos,
-				"new_pos": new_pos
-			})
+	for x in range(grid_manager.grid_size.x):
+		for y in range(bottom_anchor.y + 1, grid_manager.grid_size.y):
+			var old_pos = Vector2i(x, y)
+			var cell = grid_manager.get_cell(old_pos)
+			if cell:
+				var new_y = y - shift_distance
+				var new_pos = Vector2i(x, new_y)
+				cells_to_shift.append({
+					"cell": cell,
+					"old_pos": old_pos,
+					"new_pos": new_pos
+				})
 
 	# Actually move the cells
 	for data in cells_to_shift:
@@ -582,7 +591,7 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 		grid_manager.cells.erase(old_pos)
 		grid_manager.cells[new_pos] = cell
 
-	# 6. Record fold operation
+	# 5. Record fold operation
 	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
 	fold_history.append(fold_record)
 
@@ -598,25 +607,24 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 	var left_anchor = anchor1 if anchor1.x < anchor2.x else anchor2
 	var right_anchor = anchor2 if anchor1.x < anchor2.x else anchor1
 
-	var y = left_anchor.y  # Row where fold occurs
-
-	# 2. Calculate removed region
+	# 2. Calculate removed region (entire rectangular region)
 	var removed_cells = calculate_removed_cells(left_anchor, right_anchor)
 
-	# 3. Collect cells that need to be shifted
+	# 3. Collect ALL cells that need to be shifted (across ALL rows)
 	var shift_distance = right_anchor.x - left_anchor.x
 	var cells_to_shift: Array[Dictionary] = []
-	for x in range(right_anchor.x + 1, grid_manager.grid_size.x):
-		var old_pos = Vector2i(x, y)
-		var cell = grid_manager.get_cell(old_pos)
-		if cell:
-			var new_x = x - shift_distance
-			var new_pos = Vector2i(new_x, y)
-			cells_to_shift.append({
-				"cell": cell,
-				"old_pos": old_pos,
-				"new_pos": new_pos
-			})
+	for y in range(grid_manager.grid_size.y):
+		for x in range(right_anchor.x + 1, grid_manager.grid_size.x):
+			var old_pos = Vector2i(x, y)
+			var cell = grid_manager.get_cell(old_pos)
+			if cell:
+				var new_x = x - shift_distance
+				var new_pos = Vector2i(new_x, y)
+				cells_to_shift.append({
+					"cell": cell,
+					"old_pos": old_pos,
+					"new_pos": new_pos
+				})
 
 	# 4. Animate fade out of removed cells
 	await fade_out_cells(removed_cells, fade_duration)
@@ -679,25 +687,24 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 	var top_anchor = anchor1 if anchor1.y < anchor2.y else anchor2
 	var bottom_anchor = anchor2 if anchor1.y < anchor2.y else anchor1
 
-	var x = top_anchor.x  # Column where fold occurs
-
-	# 2. Calculate removed region
+	# 2. Calculate removed region (entire rectangular region)
 	var removed_cells = calculate_removed_cells(top_anchor, bottom_anchor)
 
-	# 3. Collect cells that need to be shifted
+	# 3. Collect ALL cells that need to be shifted (across ALL columns)
 	var shift_distance = bottom_anchor.y - top_anchor.y
 	var cells_to_shift: Array[Dictionary] = []
-	for y in range(bottom_anchor.y + 1, grid_manager.grid_size.y):
-		var old_pos = Vector2i(x, y)
-		var cell = grid_manager.get_cell(old_pos)
-		if cell:
-			var new_y = y - shift_distance
-			var new_pos = Vector2i(x, new_y)
-			cells_to_shift.append({
-				"cell": cell,
-				"old_pos": old_pos,
-				"new_pos": new_pos
-			})
+	for x in range(grid_manager.grid_size.x):
+		for y in range(bottom_anchor.y + 1, grid_manager.grid_size.y):
+			var old_pos = Vector2i(x, y)
+			var cell = grid_manager.get_cell(old_pos)
+			if cell:
+				var new_y = y - shift_distance
+				var new_pos = Vector2i(x, new_y)
+				cells_to_shift.append({
+					"cell": cell,
+					"old_pos": old_pos,
+					"new_pos": new_pos
+				})
 
 	# 4. Animate fade out of removed cells
 	await fade_out_cells(removed_cells, fade_duration)

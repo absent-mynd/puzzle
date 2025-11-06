@@ -93,10 +93,15 @@ func test_calculate_removed_cells_horizontal():
 	var anchor2 = Vector2i(6, 5)
 	var removed = fold_system.calculate_removed_cells(anchor1, anchor2)
 
-	assert_eq(removed.size(), 3, "Should remove 3 cells between anchors")
-	assert_has(removed, Vector2i(3, 5), "Should include cell at (3, 5)")
-	assert_has(removed, Vector2i(4, 5), "Should include cell at (4, 5)")
-	assert_has(removed, Vector2i(5, 5), "Should include cell at (5, 5)")
+	# Horizontal fold removes entire rectangular region between vertical lines
+	# Columns 3, 4, 5 (3 columns) across all 10 rows = 30 cells
+	assert_eq(removed.size(), 30, "Should remove 30 cells (3 columns x 10 rows)")
+
+	# Verify cells from all rows are included
+	for y in range(10):
+		assert_has(removed, Vector2i(3, y), "Should include cell at (3, " + str(y) + ")")
+		assert_has(removed, Vector2i(4, y), "Should include cell at (4, " + str(y) + ")")
+		assert_has(removed, Vector2i(5, y), "Should include cell at (5, " + str(y) + ")")
 
 
 func test_calculate_removed_cells_vertical():
@@ -104,10 +109,15 @@ func test_calculate_removed_cells_vertical():
 	var anchor2 = Vector2i(5, 6)
 	var removed = fold_system.calculate_removed_cells(anchor1, anchor2)
 
-	assert_eq(removed.size(), 3, "Should remove 3 cells between anchors")
-	assert_has(removed, Vector2i(5, 3), "Should include cell at (5, 3)")
-	assert_has(removed, Vector2i(5, 4), "Should include cell at (5, 4)")
-	assert_has(removed, Vector2i(5, 5), "Should include cell at (5, 5)")
+	# Vertical fold removes entire rectangular region between horizontal lines
+	# Rows 3, 4, 5 (3 rows) across all 10 columns = 30 cells
+	assert_eq(removed.size(), 30, "Should remove 30 cells (10 columns x 3 rows)")
+
+	# Verify cells from all columns are included
+	for x in range(10):
+		assert_has(removed, Vector2i(x, 3), "Should include cell at (" + str(x) + ", 3)")
+		assert_has(removed, Vector2i(x, 4), "Should include cell at (" + str(x) + ", 4)")
+		assert_has(removed, Vector2i(x, 5), "Should include cell at (" + str(x) + ", 5)")
 
 
 func test_calculate_removed_cells_adjacent():
@@ -148,15 +158,16 @@ func test_horizontal_fold_removes_correct_cells():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	# Store references to original cells that should be removed
-	var cell_to_remove_1 = grid_manager.get_cell(Vector2i(3, 5))
-	var cell_to_remove_2 = grid_manager.get_cell(Vector2i(4, 5))
-	var cell_to_remove_3 = grid_manager.get_cell(Vector2i(5, 5))
+	# Store references to some cells in different rows that should be removed
+	var cells_to_remove = [
+		grid_manager.get_cell(Vector2i(3, 0)),
+		grid_manager.get_cell(Vector2i(4, 5)),
+		grid_manager.get_cell(Vector2i(5, 9))
+	]
 
 	# Verify cells exist before fold
-	assert_not_null(cell_to_remove_1, "Cell (3,5) should exist before fold")
-	assert_not_null(cell_to_remove_2, "Cell (4,5) should exist before fold")
-	assert_not_null(cell_to_remove_3, "Cell (5,5) should exist before fold")
+	for cell in cells_to_remove:
+		assert_not_null(cell, "Cell should exist before fold")
 
 	# Execute fold
 	fold_system.execute_horizontal_fold(anchor1, anchor2)
@@ -165,10 +176,10 @@ func test_horizontal_fold_removes_correct_cells():
 	# Note: positions may be occupied by shifted cells
 	var found_removed_cells = 0
 	for cell in grid_manager.cells.values():
-		if cell == cell_to_remove_1 or cell == cell_to_remove_2 or cell == cell_to_remove_3:
+		if cell in cells_to_remove:
 			found_removed_cells += 1
 
-	assert_eq(found_removed_cells, 0, "Original cells should be removed from grid")
+	assert_eq(found_removed_cells, 0, "All cells in removed columns should be removed from grid")
 
 
 func test_horizontal_fold_keeps_anchor_cells():
@@ -186,20 +197,35 @@ func test_horizontal_fold_shifts_cells_correctly():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	# Store original cell at position (7, 5)
-	var original_cell = grid_manager.get_cell(Vector2i(7, 5))
-	assert_not_null(original_cell, "Cell at (7,5) should exist")
+	# Store original cells at positions (7, 0), (7, 5), (7, 9) - different rows
+	var original_cells = [
+		grid_manager.get_cell(Vector2i(7, 0)),
+		grid_manager.get_cell(Vector2i(7, 5)),
+		grid_manager.get_cell(Vector2i(7, 9))
+	]
+	for cell in original_cells:
+		assert_not_null(cell, "Cell should exist before fold")
 
 	# Execute fold
 	fold_system.execute_horizontal_fold(anchor1, anchor2)
 
-	# Cell that was at (7, 5) should now be at (3, 5)
-	# Shift distance is 6 - 2 = 4, so 7 - 4 = 3
+	# Cells that were at x=7 should now be at x=3 (shift distance is 6 - 2 = 4, so 7 - 4 = 3)
+	# This should happen for ALL rows
+	assert_null(grid_manager.get_cell(Vector2i(7, 0)), "Old position should be empty")
 	assert_null(grid_manager.get_cell(Vector2i(7, 5)), "Old position should be empty")
+	assert_null(grid_manager.get_cell(Vector2i(7, 9)), "Old position should be empty")
 
-	var shifted_cell = grid_manager.get_cell(Vector2i(3, 5))
-	assert_not_null(shifted_cell, "Shifted cell should exist at new position")
-	assert_eq(shifted_cell.grid_position, Vector2i(3, 5), "Cell grid_position should update")
+	var shifted_cell_0 = grid_manager.get_cell(Vector2i(3, 0))
+	var shifted_cell_5 = grid_manager.get_cell(Vector2i(3, 5))
+	var shifted_cell_9 = grid_manager.get_cell(Vector2i(3, 9))
+
+	assert_not_null(shifted_cell_0, "Shifted cell should exist at (3, 0)")
+	assert_not_null(shifted_cell_5, "Shifted cell should exist at (3, 5)")
+	assert_not_null(shifted_cell_9, "Shifted cell should exist at (3, 9)")
+
+	assert_eq(shifted_cell_0.grid_position, Vector2i(3, 0), "Cell grid_position should update")
+	assert_eq(shifted_cell_5.grid_position, Vector2i(3, 5), "Cell grid_position should update")
+	assert_eq(shifted_cell_9.grid_position, Vector2i(3, 9), "Cell grid_position should update")
 
 
 func test_horizontal_fold_updates_world_positions():
@@ -230,20 +256,22 @@ func test_horizontal_fold_with_reversed_anchors():
 	var anchor1 = Vector2i(6, 5)  # Right anchor first
 	var anchor2 = Vector2i(2, 5)  # Left anchor second
 
-	# Store references to original cells that should be removed
-	var cell_to_remove_1 = grid_manager.get_cell(Vector2i(3, 5))
-	var cell_to_remove_2 = grid_manager.get_cell(Vector2i(4, 5))
-	var cell_to_remove_3 = grid_manager.get_cell(Vector2i(5, 5))
+	# Store references to some cells in different rows that should be removed
+	var cells_to_remove = [
+		grid_manager.get_cell(Vector2i(3, 0)),
+		grid_manager.get_cell(Vector2i(4, 5)),
+		grid_manager.get_cell(Vector2i(5, 9))
+	]
 
 	fold_system.execute_horizontal_fold(anchor1, anchor2)
 
 	# Verify the original cells were removed
 	var found_removed_cells = 0
 	for cell in grid_manager.cells.values():
-		if cell == cell_to_remove_1 or cell == cell_to_remove_2 or cell == cell_to_remove_3:
+		if cell in cells_to_remove:
 			found_removed_cells += 1
 
-	assert_eq(found_removed_cells, 0, "Original cells should be removed from grid")
+	assert_eq(found_removed_cells, 0, "All cells in removed columns should be removed from grid")
 
 
 # ===== Vertical Fold Execution Tests =====
@@ -252,15 +280,16 @@ func test_vertical_fold_removes_correct_cells():
 	var anchor1 = Vector2i(5, 2)
 	var anchor2 = Vector2i(5, 6)
 
-	# Store references to original cells that should be removed
-	var cell_to_remove_1 = grid_manager.get_cell(Vector2i(5, 3))
-	var cell_to_remove_2 = grid_manager.get_cell(Vector2i(5, 4))
-	var cell_to_remove_3 = grid_manager.get_cell(Vector2i(5, 5))
+	# Store references to some cells in different columns that should be removed
+	var cells_to_remove = [
+		grid_manager.get_cell(Vector2i(0, 3)),
+		grid_manager.get_cell(Vector2i(5, 4)),
+		grid_manager.get_cell(Vector2i(9, 5))
+	]
 
 	# Verify cells exist before fold
-	assert_not_null(cell_to_remove_1, "Cell (5,3) should exist before fold")
-	assert_not_null(cell_to_remove_2, "Cell (5,4) should exist before fold")
-	assert_not_null(cell_to_remove_3, "Cell (5,5) should exist before fold")
+	for cell in cells_to_remove:
+		assert_not_null(cell, "Cell should exist before fold")
 
 	# Execute fold
 	fold_system.execute_vertical_fold(anchor1, anchor2)
@@ -269,10 +298,10 @@ func test_vertical_fold_removes_correct_cells():
 	# Note: positions may be occupied by shifted cells
 	var found_removed_cells = 0
 	for cell in grid_manager.cells.values():
-		if cell == cell_to_remove_1 or cell == cell_to_remove_2 or cell == cell_to_remove_3:
+		if cell in cells_to_remove:
 			found_removed_cells += 1
 
-	assert_eq(found_removed_cells, 0, "Original cells should be removed from grid")
+	assert_eq(found_removed_cells, 0, "All cells in removed rows should be removed from grid")
 
 
 func test_vertical_fold_keeps_anchor_cells():
@@ -290,20 +319,35 @@ func test_vertical_fold_shifts_cells_correctly():
 	var anchor1 = Vector2i(5, 2)
 	var anchor2 = Vector2i(5, 6)
 
-	# Store original cell at position (5, 7)
-	var original_cell = grid_manager.get_cell(Vector2i(5, 7))
-	assert_not_null(original_cell, "Cell at (5,7) should exist")
+	# Store original cells at positions (0, 7), (5, 7), (9, 7) - different columns
+	var original_cells = [
+		grid_manager.get_cell(Vector2i(0, 7)),
+		grid_manager.get_cell(Vector2i(5, 7)),
+		grid_manager.get_cell(Vector2i(9, 7))
+	]
+	for cell in original_cells:
+		assert_not_null(cell, "Cell should exist before fold")
 
 	# Execute fold
 	fold_system.execute_vertical_fold(anchor1, anchor2)
 
-	# Cell that was at (5, 7) should now be at (5, 3)
-	# Shift distance is 6 - 2 = 4, so 7 - 4 = 3
+	# Cells that were at y=7 should now be at y=3 (shift distance is 6 - 2 = 4, so 7 - 4 = 3)
+	# This should happen for ALL columns
+	assert_null(grid_manager.get_cell(Vector2i(0, 7)), "Old position should be empty")
 	assert_null(grid_manager.get_cell(Vector2i(5, 7)), "Old position should be empty")
+	assert_null(grid_manager.get_cell(Vector2i(9, 7)), "Old position should be empty")
 
-	var shifted_cell = grid_manager.get_cell(Vector2i(5, 3))
-	assert_not_null(shifted_cell, "Shifted cell should exist at new position")
-	assert_eq(shifted_cell.grid_position, Vector2i(5, 3), "Cell grid_position should update")
+	var shifted_cell_0 = grid_manager.get_cell(Vector2i(0, 3))
+	var shifted_cell_5 = grid_manager.get_cell(Vector2i(5, 3))
+	var shifted_cell_9 = grid_manager.get_cell(Vector2i(9, 3))
+
+	assert_not_null(shifted_cell_0, "Shifted cell should exist at (0, 3)")
+	assert_not_null(shifted_cell_5, "Shifted cell should exist at (5, 3)")
+	assert_not_null(shifted_cell_9, "Shifted cell should exist at (9, 3)")
+
+	assert_eq(shifted_cell_0.grid_position, Vector2i(0, 3), "Cell grid_position should update")
+	assert_eq(shifted_cell_5.grid_position, Vector2i(5, 3), "Cell grid_position should update")
+	assert_eq(shifted_cell_9.grid_position, Vector2i(9, 3), "Cell grid_position should update")
 
 
 func test_vertical_fold_updates_world_positions():
@@ -334,20 +378,22 @@ func test_vertical_fold_with_reversed_anchors():
 	var anchor1 = Vector2i(5, 6)  # Bottom anchor first
 	var anchor2 = Vector2i(5, 2)  # Top anchor second
 
-	# Store references to original cells that should be removed
-	var cell_to_remove_1 = grid_manager.get_cell(Vector2i(5, 3))
-	var cell_to_remove_2 = grid_manager.get_cell(Vector2i(5, 4))
-	var cell_to_remove_3 = grid_manager.get_cell(Vector2i(5, 5))
+	# Store references to some cells in different columns that should be removed
+	var cells_to_remove = [
+		grid_manager.get_cell(Vector2i(0, 3)),
+		grid_manager.get_cell(Vector2i(5, 4)),
+		grid_manager.get_cell(Vector2i(9, 5))
+	]
 
 	fold_system.execute_vertical_fold(anchor1, anchor2)
 
 	# Verify the original cells were removed
 	var found_removed_cells = 0
 	for cell in grid_manager.cells.values():
-		if cell == cell_to_remove_1 or cell == cell_to_remove_2 or cell == cell_to_remove_3:
+		if cell in cells_to_remove:
 			found_removed_cells += 1
 
-	assert_eq(found_removed_cells, 0, "Original cells should be removed from grid")
+	assert_eq(found_removed_cells, 0, "All cells in removed rows should be removed from grid")
 
 
 # ===== Main Execute Fold Tests =====
@@ -472,8 +518,9 @@ func test_horizontal_fold_at_grid_edge():
 
 	fold_system.execute_horizontal_fold(anchor1, anchor2)
 
-	# Should only remove cell at (8, 5)
-	assert_null(grid_manager.get_cell(Vector2i(8, 5)), "Cell (8,5) should be removed")
+	# Should remove entire column 8 (all rows)
+	for y in range(10):
+		assert_null(grid_manager.get_cell(Vector2i(8, y)), "Cell (8," + str(y) + ") should be removed")
 	assert_not_null(grid_manager.get_cell(anchor1), "Anchor cells should remain")
 	assert_not_null(grid_manager.get_cell(anchor2), "Anchor cells should remain")
 
@@ -485,8 +532,9 @@ func test_vertical_fold_at_grid_edge():
 
 	fold_system.execute_vertical_fold(anchor1, anchor2)
 
-	# Should only remove cell at (5, 8)
-	assert_null(grid_manager.get_cell(Vector2i(5, 8)), "Cell (5,8) should be removed")
+	# Should remove entire row 8 (all columns)
+	for x in range(10):
+		assert_null(grid_manager.get_cell(Vector2i(x, 8)), "Cell (" + str(x) + ",8) should be removed")
 	assert_not_null(grid_manager.get_cell(anchor1), "Anchor cells should remain")
 	assert_not_null(grid_manager.get_cell(anchor2), "Anchor cells should remain")
 

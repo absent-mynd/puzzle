@@ -59,8 +59,9 @@ func after_all():
 # ===== Basic Player Validation Tests =====
 
 func test_validate_fold_with_player_passes_when_player_not_in_way():
-	# Player at (5, 5), fold on row 2
-	player.set_grid_position(Vector2i(5, 5))
+	# Player at (7, 5), fold removes columns 3-5 across all rows
+	# Player is in column 7, which is outside the removed region
+	player.set_grid_position(Vector2i(7, 5))
 
 	var anchor1 = Vector2i(2, 2)
 	var anchor2 = Vector2i(6, 2)
@@ -177,7 +178,8 @@ func test_is_player_in_removed_region_horizontal_fold_player_adjacent():
 
 
 func test_is_player_in_removed_region_horizontal_fold_player_on_different_row():
-	# Player at (4, 4) - same column but different row
+	# Player at (4, 4) - in removed column 4, different row
+	# Horizontal fold removes ENTIRE columns 3-5 across ALL rows
 	player.set_grid_position(Vector2i(4, 4))
 
 	var anchor1 = Vector2i(2, 5)
@@ -185,7 +187,7 @@ func test_is_player_in_removed_region_horizontal_fold_player_on_different_row():
 
 	var result = fold_system.is_player_in_removed_region(anchor1, anchor2)
 
-	assert_false(result, "Player on different row should NOT be in removed region")
+	assert_true(result, "Player in removed column (even on different row) SHOULD be in removed region")
 
 
 func test_is_player_in_removed_region_vertical_fold_player_in_middle():
@@ -237,7 +239,8 @@ func test_is_player_in_removed_region_vertical_fold_player_at_anchor():
 
 
 func test_is_player_in_removed_region_vertical_fold_player_on_different_column():
-	# Player at (4, 4) - same row but different column
+	# Player at (4, 4) - in removed row 4, different column
+	# Vertical fold removes ENTIRE rows 3-5 across ALL columns
 	player.set_grid_position(Vector2i(4, 4))
 
 	var anchor1 = Vector2i(5, 2)
@@ -245,7 +248,7 @@ func test_is_player_in_removed_region_vertical_fold_player_on_different_column()
 
 	var result = fold_system.is_player_in_removed_region(anchor1, anchor2)
 
-	assert_false(result, "Player on different column should NOT be in removed region")
+	assert_true(result, "Player in removed row (even on different column) SHOULD be in removed region")
 
 
 func test_is_player_in_removed_region_returns_false_when_no_player():
@@ -266,8 +269,10 @@ func test_is_player_in_removed_region_returns_false_when_no_player():
 # ===== Integration with execute_fold() =====
 
 func test_execute_fold_succeeds_when_player_not_in_way():
-	# Player at safe position
-	player.set_grid_position(Vector2i(5, 1))
+	# Player at safe position outside removed columns
+	# Horizontal fold from (2,5) to (6,5) removes columns 3-5
+	# Player at (7, 1) is in column 7, which is safe
+	player.set_grid_position(Vector2i(7, 1))
 
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
@@ -431,7 +436,9 @@ func test_execute_vertical_fold_with_player_in_removed_region():
 
 func test_execute_vertical_fold_with_player_safe():
 	# Player safe from vertical fold
-	player.set_grid_position(Vector2i(3, 4))
+	# Vertical fold from (5,2) to (5,6) removes rows 3-5
+	# Player at (3, 7) is in row 7, which is safe
+	player.set_grid_position(Vector2i(3, 7))
 
 	var anchor1 = Vector2i(5, 2)
 	var anchor2 = Vector2i(5, 6)
