@@ -46,6 +46,7 @@ func _init(pos: Vector2i, world_pos: Vector2, size: float):
 
 	# Set up visual representation
 	polygon_visual = Polygon2D.new()
+	polygon_visual.z_index = -1  # Draw behind the cell's _draw() overlay effects
 	add_child(polygon_visual)
 	update_visual()
 
