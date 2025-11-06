@@ -108,14 +108,13 @@ func validate_fold(anchor1: Vector2i, anchor2: Vector2i) -> Dictionary:
 	if not validate_not_same_cell(anchor1, anchor2):
 		return {valid = false, reason = "Cannot fold a cell onto itself"}
 
-	# Check axis-aligned (Phase 3 only) - Must come before minimum distance
-	# because minimum distance check returns wrong error for diagonals
-	if not validate_same_row_or_column(anchor1, anchor2):
-		return {valid = false, reason = "Only horizontal and vertical folds supported (for now)"}
+	# Phase 4: Diagonal folds are now supported!
+	# We no longer reject non-axis-aligned folds
 
-	# Check minimum distance
-	if not validate_minimum_distance(anchor1, anchor2):
-		return {valid = false, reason = "Anchors must have at least one cell between them"}
+	# For axis-aligned folds, check minimum distance
+	if is_horizontal_fold(anchor1, anchor2) or is_vertical_fold(anchor1, anchor2):
+		if not validate_minimum_distance(anchor1, anchor2):
+			return {valid = false, reason = "Anchors must have at least one cell between them"}
 
 	return {valid = true, reason = ""}
 
@@ -178,6 +177,7 @@ func validate_minimum_distance(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 ## Check if fold is axis-aligned (horizontal or vertical)
 ##
 ## For Phase 3, only axis-aligned folds are supported.
+## Phase 4: This validation is now optional/informational
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
@@ -815,10 +815,11 @@ func execute_fold(anchor1: Vector2i, anchor2: Vector2i, animated: bool = true) -
 				is_animating = false
 			return true
 		"diagonal":
+			# Phase 4: Diagonal folds are now supported!
+			execute_diagonal_fold(anchor1, anchor2)
 			if animated:
 				is_animating = false
-			push_warning("FoldSystem: Diagonal folds not yet supported (Phase 3 limitation)")
-			return false
+			return true
 		_:
 			if animated:
 				is_animating = false
@@ -837,3 +838,193 @@ func get_fold_history() -> Array[Dictionary]:
 func clear_fold_history():
 	fold_history.clear()
 	next_fold_id = 0
+
+
+## ============================================================================
+## PHASE 4: GEOMETRIC FOLDING (DIAGONAL FOLDS)
+## ============================================================================
+
+## Calculate perpendicular cut lines for diagonal folds
+##
+## For diagonal folds, we create two perpendicular lines at the anchor points.
+## These lines define the region to be removed.
+##
+## @param anchor1: First anchor position (world coordinates)
+## @param anchor2: Second anchor position (world coordinates)
+## @return: Dictionary with line1, line2, and fold_axis information
+func calculate_cut_lines(anchor1: Vector2, anchor2: Vector2) -> Dictionary:
+	# Fold axis vector (direction between anchors)
+	var fold_vector = anchor2 - anchor1
+
+	# Perpendicular vector (rotate 90 degrees counter-clockwise)
+	# For vector (x, y), perpendicular is (-y, x)
+	var perpendicular = Vector2(-fold_vector.y, fold_vector.x).normalized()
+
+	return {
+		"line1": {"point": anchor1, "normal": perpendicular},
+		"line2": {"point": anchor2, "normal": perpendicular},
+		"fold_axis": {"start": anchor1, "end": anchor2}
+	}
+
+
+## Check if a cell's geometry intersects a line
+##
+## Uses GeometryCore.split_polygon_by_line() to test if the line
+## actually divides the cell.
+##
+## @param cell: The cell to test
+## @param line_point: A point on the line
+## @param line_normal: The normal vector of the line
+## @return: true if cell is intersected by the line
+func does_cell_intersect_line(cell: Cell, line_point: Vector2, line_normal: Vector2) -> bool:
+	var split_result = GeometryCore.split_polygon_by_line(
+		cell.geometry, line_point, line_normal
+	)
+	return split_result.intersections.size() > 0
+
+
+## Classify a cell's region relative to the fold lines
+##
+## Determines which region a cell is in:
+## - "kept_left": Cell is entirely on the left (before line1)
+## - "removed": Cell is entirely in the removed region (between lines)
+## - "kept_right": Cell is entirely on the right (after line2)
+## - "split_line1": Cell is split by line1
+## - "split_line2": Cell is split by line2
+##
+## @param cell: The cell to classify
+## @param cut_lines: Dictionary from calculate_cut_lines()
+## @return: String indicating the region
+func classify_cell_region(cell: Cell, cut_lines: Dictionary) -> String:
+	var centroid = cell.get_center()
+	var line1 = cut_lines.line1
+	var line2 = cut_lines.line2
+
+	# Check for splits first (most important)
+	if does_cell_intersect_line(cell, line1.point, line1.normal):
+		return "split_line1"
+	if does_cell_intersect_line(cell, line2.point, line2.normal):
+		return "split_line2"
+
+	# No splits - classify based on centroid position
+	var side1 = GeometryCore.point_side_of_line(centroid, line1.point, line1.normal)
+	var side2 = GeometryCore.point_side_of_line(centroid, line2.point, line2.normal)
+
+	# Classify based on which side of the lines the centroid is on
+	if side1 < 0:
+		# Left of line1 (kept)
+		return "kept_left"
+	elif side2 > 0:
+		# Right of line2 (kept)
+		return "kept_right"
+	else:
+		# Between line1 and line2 (removed)
+		return "removed"
+
+
+## Create visual seam line for diagonal fold
+##
+## Creates a Line2D showing where the diagonal fold occurred
+##
+## @param cut_lines: Dictionary from calculate_cut_lines()
+func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
+	# For diagonal folds, we create two seam lines (at each cut)
+	var seam_line1 = Line2D.new()
+	seam_line1.width = 2.0
+	seam_line1.default_color = Color.CYAN
+
+	# Calculate seam endpoints spanning the grid
+	var line1_start = cut_lines.line1.point - cut_lines.line1.normal * 1000
+	var line1_end = cut_lines.line1.point + cut_lines.line1.normal * 1000
+	seam_line1.points = PackedVector2Array([line1_start, line1_end])
+
+	grid_manager.add_child(seam_line1)
+	seam_lines.append(seam_line1)
+
+	# Second seam line
+	var seam_line2 = Line2D.new()
+	seam_line2.width = 2.0
+	seam_line2.default_color = Color.CYAN
+
+	var line2_start = cut_lines.line2.point - cut_lines.line2.normal * 1000
+	var line2_end = cut_lines.line2.point + cut_lines.line2.normal * 1000
+	seam_line2.points = PackedVector2Array([line2_start, line2_end])
+
+	grid_manager.add_child(seam_line2)
+	seam_lines.append(seam_line2)
+
+
+## Execute a diagonal fold (Phase 4)
+##
+## This is the most complex fold operation, handling arbitrary angles.
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
+	# Convert to world coordinates (use cell centers)
+	var anchor1_world = grid_manager.grid_to_world(anchor1) + Vector2(grid_manager.cell_size / 2, grid_manager.cell_size / 2)
+	var anchor2_world = grid_manager.grid_to_world(anchor2) + Vector2(grid_manager.cell_size / 2, grid_manager.cell_size / 2)
+
+	# 1. Calculate cut lines
+	var cut_lines = calculate_cut_lines(anchor1_world, anchor2_world)
+
+	# 2. Classify all cells
+	var cells_by_region = {
+		"kept_left": [],
+		"removed": [],
+		"kept_right": [],
+		"split_line1": [],
+		"split_line2": []
+	}
+
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.get_cell(pos)
+		if cell:
+			var region = classify_cell_region(cell, cut_lines)
+			cells_by_region[region].append(cell)
+
+	# 3. Process split cells
+	# For now, we'll handle splits by keeping the appropriate half
+	# Full merging logic will be added in a future iteration
+
+	for cell in cells_by_region.split_line1:
+		var split_result = GeometryCore.split_polygon_by_line(
+			cell.geometry, cut_lines.line1.point, cut_lines.line1.normal
+		)
+		if split_result.intersections.size() > 0:
+			# Keep the left half (before line1)
+			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "left")
+			if new_cell:
+				# New cell goes to removed region
+				new_cell.queue_free()
+
+	for cell in cells_by_region.split_line2:
+		var split_result = GeometryCore.split_polygon_by_line(
+			cell.geometry, cut_lines.line2.point, cut_lines.line2.normal
+		)
+		if split_result.intersections.size() > 0:
+			# Keep the right half (after line2)
+			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "right")
+			if new_cell:
+				# New cell goes to removed region
+				new_cell.queue_free()
+
+	# 4. Remove cells in removed region
+	var removed_cells: Array[Vector2i] = []
+	for cell in cells_by_region.removed:
+		removed_cells.append(cell.grid_position)
+		grid_manager.cells.erase(cell.grid_position)
+		if cell.get_parent():
+			cell.get_parent().remove_child(cell)
+		cell.queue_free()
+
+	# 5. For diagonal folds, we don't shift cells spatially (complex geometry)
+	# Instead, cells remain in their grid positions but their visual geometry
+	# has been updated by the splits
+
+	# 6. Create seam visualization
+	create_diagonal_seam_visual(cut_lines)
+
+	# 7. Record fold operation
+	var fold_record = create_fold_record(anchor1, anchor2, removed_cells, "diagonal")
+	fold_history.append(fold_record)
