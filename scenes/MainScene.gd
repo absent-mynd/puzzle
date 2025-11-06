@@ -58,12 +58,18 @@ func _ready() -> void:
 
 ## Loads a level from LevelData
 func load_level(level_data: LevelData) -> void:
-	# Set grid size
+	# Set grid size and cell size
 	grid_manager.grid_size = level_data.grid_size
 	grid_manager.cell_size = level_data.cell_size
 
-	# Regenerate grid with new size
-	grid_manager.initialize_grid()
+	# Clear existing grid if it exists
+	for cell in grid_manager.cells.values():
+		cell.queue_free()
+	grid_manager.cells.clear()
+
+	# Create new grid with updated size
+	grid_manager.create_grid()
+	grid_manager.center_grid_on_screen()
 
 	# Apply cell data
 	for pos in level_data.cell_data:
@@ -128,20 +134,28 @@ func setup_gui() -> void:
 		hud.restart_requested.connect(_on_restart_requested)
 		hud.undo_requested.connect(_on_undo_requested)
 
-	# Load and instantiate Pause Menu
+	# Load and instantiate Pause Menu as CanvasLayer
 	var pause_scene = load("res://scenes/ui/PauseMenu.tscn")
 	if pause_scene:
+		var pause_canvas = CanvasLayer.new()
+		pause_canvas.layer = 100  # High layer to appear on top
+		add_child(pause_canvas)
+
 		pause_menu = pause_scene.instantiate()
-		add_child(pause_menu)
+		pause_canvas.add_child(pause_menu)
 		pause_menu.resume_requested.connect(_on_resume_requested)
 		pause_menu.restart_requested.connect(_on_restart_requested)
 		pause_menu.main_menu_requested.connect(_on_main_menu_requested)
 
-	# Load and instantiate Level Complete screen
+	# Load and instantiate Level Complete screen as CanvasLayer
 	var complete_scene = load("res://scenes/ui/LevelComplete.tscn")
 	if complete_scene:
+		var complete_canvas = CanvasLayer.new()
+		complete_canvas.layer = 100  # High layer to appear on top
+		add_child(complete_canvas)
+
 		level_complete = complete_scene.instantiate()
-		add_child(level_complete)
+		complete_canvas.add_child(level_complete)
 		level_complete.next_level_requested.connect(_on_next_level_requested)
 		level_complete.retry_requested.connect(_on_restart_requested)
 		level_complete.level_select_requested.connect(_on_level_select_requested)

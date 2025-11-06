@@ -27,6 +27,15 @@ var can_undo: bool = false
 func _ready() -> void:
 	update_display()
 
+	# Prevent HUD buttons from stealing focus
+	# Allow focus only when explicitly clicked
+	if undo_button:
+		undo_button.focus_mode = Control.FOCUS_CLICK
+	if restart_button:
+		restart_button.focus_mode = Control.FOCUS_CLICK
+	if pause_button:
+		pause_button.focus_mode = Control.FOCUS_CLICK
+
 
 ## Set the level information
 func set_level_info(p_level_name: String, p_par_folds: int = -1) -> void:
@@ -84,11 +93,12 @@ func _on_pause_button_pressed() -> void:
 
 
 ## Handle keyboard shortcuts
-func _input(event: InputEvent) -> void:
+## Uses _unhandled_input so game input is processed first
+func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):  # ESC
 		pause_requested.emit()
 		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("ui_text_backspace"):  # U for undo
+	elif Input.is_key_pressed(KEY_U):  # U for undo
 		if can_undo:
 			undo_requested.emit()
 			get_viewport().set_input_as_handled()
