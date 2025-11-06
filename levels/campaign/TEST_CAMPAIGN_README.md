@@ -2,10 +2,28 @@
 
 This document describes all levels in the test campaign, their purpose, and what edge cases they test.
 
+## ⚠️ IMPORTANT: Overlapping/Merging Fold Behavior
+
+**Updated**: 2025-11-06 - Levels have been adjusted for the new Phase 3 fold implementation
+
+### New Folding Behavior
+The game now implements **overlapping/merging** fold behavior:
+- When folding from anchor A to anchor B, **B merges completely with A** at A's position
+- Cells between the anchors are removed
+- **MIN_FOLD_DISTANCE = 0** - adjacent cells can be folded together
+- This makes folding much more powerful than traditional "bring adjacent" behavior
+
+### Impact on Levels
+- **Par fold counts have been reduced** for most levels
+- **Level 04 (Corner Pocket)** has been completely redesigned with obstacles
+- Levels now require more strategic thinking about which cells to merge
+- The overlapping behavior enables more creative solutions
+
 ## Overview
 
 **Total Levels**: 19 (3 original + 16 new test levels)
 **Purpose**: Comprehensive testing of game mechanics and edge case discovery
+**Fold Behavior**: Overlapping/Merging (MIN_FOLD_DISTANCE = 0)
 
 ## Level Catalog
 
@@ -15,24 +33,26 @@ This document describes all levels in the test campaign, their purpose, and what
 - **ID**: `01_introduction`
 - **Grid**: 8x8
 - **Difficulty**: 1 ⭐
-- **Par**: 3 folds
+- **Par**: 2 folds (updated for overlapping behavior)
 - **Description**: Learn the basics of space folding. Reach the goal using a simple horizontal fold.
 - **Test Purpose**: Basic tutorial level, tests simple horizontal folding
 - **Key Features**:
   - Empty grid with single goal
   - Corner-to-corner traversal
+  - With overlapping: can fold row, then column to merge with goal
 
 #### 02 - Vertical Challenge
 - **ID**: `02_basic_folding`
 - **Grid**: 10x10
 - **Difficulty**: 1 ⭐
-- **Par**: 4 folds
+- **Par**: 3 folds (updated for overlapping behavior)
 - **Description**: Practice vertical folds to navigate around obstacles and reach the goal.
 - **Test Purpose**: Vertical folding with wall obstacles
 - **Key Features**:
   - Vertical wall with gap
   - Tests wall avoidance
   - Tests finding the gap in obstacles
+  - Overlapping behavior allows more direct routes
 
 #### 03 - Diagonal Thinking
 - **ID**: `03_diagonal_challenge`
@@ -52,15 +72,16 @@ This document describes all levels in the test campaign, their purpose, and what
 
 #### 04 - Corner Pocket
 - **ID**: `04_corner_fold`
-- **Grid**: 6x6
-- **Difficulty**: 1 ⭐
-- **Par**: 2 folds
-- **Description**: Test folding from corners. Player starts in corner, goal in opposite corner.
-- **Test Purpose**: Corner-to-corner folding behavior
+- **Grid**: 7x7 (REDESIGNED)
+- **Difficulty**: 2 ⭐⭐ (increased)
+- **Par**: 3 folds (redesigned for overlapping behavior)
+- **Description**: Navigate around obstacles to reach the opposite corner. Tests strategic folding with walls.
+- **Test Purpose**: Corner-to-corner folding behavior with obstacles
 - **Edge Cases Tested**:
   - ✓ Folding from grid corners
-  - ✓ Minimal distance corner-to-corner
-  - ✓ Empty grid traversal
+  - ✓ Strategic navigation around diagonal wall pattern
+  - ✓ Prevents trivial one-fold solution
+- **Note**: Completely redesigned with diagonal walls and off-diagonal obstacles to prevent direct merging
 
 #### 05 - Edge of Space
 - **ID**: `05_boundary_test`
@@ -103,7 +124,7 @@ This document describes all levels in the test campaign, their purpose, and what
 - **ID**: `08_tight_spaces`
 - **Grid**: 11x7
 - **Difficulty**: 2 ⭐⭐
-- **Par**: 5 folds
+- **Par**: 4 folds (updated for overlapping behavior)
 - **Description**: Navigate through tight corridors. Tests single-cell width pathways.
 - **Test Purpose**: Single-cell-wide corridors
 - **Edge Cases Tested**:
@@ -111,12 +132,13 @@ This document describes all levels in the test campaign, their purpose, and what
   - ✓ Zigzag wall pattern
   - ✓ Alternating gaps
   - ✓ Collision detection in tight spaces
+  - Overlapping makes navigation slightly easier
 
 #### 09 - Blocked Path
 - **ID**: `09_player_blocking`
 - **Grid**: 7x7
 - **Difficulty**: 2 ⭐⭐
-- **Par**: 3 folds
+- **Par**: 2 folds (updated for overlapping behavior)
 - **Description**: Tests player fold blocking rules. Player position should prevent certain folds.
 - **Test Purpose**: Player position blocking fold validation
 - **Edge Cases Tested**:
@@ -124,12 +146,13 @@ This document describes all levels in the test campaign, their purpose, and what
   - ✓ Player in removed region
   - ✓ Player on split cell
   - ✓ Multiple goals to test different paths
+  - Can reach corner goals more directly with overlapping
 
 #### 10 - Labyrinth
 - **ID**: `10_maze`
 - **Grid**: 12x12
 - **Difficulty**: 3 ⭐⭐⭐
-- **Par**: 8 folds
+- **Par**: 5 folds (updated for overlapping behavior)
 - **Description**: Complex maze requiring careful navigation and strategic folding.
 - **Test Purpose**: Complex pathfinding and multiple fold sequences
 - **Edge Cases Tested**:
@@ -137,6 +160,7 @@ This document describes all levels in the test campaign, their purpose, and what
   - ✓ Multiple turns required
   - ✓ Long path navigation
   - ✓ Strategic fold planning
+  - Significantly easier with overlapping - can skip sections
 
 #### 11 - Limited Moves
 - **ID**: `11_fold_limit`
@@ -170,7 +194,7 @@ This document describes all levels in the test campaign, their purpose, and what
 - **ID**: `13_minimal`
 - **Grid**: 3x3
 - **Difficulty**: 1 ⭐
-- **Par**: 2 folds
+- **Par**: 1 fold (updated for overlapping behavior!)
 - **Description**: Minimal 3x3 grid. Tests edge cases with very small grids.
 - **Test Purpose**: Behavior on minimal grid size
 - **Edge Cases Tested**:
@@ -178,12 +202,13 @@ This document describes all levels in the test campaign, their purpose, and what
   - ✓ Limited fold options
   - ✓ UI scaling on small grids
   - ✓ Center obstacle
+  - **Now solvable in 1 fold!** Can fold around obstacle to merge with goal
 
 #### 14 - Crossing Waters
 - **ID**: `14_water_hazard`
 - **Grid**: 9x9
 - **Difficulty**: 2 ⭐⭐
-- **Par**: 4 folds
+- **Par**: 3 folds (updated for overlapping behavior)
 - **Description**: Navigate around water hazards. Tests water cell type mechanics.
 - **Test Purpose**: Water cell type and navigation around hazards
 - **Edge Cases Tested**:
@@ -191,6 +216,7 @@ This document describes all levels in the test campaign, their purpose, and what
   - ✓ Multiple 2x5 water patches
   - ✓ Navigation around hazards
   - ✓ Death/reset on water entry (if implemented)
+  - Can skip over water sections more easily with overlapping
 
 #### 15 - Complex Pattern
 - **ID**: `15_checkerboard`

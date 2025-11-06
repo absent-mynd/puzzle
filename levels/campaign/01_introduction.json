@@ -16,7 +16,7 @@
 	},
 	"difficulty": 1,
 	"max_folds": -1,
-	"par_folds": 3,
+	"par_folds": 2,
 	"metadata": {
 		"author": "Space Folding Team",
 		"version": "1.0",

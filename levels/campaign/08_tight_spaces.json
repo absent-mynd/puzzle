@@ -38,7 +38,7 @@
 	},
 	"difficulty": 2,
 	"max_folds": -1,
-	"par_folds": 5,
+	"par_folds": 4,
 	"metadata": {
 		"author": "Test Campaign",
 		"version": "1.0",
