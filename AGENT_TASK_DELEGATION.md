@@ -5,6 +5,36 @@
 
 ---
 
+## How to Use This Document
+
+This document provides a comprehensive task breakdown for AI agents working on the Space-Folding Puzzle Game project. It is designed to be used in conjunction with `CLAUDE.md`, which provides essential project context.
+
+### For AI Agents Starting a Task:
+
+1. **First, read `CLAUDE.md`** - Get essential project context, architectural decisions, and development guidelines
+2. **Then, consult this document** - Find your assigned task and understand its requirements
+3. **Review dependencies** - Ensure prerequisite phases/tasks are complete
+4. **Check the relevant phase issue file** - See detailed specifications (e.g., `PHASE_4_ISSUES.md`)
+5. **Write tests first** - Follow TDD approach (see CLAUDE.md for testing framework details)
+6. **Implement the feature** - Follow code quality standards from CLAUDE.md
+7. **Verify and commit** - Run `./run_tests.sh`, ensure all tests pass, commit with clear messages
+
+### Quick Task Selection Guide:
+
+- **New to the project?** Start with P2-P3 tasks (Level System, GUI, Audio)
+- **Experienced with geometry?** Tackle P0 Task 1 (Geometric Folding - CRITICAL)
+- **UI/UX specialist?** Focus on Task 6 (Level Editor), Task 7 (Visual Polish), Task 8 (GUI System)
+- **Good at testing?** Pick Task 10 (Testing Suite), Task 11 (Performance)
+- **Creative/Design focused?** Task 2 (Campaign Levels), Task 12 (Advanced Features)
+
+### Integration with CLAUDE.md:
+
+- **CLAUDE.md** = Project context, architecture, common pitfalls, critical decisions
+- **This document** = Task breakdown, priorities, time estimates, acceptance criteria
+- **Always reference both documents** when starting new work
+
+---
+
 ## Current Project State Summary
 
 ### ✅ Completed
@@ -743,6 +773,66 @@ Parallel tracks:
 - Polished UI/UX
 - Stable 60 FPS
 - Positive playtester feedback
+
+---
+
+## Quick Reference: Task Summary Table
+
+| Task # | Name | Priority | Complexity | Est. Time | Dependencies | Risk | Best For |
+|--------|------|----------|------------|-----------|--------------|------|----------|
+| 1 | Geometric Folding | P0 | ⭐⭐⭐⭐⭐ | 8-12h | None | HIGH | Geometry specialist |
+| 2 | Campaign Levels | P0 | ⭐⭐ | 3-4h | Phase 3, 7 | LOW | Creative/Designer |
+| 3 | Multi-Seam Handling | P1 | ⭐⭐⭐⭐ | 4-6h | Phase 4 | MEDIUM | Geometry specialist |
+| 4 | Undo System | P1 | ⭐⭐⭐ | 4-5h | Phase 3, 4 | MEDIUM | Systems programmer |
+| 5 | Level Management | P2 | ⭐⭐⭐ | 5-6h | Phase 3, 7 | LOW | General developer |
+| 6 | Level Editor | P2 | ⭐⭐⭐⭐ | 6-8h | Task 5 | MEDIUM | UI/UX specialist |
+| 7 | Visual Polish | P3 | ⭐⭐⭐ | 6-8h | Phase 4, 5 | LOW | Visual/Graphics |
+| 8 | GUI System | P3 | ⭐⭐⭐ | 6-8h | None | LOW | UI/UX specialist |
+| 9 | Audio System | P3 | ⭐⭐ | 4-5h | None | LOW | Audio specialist |
+| 10 | Testing Suite | P4 | ⭐⭐ | 4-5h | All phases | LOW | QA/Testing |
+| 11 | Performance Opt | P4 | ⭐⭐⭐ | 3-4h | Most features | LOW | Optimization specialist |
+| 12 | Advanced Features | P5 | ⭐⭐⭐ | 4-6h | Core complete | LOW | Creative/Designer |
+| 13 | Mobile/Web Port | P5 | ⭐⭐⭐ | 6-8h | Core complete | MEDIUM | Platform specialist |
+
+**Legend:**
+- **Priority:** P0 (Critical) → P5 (Future)
+- **Complexity:** ⭐ (Simple) → ⭐⭐⭐⭐⭐ (Very Complex)
+- **Est. Time:** Estimated hours for one developer
+- **Risk:** Likelihood of complications or delays
+
+---
+
+## Communication Guidelines for AI Agents
+
+When working on tasks from this document:
+
+### Asking for Clarification
+If requirements are unclear:
+1. Check CLAUDE.md first
+2. Check the phase issue file (e.g., PHASE_4_ISSUES.md)
+3. Review existing tests to understand expected behavior
+4. If still unclear, ask specific questions referencing the documentation
+
+### Reporting Progress
+When updating on task progress:
+1. Reference task number and name
+2. Report test status (X/Y tests passing)
+3. List any blockers or risks encountered
+4. Mention any deviations from the plan
+
+### Requesting Code Review
+When completing a task:
+1. Ensure all acceptance criteria are met
+2. Run full test suite and report results
+3. Document any architectural decisions made
+4. Highlight any areas needing special attention
+
+### Handling Blockers
+If blocked on a task:
+1. Document the specific blocker
+2. List what you've tried
+3. Suggest alternative approaches
+4. Request specific help or resources needed
 
 ---
 
