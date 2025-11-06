@@ -17,10 +17,12 @@ var cell_type: int = 0             # 0=empty, 1=wall, 2=water, 3=goal
 var is_partial: bool = false       # True if cell has been split
 var seams: Array[Dictionary] = []  # Track seam information
 var polygon_visual: Polygon2D      # Visual representation
+var border_line: Line2D            # Cell border/outline
 
 ## Visual feedback properties (for anchor selection system - Issue #6)
 var outline_color: Color = Color.TRANSPARENT
 var is_hovered: bool = false
+var highlight_overlay: Polygon2D  # Semi-transparent overlay for selection/hover
 
 
 ## Constructor
@@ -44,6 +46,20 @@ func _init(pos: Vector2i, local_pos: Vector2, size: float):
 	# Set up visual representation
 	polygon_visual = Polygon2D.new()
 	add_child(polygon_visual)
+
+	# Set up border/outline
+	border_line = Line2D.new()
+	border_line.width = 2.0
+	border_line.closed = true  # Makes it a closed loop
+	add_child(border_line)
+
+	# Set up highlight overlay (for selection/hover feedback)
+	highlight_overlay = Polygon2D.new()
+	highlight_overlay.polygon = geometry
+	highlight_overlay.color = Color.TRANSPARENT
+	highlight_overlay.z_index = 1  # Above the main visual
+	add_child(highlight_overlay)
+
 	update_visual()
 
 
@@ -80,11 +96,22 @@ func set_cell_type(type: int):
 ## Update the visual representation of the cell
 ##
 ## Refreshes the Polygon2D node with current geometry and applies
-## the appropriate color based on cell_type.
+## the appropriate color based on cell_type. Also updates the border
+## outline to follow the cell's perimeter.
 func update_visual():
 	if polygon_visual:
 		polygon_visual.polygon = geometry
-		polygon_visual.color = get_cell_color()
+		var cell_color = get_cell_color()
+		polygon_visual.color = cell_color
+
+		# Update border outline
+		if border_line:
+			border_line.points = geometry
+			border_line.default_color = darken_color(cell_color, 0.6)
+
+		# Update highlight overlay geometry to match cell
+		if highlight_overlay:
+			highlight_overlay.polygon = geometry
 
 
 ## Get the color for the current cell type
@@ -97,6 +124,15 @@ func get_cell_color() -> Color:
 		2: return Color(0.2, 0.4, 1.0)  # Water - blue
 		3: return Color(0.2, 1.0, 0.2)  # Goal - green
 		_: return Color(1.0, 1.0, 1.0)  # Default - white
+
+
+## Darken a color by a given factor
+##
+## @param color: The color to darken
+## @param factor: How much to darken (0.0 = black, 1.0 = unchanged)
+## @return: Darkened color
+func darken_color(color: Color, factor: float = 0.7) -> Color:
+	return Color(color.r * factor, color.g * factor, color.b * factor, color.a)
 
 
 ## Check if a point is inside the cell geometry
@@ -150,10 +186,10 @@ func is_square() -> bool:
 
 ## Set outline color for visual feedback (anchor selection)
 ##
-## @param color: Color for the outline
+## @param color: Color for the outline (Red for first anchor, Blue for second)
 func set_outline_color(color: Color):
 	outline_color = color
-	queue_redraw()
+	update_highlight()
 
 
 ## Set hover highlight state
@@ -161,30 +197,34 @@ func set_outline_color(color: Color):
 ## @param enabled: Whether hover highlight should be shown
 func set_hover_highlight(enabled: bool):
 	is_hovered = enabled
-	queue_redraw()
+	update_highlight()
 
 
 ## Clear all visual feedback
 func clear_visual_feedback():
 	outline_color = Color.TRANSPARENT
 	is_hovered = false
-	queue_redraw()
+	update_highlight()
 
 
-## Custom draw function for visual feedback
-##
-## Draws outline and hover effects on top of the polygon visual.
-func _draw():
-	# Draw hover effect (semi-transparent yellow)
-	if is_hovered:
-		draw_colored_polygon(geometry, Color(1, 1, 0, 0.3))
+## Update the highlight overlay based on selection/hover state
+func update_highlight():
+	if not highlight_overlay:
+		return
 
-	# Draw outline if selected
+	# Priority: selection outline > hover
 	if outline_color.a > 0:
-		# Create closed polygon for outline by appending first vertex
-		var outline_points = geometry.duplicate()
-		outline_points.append(geometry[0])
-		draw_polyline(outline_points, outline_color, 4.0)
+		# Selected anchor - use semi-transparent version of selection color
+		highlight_overlay.color = Color(outline_color.r, outline_color.g, outline_color.b, 0.4)
+		highlight_overlay.z_index = 2  # Bring to front
+	elif is_hovered:
+		# Hovered - use semi-transparent yellow
+		highlight_overlay.color = Color(1, 1, 0, 0.3)
+		highlight_overlay.z_index = 1  # Slightly above normal
+	else:
+		# No highlight
+		highlight_overlay.color = Color.TRANSPARENT
+		highlight_overlay.z_index = 0
 
 
 ## ============================================================================
