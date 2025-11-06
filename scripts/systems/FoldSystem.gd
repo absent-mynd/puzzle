@@ -112,9 +112,10 @@ func validate_fold(anchor1: Vector2i, anchor2: Vector2i) -> Dictionary:
 	# We no longer reject non-axis-aligned folds
 
 	# For axis-aligned folds, check minimum distance
+	# Note: MIN_FOLD_DISTANCE = 0, so adjacent anchors are allowed
 	if is_horizontal_fold(anchor1, anchor2) or is_vertical_fold(anchor1, anchor2):
 		if not validate_minimum_distance(anchor1, anchor2):
-			return {valid = false, reason = "Anchors must have at least one cell between them"}
+			return {valid = false, reason = "Invalid anchor distance"}
 
 	return {valid = true, reason = ""}
 
@@ -1013,8 +1014,8 @@ func clear_fold_history():
 ## For diagonal folds, we create two perpendicular lines at the anchor points.
 ## These lines define the region to be removed.
 ##
-## @param anchor1: First anchor position (world coordinates)
-## @param anchor2: Second anchor position (world coordinates)
+## @param anchor1: First anchor position (LOCAL coordinates - relative to GridManager)
+## @param anchor2: Second anchor position (LOCAL coordinates - relative to GridManager)
 ## @return: Dictionary with line1, line2, and fold_axis information
 func calculate_cut_lines(anchor1: Vector2, anchor2: Vector2) -> Dictionary:
 	# Fold axis vector (direction between anchors)
@@ -1125,12 +1126,14 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
-	# Convert to world coordinates (use cell centers)
-	var anchor1_world = grid_manager.grid_to_world(anchor1) + Vector2(grid_manager.cell_size / 2, grid_manager.cell_size / 2)
-	var anchor2_world = grid_manager.grid_to_world(anchor2) + Vector2(grid_manager.cell_size / 2, grid_manager.cell_size / 2)
+	# Convert to LOCAL coordinates (cell centers)
+	# Cells use LOCAL coordinates relative to GridManager
+	var cell_size = grid_manager.cell_size
+	var anchor1_local = Vector2(anchor1) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var anchor2_local = Vector2(anchor2) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
-	# 1. Calculate cut lines
-	var cut_lines = calculate_cut_lines(anchor1_world, anchor2_world)
+	# 1. Calculate cut lines (using LOCAL coordinates)
+	var cut_lines = calculate_cut_lines(anchor1_local, anchor2_local)
 
 	# 2. Classify all cells
 	var cells_by_region = {
