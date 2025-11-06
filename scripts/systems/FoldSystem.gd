@@ -1075,15 +1075,19 @@ func classify_cell_region(cell: Cell, cut_lines: Dictionary) -> String:
 	var side1 = GeometryCore.point_side_of_line(centroid, line1.point, line1.normal)
 	var side2 = GeometryCore.point_side_of_line(centroid, line2.point, line2.normal)
 
+	# Both lines have the same normal (parallel lines)
+	# side > 0 means point is in direction of normal from the line
+	# side < 0 means point is opposite direction of normal from the line
+
 	# Classify based on which side of the lines the centroid is on
-	if side1 < 0:
-		# Left of line1 (kept)
+	if side1 > 0 and side2 > 0:
+		# Point is on positive side of BOTH lines (before line1 in fold direction)
 		return "kept_left"
-	elif side2 > 0:
-		# Right of line2 (kept)
+	elif side1 < 0 and side2 < 0:
+		# Point is on negative side of BOTH lines (after line2 in fold direction)
 		return "kept_right"
 	else:
-		# Between line1 and line2 (removed)
+		# Point is between line1 and line2 (one positive, one negative)
 		return "removed"
 
 

@@ -152,72 +152,81 @@ func test_calculate_cut_lines_perpendicular_relationship():
 
 ## Test cell fully on left side is classified as "kept_left"
 func test_classify_cell_region_kept_left():
-	# Set up a diagonal fold
-	var anchor1_grid = Vector2i(5, 0)
-	var anchor2_grid = Vector2i(5, 9)
+	# Diagonal fold from (2, 5) to (7, 3) - creates two distinct perpendicular lines
+	# This creates a "stripe" of removed region between the two cut lines
+	var anchor1_grid = Vector2i(2, 5)
+	var anchor2_grid = Vector2i(7, 3)
 
-	var anchor1_world = grid_manager.grid_to_world(anchor1_grid)
-	var anchor2_world = grid_manager.grid_to_world(anchor2_grid)
+	# Convert to LOCAL coordinates (cell centers)
+	var cell_size = grid_manager.cell_size
+	var anchor1_local = Vector2(anchor1_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var anchor2_local = Vector2(anchor2_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
-	var cut_lines = fold_system.calculate_cut_lines(anchor1_world, anchor2_world)
+	var cut_lines = fold_system.calculate_cut_lines(anchor1_local, anchor2_local)
 
-	# Cell at (3, 5) should be on the kept-left side
-	var cell = grid_manager.get_cell(Vector2i(3, 5))
+	# Cell at (0, 7) should be on the kept-left side (upper-left of the diagonal fold)
+	var cell = grid_manager.get_cell(Vector2i(0, 7))
 	var region = fold_system.classify_cell_region(cell, cut_lines)
 
-	assert_eq(region, "kept_left", "Cell at (3, 5) should be classified as kept_left")
+	assert_eq(region, "kept_left", "Cell at (0, 7) should be classified as kept_left")
 
 
 ## Test cell fully in removed region is classified as "removed"
 func test_classify_cell_region_removed():
-	# Vertical fold at columns 3 and 7
-	var anchor1_grid = Vector2i(3, 5)
-	var anchor2_grid = Vector2i(7, 5)
+	# Diagonal fold from (2, 5) to (7, 3)
+	var anchor1_grid = Vector2i(2, 5)
+	var anchor2_grid = Vector2i(7, 3)
 
-	var anchor1_world = grid_manager.grid_to_world(anchor1_grid)
-	var anchor2_world = grid_manager.grid_to_world(anchor2_grid)
+	# Convert to LOCAL coordinates (cell centers)
+	var cell_size = grid_manager.cell_size
+	var anchor1_local = Vector2(anchor1_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var anchor2_local = Vector2(anchor2_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
-	var cut_lines = fold_system.calculate_cut_lines(anchor1_world, anchor2_world)
+	var cut_lines = fold_system.calculate_cut_lines(anchor1_local, anchor2_local)
 
-	# Cell at (5, 5) should be in the removed region (between columns 3 and 7)
-	var cell = grid_manager.get_cell(Vector2i(5, 5))
+	# Cell at (5, 4) should be in the removed region (between the two cut lines)
+	var cell = grid_manager.get_cell(Vector2i(5, 4))
 	var region = fold_system.classify_cell_region(cell, cut_lines)
 
-	assert_eq(region, "removed", "Cell at (5, 5) should be in removed region")
+	assert_eq(region, "removed", "Cell at (5, 4) should be in removed region")
 
 
 ## Test cell fully on right side is classified as "kept_right"
 func test_classify_cell_region_kept_right():
-	# Vertical fold at columns 3 and 7
-	var anchor1_grid = Vector2i(3, 5)
-	var anchor2_grid = Vector2i(7, 5)
+	# Diagonal fold from (2, 5) to (7, 3)
+	var anchor1_grid = Vector2i(2, 5)
+	var anchor2_grid = Vector2i(7, 3)
 
-	var anchor1_world = grid_manager.grid_to_world(anchor1_grid)
-	var anchor2_world = grid_manager.grid_to_world(anchor2_grid)
+	# Convert to LOCAL coordinates (cell centers)
+	var cell_size = grid_manager.cell_size
+	var anchor1_local = Vector2(anchor1_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var anchor2_local = Vector2(anchor2_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
-	var cut_lines = fold_system.calculate_cut_lines(anchor1_world, anchor2_world)
+	var cut_lines = fold_system.calculate_cut_lines(anchor1_local, anchor2_local)
 
-	# Cell at (8, 5) should be on the kept-right side
-	var cell = grid_manager.get_cell(Vector2i(8, 5))
+	# Cell at (9, 1) should be on the kept-right side (lower-right of the diagonal fold)
+	var cell = grid_manager.get_cell(Vector2i(9, 1))
 	var region = fold_system.classify_cell_region(cell, cut_lines)
 
-	assert_eq(region, "kept_right", "Cell at (8, 5) should be classified as kept_right")
+	assert_eq(region, "kept_right", "Cell at (9, 1) should be classified as kept_right")
 
 
 ## Test cell intersecting line1 is classified as "split_line1"
 func test_classify_cell_region_split_line1():
-	# Vertical fold at columns 3 and 7
-	# Cell at (3, 5) should be split by line1
-	var anchor1_grid = Vector2i(3, 5)
-	var anchor2_grid = Vector2i(7, 5)
+	# Diagonal fold - position line1 to pass through cell (2, 5)
+	# line1 is at anchor1
+	var anchor1_grid = Vector2i(2, 5)
+	var anchor2_grid = Vector2i(7, 3)
 
-	var anchor1_world = grid_manager.grid_to_world(anchor1_grid) + Vector2(32, 32)  # Center of cell (3,5)
-	var anchor2_world = grid_manager.grid_to_world(anchor2_grid) + Vector2(32, 32)
+	# Convert to LOCAL coordinates (cell centers) - this places line1 through center of cell (2, 5)
+	var cell_size = grid_manager.cell_size
+	var anchor1_local = Vector2(anchor1_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var anchor2_local = Vector2(anchor2_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
-	var cut_lines = fold_system.calculate_cut_lines(anchor1_world, anchor2_world)
+	var cut_lines = fold_system.calculate_cut_lines(anchor1_local, anchor2_local)
 
-	# Cell at (3, 5) should be split by line1
-	var cell = grid_manager.get_cell(Vector2i(3, 5))
+	# Cell at (2, 5) should be split by line1
+	var cell = grid_manager.get_cell(Vector2i(2, 5))
 	var region = fold_system.classify_cell_region(cell, cut_lines)
 
 	assert_eq(region, "split_line1", "Cell should be split by line1")
@@ -225,18 +234,20 @@ func test_classify_cell_region_split_line1():
 
 ## Test cell intersecting line2 is classified as "split_line2"
 func test_classify_cell_region_split_line2():
-	# Vertical fold at columns 3 and 7
-	# Cell at (7, 5) should be split by line2
-	var anchor1_grid = Vector2i(3, 5)
-	var anchor2_grid = Vector2i(7, 5)
+	# Diagonal fold - position line2 to pass through cell (7, 3)
+	# line2 is at anchor2
+	var anchor1_grid = Vector2i(2, 5)
+	var anchor2_grid = Vector2i(7, 3)
 
-	var anchor1_world = grid_manager.grid_to_world(anchor1_grid) + Vector2(32, 32)
-	var anchor2_world = grid_manager.grid_to_world(anchor2_grid) + Vector2(32, 32)
+	# Convert to LOCAL coordinates (cell centers) - this places line2 through center of cell (7, 3)
+	var cell_size = grid_manager.cell_size
+	var anchor1_local = Vector2(anchor1_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var anchor2_local = Vector2(anchor2_grid) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
-	var cut_lines = fold_system.calculate_cut_lines(anchor1_world, anchor2_world)
+	var cut_lines = fold_system.calculate_cut_lines(anchor1_local, anchor2_local)
 
-	# Cell at (7, 5) should be split by line2
-	var cell = grid_manager.get_cell(Vector2i(7, 5))
+	# Cell at (7, 3) should be split by line2
+	var cell = grid_manager.get_cell(Vector2i(7, 3))
 	var region = fold_system.classify_cell_region(cell, cut_lines)
 
 	assert_eq(region, "split_line2", "Cell should be split by line2")
