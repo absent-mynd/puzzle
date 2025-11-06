@@ -1,0 +1,191 @@
+[gd_scene load_steps=2 format=3 uid="uid://h6k2p9m5q3n8"]
+
+[ext_resource type="Script" path="res://scripts/ui/Settings.gd" id="1_settings"]
+
+[node name="Settings" type="Control"]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_settings")
+
+[node name="DimBackground" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="CenterContainer"]
+custom_minimum_size = Vector2(600, 700)
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 30
+
+[node name="Title" type="Label" parent="CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+text = "SETTINGS"
+horizontal_alignment = 1
+
+[node name="Spacer1" type="Control" parent="CenterContainer/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="AudioSection" type="VBoxContainer" parent="CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="AudioTitle" type="Label" parent="CenterContainer/Panel/VBoxContainer/AudioSection"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Audio"
+
+[node name="MasterVolume" type="HBoxContainer" parent="CenterContainer/Panel/VBoxContainer/AudioSection"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CenterContainer/Panel/VBoxContainer/AudioSection/MasterVolume"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Master Volume:"
+
+[node name="Slider" type="HSlider" parent="CenterContainer/Panel/VBoxContainer/AudioSection/MasterVolume"]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="Value" type="Label" parent="CenterContainer/Panel/VBoxContainer/AudioSection/MasterVolume"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "100%"
+
+[node name="MusicVolume" type="HBoxContainer" parent="CenterContainer/Panel/VBoxContainer/AudioSection"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CenterContainer/Panel/VBoxContainer/AudioSection/MusicVolume"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Music Volume:"
+
+[node name="Slider" type="HSlider" parent="CenterContainer/Panel/VBoxContainer/AudioSection/MusicVolume"]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="Value" type="Label" parent="CenterContainer/Panel/VBoxContainer/AudioSection/MusicVolume"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "80%"
+
+[node name="SFXVolume" type="HBoxContainer" parent="CenterContainer/Panel/VBoxContainer/AudioSection"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CenterContainer/Panel/VBoxContainer/AudioSection/SFXVolume"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "SFX Volume:"
+
+[node name="Slider" type="HSlider" parent="CenterContainer/Panel/VBoxContainer/AudioSection/SFXVolume"]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="Value" type="Label" parent="CenterContainer/Panel/VBoxContainer/AudioSection/SFXVolume"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "100%"
+
+[node name="Spacer2" type="Control" parent="CenterContainer/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="GraphicsSection" type="VBoxContainer" parent="CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="GraphicsTitle" type="Label" parent="CenterContainer/Panel/VBoxContainer/GraphicsSection"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Graphics"
+
+[node name="Fullscreen" type="HBoxContainer" parent="CenterContainer/Panel/VBoxContainer/GraphicsSection"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CenterContainer/Panel/VBoxContainer/GraphicsSection/Fullscreen"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Fullscreen:"
+
+[node name="CheckBox" type="CheckBox" parent="CenterContainer/Panel/VBoxContainer/GraphicsSection/Fullscreen"]
+layout_mode = 2
+
+[node name="VSync" type="HBoxContainer" parent="CenterContainer/Panel/VBoxContainer/GraphicsSection"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CenterContainer/Panel/VBoxContainer/GraphicsSection/VSync"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "VSync:"
+
+[node name="CheckBox" type="CheckBox" parent="CenterContainer/Panel/VBoxContainer/GraphicsSection/VSync"]
+layout_mode = 2
+button_pressed = true
+
+[node name="Spacer3" type="Control" parent="CenterContainer/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ButtonsContainer" type="HBoxContainer" parent="CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 20
+alignment = 1
+
+[node name="ApplyButton" type="Button" parent="CenterContainer/Panel/VBoxContainer/ButtonsContainer"]
+custom_minimum_size = Vector2(200, 60)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Apply"
+
+[node name="BackButton" type="Button" parent="CenterContainer/Panel/VBoxContainer/ButtonsContainer"]
+custom_minimum_size = Vector2(200, 60)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Back"
+
+[connection signal="value_changed" from="CenterContainer/Panel/VBoxContainer/AudioSection/MasterVolume/Slider" to="." method="_on_master_volume_changed"]
+[connection signal="value_changed" from="CenterContainer/Panel/VBoxContainer/AudioSection/MusicVolume/Slider" to="." method="_on_music_volume_changed"]
+[connection signal="value_changed" from="CenterContainer/Panel/VBoxContainer/AudioSection/SFXVolume/Slider" to="." method="_on_sfx_volume_changed"]
+[connection signal="toggled" from="CenterContainer/Panel/VBoxContainer/GraphicsSection/Fullscreen/CheckBox" to="." method="_on_fullscreen_toggled"]
+[connection signal="toggled" from="CenterContainer/Panel/VBoxContainer/GraphicsSection/VSync/CheckBox" to="." method="_on_vsync_toggled"]
+[connection signal="pressed" from="CenterContainer/Panel/VBoxContainer/ButtonsContainer/ApplyButton" to="." method="_on_apply_button_pressed"]
+[connection signal="pressed" from="CenterContainer/Panel/VBoxContainer/ButtonsContainer/BackButton" to="." method="_on_back_button_pressed"]
