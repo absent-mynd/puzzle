@@ -448,8 +448,8 @@ func remove_seams_in_removed_region(start_coord: int, end_coord: int, seam_orien
 		if seam_orientation == "vertical":
 			# Vertical seams - check x position
 			var seam_x = seam.points[0].x
-			var seam_world_x = seam_x - grid_manager.grid_origin.x
-			var seam_grid_x = int(seam_world_x / cell_size + 0.5)
+			# Seam coordinates are already in local coordinates (relative to GridManager)
+			var seam_grid_x = int(seam_x / cell_size + 0.5)
 
 			# Remove if seam is between the anchors (exclusive)
 			if seam_grid_x > start_coord and seam_grid_x < end_coord:
@@ -457,8 +457,8 @@ func remove_seams_in_removed_region(start_coord: int, end_coord: int, seam_orien
 		elif seam_orientation == "horizontal":
 			# Horizontal seams - check y position
 			var seam_y = seam.points[0].y
-			var seam_world_y = seam_y - grid_manager.grid_origin.y
-			var seam_grid_y = int(seam_world_y / cell_size + 0.5)
+			# Seam coordinates are already in local coordinates (relative to GridManager)
+			var seam_grid_y = int(seam_y / cell_size + 0.5)
 
 			# Remove if seam is between the anchors (exclusive)
 			if seam_grid_y > start_coord and seam_grid_y < end_coord:
