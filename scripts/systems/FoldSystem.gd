@@ -1039,18 +1039,32 @@ func calculate_cut_lines(anchor1: Vector2, anchor2: Vector2) -> Dictionary:
 
 ## Check if a cell's geometry intersects a line
 ##
-## Uses GeometryCore.split_polygon_by_line() to test if the line
-## actually divides the cell.
+## A cell is only considered "split" if the line actually divides it into
+## two regions (vertices on both sides of the line). Cells that just touch
+## the line at a vertex or edge are not considered split.
 ##
 ## @param cell: The cell to test
 ## @param line_point: A point on the line
 ## @param line_normal: The normal vector of the line
-## @return: true if cell is intersected by the line
+## @return: true if cell is truly split by the line
 func does_cell_intersect_line(cell: Cell, line_point: Vector2, line_normal: Vector2) -> bool:
-	var split_result = GeometryCore.split_polygon_by_line(
-		cell.geometry, line_point, line_normal
-	)
-	return split_result.intersections.size() > 0
+	# Check if there are vertices on both sides of the line
+	var has_positive = false
+	var has_negative = false
+
+	for vertex in cell.geometry:
+		var side = GeometryCore.point_side_of_line(vertex, line_point, line_normal)
+		if side > 0:
+			has_positive = true
+		elif side < 0:
+			has_negative = true
+
+		# If we have vertices on both sides, the cell is truly split
+		if has_positive and has_negative:
+			return true
+
+	# Cell is not split - all vertices are on one side or on the line
+	return false
 
 
 ## Classify a cell's region relative to the fold lines
