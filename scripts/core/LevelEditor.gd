@@ -322,7 +322,7 @@ func save_level() -> void:
 	current_level.player_start_position = player_start_position
 
 	# Create levels directory if it doesn't exist
-	var levels_dir = "user://levels/"
+	var levels_dir = GameManager.CUSTOM_LEVELS_DIR
 	if not DirAccess.dir_exists_absolute(levels_dir):
 		DirAccess.make_dir_recursive_absolute(levels_dir)
 
@@ -341,7 +341,7 @@ func save_level() -> void:
 
 ## Load a level
 func load_level() -> void:
-	var levels_dir = "user://levels/"
+	var levels_dir = GameManager.CUSTOM_LEVELS_DIR
 	var file_path = levels_dir + save_filename + ".json"
 
 	var loaded_level = level_manager.load_level(file_path)
@@ -412,7 +412,7 @@ func new_level() -> void:
 ## Start browse mode
 func start_browse_mode() -> void:
 	# Get list of custom level files
-	var levels_dir = "user://levels/"
+	var levels_dir = GameManager.CUSTOM_LEVELS_DIR
 	custom_level_files = get_custom_level_files(levels_dir)
 
 	if custom_level_files.is_empty():
@@ -511,7 +511,7 @@ func test_level() -> void:
 	current_level.player_start_position = player_start_position
 
 	# Create levels directory if it doesn't exist
-	var levels_dir = "user://levels/"
+	var levels_dir = GameManager.CUSTOM_LEVELS_DIR
 	if not DirAccess.dir_exists_absolute(levels_dir):
 		DirAccess.make_dir_recursive_absolute(levels_dir)
 
