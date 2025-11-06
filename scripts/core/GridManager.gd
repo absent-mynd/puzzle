@@ -191,6 +191,9 @@ func select_cell(grid_pos: Vector2i) -> void:
 	# Clear hover effects
 	clear_all_hover_effects()
 
+	# Play selection sound
+	AudioManager.play_sfx("selection")
+
 	# Handle selection based on count
 	if selected_anchors.size() == 0:
 		# First anchor - red outline

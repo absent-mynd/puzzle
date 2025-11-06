@@ -7,12 +7,18 @@ extends Control
 
 
 func _ready() -> void:
+	# Start menu music
+	AudioManager.play_music("menu", true)
+
 	# Set focus to play button for keyboard navigation
 	$CenterContainer/VBoxContainer/PlayButton.grab_focus()
 
 
 ## Start the campaign from the first level
 func _on_play_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	# Start the first unlocked campaign level
 	var unlocked_levels = GameManager.progress_manager.campaign_data["levels_unlocked"]
 	if unlocked_levels.size() > 0:
@@ -26,6 +32,9 @@ func _on_play_button_pressed() -> void:
 
 ## Open level select screen
 func _on_level_select_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	get_tree().change_scene_to_file("res://scenes/ui/LevelSelect.tscn")
 
 
@@ -36,11 +45,17 @@ func _on_custom_levels_button_pressed() -> void:
 
 ## Open level editor
 func _on_editor_button_pressed() -> void:
+  # Play button click sound
+  AudioManager.play_sfx("button_click")
+
 	get_tree().change_scene_to_file("res://scenes/ui/LevelEditor.tscn")
 
 
 ## Open settings menu
 func _on_settings_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	var settings_scene = load("res://scenes/ui/Settings.tscn")
 	if settings_scene:
 		var settings = settings_scene.instantiate()
@@ -57,6 +72,9 @@ func _on_settings_closed(settings_node: Node) -> void:
 
 ## Quit the game
 func _on_quit_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	get_tree().quit()
 
 

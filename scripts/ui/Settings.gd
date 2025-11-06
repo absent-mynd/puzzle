@@ -59,15 +59,10 @@ func save_settings() -> void:
 
 ## Apply current settings to the game
 func apply_settings() -> void:
-	# Apply audio settings
-	var master_bus_index = AudioServer.get_bus_index("Master")
-	AudioServer.set_bus_volume_db(master_bus_index, linear_to_db(settings.master_volume))
-
-	# TODO: Apply music and SFX volume when audio buses are configured
-	# var music_bus_index = AudioServer.get_bus_index("Music")
-	# AudioServer.set_bus_volume_db(music_bus_index, linear_to_db(settings.music_volume))
-	# var sfx_bus_index = AudioServer.get_bus_index("SFX")
-	# AudioServer.set_bus_volume_db(sfx_bus_index, linear_to_db(settings.sfx_volume))
+	# Apply audio settings using AudioManager
+	AudioManager.set_master_volume(settings.master_volume)
+	AudioManager.set_music_volume(settings.music_volume)
+	AudioManager.set_sfx_volume(settings.sfx_volume)
 
 	# Apply graphics settings
 	if settings.fullscreen:
@@ -107,22 +102,25 @@ func _on_master_volume_changed(value: float) -> void:
 	settings.master_volume = value
 	master_volume_value.text = "%d%%" % int(value * 100)
 	# Apply immediately for preview
-	var master_bus_index = AudioServer.get_bus_index("Master")
-	AudioServer.set_bus_volume_db(master_bus_index, linear_to_db(value))
+	AudioManager.set_master_volume(value)
 
 
 ## Handle music volume change
 func _on_music_volume_changed(value: float) -> void:
 	settings.music_volume = value
 	music_volume_value.text = "%d%%" % int(value * 100)
-	# TODO: Apply to music bus when available
+	# Apply immediately for preview
+	AudioManager.set_music_volume(value)
 
 
 ## Handle SFX volume change
 func _on_sfx_volume_changed(value: float) -> void:
 	settings.sfx_volume = value
 	sfx_volume_value.text = "%d%%" % int(value * 100)
-	# TODO: Apply to SFX bus when available
+	# Apply immediately for preview
+	AudioManager.set_sfx_volume(value)
+	# Play a test sound for preview
+	AudioManager.play_sfx("selection")
 
 
 ## Handle fullscreen toggle
@@ -137,6 +135,9 @@ func _on_vsync_toggled(toggled_on: bool) -> void:
 
 ## Apply and save settings
 func _on_apply_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	apply_settings()
 	save_settings()
 	print("Settings applied and saved")
@@ -144,6 +145,9 @@ func _on_apply_button_pressed() -> void:
 
 ## Close settings without saving
 func _on_back_button_pressed() -> void:
+	# Play button click sound
+	AudioManager.play_sfx("button_click")
+
 	# Reload settings to discard changes
 	load_settings()
 	apply_settings()
