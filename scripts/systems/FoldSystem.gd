@@ -339,16 +339,16 @@ func shift_cells_animated(cells_to_shift: Array[Dictionary], duration: float) ->
 		var cell = data.cell
 		var new_pos = data.new_pos
 
-		# Calculate new world position
-		var new_world_pos = grid_manager.grid_to_world(new_pos)
+		# Calculate new local position (not world - cells are children of GridManager!)
+		var new_local_pos = Vector2(new_pos) * grid_manager.cell_size
 		var cell_size = grid_manager.cell_size
 
-		# Calculate new geometry
+		# Calculate new geometry using local coordinates
 		var new_geometry = PackedVector2Array([
-			new_world_pos,
-			new_world_pos + Vector2(cell_size, 0),
-			new_world_pos + Vector2(cell_size, cell_size),
-			new_world_pos + Vector2(0, cell_size)
+			new_local_pos,
+			new_local_pos + Vector2(cell_size, 0),
+			new_local_pos + Vector2(cell_size, cell_size),
+			new_local_pos + Vector2(0, cell_size)
 		])
 
 		# Store start and end geometry for interpolation
@@ -427,6 +427,75 @@ func create_seam_visual(anchor1: Vector2i, anchor2: Vector2i, orientation: Strin
 	seam_lines.append(seam_line)
 
 
+## Remove seam lines that fall within the removed region
+##
+## For horizontal folds, removes vertical seams in the removed column range
+## For vertical folds, removes horizontal seams in the removed row range
+##
+## @param start_coord: Start coordinate (x for horizontal, y for vertical)
+## @param end_coord: End coordinate (x for horizontal, y for vertical)
+## @param seam_orientation: Orientation of seams to check ("vertical" or "horizontal")
+func remove_seams_in_removed_region(start_coord: int, end_coord: int, seam_orientation: String) -> void:
+	var cell_size = grid_manager.cell_size
+	var seams_to_remove: Array[Line2D] = []
+
+	for seam in seam_lines:
+		if not seam or not is_instance_valid(seam):
+			continue
+
+		# Get seam position based on orientation
+		if seam_orientation == "vertical":
+			# Vertical seams - check x position
+			var seam_x = seam.points[0].x
+			var seam_world_x = seam_x - grid_manager.grid_origin.x
+			var seam_grid_x = int(seam_world_x / cell_size + 0.5)
+
+			# Remove if seam is between the anchors (exclusive)
+			if seam_grid_x > start_coord and seam_grid_x < end_coord:
+				seams_to_remove.append(seam)
+		elif seam_orientation == "horizontal":
+			# Horizontal seams - check y position
+			var seam_y = seam.points[0].y
+			var seam_world_y = seam_y - grid_manager.grid_origin.y
+			var seam_grid_y = int(seam_world_y / cell_size + 0.5)
+
+			# Remove if seam is between the anchors (exclusive)
+			if seam_grid_y > start_coord and seam_grid_y < end_coord:
+				seams_to_remove.append(seam)
+
+	# Remove the seams
+	for seam in seams_to_remove:
+		seam_lines.erase(seam)
+		seam.queue_free()
+
+
+## Shift seam lines after cells have been shifted
+##
+## @param shift_amount: Number of cells to shift
+## @param fold_orientation: Direction of fold ("horizontal" or "vertical")
+func shift_seam_lines(shift_amount: int, fold_orientation: String) -> void:
+	var cell_size = grid_manager.cell_size
+	var shift_pixels = shift_amount * cell_size
+
+	for seam in seam_lines:
+		if not seam or not is_instance_valid(seam):
+			continue
+
+		# Shift seams perpendicular to fold direction
+		if fold_orientation == "horizontal":
+			# Horizontal fold shifts cells left/right, so shift vertical seams
+			var new_points = PackedVector2Array()
+			for point in seam.points:
+				new_points.append(Vector2(point.x - shift_pixels, point.y))
+			seam.points = new_points
+		elif fold_orientation == "vertical":
+			# Vertical fold shifts cells up/down, so shift horizontal seams
+			var new_points = PackedVector2Array()
+			for point in seam.points:
+				new_points.append(Vector2(point.x, point.y - shift_pixels))
+			seam.points = new_points
+
+
 ## Horizontal Fold Implementation
 
 ## Execute a horizontal fold between two anchors
@@ -449,7 +518,7 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	# 2. Calculate removed region (entire rectangular region)
 	var removed_cells = calculate_removed_cells(left_anchor, right_anchor)
 
-	# 3. Remove cells from grid
+	# 3. Remove cells from grid and clean up seam lines
 	for pos in removed_cells:
 		var cell = grid_manager.get_cell(pos)
 		if cell:
@@ -460,6 +529,9 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 				cell.get_parent().remove_child(cell)
 			# Free the cell
 			cell.queue_free()
+
+	# Remove seam lines that are in the removed column range
+	remove_seams_in_removed_region(left_anchor.x, right_anchor.x, "vertical")
 
 	# 4. Shift ALL cells from right_anchor onwards (across ALL rows)
 	var shift_distance = right_anchor.x - left_anchor.x
@@ -488,14 +560,15 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		# Update cell's grid position
 		cell.grid_position = new_pos
 
-		# Update world position (recalculate geometry)
-		var new_world_pos = grid_manager.grid_to_world(new_pos)
+		# Update local position (recalculate geometry using local coords, not world coords!)
+		# Cells are children of GridManager, so geometry should be relative to GridManager
+		var new_local_pos = Vector2(new_pos) * grid_manager.cell_size
 		var cell_size = grid_manager.cell_size
 		cell.geometry = PackedVector2Array([
-			new_world_pos,
-			new_world_pos + Vector2(cell_size, 0),
-			new_world_pos + Vector2(cell_size, cell_size),
-			new_world_pos + Vector2(0, cell_size)
+			new_local_pos,
+			new_local_pos + Vector2(cell_size, 0),
+			new_local_pos + Vector2(cell_size, cell_size),
+			new_local_pos + Vector2(0, cell_size)
 		])
 		cell.update_visual()
 
@@ -530,7 +603,7 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 	# 2. Calculate removed region (entire rectangular region)
 	var removed_cells = calculate_removed_cells(top_anchor, bottom_anchor)
 
-	# 3. Remove cells from grid
+	# 3. Remove cells from grid and clean up seam lines
 	for pos in removed_cells:
 		var cell = grid_manager.get_cell(pos)
 		if cell:
@@ -541,6 +614,9 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 				cell.get_parent().remove_child(cell)
 			# Free the cell
 			cell.queue_free()
+
+	# Remove seam lines that are in the removed row range
+	remove_seams_in_removed_region(top_anchor.y, bottom_anchor.y, "horizontal")
 
 	# 4. Shift ALL cells from bottom_anchor onwards (across ALL columns)
 	var shift_distance = bottom_anchor.y - top_anchor.y
@@ -569,14 +645,15 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 		# Update cell's grid position
 		cell.grid_position = new_pos
 
-		# Update world position (recalculate geometry)
-		var new_world_pos = grid_manager.grid_to_world(new_pos)
+		# Update local position (recalculate geometry using local coords, not world coords!)
+		# Cells are children of GridManager, so geometry should be relative to GridManager
+		var new_local_pos = Vector2(new_pos) * grid_manager.cell_size
 		var cell_size = grid_manager.cell_size
 		cell.geometry = PackedVector2Array([
-			new_world_pos,
-			new_world_pos + Vector2(cell_size, 0),
-			new_world_pos + Vector2(cell_size, cell_size),
-			new_world_pos + Vector2(0, cell_size)
+			new_local_pos,
+			new_local_pos + Vector2(cell_size, 0),
+			new_local_pos + Vector2(cell_size, cell_size),
+			new_local_pos + Vector2(0, cell_size)
 		])
 		cell.update_visual()
 
@@ -622,7 +699,7 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 	# 4. Animate fade out of removed cells
 	await fade_out_cells(removed_cells, fade_duration)
 
-	# 5. Remove cells from grid
+	# 5. Remove cells from grid and clean up seam lines
 	for pos in removed_cells:
 		var cell = grid_manager.get_cell(pos)
 		if cell:
@@ -630,6 +707,11 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 			if cell.get_parent():
 				cell.get_parent().remove_child(cell)
 			cell.queue_free()
+
+	# Remove seam lines that are in the removed column range
+	remove_seams_in_removed_region(left_anchor.x, right_anchor.x, "vertical")
+	# Shift remaining seam lines
+	shift_seam_lines(shift_distance, "horizontal")
 
 	# 6. Animate cell shifting
 	await shift_cells_animated(cells_to_shift, shift_duration)
@@ -643,14 +725,14 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 		# Update cell's grid position
 		cell.grid_position = new_pos
 
-		# Update final geometry
-		var new_world_pos = grid_manager.grid_to_world(new_pos)
+		# Update final geometry using local coordinates
+		var new_local_pos = Vector2(new_pos) * grid_manager.cell_size
 		var cell_size = grid_manager.cell_size
 		cell.geometry = PackedVector2Array([
-			new_world_pos,
-			new_world_pos + Vector2(cell_size, 0),
-			new_world_pos + Vector2(cell_size, cell_size),
-			new_world_pos + Vector2(0, cell_size)
+			new_local_pos,
+			new_local_pos + Vector2(cell_size, 0),
+			new_local_pos + Vector2(cell_size, cell_size),
+			new_local_pos + Vector2(0, cell_size)
 		])
 		cell.update_visual()
 
@@ -702,7 +784,7 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 	# 4. Animate fade out of removed cells
 	await fade_out_cells(removed_cells, fade_duration)
 
-	# 5. Remove cells from grid
+	# 5. Remove cells from grid and clean up seam lines
 	for pos in removed_cells:
 		var cell = grid_manager.get_cell(pos)
 		if cell:
@@ -710,6 +792,11 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 			if cell.get_parent():
 				cell.get_parent().remove_child(cell)
 			cell.queue_free()
+
+	# Remove seam lines that are in the removed row range
+	remove_seams_in_removed_region(top_anchor.y, bottom_anchor.y, "horizontal")
+	# Shift remaining seam lines
+	shift_seam_lines(shift_distance, "vertical")
 
 	# 6. Animate cell shifting
 	await shift_cells_animated(cells_to_shift, shift_duration)
@@ -723,14 +810,14 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 		# Update cell's grid position
 		cell.grid_position = new_pos
 
-		# Update final geometry
-		var new_world_pos = grid_manager.grid_to_world(new_pos)
+		# Update final geometry using local coordinates
+		var new_local_pos = Vector2(new_pos) * grid_manager.cell_size
 		var cell_size = grid_manager.cell_size
 		cell.geometry = PackedVector2Array([
-			new_world_pos,
-			new_world_pos + Vector2(cell_size, 0),
-			new_world_pos + Vector2(cell_size, cell_size),
-			new_world_pos + Vector2(0, cell_size)
+			new_local_pos,
+			new_local_pos + Vector2(cell_size, 0),
+			new_local_pos + Vector2(cell_size, cell_size),
+			new_local_pos + Vector2(0, cell_size)
 		])
 		cell.update_visual()
 

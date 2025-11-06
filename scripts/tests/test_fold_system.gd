@@ -239,15 +239,16 @@ func test_horizontal_fold_updates_world_positions():
 	# Execute fold
 	fold_system.execute_horizontal_fold(anchor1, anchor2)
 
-	# Check that shifted cells have correct world positions
+	# Check that shifted cells have correct local positions
+	# (Cells are children of GridManager, so geometry is in local coordinates)
 	var shifted_cell = grid_manager.get_cell(Vector2i(3, 5))
 	if shifted_cell:
-		var expected_world_pos = grid_manager.grid_to_world(Vector2i(3, 5))
+		var expected_local_pos = Vector2(Vector2i(3, 5)) * grid_manager.cell_size
 		var actual_center = shifted_cell.get_center()
 		var cell_size = grid_manager.cell_size
 
-		# Center should be at expected_world_pos + half cell_size
-		var expected_center = expected_world_pos + Vector2(cell_size / 2, cell_size / 2)
+		# Center should be at expected_local_pos + half cell_size
+		var expected_center = expected_local_pos + Vector2(cell_size / 2, cell_size / 2)
 
 		assert_almost_eq(actual_center.x, expected_center.x, 1.0,
 			"Shifted cell X position should be correct")
@@ -365,15 +366,16 @@ func test_vertical_fold_updates_world_positions():
 	# Execute fold
 	fold_system.execute_vertical_fold(anchor1, anchor2)
 
-	# Check that shifted cells have correct world positions
+	# Check that shifted cells have correct local positions
+	# (Cells are children of GridManager, so geometry is in local coordinates)
 	var shifted_cell = grid_manager.get_cell(Vector2i(5, 3))
 	if shifted_cell:
-		var expected_world_pos = grid_manager.grid_to_world(Vector2i(5, 3))
+		var expected_local_pos = Vector2(Vector2i(5, 3)) * grid_manager.cell_size
 		var actual_center = shifted_cell.get_center()
 		var cell_size = grid_manager.cell_size
 
-		# Center should be at expected_world_pos + half cell_size
-		var expected_center = expected_world_pos + Vector2(cell_size / 2, cell_size / 2)
+		# Center should be at expected_local_pos + half cell_size
+		var expected_center = expected_local_pos + Vector2(cell_size / 2, cell_size / 2)
 
 		assert_almost_eq(actual_center.x, expected_center.x, 1.0,
 			"Shifted cell X position should be correct")
