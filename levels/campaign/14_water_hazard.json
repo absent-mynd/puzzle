@@ -1,0 +1,46 @@
+{
+	"level_id": "14_water_hazard",
+	"level_name": "Crossing Waters",
+	"description": "Navigate around water hazards. Tests water cell type mechanics.",
+	"grid_size": {
+		"x": 9,
+		"y": 9
+	},
+	"cell_size": 64.0,
+	"player_start_position": {
+		"x": 0,
+		"y": 4
+	},
+	"cell_data": {
+		"(2, 2)": 2,
+		"(2, 3)": 2,
+		"(2, 4)": 2,
+		"(2, 5)": 2,
+		"(2, 6)": 2,
+		"(3, 2)": 2,
+		"(3, 3)": 2,
+		"(3, 4)": 2,
+		"(3, 5)": 2,
+		"(3, 6)": 2,
+		"(5, 2)": 2,
+		"(5, 3)": 2,
+		"(5, 4)": 2,
+		"(5, 5)": 2,
+		"(5, 6)": 2,
+		"(6, 2)": 2,
+		"(6, 3)": 2,
+		"(6, 4)": 2,
+		"(6, 5)": 2,
+		"(6, 6)": 2,
+		"(8, 4)": 3
+	},
+	"difficulty": 2,
+	"max_folds": -1,
+	"par_folds": 4,
+	"metadata": {
+		"author": "Test Campaign",
+		"version": "1.0",
+		"tags": ["test", "water", "hazards", "cell-types"],
+		"test_purpose": "Tests water cell type and navigation around hazards"
+	}
+}

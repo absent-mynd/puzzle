@@ -1,0 +1,28 @@
+{
+	"level_id": "17_single_column",
+	"level_name": "Vertical Line",
+	"description": "Extreme aspect ratio - 1 column, 15 rows. Tests vertical-only folding.",
+	"grid_size": {
+		"x": 1,
+		"y": 15
+	},
+	"cell_size": 64.0,
+	"player_start_position": {
+		"x": 0,
+		"y": 0
+	},
+	"cell_data": {
+		"(0, 5)": 1,
+		"(0, 10)": 1,
+		"(0, 14)": 3
+	},
+	"difficulty": 2,
+	"max_folds": -1,
+	"par_folds": 2,
+	"metadata": {
+		"author": "Test Campaign",
+		"version": "1.0",
+		"tags": ["test", "edge-case", "aspect-ratio", "vertical"],
+		"test_purpose": "Tests extreme aspect ratio (single column)"
+	}
+}
