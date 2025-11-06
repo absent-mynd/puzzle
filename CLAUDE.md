@@ -242,16 +242,32 @@ var fold_history: Array[Dictionary] = []
 
 **Running Tests**:
 ```bash
-# Command line (preferred for CI/CD)
-godot --path . --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/
-
-# With script
+# Run all tests (default)
 ./run_tests.sh
+
+# Run specific test file (multiple ways)
+./run_tests.sh geometry_core           # By name (with or without test_ prefix)
+./run_tests.sh test_fold_system        # With test_ prefix
+./run_tests.sh fold                    # Partial match (runs all tests containing "fold")
+
+# Show help
+./run_tests.sh --help
+
+# Advanced: Pass GUT options directly
+./run_tests.sh -gtest=res://scripts/tests/test_geometry_core.gd
+
+# Command line (for CI/CD)
+godot --path . --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/
 
 # In Godot Editor
 # Project → Project Settings → Plugins → Enable "Gut"
 # Bottom panel → GUT → Run All
 ```
+
+**Notes**:
+- The script automatically handles test file names (with or without `test_` prefix or `.gd` extension)
+- Using partial names will run all test files containing that string (e.g., `player` runs both `test_player.gd` and `test_player_fold_validation.gd`)
+- Running specific tests is much faster for development and debugging
 
 **Test File Structure**:
 ```gdscript
@@ -433,6 +449,14 @@ Read these when working on specific features:
 # Run all tests
 ./run_tests.sh
 
+# Run specific test file (fast - recommended for development)
+./run_tests.sh geometry_core           # Run test_geometry_core.gd
+./run_tests.sh fold_system             # Run test_fold_system.gd
+./run_tests.sh player                  # Run all tests with "player" in filename
+
+# Show test runner help
+./run_tests.sh --help
+
 # Run tests in Docker (CI environment)
 docker run --rm -v $(pwd):/workspace -w /workspace \
   barichello/godot-ci:4.3 \
@@ -445,7 +469,7 @@ docker run --rm -v $(pwd):/workspace -w /workspace \
 # List all .gd files
 find . -name "*.gd" -not -path "./addons/*"
 
-# Run specific test file
+# Advanced: Run specific test file with Godot directly
 godot --path . --headless -s addons/gut/gut_cmdln.gd -gtest=res://scripts/tests/test_example.gd
 ```
 
