@@ -261,13 +261,13 @@ func _apply_volume_settings() -> void:
 	var sfx_idx = AudioServer.get_bus_index(BUS_SFX)
 
 	if master_idx != -1:
-		AudioServer.set_bus_volume_db(master_idx, linear_to_db(master_volume))
+		AudioServer.set_bus_volume_db(master_idx, linear_to_db(max(master_volume, 0.0001)))
 
 	if music_idx != -1:
-		AudioServer.set_bus_volume_db(music_idx, linear_to_db(music_volume))
+		AudioServer.set_bus_volume_db(music_idx, linear_to_db(max(music_volume, 0.0001)))
 
 	if sfx_idx != -1:
-		AudioServer.set_bus_volume_db(sfx_idx, linear_to_db(sfx_volume))
+		AudioServer.set_bus_volume_db(sfx_idx, linear_to_db(max(sfx_volume, 0.0001)))
 
 
 ## Get master volume (0.0 to 1.0)
