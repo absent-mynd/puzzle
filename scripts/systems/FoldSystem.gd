@@ -1310,13 +1310,14 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			cell.geometry, cut_lines.line1.point, cut_lines.line1.normal
 		)
 		if split_result.intersections.size() > 0:
-			# Keep the left half (negative side of normal, away from removed region)
+			# Keep the "right" half = NEGATIVE side of normal (away from removed region)
 			# Line1 is at the start of the removed region
-			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "left")
+			# Note: In GeometryCore, "right" = negative side, "left" = positive side
+			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "right")
 			if new_cell:
-				# New cell (right half) goes to removed region
+				# New cell ("left" half = positive side) goes to removed region
 				new_cell.queue_free()
-			# Cell now contains left half - store for merging
+			# Cell now contains "right" half (negative side) - store for merging
 			line1_split_halves.append(cell)
 
 	for cell in cells_by_region.split_line2:
@@ -1324,13 +1325,14 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			cell.geometry, cut_lines.line2.point, cut_lines.line2.normal
 		)
 		if split_result.intersections.size() > 0:
-			# Keep the right half (positive side of normal, away from removed region)
+			# Keep the "left" half = POSITIVE side of normal (away from removed region)
 			# Line2 is at the end of the removed region
-			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "right")
+			# Note: In GeometryCore, "left" = positive side, "right" = negative side
+			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "left")
 			if new_cell:
-				# New cell (left half) goes to removed region
+				# New cell ("right" half = negative side) goes to removed region
 				new_cell.queue_free()
-			# Cell now contains right half - store for merging
+			# Cell now contains "left" half (positive side) - store for merging
 			line2_split_halves.append(cell)
 
 	# 4. Remove cells in removed region
