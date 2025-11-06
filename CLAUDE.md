@@ -301,10 +301,11 @@ CI/CD configuration - runs on every PR and push to main
 Read these when working on specific features:
 
 1. **IMPLEMENTATION_PLAN.md** - Comprehensive 9-phase plan with all details
-2. **spec_files/claude_code_implementation_guide.md** - Stage-by-stage implementation guide
-3. **spec_files/math_utilities_reference.md** - Mathematical algorithms and formulas
-4. **spec_files/space_folding_design_exploration.md** - Design decisions and rationale
-5. **spec_files/test_scenarios_and_validation.md** - Comprehensive test scenarios
+2. **AGENT_TASK_DELEGATION.md** - Task breakdown and delegation guide for AI agents working on this project
+3. **spec_files/claude_code_implementation_guide.md** - Stage-by-stage implementation guide
+4. **spec_files/math_utilities_reference.md** - Mathematical algorithms and formulas
+5. **spec_files/space_folding_design_exploration.md** - Design decisions and rationale
+6. **spec_files/test_scenarios_and_validation.md** - Comprehensive test scenarios
 
 ## Quick Reference Commands
 
