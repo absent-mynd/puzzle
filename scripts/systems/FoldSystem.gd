@@ -12,6 +12,10 @@ class_name FoldSystem
 
 ## Properties
 
+## Debug flag to control diagnostic output during fold execution
+## Set to true to see detailed fold execution logs (useful for debugging diagonal folds)
+const DEBUG_FOLD_EXECUTION: bool = false
+
 ## Reference to the GridManager
 var grid_manager: GridManager
 
@@ -1180,8 +1184,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		else:
 			target_anchor = anchor2
 			source_anchor = anchor1
-		print("\n=== Axis-Aligned Horizontal Fold ===")
-		print("Chose left-most anchor: target=%s, source=%s" % [target_anchor, source_anchor])
+		if DEBUG_FOLD_EXECUTION:
+			print("\n=== Axis-Aligned Horizontal Fold ===")
+			print("Chose left-most anchor: target=%s, source=%s" % [target_anchor, source_anchor])
 	elif is_vertical:
 		# Vertical fold - always shift toward TOP-most anchor (simple, no negatives possible)
 		if anchor1.y < anchor2.y:
@@ -1190,8 +1195,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		else:
 			target_anchor = anchor2
 			source_anchor = anchor1
-		print("\n=== Axis-Aligned Vertical Fold ===")
-		print("Chose top-most anchor: target=%s, source=%s" % [target_anchor, source_anchor])
+		if DEBUG_FOLD_EXECUTION:
+			print("\n=== Axis-Aligned Vertical Fold ===")
+			print("Chose top-most anchor: target=%s, source=%s" % [target_anchor, source_anchor])
 	else:
 		# TRUE DIAGONAL FOLD - use negative-avoidance algorithm
 		# Calculate both possible shift vectors
@@ -1227,14 +1233,15 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		var max_y_option2 = max_existing_y + shift_if_anchor2_target.y
 
 		# DEBUG: Print normalization decision
-		print("\n=== Diagonal Fold Normalization ===")
-		print("anchor1=%s, anchor2=%s" % [anchor1, anchor2])
-		print("shift_if_anchor1_target=%s, shift_if_anchor2_target=%s" % [shift_if_anchor1_target, shift_if_anchor2_target])
-		print("Grid bounds: x=[%d,%d], y=[%d,%d]" % [min_existing_x, max_existing_x, min_existing_y, max_existing_y])
-		print("Option1: min_x=%d, min_y=%d, creates_negative=%s" % [min_x_option1, min_y_option1, creates_negative_option1])
-		print("Option2: min_x=%d, min_y=%d, creates_negative=%s" % [min_x_option2, min_y_option2, creates_negative_option2])
-		print("Option1: max_x=%d, max_y=%d" % [max_x_option1, max_y_option1])
-		print("Option2: max_x=%d, max_y=%d" % [max_x_option2, max_y_option2])
+		if DEBUG_FOLD_EXECUTION:
+			print("\n=== Diagonal Fold Normalization ===")
+			print("anchor1=%s, anchor2=%s" % [anchor1, anchor2])
+			print("shift_if_anchor1_target=%s, shift_if_anchor2_target=%s" % [shift_if_anchor1_target, shift_if_anchor2_target])
+			print("Grid bounds: x=[%d,%d], y=[%d,%d]" % [min_existing_x, max_existing_x, min_existing_y, max_existing_y])
+			print("Option1: min_x=%d, min_y=%d, creates_negative=%s" % [min_x_option1, min_y_option1, creates_negative_option1])
+			print("Option2: min_x=%d, min_y=%d, creates_negative=%s" % [min_x_option2, min_y_option2, creates_negative_option2])
+			print("Option1: max_x=%d, max_y=%d" % [max_x_option1, max_y_option1])
+			print("Option2: max_x=%d, max_y=%d" % [max_x_option2, max_y_option2])
 
 		# Choose the option that avoids negative coordinates
 		# If only one avoids negatives, choose it
@@ -1243,12 +1250,14 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			# Option 1 avoids negatives
 			target_anchor = anchor1
 			source_anchor = anchor2
-			print("→ Chose anchor1 as target (avoids negatives)")
+			if DEBUG_FOLD_EXECUTION:
+				print("→ Chose anchor1 as target (avoids negatives)")
 		elif not creates_negative_option2 and creates_negative_option1:
 			# Option 2 avoids negatives
 			target_anchor = anchor2
 			source_anchor = anchor1
-			print("→ Chose anchor2 as target (avoids negatives)")
+			if DEBUG_FOLD_EXECUTION:
+				print("→ Chose anchor2 as target (avoids negatives)")
 		else:
 			# Both create negatives OR both avoid negatives
 			# Prefer positive expansion (larger max) over negative expansion (negative min)
@@ -1268,11 +1277,13 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 			if badness1 < badness2:
 				target_anchor = anchor1
 				source_anchor = anchor2
-				print("→ Chose anchor1 (less negative expansion: %d vs %d)" % [badness1, badness2])
+				if DEBUG_FOLD_EXECUTION:
+					print("→ Chose anchor1 (less negative expansion: %d vs %d)" % [badness1, badness2])
 			elif badness2 < badness1:
 				target_anchor = anchor2
 				source_anchor = anchor1
-				print("→ Chose anchor2 (less negative expansion: %d vs %d)" % [badness2, badness1])
+				if DEBUG_FOLD_EXECUTION:
+					print("→ Chose anchor2 (less negative expansion: %d vs %d)" % [badness2, badness1])
 			else:
 				# Equal badness - prefer positive expansion
 				var expansion1 = max(max_x_option1, max_y_option1)
@@ -1283,7 +1294,8 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 				else:
 					target_anchor = anchor2
 					source_anchor = anchor1
-				print("→ Equal badness, chose based on expansion")
+				if DEBUG_FOLD_EXECUTION:
+					print("→ Equal badness, chose based on expansion")
 
 	# Convert to LOCAL coordinates (cell centers)
 	var cell_size = grid_manager.cell_size
@@ -1298,34 +1310,35 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	var classification = _classify_cells_for_diagonal_fold(target_anchor, source_anchor, cut_lines)
 
 	# DEBUG: Print classification results
-	print("\n=== Diagonal Fold Classification ===")
-	print("anchor1: %s, anchor2: %s (original parameters)" % [anchor1, anchor2])
-	print("target_anchor: %s, source_anchor: %s (normalized)" % [target_anchor, source_anchor])
-
-	var stationary_positions = []
-	for c in classification.stationary:
-		stationary_positions.append(c.grid_position)
-	print("stationary: %d cells at %s" % [classification.stationary.size(), stationary_positions])
-
-	var line1_positions = []
-	for c in classification.on_line1:
-		line1_positions.append(c.grid_position)
-	print("on_line1: %d cells at %s" % [classification.on_line1.size(), line1_positions])
-
-	var removed_pos_debug = []
-	for c in classification.removed:
-		removed_pos_debug.append(c.grid_position)
-	print("removed: %d cells at %s" % [classification.removed.size(), removed_pos_debug])
-
-	var line2_positions = []
-	for c in classification.on_line2:
-		line2_positions.append(c.grid_position)
-	print("on_line2: %d cells at %s" % [classification.on_line2.size(), line2_positions])
-
-	var shift_positions = []
-	for c in classification.to_shift:
-		shift_positions.append(c.grid_position)
-	print("to_shift: %d cells at %s" % [classification.to_shift.size(), shift_positions])
+	if DEBUG_FOLD_EXECUTION:
+		print("\n=== Diagonal Fold Classification ===")
+		print("anchor1: %s, anchor2: %s (original parameters)" % [anchor1, anchor2])
+		print("target_anchor: %s, source_anchor: %s (normalized)" % [target_anchor, source_anchor])
+		
+		var stationary_positions = []
+		for c in classification.stationary:
+			stationary_positions.append(c.grid_position)
+		print("stationary: %d cells at %s" % [classification.stationary.size(), stationary_positions])
+		
+		var line1_positions = []
+		for c in classification.on_line1:
+			line1_positions.append(c.grid_position)
+		print("on_line1: %d cells at %s" % [classification.on_line1.size(), line1_positions])
+		
+		var removed_pos_debug = []
+		for c in classification.removed:
+			removed_pos_debug.append(c.grid_position)
+		print("removed: %d cells at %s" % [classification.removed.size(), removed_pos_debug])
+		
+		var line2_positions = []
+		for c in classification.on_line2:
+			line2_positions.append(c.grid_position)
+		print("on_line2: %d cells at %s" % [classification.on_line2.size(), line2_positions])
+		
+		var shift_positions = []
+		for c in classification.to_shift:
+			shift_positions.append(c.grid_position)
+		print("to_shift: %d cells at %s" % [classification.to_shift.size(), shift_positions])
 
 	# 3. Split cells on cut lines and store split parts
 	var split_parts_line1 = _process_split_cells_on_line1(classification.on_line1, cut_lines, target_anchor, source_anchor)
