@@ -1399,11 +1399,18 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	create_diagonal_seam_visual(cut_lines)
 
 	# 8. Update player position if affected
-	if player and player.grid_position in classification.to_shift:
-		player.grid_position += Vector2i(shift_vector)
-		var new_cell = grid_manager.get_cell(player.grid_position)
-		if new_cell:
-			player.global_position = grid_manager.to_global(new_cell.get_center())
+	if player:
+		# Build list of positions that are shifting
+		var shifting_positions: Array[Vector2i] = []
+		for cell in classification.to_shift:
+			shifting_positions.append(cell.grid_position)
+
+		# Check if player is on a shifting cell
+		if player.grid_position in shifting_positions:
+			player.grid_position += Vector2i(shift_vector)
+			var new_cell = grid_manager.get_cell(player.grid_position)
+			if new_cell:
+				player.global_position = grid_manager.to_global(new_cell.get_center())
 
 	# 9. Record fold operation
 	var removed_positions: Array[Vector2i] = []
@@ -1603,12 +1610,13 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 		# Update cell position
 		cell.grid_position = new_pos
 
-		# Translate geometry
+		# Translate geometry for ALL pieces (Phase 5 multi-polygon support)
 		var shift_pixels = Vector2(shift_vector) * grid_manager.cell_size
-		var new_geometry = PackedVector2Array()
-		for vertex in cell.geometry:
-			new_geometry.append(vertex + shift_pixels)
-		cell.geometry = new_geometry
+		for piece in cell.geometry_pieces:
+			var new_geometry = PackedVector2Array()
+			for vertex in piece.geometry:
+				new_geometry.append(vertex + shift_pixels)
+			piece.geometry = new_geometry
 		cell.update_visual()
 
 	# PASS 2: Place cells at new positions and handle REAL merges
