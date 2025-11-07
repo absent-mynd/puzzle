@@ -45,6 +45,10 @@ var fragments: Array[CellFragment] = []
 ## Array indices match fragments array (fragment[i] → polygon_visuals[i])
 var polygon_visuals: Array[Polygon2D] = []
 
+## Border lines - one Line2D per fragment for permanent outlines
+## Array indices match fragments array (fragment[i] → border_lines[i])
+var border_lines: Array[Line2D] = []
+
 
 ## ============================================================================
 ## PROPERTIES - Fold History (for Undo System)
@@ -113,6 +117,15 @@ func add_fragment(frag: CellFragment):
 	add_child(polygon)
 	polygon_visuals.append(polygon)
 
+	# Create border line for this fragment
+	var border = Line2D.new()
+	border.points = frag.geometry
+	border.width = 2.0
+	border.closed = true
+	border.default_color = darken_color(get_cell_color(), 0.6)
+	add_child(border)
+	border_lines.append(border)
+
 
 ## Remove a specific fragment by index
 ##
@@ -129,6 +142,11 @@ func remove_fragment(index: int):
 		polygon_visuals.remove_at(index)
 		poly.queue_free()
 
+	if index < border_lines.size():
+		var border = border_lines[index]
+		border_lines.remove_at(index)
+		border.queue_free()
+
 
 ## Remove all fragments and their visuals
 ## Used when cell is being deleted
@@ -138,6 +156,10 @@ func clear_fragments():
 	for poly in polygon_visuals:
 		poly.queue_free()
 	polygon_visuals.clear()
+
+	for border in border_lines:
+		border.queue_free()
+	border_lines.clear()
 
 
 ## Get number of fragments in this cell
@@ -356,14 +378,29 @@ func get_cell_color() -> Color:
 		_: return Color(1.0, 1.0, 1.0)  # Default - white
 
 
+## Darken a color by a given factor
+## Used for cell borders to create visual depth
+##
+## @param color: The color to darken
+## @param factor: How much to darken (0.0 = black, 1.0 = unchanged)
+## @return: Darkened color
+func darken_color(color: Color, factor: float = 0.7) -> Color:
+	return Color(color.r * factor, color.g * factor, color.b * factor, color.a)
+
+
 ## Update all fragment visuals (geometry and color)
 ## Call this after geometry changes or cell type changes
 func update_all_visuals():
 	var color = get_cell_color()
+	var border_color = darken_color(color, 0.6)
 
 	for i in range(min(fragments.size(), polygon_visuals.size())):
 		polygon_visuals[i].polygon = fragments[i].geometry
 		polygon_visuals[i].color = color
+
+	for i in range(min(fragments.size(), border_lines.size())):
+		border_lines[i].points = fragments[i].geometry
+		border_lines[i].default_color = border_color
 
 	queue_redraw()  # Trigger redraw for outlines/hover
 
