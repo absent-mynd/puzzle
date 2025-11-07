@@ -1163,31 +1163,127 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 ## @param anchor2: Second anchor grid position (shifting side)
 func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	# NORMALIZE ANCHORS to avoid negative coordinate shifts
-	# Strategy: Choose target anchor that maximizes positive shift directions
-	# shift_vector = target - source, so we want target to be "larger" than source
-	# This ensures cells shift toward positive coordinates (right/down)
+	# Paper-folding interpretation: one cut line stays fixed, other moves toward it
+	# Strategy: Choose target anchor to keep all shifted cells in positive quadrant (no negative rows/columns)
 	var target_anchor: Vector2i
 	var source_anchor: Vector2i
 
-	# Use the "larger" anchor as target (more right + more down = larger)
-	# This ensures shift_vector components are as positive as possible
-	var anchor1_score = anchor1.x + anchor1.y
-	var anchor2_score = anchor2.x + anchor2.y
+	# Check if this is axis-aligned (horizontal or vertical fold)
+	var is_horizontal = anchor1.y == anchor2.y
+	var is_vertical = anchor1.x == anchor2.x
 
-	if anchor1_score > anchor2_score:
-		target_anchor = anchor1
-		source_anchor = anchor2
-	elif anchor2_score > anchor1_score:
-		target_anchor = anchor2
-		source_anchor = anchor1
-	else:
-		# Equal scores - prefer the one with larger x (rightmost)
-		if anchor1.x >= anchor2.x:
+	if is_horizontal:
+		# Horizontal fold - always shift toward LEFT-most anchor (simple, no negatives possible)
+		if anchor1.x < anchor2.x:
 			target_anchor = anchor1
 			source_anchor = anchor2
 		else:
 			target_anchor = anchor2
 			source_anchor = anchor1
+		print("\n=== Axis-Aligned Horizontal Fold ===")
+		print("Chose left-most anchor: target=%s, source=%s" % [target_anchor, source_anchor])
+	elif is_vertical:
+		# Vertical fold - always shift toward TOP-most anchor (simple, no negatives possible)
+		if anchor1.y < anchor2.y:
+			target_anchor = anchor1
+			source_anchor = anchor2
+		else:
+			target_anchor = anchor2
+			source_anchor = anchor1
+		print("\n=== Axis-Aligned Vertical Fold ===")
+		print("Chose top-most anchor: target=%s, source=%s" % [target_anchor, source_anchor])
+	else:
+		# TRUE DIAGONAL FOLD - use negative-avoidance algorithm
+		# Calculate both possible shift vectors
+		var shift_if_anchor1_target = anchor1 - anchor2  # anchor2 side shifts toward anchor1
+		var shift_if_anchor2_target = anchor2 - anchor1  # anchor1 side shifts toward anchor1
+
+		# Get actual grid bounds from existing cells
+		var min_existing_x = 0
+		var max_existing_x = grid_manager.grid_size.x - 1
+		var min_existing_y = 0
+		var max_existing_y = grid_manager.grid_size.y - 1
+
+		for pos in grid_manager.cells.keys():
+			min_existing_x = min(min_existing_x, pos.x)
+			max_existing_x = max(max_existing_x, pos.x)
+			min_existing_y = min(min_existing_y, pos.y)
+			max_existing_y = max(max_existing_y, pos.y)
+
+		# For each option, calculate if x or y would go negative
+		# We want to avoid BOTH negative x AND negative y
+		var min_x_option1 = min_existing_x + shift_if_anchor1_target.x
+		var min_y_option1 = min_existing_y + shift_if_anchor1_target.y
+		var creates_negative_option1 = (min_x_option1 < 0) or (min_y_option1 < 0)
+
+		var min_x_option2 = min_existing_x + shift_if_anchor2_target.x
+		var min_y_option2 = min_existing_y + shift_if_anchor2_target.y
+		var creates_negative_option2 = (min_x_option2 < 0) or (min_y_option2 < 0)
+
+		# Also calculate maximum coordinates (for positive expansion preference)
+		var max_x_option1 = max_existing_x + shift_if_anchor1_target.x
+		var max_y_option1 = max_existing_y + shift_if_anchor1_target.y
+		var max_x_option2 = max_existing_x + shift_if_anchor2_target.x
+		var max_y_option2 = max_existing_y + shift_if_anchor2_target.y
+
+		# DEBUG: Print normalization decision
+		print("\n=== Diagonal Fold Normalization ===")
+		print("anchor1=%s, anchor2=%s" % [anchor1, anchor2])
+		print("shift_if_anchor1_target=%s, shift_if_anchor2_target=%s" % [shift_if_anchor1_target, shift_if_anchor2_target])
+		print("Grid bounds: x=[%d,%d], y=[%d,%d]" % [min_existing_x, max_existing_x, min_existing_y, max_existing_y])
+		print("Option1: min_x=%d, min_y=%d, creates_negative=%s" % [min_x_option1, min_y_option1, creates_negative_option1])
+		print("Option2: min_x=%d, min_y=%d, creates_negative=%s" % [min_x_option2, min_y_option2, creates_negative_option2])
+		print("Option1: max_x=%d, max_y=%d" % [max_x_option1, max_y_option1])
+		print("Option2: max_x=%d, max_y=%d" % [max_x_option2, max_y_option2])
+
+		# Choose the option that avoids negative coordinates
+		# If only one avoids negatives, choose it
+		# If both avoid or both create negatives, prefer positive expansion over negative
+		if not creates_negative_option1 and creates_negative_option2:
+			# Option 1 avoids negatives
+			target_anchor = anchor1
+			source_anchor = anchor2
+			print("→ Chose anchor1 as target (avoids negatives)")
+		elif not creates_negative_option2 and creates_negative_option1:
+			# Option 2 avoids negatives
+			target_anchor = anchor2
+			source_anchor = anchor1
+			print("→ Chose anchor2 as target (avoids negatives)")
+		else:
+			# Both create negatives OR both avoid negatives
+			# Prefer positive expansion (larger max) over negative expansion (negative min)
+			# Calculate "badness" score: negative values are bad, positive expansion is ok
+			var badness1 = 0
+			if min_x_option1 < 0:
+				badness1 += abs(min_x_option1)
+			if min_y_option1 < 0:
+				badness1 += abs(min_y_option1)
+
+			var badness2 = 0
+			if min_x_option2 < 0:
+				badness2 += abs(min_x_option2)
+			if min_y_option2 < 0:
+				badness2 += abs(min_y_option2)
+
+			if badness1 < badness2:
+				target_anchor = anchor1
+				source_anchor = anchor2
+				print("→ Chose anchor1 (less negative expansion: %d vs %d)" % [badness1, badness2])
+			elif badness2 < badness1:
+				target_anchor = anchor2
+				source_anchor = anchor1
+				print("→ Chose anchor2 (less negative expansion: %d vs %d)" % [badness2, badness1])
+			else:
+				# Equal badness - prefer positive expansion
+				var expansion1 = max(max_x_option1, max_y_option1)
+				var expansion2 = max(max_x_option2, max_y_option2)
+				if expansion1 <= expansion2:
+					target_anchor = anchor1
+					source_anchor = anchor2
+				else:
+					target_anchor = anchor2
+					source_anchor = anchor1
+				print("→ Equal badness, chose based on expansion")
 
 	# Convert to LOCAL coordinates (cell centers)
 	var cell_size = grid_manager.cell_size
