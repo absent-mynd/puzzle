@@ -1615,7 +1615,7 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 		var existing = grid_manager.get_cell(new_pos)
 		if existing:
 			# Merge with existing cell (this is a REAL collision, not a false one)
-			_merge_cells_simple(existing, cell, new_pos)
+			_merge_cells_multi_polygon(existing, cell, new_pos)
 		else:
 			# Place cell at new position
 			grid_manager.cells[new_pos] = cell
@@ -1641,27 +1641,39 @@ func _merge_split_parts_at_anchor1(split_parts: Array, anchor1: Vector2i):
 				part_cell.queue_free()
 
 
-## Simple cell merge - combines two cells at the same position
-## In full implementation, this would do proper polygon union
+## PHASE 5: Multi-polygon cell merge
+##
+## Merges two cells by transferring all pieces from incoming to existing.
+## This maintains visual distinction between different cell types instead
+## of performing geometric union.
 ##
 ## @param existing: Cell already at the position
 ## @param incoming: Cell being moved to this position
 ## @param pos: Grid position where merge occurs
-func _merge_cells_simple(existing: Cell, incoming: Cell, pos: Vector2i):
-	# Mark both as partial (they've been affected by folds)
+func _merge_cells_multi_polygon(existing: Cell, incoming: Cell, pos: Vector2i):
+	# Mark both as affected by merge
 	existing.is_partial = true
 	incoming.is_partial = true
 
-	# For now, keep the existing cell and free the incoming one
-	# A full implementation would:
-	# 1. Combine geometries (polygon union)
-	# 2. Merge seam data
-	# 3. Create visual indication of the merge
+	# Transfer all pieces from incoming to existing
+	for piece in incoming.geometry_pieces:
+		var piece_copy = piece.duplicate_piece()
+		existing.add_piece(piece_copy)
 
-	# Update visual to show it's been merged
+	# Update dominant cell type based on new composition
+	# (add_piece already does this, but be explicit)
+	existing.cell_type = existing.get_dominant_type()
+
+	# Update visual to show all pieces
 	existing.update_visual()
 
-	# Free the incoming cell
+	# Free the incoming cell (its pieces are now in existing)
 	incoming.queue_free()
 
-	# Keep existing cell in dictionary (already there)
+	# Log merge for debugging (if enabled)
+	if DEBUG_FOLD_EXECUTION:
+		print("  Merged cells at %s: now has %d pieces with types %s" % [
+			pos,
+			existing.geometry_pieces.size(),
+			existing.get_cell_types()
+		])

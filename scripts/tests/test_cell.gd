@@ -247,3 +247,200 @@ func test_multiple_cells_independence():
 
 	cell1.free()
 	cell2.free()
+
+
+## ============================================================================
+## PHASE 5: MULTI-POLYGON SUPPORT TESTS
+## ============================================================================
+
+## Test: Cell initializes with one piece
+func test_multi_piece_cell_creation():
+	var cell = Cell.new(Vector2i(1, 1), Vector2(64, 64), CELL_SIZE)
+
+	assert_eq(cell.geometry_pieces.size(), 1, "New cell should have 1 piece")
+	assert_not_null(cell.geometry_pieces[0], "First piece should exist")
+	assert_eq(cell.geometry_pieces[0].geometry.size(), 4, "First piece should be a square")
+
+	cell.free()
+
+
+## Test: Add piece to cell
+func test_add_piece_to_cell():
+	var cell = Cell.new(Vector2i(1, 1), Vector2(64, 64), CELL_SIZE)
+
+	var new_geometry = PackedVector2Array([
+		Vector2(128, 64), Vector2(192, 64),
+		Vector2(192, 128), Vector2(128, 128)
+	])
+	var new_piece = CellPiece.new(new_geometry, 1, 0)  # Wall
+
+	cell.add_piece(new_piece)
+
+	assert_eq(cell.geometry_pieces.size(), 2, "Cell should have 2 pieces after adding")
+
+	cell.free()
+
+
+## Test: Get cell types from multi-piece cell
+func test_get_cell_types():
+	var cell = Cell.new(Vector2i(1, 1), Vector2(64, 64), CELL_SIZE)
+
+	# Initial cell has type 0 (empty)
+	var types = cell.get_cell_types()
+	assert_eq(types.size(), 1, "Should have 1 type initially")
+	assert_has(types, 0, "Should contain empty type")
+
+	# Add pieces of different types
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 1, 0))  # Wall
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 2, 1))  # Water
+
+	types = cell.get_cell_types()
+	assert_eq(types.size(), 3, "Should have 3 types")
+	assert_has(types, 0, "Should contain empty type")
+	assert_has(types, 1, "Should contain wall type")
+	assert_has(types, 2, "Should contain water type")
+
+	cell.free()
+
+
+## Test: Dominant type - Goal dominates all
+func test_get_dominant_type_goal():
+	var cell = Cell.new(Vector2i(1, 1), Vector2(64, 64), CELL_SIZE)
+
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 1, 0))  # Wall
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 2, 1))  # Water
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 3, 2))  # Goal
+
+	assert_eq(cell.get_dominant_type(), 3, "Goal should dominate")
+
+	cell.free()
+
+
+## Test: Dominant type - Wall dominates water and empty
+func test_get_dominant_type_wall():
+	var cell = Cell.new(Vector2i(1, 1), Vector2(64, 64), CELL_SIZE)
+
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 2, 0))  # Water
+
+	assert_eq(cell.get_dominant_type(), 2, "Water should dominate empty")
+
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 1, 1))  # Wall
+
+	assert_eq(cell.get_dominant_type(), 1, "Wall should dominate over water")
+
+	cell.free()
+
+
+## Test: Dominant type - Water dominates empty
+func test_get_dominant_type_water():
+	var cell = Cell.new(Vector2i(1, 1), Vector2(64, 64), CELL_SIZE)
+
+	# Initial piece is empty (type 0)
+	assert_eq(cell.get_dominant_type(), 0, "Should be empty initially")
+
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 2, 0))  # Water
+
+	assert_eq(cell.get_dominant_type(), 2, "Water should dominate empty")
+
+	cell.free()
+
+
+## Test: has_cell_type()
+func test_has_cell_type():
+	var cell = Cell.new(Vector2i(1, 1), Vector2(64, 64), CELL_SIZE)
+
+	# Initial cell has type 0
+	assert_true(cell.has_cell_type(0), "Should have empty type")
+	assert_false(cell.has_cell_type(1), "Should not have wall type")
+
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 2, 0))  # Water
+
+	assert_true(cell.has_cell_type(0), "Should still have empty type")
+	assert_true(cell.has_cell_type(2), "Should have water type")
+	assert_false(cell.has_cell_type(1), "Should not have wall type")
+
+	cell.free()
+
+
+## Test: get_total_area()
+func test_get_total_area():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+
+	# Initial square 64x64 = 4096
+	var initial_area = cell.get_total_area()
+	assert_almost_eq(initial_area, 4096.0, 0.1, "Initial area should be 4096")
+
+	# Add another 64x64 piece
+	var piece_geometry = PackedVector2Array([
+		Vector2(64, 0), Vector2(128, 0),
+		Vector2(128, 64), Vector2(64, 64)
+	])
+	cell.add_piece(CellPiece.new(piece_geometry, 1, 0))
+
+	var total_area = cell.get_total_area()
+	assert_almost_eq(total_area, 8192.0, 0.1, "Total area should be 8192 (two 64x64 squares)")
+
+	cell.free()
+
+
+## Test: get_center() with multiple pieces
+func test_get_center_multi_piece():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+
+	# Initial piece centered at (32, 32)
+	var center1 = cell.get_center()
+	assert_almost_eq(center1.x, 32.0, 0.1, "Single piece center x should be 32")
+	assert_almost_eq(center1.y, 32.0, 0.1, "Single piece center y should be 32")
+
+	# Add piece to the right (64-128, 0-64), centered at (96, 32)
+	var piece_geometry = PackedVector2Array([
+		Vector2(64, 0), Vector2(128, 0),
+		Vector2(128, 64), Vector2(64, 64)
+	])
+	cell.add_piece(CellPiece.new(piece_geometry, 1, 0))
+
+	# Weighted center should be at (64, 32) - midpoint between two equal-area pieces
+	var center2 = cell.get_center()
+	assert_almost_eq(center2.x, 64.0, 0.1, "Multi-piece center x should be 64")
+	assert_almost_eq(center2.y, 32.0, 0.1, "Multi-piece center y should be 32")
+
+	cell.free()
+
+
+## Test: Legacy geometry accessor
+func test_geometry_accessor_backward_compatibility():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+
+	# Getter should return first piece's geometry
+	assert_eq(cell.geometry.size(), 4, "Geometry getter should return 4 vertices")
+
+	# Setter should update first piece
+	var new_geometry = PackedVector2Array([
+		Vector2(10, 10), Vector2(50, 10),
+		Vector2(50, 50), Vector2(10, 50)
+	])
+	cell.geometry = new_geometry
+
+	assert_eq(cell.geometry_pieces[0].geometry.size(), 4, "First piece should have updated geometry")
+	assert_eq(cell.geometry_pieces[0].geometry[0], Vector2(10, 10), "First vertex should match")
+
+	cell.free()
+
+
+## Test: add_piece updates dominant type
+func test_add_piece_updates_dominant_type():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+
+	assert_eq(cell.cell_type, 0, "Initial cell_type should be 0 (empty)")
+
+	# Add wall piece
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 1, 0))
+
+	assert_eq(cell.cell_type, 1, "cell_type should update to 1 (wall) after adding wall piece")
+
+	# Add goal piece
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 3, 1))
+
+	assert_eq(cell.cell_type, 3, "cell_type should update to 3 (goal) after adding goal piece")
+
+	cell.free()
