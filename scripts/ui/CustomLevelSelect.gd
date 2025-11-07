@@ -25,7 +25,7 @@ func populate_levels() -> void:
 	if level_files.is_empty():
 		# Show "no levels" message
 		var label = Label.new()
-		label.text = "No custom levels found."
+		label.text = "No custom levels found. Create one in the Level Editor!"
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.add_theme_font_size_override("font_size", 24)
 		level_grid.add_child(label)
