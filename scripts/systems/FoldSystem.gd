@@ -290,25 +290,65 @@ func get_fold_distance(anchor1: Vector2i, anchor2: Vector2i) -> int:
 		return -1  # Invalid for diagonal folds
 
 
-## Create a fold record for the history system
+## Create a fold record for the history system (ENHANCED for Phase 5/6)
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 ## @param removed_cells: Array of cells that were removed
-## @param orientation: Fold orientation ("horizontal" or "vertical")
-## @return: Dictionary containing fold metadata
+## @param orientation: Fold orientation ("horizontal", "vertical", "diagonal")
+## @return: Dictionary containing fold metadata and complete grid state
 func create_fold_record(anchor1: Vector2i, anchor2: Vector2i, removed_cells: Array[Vector2i], orientation: String) -> Dictionary:
+	# Serialize all cells in the grid (BEFORE the fold)
+	var cells_state = serialize_grid_state()
+
+	# Store player position (if player exists)
+	var player_position = Vector2i(-1, -1)
+	if player:
+		player_position = player.grid_position
+
 	var record = {
 		"fold_id": next_fold_id,
 		"anchor1": anchor1,
 		"anchor2": anchor2,
 		"removed_cells": removed_cells.duplicate(),
 		"orientation": orientation,
-		"timestamp": Time.get_ticks_msec()
+		"timestamp": Time.get_ticks_msec(),
+		"cells_state": cells_state,  # Complete cell state snapshot
+		"player_position": player_position,  # Player position before fold
+		"fold_count": GameManager.fold_count if GameManager else 0  # Global fold counter
 	}
 
 	next_fold_id += 1
 	return record
+
+
+## Serialize the entire grid state (all cells)
+##
+## @return: Dictionary mapping grid positions to cell state dictionaries
+func serialize_grid_state() -> Dictionary:
+	var state = {}
+
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[pos]
+		if cell:
+			state[var_to_str(pos)] = cell.to_dict()
+
+	return state
+
+
+## Deserialize grid state from a fold record
+##
+## @param state: Dictionary mapping grid positions to cell state dictionaries
+## @return: Dictionary of restored cell states (without visual nodes)
+func deserialize_grid_state(state: Dictionary) -> Dictionary:
+	var restored_cells = {}
+
+	for pos_str in state.keys():
+		var cell_data = state[pos_str]
+		# Store the cell data - actual Cell node creation happens in undo system
+		restored_cells[pos_str] = cell_data
+
+	return restored_cells
 
 
 ## Animation Methods (Issue #9)

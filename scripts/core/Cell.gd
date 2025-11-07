@@ -288,3 +288,31 @@ func apply_split(split_result: Dictionary, line_point: Vector2, line_normal: Vec
 	new_cell.update_visual()
 
 	return new_cell
+
+
+## ============================================================================
+## SERIALIZATION (FOR FOLD HISTORY AND UNDO SYSTEM)
+## ============================================================================
+
+## Serialize cell to dictionary (for fold history/save states)
+##
+## @return: Dictionary containing all cell data
+func to_dict() -> Dictionary:
+	var geometry_array = []
+	for v in geometry:
+		geometry_array.append({"x": v.x, "y": v.y})
+
+	return {
+		"grid_position": {"x": grid_position.x, "y": grid_position.y},
+		"geometry": geometry_array,
+		"cell_type": cell_type,
+		"is_partial": is_partial,
+		"seams": seams.duplicate(true)  # Deep copy
+	}
+
+
+## Create a cell state snapshot (excludes visual nodes)
+##
+## @return: Dictionary containing cell state data only
+func create_state_snapshot() -> Dictionary:
+	return to_dict()
