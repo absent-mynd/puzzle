@@ -1531,15 +1531,19 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 	# Combine regular cells with split cells from line2
 	var all_shifting = cells_to_shift + additional_cells
 
-	# Process each shifting cell
+	# TWO-PASS APPROACH to avoid false collisions:
+	# Pass 1: Remove all cells from old positions and update their properties
+	# Pass 2: Place all cells at new positions (checking for REAL collisions)
+
+	# PASS 1: Remove from old positions and update cell data
 	for cell in all_shifting:
 		var old_pos = cell.grid_position
 		var new_pos = old_pos + shift_vector
 
-		# Remove from old position first
+		# Remove from old position
 		grid_manager.cells.erase(old_pos)
 
-		# Update cell position (allow negative coordinates - grid can expand)
+		# Update cell position
 		cell.grid_position = new_pos
 
 		# Translate geometry
@@ -1550,15 +1554,17 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 		cell.geometry = new_geometry
 		cell.update_visual()
 
-		# Check if new position is occupied - need to merge
+	# PASS 2: Place cells at new positions and handle REAL merges
+	for cell in all_shifting:
+		var new_pos = cell.grid_position
+
+		# Check if new position is already occupied (by a cell NOT in shift queue)
 		var existing = grid_manager.get_cell(new_pos)
 		if existing:
-			# Merge geometries by creating a compound cell
-			# For now, simple approach: keep both as separate cells with seam indicator
-			# Full polygon union would be more complex
+			# Merge with existing cell (this is a REAL collision, not a false one)
 			_merge_cells_simple(existing, cell, new_pos)
 		else:
-			# Place cell at new position (even if outside original grid bounds)
+			# Place cell at new position
 			grid_manager.cells[new_pos] = cell
 
 
