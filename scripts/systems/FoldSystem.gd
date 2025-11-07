@@ -1509,10 +1509,12 @@ func _process_split_cells_on_line1(cells: Array, cut_lines: Dictionary, anchor1:
 
 		if split_result.intersections.size() > 0:
 			# Update cell geometry to kept side
+			# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
+			# So we swap the assignment to get the correct polygon half
 			if keep_side == "left":
-				cell.geometry = split_result.left
+				cell.geometry = split_result.right  # SWAPPED: use right for left
 			else:
-				cell.geometry = split_result.right
+				cell.geometry = split_result.left   # SWAPPED: use left for right
 
 			cell.is_partial = true
 			cell.update_visual()
@@ -1549,10 +1551,12 @@ func _process_split_cells_on_line2(cells: Array, cut_lines: Dictionary, anchor1:
 
 		if split_result.intersections.size() > 0:
 			# Update cell geometry to kept side
+			# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
+			# So we swap the assignment to get the correct polygon half
 			if keep_side == "left":
-				cell.geometry = split_result.left
+				cell.geometry = split_result.right  # SWAPPED: use right for left
 			else:
-				cell.geometry = split_result.right
+				cell.geometry = split_result.left   # SWAPPED: use left for right
 
 			cell.is_partial = true
 			cell.update_visual()

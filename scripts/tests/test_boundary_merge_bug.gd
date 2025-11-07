@@ -19,6 +19,114 @@ func before_each():
 	fold_system.grid_manager = grid_manager
 
 
+func test_diagonal_merge_correct_polygon_orientation():
+	print("\n╔════════════════════════════════════════════╗")
+	print("║  DIAGONAL MERGE - POLYGON ORIENTATION BUG  ║")
+	print("║  Testing (0,0) wall + (1,1) ground merge   ║")
+	print("╚════════════════════════════════════════════╝\n")
+
+	# Set up a specific scenario:
+	# - Cell (0,0) is a WALL
+	# - Cell (1,1) is EMPTY (ground)
+	# - Diagonal fold with anchors at (0,0) and (1,1)
+	# - Expected: merged cell should have wall piece in TOP-LEFT, ground piece in BOTTOM-RIGHT
+	# - Bug: merged cell has wall piece in BOTTOM-RIGHT, ground piece in TOP-LEFT (inverted!)
+
+	var cell_00 = grid_manager.get_cell(Vector2i(0, 0))
+	var cell_11 = grid_manager.get_cell(Vector2i(1, 1))
+
+	cell_00.set_cell_type(1)  # Wall
+	cell_11.set_cell_type(0)  # Ground (empty)
+
+	print("BEFORE fold:")
+	print("  Cell (0,0): type=%d (wall)" % cell_00.cell_type)
+	print("  Cell (1,1): type=%d (ground)" % cell_11.cell_type)
+	print("")
+
+	# Execute diagonal fold
+	var anchor1 = Vector2i(0, 0)
+	var anchor2 = Vector2i(1, 1)
+	fold_system.execute_diagonal_fold(anchor1, anchor2)
+
+	print("AFTER fold:")
+
+	# Find which cells still exist
+	print("  Searching for cells...")
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[pos]
+		if cell:
+			print("    Cell at %s: type=%d, partial=%s, pieces=%d" % [pos, cell.cell_type, cell.is_partial, cell.geometry_pieces.size()])
+
+	# The anchor cells should be merged
+	var cell_00_after = grid_manager.get_cell(Vector2i(0, 0))
+	var cell_11_after = grid_manager.get_cell(Vector2i(1, 1))
+
+	# At least ONE anchor should have a merged cell
+	if not cell_00_after and not cell_11_after:
+		print("  ERROR: Both anchor cells are gone!")
+		assert_true(cell_00_after != null or cell_11_after != null, "At least one anchor cell should exist")
+		return
+
+	# Use whichever cell exists
+	var merged_cell = cell_00_after if cell_00_after else cell_11_after
+	var merged_pos = Vector2i(0, 0) if cell_00_after else Vector2i(1, 1)
+
+	print("")
+	print("  Merged cell is at position %s" % merged_pos)
+	print("  Pieces: %d" % merged_cell.geometry_pieces.size())
+
+	print("")
+
+	# Check which piece type is where in the geometry
+	var bug_detected = false
+
+	# The merged cell should have 2 pieces (wall + ground)
+	if merged_cell.geometry_pieces.size() < 2:
+		print("  ERROR: Merged cell only has %d piece(s), expected 2" % merged_cell.geometry_pieces.size())
+		return
+
+	# Find the wall piece and ground piece
+	var wall_piece = null
+	var ground_piece = null
+
+	for piece in merged_cell.geometry_pieces:
+		if piece.cell_type == 1:
+			wall_piece = piece
+		elif piece.cell_type == 0:
+			ground_piece = piece
+
+	if not wall_piece or not ground_piece:
+		print("  ERROR: Could not find both wall and ground pieces!")
+		print("  Pieces found: %s" % [merged_cell.geometry_pieces.map(func(p): return p.cell_type)])
+		return
+
+	# Check orientations
+	var wall_center = wall_piece.get_center()
+	var ground_center = ground_piece.get_center()
+
+	print("  Wall piece center: (%.1f, %.1f)" % [wall_center.x, wall_center.y])
+	print("  Ground piece center: (%.1f, %.1f)" % [ground_center.x, ground_center.y])
+	print("")
+
+	# The diagonal goes from (0,0) to (64,64)
+	# Wall started at (0,0), so wall piece should be in top-left (lower x, lower y)
+	# Ground started at (1,1), so ground piece should be in bottom-right (higher x, higher y)
+
+	if wall_center.x > ground_center.x or wall_center.y > ground_center.y:
+		print("  ❌ BUG DETECTED: Wall piece is in bottom-right, ground piece is in top-left")
+		print("  This is backwards - they should be swapped!")
+		bug_detected = true
+	else:
+		print("  ✅ Correct: Wall piece is in top-left, ground piece is in bottom-right")
+
+	if bug_detected:
+		print("❌ BUG CONFIRMED: Split polygons are on wrong side of seam!")
+	else:
+		print("✅ No polygon orientation bug detected")
+
+	assert_false(bug_detected, "Split polygons should be on correct side of seam")
+
+
 func test_boundary_merge_keeps_correct_seam_side():
 	print("\n╔════════════════════════════════════════════╗")
 	print("║  BOUNDARY MERGE BUG TEST                   ║")
