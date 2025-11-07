@@ -16,8 +16,10 @@ var geometry_pieces: Array[CellPiece] = []  # PHASE 5: Array of geometric pieces
 var cell_type: int = 0             # 0=empty, 1=wall, 2=water, 3=goal (dominant type)
 var is_partial: bool = false       # True if cell has been split
 var seams: Array[Dictionary] = []  # Track seam information (legacy)
-var polygon_visual: Polygon2D      # Visual representation
+var polygon_visual: Polygon2D      # Visual representation (legacy - first piece)
 var border_line: Line2D            # Cell border/outline
+var piece_visuals: Node2D = null   # PHASE 5: Container for multi-piece visuals
+var seam_visuals: Node2D = null    # PHASE 5: Container for seam lines
 
 ## Legacy geometry accessor for backward compatibility
 ## Returns geometry of first piece, or empty array if no pieces
@@ -78,6 +80,17 @@ func _init(pos: Vector2i, local_pos: Vector2, size: float):
 	highlight_overlay.color = Color.TRANSPARENT
 	highlight_overlay.z_index = 1  # Above the main visual
 	add_child(highlight_overlay)
+
+	# PHASE 5: Create containers for multi-piece rendering
+	piece_visuals = Node2D.new()
+	piece_visuals.name = "PieceVisuals"
+	piece_visuals.z_index = 0  # Below highlight
+	add_child(piece_visuals)
+
+	seam_visuals = Node2D.new()
+	seam_visuals.name = "SeamVisuals"
+	seam_visuals.z_index = 2  # Above everything
+	add_child(seam_visuals)
 
 	update_visual()
 
@@ -144,34 +157,82 @@ func set_cell_type(type: int):
 
 ## Update the visual representation of the cell
 ##
-## Refreshes the Polygon2D node with current geometry and applies
-## the appropriate color based on cell_type. Also updates the border
-## outline to follow the cell's perimeter.
-##
-## PHASE 5: Currently renders first piece only. Task 7 will add
-## multi-piece rendering with separate visuals for each piece.
+## PHASE 5: Renders all pieces with separate visuals for multi-polygon cells.
+## Each piece gets its own Polygon2D with type-appropriate coloring and borders.
 func update_visual():
-	if polygon_visual and not geometry_pieces.is_empty():
-		# For now, render the first piece (will be enhanced in Task 7)
-		polygon_visual.polygon = geometry_pieces[0].geometry
-		var cell_color = get_cell_color()
-		polygon_visual.color = cell_color
+	if geometry_pieces.is_empty():
+		return
 
-		# Update border outline - use first piece geometry
+	# Clear existing piece visuals
+	if piece_visuals:
+		for child in piece_visuals.get_children():
+			piece_visuals.remove_child(child)
+			child.queue_free()
+
+	# If single piece, use legacy rendering for backward compatibility
+	if geometry_pieces.size() == 1:
+		if polygon_visual:
+			polygon_visual.polygon = geometry_pieces[0].geometry
+			polygon_visual.color = get_cell_color_for_type(geometry_pieces[0].cell_type)
+			polygon_visual.visible = true
+
 		if border_line:
 			border_line.points = geometry_pieces[0].geometry
-			border_line.default_color = darken_color(cell_color, 0.6)
+			border_line.default_color = darken_color(polygon_visual.color, 0.6)
+			border_line.visible = true
 
-		# Update highlight overlay geometry to match cell
+		# Update highlight overlay
+		if highlight_overlay:
+			highlight_overlay.polygon = geometry_pieces[0].geometry
+	else:
+		# Multi-piece rendering: hide legacy visuals, use piece_visuals container
+		if polygon_visual:
+			polygon_visual.visible = false
+		if border_line:
+			border_line.visible = false
+
+		# Create separate visual for each piece
+		for i in range(geometry_pieces.size()):
+			var piece = geometry_pieces[i]
+
+			# Create polygon visual for this piece
+			var piece_polygon = Polygon2D.new()
+			piece_polygon.polygon = piece.geometry
+			piece_polygon.color = get_cell_color_for_type(piece.cell_type)
+			piece_polygon.name = "Piece_%d" % i
+			piece_visuals.add_child(piece_polygon)
+
+			# Create border for this piece
+			var piece_border = Line2D.new()
+			piece_border.points = piece.geometry
+			piece_border.closed = true
+			piece_border.width = 1.5
+			piece_border.default_color = darken_color(piece_polygon.color, 0.6)
+			piece_border.name = "PieceBorder_%d" % i
+			piece_visuals.add_child(piece_border)
+
+		# Update highlight overlay to cover all pieces (use first piece's geometry)
 		if highlight_overlay:
 			highlight_overlay.polygon = geometry_pieces[0].geometry
 
+	# Visualize seams if multiple pieces exist
+	if geometry_pieces.size() > 1:
+		visualize_seams()
 
-## Get the color for the current cell type
+
+## Get the color for the current cell type (using cell_type property)
 ##
 ## @return: Color based on cell_type
 func get_cell_color() -> Color:
-	match cell_type:
+	return get_cell_color_for_type(cell_type)
+
+
+## Get the color for a specific cell type
+##
+## @param type: Cell type (0=empty, 1=wall, 2=water, 3=goal)
+## @return: Color for the given type
+func get_cell_color_for_type(type: int) -> Color:
+	match type:
 		0: return Color(0.8, 0.8, 0.8)  # Empty - light gray
 		1: return Color(0.2, 0.2, 0.2)  # Wall - dark gray
 		2: return Color(0.2, 0.4, 1.0)  # Water - blue
@@ -280,6 +341,49 @@ func update_highlight():
 		highlight_overlay.z_index = 0
 
 
+## Visualize seams between pieces (PHASE 5)
+##
+## Draws seam lines to show where folds have split the cell.
+## Seams are rendered as colored lines based on fold order.
+func visualize_seams():
+	if not seam_visuals:
+		return
+
+	# Clear existing seam visuals
+	for child in seam_visuals.get_children():
+		seam_visuals.remove_child(child)
+		child.queue_free()
+
+	# Collect all unique seams across all pieces
+	var all_seams = get_all_seams()
+
+	# Draw each seam as a line
+	for seam in all_seams:
+		var seam_line = Line2D.new()
+		seam_line.points = seam.intersection_points
+		seam_line.width = 2.0
+		seam_line.default_color = get_seam_color(seam.fold_id)
+		seam_line.name = "Seam_Fold_%d" % seam.fold_id
+		seam_visuals.add_child(seam_line)
+
+
+## Get a color for a seam based on fold ID
+##
+## @param fold_id: ID of the fold that created this seam
+## @return: Color for the seam line
+func get_seam_color(fold_id: int) -> Color:
+	# Cycle through distinct colors for different folds
+	var colors = [
+		Color(1.0, 0.0, 0.0, 0.8),  # Red
+		Color(0.0, 1.0, 0.0, 0.8),  # Green
+		Color(0.0, 0.0, 1.0, 0.8),  # Blue
+		Color(1.0, 1.0, 0.0, 0.8),  # Yellow
+		Color(1.0, 0.0, 1.0, 0.8),  # Magenta
+		Color(0.0, 1.0, 1.0, 0.8),  # Cyan
+	]
+	return colors[fold_id % colors.size()]
+
+
 ## ============================================================================
 ## PHASE 4: POLYGON SPLITTING SUPPORT
 ## ============================================================================
@@ -382,6 +486,8 @@ func add_piece(piece: CellPiece) -> void:
 	geometry_pieces.append(piece)
 	# Update dominant type after adding piece
 	cell_type = get_dominant_type()
+	# Update visual to show new piece
+	update_visual()
 
 
 ## Get all unique cell types present in this cell

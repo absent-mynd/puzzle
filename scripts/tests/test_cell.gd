@@ -444,3 +444,162 @@ func test_add_piece_updates_dominant_type():
 	assert_eq(cell.cell_type, 3, "cell_type should update to 3 (goal) after adding goal piece")
 
 	cell.free()
+
+
+## ============================================================================
+## PHASE 5: VISUAL RENDERING TESTS
+## ============================================================================
+
+## Test: Single piece uses legacy rendering
+func test_single_piece_uses_legacy_rendering():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+	add_child_autofree(cell)
+
+	# Single piece should use legacy polygon_visual
+	assert_not_null(cell.polygon_visual, "polygon_visual should exist")
+	assert_true(cell.polygon_visual.visible, "polygon_visual should be visible for single piece")
+	assert_eq(cell.piece_visuals.get_child_count(), 0, "piece_visuals should be empty for single piece")
+
+	cell.free()
+
+
+## Test: Multi-piece creates separate visuals
+func test_multi_piece_creates_separate_visuals():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+	add_child_autofree(cell)
+
+	# Add second piece
+	var piece_geometry = PackedVector2Array([
+		Vector2(64, 0), Vector2(128, 0),
+		Vector2(128, 64), Vector2(64, 64)
+	])
+	cell.add_piece(CellPiece.new(piece_geometry, 1, 0))
+
+	# Should now use piece_visuals container
+	assert_false(cell.polygon_visual.visible, "polygon_visual should be hidden for multi-piece")
+	assert_eq(cell.piece_visuals.get_child_count(), 4, "Should have 4 children (2 polygons + 2 borders)")
+
+	# Check that we have both Polygon2D and Line2D nodes
+	var polygon_count = 0
+	var line_count = 0
+	for child in cell.piece_visuals.get_children():
+		if child is Polygon2D:
+			polygon_count += 1
+		elif child is Line2D:
+			line_count += 1
+
+	assert_eq(polygon_count, 2, "Should have 2 Polygon2D nodes")
+	assert_eq(line_count, 2, "Should have 2 Line2D borders")
+
+	cell.free()
+
+
+## Test: Piece visuals have correct colors
+func test_piece_visuals_have_correct_colors():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+	add_child_autofree(cell)
+
+	# Set first piece to wall
+	cell.geometry_pieces[0].cell_type = 1
+
+	# Add water piece
+	var piece_geometry = PackedVector2Array([
+		Vector2(64, 0), Vector2(128, 0),
+		Vector2(128, 64), Vector2(64, 64)
+	])
+	cell.add_piece(CellPiece.new(piece_geometry, 2, 0))  # Water
+
+	# Find the polygon visuals
+	var polygons: Array[Polygon2D] = []
+	for child in cell.piece_visuals.get_children():
+		if child is Polygon2D:
+			polygons.append(child)
+
+	assert_eq(polygons.size(), 2, "Should have 2 polygon visuals")
+
+	# Check colors match cell types
+	var wall_color = cell.get_cell_color_for_type(1)
+	var water_color = cell.get_cell_color_for_type(2)
+
+	# First polygon should be wall (dark gray)
+	assert_eq(polygons[0].color, wall_color, "First polygon should have wall color")
+
+	# Second polygon should be water (blue)
+	assert_eq(polygons[1].color, water_color, "Second polygon should have water color")
+
+	cell.free()
+
+
+## Test: Seam visualization creates Line2D nodes
+func test_seam_visualization_creates_line_nodes():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+	add_child_autofree(cell)
+
+	# Add second piece with seam
+	var piece_geometry = PackedVector2Array([
+		Vector2(64, 0), Vector2(128, 0),
+		Vector2(128, 64), Vector2(64, 64)
+	])
+	var piece = CellPiece.new(piece_geometry, 1, 0)
+
+	# Add seam to piece
+	var seam = Seam.new(
+		Vector2(64, 0),
+		Vector2(1, 0),
+		PackedVector2Array([Vector2(64, 0), Vector2(64, 64)]),
+		1,
+		0,
+		"vertical"
+	)
+	piece.add_seam(seam)
+
+	cell.add_piece(piece)
+
+	# Seam visuals should have been created
+	assert_gt(cell.seam_visuals.get_child_count(), 0, "Should have seam visuals")
+
+	# Check that seam line exists
+	var seam_lines = 0
+	for child in cell.seam_visuals.get_children():
+		if child is Line2D:
+			seam_lines += 1
+
+	assert_eq(seam_lines, 1, "Should have 1 seam line")
+
+	cell.free()
+
+
+## Test: Visual cleanup when updating
+func test_visual_cleanup_when_updating():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+	add_child_autofree(cell)
+
+	# Add multiple pieces
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 1, 0))
+	var initial_count = cell.piece_visuals.get_child_count()
+	assert_gt(initial_count, 0, "Should have piece visuals")
+
+	# Update visual again
+	cell.update_visual()
+
+	# Should not have duplicated visuals
+	assert_eq(cell.piece_visuals.get_child_count(), initial_count, "Should not duplicate visuals on update")
+
+	cell.free()
+
+
+## Test: get_cell_color_for_type returns correct colors
+func test_get_cell_color_for_type():
+	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
+
+	var empty_color = cell.get_cell_color_for_type(0)
+	var wall_color = cell.get_cell_color_for_type(1)
+	var water_color = cell.get_cell_color_for_type(2)
+	var goal_color = cell.get_cell_color_for_type(3)
+
+	assert_eq(empty_color, Color(0.8, 0.8, 0.8), "Empty should be light gray")
+	assert_eq(wall_color, Color(0.2, 0.2, 0.2), "Wall should be dark gray")
+	assert_eq(water_color, Color(0.2, 0.4, 1.0), "Water should be blue")
+	assert_eq(goal_color, Color(0.2, 1.0, 0.2), "Goal should be green")
+
+	cell.free()
