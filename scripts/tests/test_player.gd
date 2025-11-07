@@ -236,3 +236,70 @@ func test_world_position_updates_after_move():
 
 	var distance = player.global_position.distance_to(expected_world_pos)
 	assert_lt(distance, 1.0, "Player world position should be at target cell center")
+
+
+## ============================================================================
+## PHASE 5: MULTI-PIECE CELL COLLISION TESTS
+## ============================================================================
+
+## Test: Player collision with multi-type cell (dominant type is wall)
+func test_player_collision_with_multi_type_cell():
+	await wait_physics_frames(2)
+
+	var cell = grid_manager.get_cell(Vector2i(1, 0))
+
+	# Add wall piece to cell (making dominant type wall)
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 1, 0))
+
+	# Player should not be able to move into cell with wall as dominant type
+	assert_false(player.can_move_to(Vector2i(1, 0)), "Can't move into cell with wall dominant type")
+
+
+## Test: Player can move into multi-type cell with non-wall dominant
+func test_player_can_move_into_multi_type_non_wall():
+	await wait_physics_frames(2)
+
+	var cell = grid_manager.get_cell(Vector2i(1, 0))
+
+	# Add water piece (water dominates empty)
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 2, 0))
+
+	# Player should be able to move into cell (dominant is water)
+	assert_true(player.can_move_to(Vector2i(1, 0)), "Can move into cell with water dominant type")
+
+
+## Test: Goal detection in multi-type cell
+func test_player_goal_detection_multi_type():
+	await wait_physics_frames(2)
+
+	var cell = grid_manager.get_cell(Vector2i(1, 0))
+
+	# Add goal piece along with empty
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 3, 0))
+
+	# Move player to that cell
+	player.grid_position = Vector2i(1, 0)
+
+	# Should detect goal even if cell has multiple types
+	var goal_signal = watch_signals(player)
+	player.check_goal()
+
+	assert_signal_emitted(player, "goal_reached", "Should detect goal in multi-type cell")
+
+
+## Test: Goal detection with goal as non-dominant type
+func test_player_goal_detection_non_dominant():
+	await wait_physics_frames(2)
+
+	var cell = grid_manager.get_cell(Vector2i(1, 0))
+
+	# Add empty and goal pieces (goal dominates, but test has_cell_type logic)
+	cell.geometry_pieces[0].cell_type = 0  # Empty
+	cell.add_piece(CellPiece.new(PackedVector2Array(), 3, 0))  # Goal
+
+	player.grid_position = Vector2i(1, 0)
+
+	var goal_signal = watch_signals(player)
+	player.check_goal()
+
+	assert_signal_emitted(player, "goal_reached", "Should detect goal regardless of dominance")

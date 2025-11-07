@@ -122,6 +122,8 @@ func attempt_move(direction: Vector2i) -> bool:
 ## Check if player can move to target position
 ## @param target_grid_pos: Target grid position
 ## @return: true if move is valid, false otherwise
+##
+## PHASE 5: Uses dominant type for multi-piece cells
 func can_move_to(target_grid_pos: Vector2i) -> bool:
 	# Check if position is within grid bounds
 	if not grid_manager.is_valid_position(target_grid_pos):
@@ -132,11 +134,15 @@ func can_move_to(target_grid_pos: Vector2i) -> bool:
 	if not target_cell:
 		return false
 
-	# Check if target cell is walkable (not a wall)
+	# PHASE 5: Check dominant type for collision
 	# Cell types: 0=empty, 1=wall, 2=water, 3=goal
-	if target_cell.cell_type == 1:  # Wall
+	var dominant_type = target_cell.get_dominant_type()
+
+	# Can't move into walls
+	if dominant_type == 1:
 		return false
 
+	# Can move into empty, water, or goal
 	return true
 
 
@@ -190,9 +196,11 @@ func _on_move_finished() -> void:
 
 
 ## Check if player is on goal cell
+##
+## PHASE 5: Uses has_cell_type() to detect goal in multi-piece cells
 func check_goal() -> void:
 	var current_cell = grid_manager.get_cell(grid_position)
-	if current_cell and current_cell.cell_type == 3:  # Goal
+	if current_cell and current_cell.has_cell_type(3):  # Goal (checks all pieces)
 		# Play victory sound
 		AudioManager.play_sfx("victory")
 		emit_signal("goal_reached")

@@ -130,8 +130,15 @@ func add_seam(seam_data: Dictionary):
 ## Set the cell type and update visual appearance
 ##
 ## @param type: Cell type (0=empty, 1=wall, 2=water, 3=goal)
+##
+## PHASE 5: Also updates first piece's type for backward compatibility
 func set_cell_type(type: int):
 	cell_type = type
+
+	# PHASE 5: Update first piece's type if it exists
+	if not geometry_pieces.is_empty():
+		geometry_pieces[0].cell_type = type
+
 	update_visual()
 
 
