@@ -2,6 +2,7 @@
 .godot/
 *.translation
 *.import
+*.uid
 
 # Local Godot binary (decompressed from godot.gz)
 tools/godot/godot
