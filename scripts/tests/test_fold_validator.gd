@@ -144,7 +144,7 @@ static func validate_fold_result(
 
 	# 4. Area conservation (within tolerance)
 	var area_after = calculate_total_area(grid_manager)
-	var expected_area = area_before - (expected_removed * 64 * 64)  # Assuming 64x64 cells
+	var expected_area = area_before - (expected_removed * grid_manager.cell_size * grid_manager.cell_size)  # Use actual cell size
 	var area_diff = abs(area_after - expected_area)
 	result.stats["area_before"] = area_before
 	result.stats["area_after"] = area_after
