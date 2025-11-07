@@ -27,8 +27,9 @@ func _ready() -> void:
 	progress_manager = ProgressManager.new()
 	add_child(progress_manager)
 
-	# Preload campaign levels for faster access
+	# Preload campaign and custom levels for faster access
 	level_manager.preload_levels("res://levels/campaign/")
+	level_manager.preload_levels("res://levels/custom/")
 
 
 ## Starts a level by loading its data and transitioning to the game scene
@@ -96,6 +97,11 @@ func increment_fold_count() -> void:
 ## Gets campaign level list
 func get_campaign_levels() -> Array[String]:
 	return level_manager.get_level_list("res://levels/campaign/")
+
+
+## Gets custom level list
+func get_custom_levels() -> Array[String]:
+	return level_manager.get_level_list("res://levels/custom/")
 
 
 ## Checks if a level is unlocked
