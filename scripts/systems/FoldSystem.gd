@@ -39,6 +39,12 @@ var seam_lines: Array[Line2D] = []
 ## Minimum fold distance (anchors can be adjacent)
 const MIN_FOLD_DISTANCE = 0
 
+## Debug visualization colors
+const DEBUG_COLOR_REMOVED: Color = Color(1.0, 0.3, 0.3, 0.8)  # Red for removed cells
+const DEBUG_COLOR_SHIFTED: Color = Color(0.3, 0.7, 1.0, 0.8)  # Blue for shifted cells
+const DEBUG_COLOR_MERGED: Color = Color(1.0, 0.8, 0.2, 0.8)   # Yellow for merged cells
+const DEBUG_HIGHLIGHT_DURATION: float = 1.0  # How long to show highlights
+
 
 ## ============================================================================
 ## INITIALIZATION
@@ -300,6 +306,10 @@ func _shift_and_merge_cells(cell_positions: Array, fold_line: Dictionary, anchor
 		var cell = grid_manager.cells[pos]
 		var new_pos = pos + Vector2i(shift_vector)
 
+		# Debug: Highlight cells that are being shifted
+		if grid_manager.debug_mode:
+			cell.debug_highlight(DEBUG_COLOR_SHIFTED, DEBUG_HIGHLIGHT_DURATION)
+
 		# Update cell metadata
 		cell.grid_position = new_pos
 		cell.add_fold_to_history(fold_id)
@@ -316,6 +326,9 @@ func _shift_and_merge_cells(cell_positions: Array, fold_line: Dictionary, anchor
 		# Handle merging at new position
 		if grid_manager.cells.has(new_pos):
 			var existing = grid_manager.cells[new_pos]
+			# Debug: Highlight merge operation
+			if grid_manager.debug_mode:
+				existing.debug_highlight(DEBUG_COLOR_MERGED, DEBUG_HIGHLIGHT_DURATION)
 			existing.merge_with(cell, fold_id)
 			cell.queue_free()
 		else:
@@ -342,6 +355,14 @@ func _calculate_shift_vector(anchor1: Vector2i, anchor2: Vector2i) -> Vector2:
 ## @param animated: Whether to use fade animation
 func _remove_cells(cell_positions: Array, animated: bool):
 	for pos in cell_positions:
+		# Debug: Highlight cells being removed
+		if grid_manager.debug_mode:
+			var cell = grid_manager.cells.get(pos)
+			if cell:
+				cell.debug_highlight(DEBUG_COLOR_REMOVED, DEBUG_HIGHLIGHT_DURATION)
+				# Wait briefly to show the highlight before removal
+				await get_tree().create_timer(0.2).timeout
+
 		if animated:
 			# TODO: Add fade animation
 			pass

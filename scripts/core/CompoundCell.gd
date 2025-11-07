@@ -78,6 +78,20 @@ const HOVER_COLOR: Color = Color(1, 1, 0, 0.3)
 
 
 ## ============================================================================
+## PROPERTIES - Debug Visualization
+## ============================================================================
+
+## Debug label for showing cell information
+var debug_label: Label = null
+
+## Whether debug visualization is enabled
+var debug_mode: bool = false
+
+## Background for debug label
+var debug_background: ColorRect = null
+
+
+## ============================================================================
 ## CONSTRUCTOR
 ## ============================================================================
 
@@ -303,6 +317,10 @@ func merge_with(other: CompoundCell, fold_id: int):
 
 	# Update all visuals
 	update_all_visuals()
+
+	# Update debug display if enabled
+	if debug_mode:
+		update_debug_display()
 
 
 ## Determine cell type when merging
@@ -541,6 +559,103 @@ func split_all_fragments(line_point: Vector2, line_normal: Vector2, fold_id: int
 ## ============================================================================
 ## DEBUG & UTILITIES
 ## ============================================================================
+
+## Enable or disable debug visualization for this cell
+##
+## @param enabled: Whether to show debug info
+func set_debug_mode(enabled: bool):
+	debug_mode = enabled
+
+	if enabled and debug_label == null:
+		_create_debug_label()
+
+	if debug_label:
+		debug_label.visible = enabled
+		debug_background.visible = enabled
+
+	if enabled:
+		update_debug_display()
+
+
+## Create debug label and background
+func _create_debug_label():
+	# Create semi-transparent background
+	debug_background = ColorRect.new()
+	debug_background.color = Color(0, 0, 0, 0.7)
+	debug_background.size = Vector2(64, 48)  # Will auto-adjust based on label
+	debug_background.position = Vector2(-32, -24)  # Center on cell
+	add_child(debug_background)
+
+	# Create label
+	debug_label = Label.new()
+	debug_label.add_theme_color_override("font_color", Color.WHITE)
+	debug_label.add_theme_font_size_override("font_size", 10)
+	debug_label.position = Vector2(-30, -22)
+	debug_label.size = Vector2(60, 44)
+	debug_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	add_child(debug_label)
+
+
+## Update debug display with current cell info
+func update_debug_display():
+	if not debug_mode or debug_label == null:
+		return
+
+	var info_lines = []
+
+	# Grid position
+	info_lines.append("Pos: %s" % str(grid_position))
+
+	# Fragment count
+	if fragments.size() > 1:
+		info_lines.append("Frags: %d" % fragments.size())
+
+	# Merged sources (if merged from multiple cells)
+	if source_positions.size() > 1:
+		var sources_str = ""
+		for i in range(min(3, source_positions.size())):
+			if i > 0:
+				sources_str += ","
+			sources_str += "(%d,%d)" % [source_positions[i].x, source_positions[i].y]
+		if source_positions.size() > 3:
+			sources_str += "..."
+		info_lines.append("Src: %s" % sources_str)
+
+	# Fold history (if any folds affected this cell)
+	if fold_history.size() > 0:
+		var folds_str = ""
+		for i in range(min(3, fold_history.size())):
+			if i > 0:
+				folds_str += ","
+			folds_str += str(fold_history[i])
+		if fold_history.size() > 3:
+			folds_str += "..."
+		info_lines.append("Folds: %s" % folds_str)
+
+	debug_label.text = "\n".join(info_lines)
+
+	# Adjust background size to fit text
+	var text_size = debug_label.get_minimum_size()
+	debug_background.size = text_size + Vector2(4, 4)
+	debug_background.position = Vector2(-text_size.x / 2 - 2, -text_size.y / 2 - 2)
+	debug_label.position = Vector2(-text_size.x / 2, -text_size.y / 2)
+
+
+## Highlight this cell with a color (for showing operations)
+##
+## @param color: Color to highlight with
+## @param duration: How long to show highlight (0 = permanent)
+func debug_highlight(color: Color, duration: float = 0.5):
+	# Temporarily change all polygon colors
+	for poly in polygon_visuals:
+		var original_color = poly.color
+		poly.color = color
+
+		if duration > 0:
+			# Create a timer to restore color
+			await get_tree().create_timer(duration).timeout
+			poly.color = original_color
+
 
 ## Get debug string representation
 ## GDScript convention: use _to_string() to override Object's string conversion

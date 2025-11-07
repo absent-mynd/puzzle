@@ -233,6 +233,11 @@ func check_win_condition() -> bool:
 
 ## Handle input for fold execution (Issue #9)
 func _unhandled_input(event: InputEvent) -> void:
+	# Toggle debug mode with F3
+	if event.is_action_pressed("ui_debug"):
+		toggle_debug_mode()
+		return
+
 	# Block input if level is complete
 	if is_level_complete:
 		return
@@ -240,6 +245,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Execute fold when ENTER/SPACE is pressed
 	if event.is_action_pressed("ui_accept"):
 		execute_fold()
+
+
+## Toggle debug visualization mode
+func toggle_debug_mode() -> void:
+	if grid_manager:
+		grid_manager.toggle_debug_mode()
+		var status = "ON" if grid_manager.debug_mode else "OFF"
+		print("Debug mode: %s" % status)
 
 
 ## Execute fold with selected anchors
@@ -267,6 +280,10 @@ func execute_fold() -> void:
 		# Update HUD
 		if hud:
 			hud.set_fold_count(GameManager.fold_count)
+
+		# Update debug displays after fold
+		if grid_manager and grid_manager.debug_mode:
+			grid_manager.update_debug_displays()
 
 		print("Fold executed successfully! Total folds: %d" % GameManager.fold_count)
 	else:

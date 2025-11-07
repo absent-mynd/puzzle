@@ -36,6 +36,9 @@ var hovered_cell: CompoundCell = null
 ## Reference to FoldSystem for validation (set externally)
 var fold_system: FoldSystem = null
 
+## Debug mode - shows cell information overlays
+var debug_mode: bool = false
+
 
 ## Initialize grid on ready
 func _ready() -> void:
@@ -354,3 +357,30 @@ func remove_cell(grid_pos: Vector2i):
 
 		# Queue free the CompoundCell node
 		cell.queue_free()
+
+
+## Enable or disable debug visualization for all cells
+##
+## @param enabled: Whether to show debug overlays
+func set_debug_mode(enabled: bool):
+	debug_mode = enabled
+
+	# Apply to all existing cells
+	for cell in cells.values():
+		if cell:
+			cell.set_debug_mode(enabled)
+
+
+## Toggle debug mode on/off
+func toggle_debug_mode():
+	set_debug_mode(not debug_mode)
+
+
+## Update all debug displays (useful after fold operations)
+func update_debug_displays():
+	if not debug_mode:
+		return
+
+	for cell in cells.values():
+		if cell and cell.debug_mode:
+			cell.update_debug_display()
