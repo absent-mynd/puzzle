@@ -73,23 +73,23 @@ func test_full_fold_reversed_anchors():
 		else:
 			print("  x=%d: MISSING ❌" % x)
 
-	# Expectations
+	# Expectations (WITH NORMALIZATION FIX)
 	print("\n╔════════════════════════════════════════════╗")
-	print("║  Expected Results:                         ║")
+	print("║  Expected Results (with normalization):    ║")
 	print("╠════════════════════════════════════════════╣")
-	print("║  x=0: Should EXIST (kept, outside removed) ║")
-	print("║  x=1: Should EXIST (split, partial kept)   ║")
-	print("║  x=2: Should be REMOVED                    ║")
-	print("║  x=3: Should EXIST (split, partial kept)   ║")
-	print("║  x=4: Should EXIST (kept, outside removed) ║")
+	print("║  x=0: Should EXIST (left of left anchor)   ║")
+	print("║  x=1: Should EXIST (merged at left anchor) ║")
+	print("║  x=2: Should EXIST (shifted from x=4)      ║")
+	print("║  x=3: Removed/shifted (no longer exists)   ║")
+	print("║  x=4: Removed/shifted (no longer exists)   ║")
+	print("║  NOTE: With normalization, cells always    ║")
+	print("║        shift toward LEFT-MOST anchor       ║")
 	print("╚════════════════════════════════════════════╝")
 
-	# Assertions
+	# Assertions (UPDATED for normalized behavior)
 	assert_not_null(grid_manager.get_cell(Vector2i(0, 2)), "Cell at x=0 should exist")
-	assert_not_null(grid_manager.get_cell(Vector2i(1, 2)), "Cell at x=1 should exist (split)")
-	assert_null(grid_manager.get_cell(Vector2i(2, 2)), "Cell at x=2 should be removed")
-	assert_not_null(grid_manager.get_cell(Vector2i(3, 2)), "Cell at x=3 should exist (split)")
-	assert_not_null(grid_manager.get_cell(Vector2i(4, 2)), "Cell at x=4 should exist")
+	assert_not_null(grid_manager.get_cell(Vector2i(1, 2)), "Cell at x=1 should exist (merged)")
+	assert_not_null(grid_manager.get_cell(Vector2i(2, 2)), "Cell at x=2 should exist (shifted from x=4)")
 
 	# Check if split cells have proper geometry
 	var cell_1 = grid_manager.get_cell(Vector2i(1, 2))
@@ -97,10 +97,7 @@ func test_full_fold_reversed_anchors():
 		assert_true(cell_1.is_partial, "Cell at x=1 should be marked as partial")
 		assert_true(cell_1.geometry.size() >= 3, "Cell at x=1 should have valid geometry")
 
-	var cell_3 = grid_manager.get_cell(Vector2i(3, 2))
-	if cell_3:
-		assert_true(cell_3.is_partial, "Cell at x=3 should be marked as partial")
-		assert_true(cell_3.geometry.size() >= 3, "Cell at x=3 should have valid geometry")
+	# Cell at x=3 no longer exists after normalization (shifted away)
 
 ## Test full execution with normal anchors for comparison
 func test_full_fold_normal_anchors():
@@ -127,9 +124,7 @@ func test_full_fold_normal_anchors():
 		else:
 			print("  x=%d: MISSING" % x)
 
-	# Same assertions
+	# Same assertions as reversed test (normalization makes them identical)
 	assert_not_null(grid_manager.get_cell(Vector2i(0, 2)), "Cell at x=0 should exist")
-	assert_not_null(grid_manager.get_cell(Vector2i(1, 2)), "Cell at x=1 should exist (split)")
-	assert_null(grid_manager.get_cell(Vector2i(2, 2)), "Cell at x=2 should be removed")
-	assert_not_null(grid_manager.get_cell(Vector2i(3, 2)), "Cell at x=3 should exist (split)")
-	assert_not_null(grid_manager.get_cell(Vector2i(4, 2)), "Cell at x=4 should exist")
+	assert_not_null(grid_manager.get_cell(Vector2i(1, 2)), "Cell at x=1 should exist (merged)")
+	assert_not_null(grid_manager.get_cell(Vector2i(2, 2)), "Cell at x=2 should exist (shifted from x=4)")

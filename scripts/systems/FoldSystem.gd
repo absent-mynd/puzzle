@@ -1162,35 +1162,80 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 ## @param anchor1: First anchor grid position (stationary side)
 ## @param anchor2: Second anchor grid position (shifting side)
 func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
+	# NORMALIZE ANCHORS for symmetric behavior
+	# Always shift toward the "target" anchor (left-most for horizontal, top-most for vertical)
+	var fold_vector = anchor2 - anchor1
+	var target_anchor: Vector2i
+	var source_anchor: Vector2i
+
+	if abs(fold_vector.x) > abs(fold_vector.y):
+		# Primarily horizontal fold - use left-most as target
+		if anchor1.x < anchor2.x:
+			target_anchor = anchor1
+			source_anchor = anchor2
+		else:
+			target_anchor = anchor2
+			source_anchor = anchor1
+	else:
+		# Primarily vertical fold - use top-most as target
+		if anchor1.y < anchor2.y:
+			target_anchor = anchor1
+			source_anchor = anchor2
+		else:
+			target_anchor = anchor2
+			source_anchor = anchor1
+
 	# Convert to LOCAL coordinates (cell centers)
 	var cell_size = grid_manager.cell_size
-	var anchor1_local = Vector2(anchor1) * cell_size + Vector2(cell_size / 2, cell_size / 2)
-	var anchor2_local = Vector2(anchor2) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var target_local = Vector2(target_anchor) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var source_local = Vector2(source_anchor) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
 	# 1. Calculate cut lines (perpendicular to fold axis)
-	var cut_lines = calculate_cut_lines(anchor1_local, anchor2_local)
+	var cut_lines = calculate_cut_lines(target_local, source_local)
 
 	# 2. Classify all cells relative to cut lines
-	var classification = _classify_cells_for_diagonal_fold(anchor1, anchor2, cut_lines)
+	# Now classification always treats target_anchor as stationary side
+	var classification = _classify_cells_for_diagonal_fold(target_anchor, source_anchor, cut_lines)
 
 	# DEBUG: Print classification results
 	print("\n=== Diagonal Fold Classification ===")
-	print("anchor1: %s, anchor2: %s" % [anchor1, anchor2])
-	print("stationary: %d cells" % classification.stationary.size())
-	print("on_line1: %d cells at %s" % [classification.on_line1.size(), [c.grid_position for c in classification.on_line1]])
-	print("removed: %d cells at %s" % [classification.removed.size(), [c.grid_position for c in classification.removed]])
-	print("on_line2: %d cells at %s" % [classification.on_line2.size(), [c.grid_position for c in classification.on_line2]])
-	print("to_shift: %d cells at %s" % [classification.to_shift.size(), [c.grid_position for c in classification.to_shift]])
+	print("anchor1: %s, anchor2: %s (original parameters)" % [anchor1, anchor2])
+	print("target_anchor: %s, source_anchor: %s (normalized)" % [target_anchor, source_anchor])
+
+	var stationary_positions = []
+	for c in classification.stationary:
+		stationary_positions.append(c.grid_position)
+	print("stationary: %d cells at %s" % [classification.stationary.size(), stationary_positions])
+
+	var line1_positions = []
+	for c in classification.on_line1:
+		line1_positions.append(c.grid_position)
+	print("on_line1: %d cells at %s" % [classification.on_line1.size(), line1_positions])
+
+	var removed_pos_debug = []
+	for c in classification.removed:
+		removed_pos_debug.append(c.grid_position)
+	print("removed: %d cells at %s" % [classification.removed.size(), removed_pos_debug])
+
+	var line2_positions = []
+	for c in classification.on_line2:
+		line2_positions.append(c.grid_position)
+	print("on_line2: %d cells at %s" % [classification.on_line2.size(), line2_positions])
+
+	var shift_positions = []
+	for c in classification.to_shift:
+		shift_positions.append(c.grid_position)
+	print("to_shift: %d cells at %s" % [classification.to_shift.size(), shift_positions])
 
 	# 3. Split cells on cut lines and store split parts
-	var split_parts_line1 = _process_split_cells_on_line1(classification.on_line1, cut_lines, anchor1, anchor2)
-	var split_parts_line2 = _process_split_cells_on_line2(classification.on_line2, cut_lines, anchor1, anchor2)
+	var split_parts_line1 = _process_split_cells_on_line1(classification.on_line1, cut_lines, target_anchor, source_anchor)
+	var split_parts_line2 = _process_split_cells_on_line2(classification.on_line2, cut_lines, target_anchor, source_anchor)
 
 	# 4. Remove cells in removed region
 	_remove_cells_in_region(classification.removed)
 
-	# 5. Shift cells from anchor2 side toward anchor1
-	var shift_vector = anchor1 - anchor2  # Grid units
+	# 5. Shift cells from source side toward target
+	var shift_vector = target_anchor - source_anchor  # Grid units
 	_shift_cells_with_merge(classification.to_shift, shift_vector, split_parts_line2)
 
 	# 6. Cells on line1 are already split in-place at anchor1
