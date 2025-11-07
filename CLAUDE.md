@@ -91,7 +91,7 @@ See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for detailed rationale.
 
 ```
 /home/user/puzzle/
-├── GUIDE.md                     # ← YOU ARE HERE - Start here!
+├── CLAUDE.md                    # ← YOU ARE HERE - Start here!
 ├── STATUS.md                    # Current progress (update frequently)
 ├── README.md                    # Public-facing project info
 │
@@ -321,7 +321,7 @@ git push -u origin claude/condense-context-011CUu8JZwaeZU23X9zmUcTg
 - Finding critical implementation details
 - Completing phase (move to `completed/`)
 
-**Update GUIDE.md ONLY when:**
+**Update CLAUDE.md ONLY when:**
 - New critical pitfall discovered
 - Major architectural change
 - New tool or workflow added

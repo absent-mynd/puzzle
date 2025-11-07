@@ -138,7 +138,7 @@ Always note the date of updates in the document.
 
 ## Additional Resources
 
-- [GUIDE.md](../../GUIDE.md) - Quick start for AI agents
+- [CLAUDE.md](../../CLAUDE.md) - Quick start for AI agents
 - [STATUS.md](../../STATUS.md) - Current project status
 - [ARCHITECTURE.md](../ARCHITECTURE.md) - Design decisions
 - [DEVELOPMENT.md](../DEVELOPMENT.md) - Development workflow

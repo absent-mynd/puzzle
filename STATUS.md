@@ -227,7 +227,7 @@
 
 ### 2025-11-07
 - **Documentation consolidation** - Reorganized all documentation into streamlined structure
-- Created GUIDE.md, STATUS.md, and docs/ directory structure
+- Created CLAUDE.md, STATUS.md, and docs/ directory structure
 - Archived redundant documentation
 
 ### 2025-11-06
@@ -358,7 +358,7 @@ Documentation Pages: 12 (consolidated from 22)
 ---
 
 **For detailed information, see:**
-- [GUIDE.md](GUIDE.md) - AI agent quick start
+- [CLAUDE.md](CLAUDE.md) - AI agent quick start
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Design decisions
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Development workflow
 - [docs/REFERENCE.md](docs/REFERENCE.md) - API reference
