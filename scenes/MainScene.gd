@@ -254,7 +254,7 @@ func execute_fold() -> void:
 		return
 
 	# Execute the fold (with animation)
-	var success = await fold_system.execute_fold(anchors[0], anchors[1], true)
+	var success = fold_system.execute_fold(anchors[0], anchors[1], true)
 
 	# Clear selection after fold (whether successful or not)
 	if grid_manager:
