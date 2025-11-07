@@ -158,9 +158,10 @@ func test_calculate_cut_lines_perpendicular_relationship():
 
 ## Test cell fully on left side is classified as "kept_left"
 func test_classify_cell_region_kept_left():
-	# Set up a vertical fold (same x-coordinate)
-	var anchor1_grid = Vector2i(5, 0)
-	var anchor2_grid = Vector2i(5, 9)
+	# Set up a HORIZONTAL fold to test kept_left (use left anchor first for normalization)
+	# anchor1=(3,5) left, anchor2=(7,5) right
+	var anchor1_grid = Vector2i(3, 5)
+	var anchor2_grid = Vector2i(7, 5)
 
 	# Convert to LOCAL coordinates (cell centers, relative to GridManager)
 	var cell_size = grid_manager.cell_size
@@ -169,11 +170,11 @@ func test_classify_cell_region_kept_left():
 
 	var cut_lines = fold_system.calculate_cut_lines(anchor1_local, anchor2_local)
 
-	# Cell at (3, 5) should be on the kept-left side (x < 5)
-	var cell = grid_manager.get_cell(Vector2i(3, 5))
+	# Cell at (1, 5) should be on the kept-left side (x < 3)
+	var cell = grid_manager.get_cell(Vector2i(1, 5))
 	var region = fold_system.classify_cell_region(cell, cut_lines)
 
-	assert_eq(region, "kept_left", "Cell at (3, 5) should be classified as kept_left")
+	assert_eq(region, "kept_left", "Cell at (1, 5) should be classified as kept_left")
 
 
 ## Test cell fully in removed region is classified as "removed"

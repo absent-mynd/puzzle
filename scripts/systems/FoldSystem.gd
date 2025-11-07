@@ -12,6 +12,10 @@ class_name FoldSystem
 
 ## Properties
 
+## Debug flag to control diagnostic output during fold execution
+## Set to true to see detailed fold execution logs (useful for debugging diagonal folds)
+const DEBUG_FOLD_EXECUTION: bool = false
+
 ## Reference to the GridManager
 var grid_manager: GridManager
 
@@ -601,6 +605,9 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
 	fold_history.append(fold_record)
 
+	# 7. Clean up any freed cell references
+	grid_manager.cleanup_freed_cells()
+
 
 ## Vertical Fold Implementation
 
@@ -704,6 +711,9 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 	# 6. Record fold operation
 	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
 	fold_history.append(fold_record)
+
+	# 7. Clean up any freed cell references
+	grid_manager.cleanup_freed_cells()
 
 
 ## Execute a horizontal fold with animation (Issue #9)
@@ -809,6 +819,9 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
 	fold_history.append(fold_record)
 
+	# 11. Clean up any freed cell references
+	grid_manager.cleanup_freed_cells()
+
 
 ## Execute a vertical fold with animation (Issue #9)
 ##
@@ -912,6 +925,9 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 	# 10. Record fold operation
 	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
 	fold_history.append(fold_record)
+
+	# 11. Clean up any freed cell references
+	grid_manager.cleanup_freed_cells()
 
 
 ## Main Fold Execution Method
@@ -1140,79 +1156,472 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 
 ## Execute a diagonal fold (Phase 4)
 ##
-## This is the most complex fold operation, handling arbitrary angles.
+## Implements the full two-cut-line algorithm with merging and shifting:
+## 1. Two perpendicular cut lines at anchor positions
+## 2. Cells between lines are removed
+## 3. Cells on cut lines are split and parts merge
+## 4. Cells past anchor2 shift toward anchor1
+## 5. Overlapping cells merge together
 ##
-## @param anchor1: First anchor grid position
-## @param anchor2: Second anchor grid position
+## @param anchor1: First anchor grid position (stationary side)
+## @param anchor2: Second anchor grid position (shifting side)
 func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
+	# NORMALIZE ANCHORS to avoid negative coordinate shifts
+	# Paper-folding interpretation: one cut line stays fixed, other moves toward it
+	# Strategy: Choose target anchor to keep all shifted cells in positive quadrant (no negative rows/columns)
+	var target_anchor: Vector2i
+	var source_anchor: Vector2i
+
+	# Check if this is axis-aligned (horizontal or vertical fold)
+	var is_horizontal = anchor1.y == anchor2.y
+	var is_vertical = anchor1.x == anchor2.x
+
+	if is_horizontal:
+		# Horizontal fold - always shift toward LEFT-most anchor (simple, no negatives possible)
+		if anchor1.x < anchor2.x:
+			target_anchor = anchor1
+			source_anchor = anchor2
+		else:
+			target_anchor = anchor2
+			source_anchor = anchor1
+		if DEBUG_FOLD_EXECUTION:
+			print("\n=== Axis-Aligned Horizontal Fold ===")
+			print("Chose left-most anchor: target=%s, source=%s" % [target_anchor, source_anchor])
+	elif is_vertical:
+		# Vertical fold - always shift toward TOP-most anchor (simple, no negatives possible)
+		if anchor1.y < anchor2.y:
+			target_anchor = anchor1
+			source_anchor = anchor2
+		else:
+			target_anchor = anchor2
+			source_anchor = anchor1
+		if DEBUG_FOLD_EXECUTION:
+			print("\n=== Axis-Aligned Vertical Fold ===")
+			print("Chose top-most anchor: target=%s, source=%s" % [target_anchor, source_anchor])
+	else:
+		# TRUE DIAGONAL FOLD - use negative-avoidance algorithm
+		# Calculate both possible shift vectors
+		var shift_if_anchor1_target = anchor1 - anchor2  # anchor2 side shifts toward anchor1
+		var shift_if_anchor2_target = anchor2 - anchor1  # anchor1 side shifts toward anchor2
+
+		# Get actual grid bounds from existing cells
+		var min_existing_x = 0
+		var max_existing_x = grid_manager.grid_size.x - 1
+		var min_existing_y = 0
+		var max_existing_y = grid_manager.grid_size.y - 1
+
+		for pos in grid_manager.cells.keys():
+			min_existing_x = min(min_existing_x, pos.x)
+			max_existing_x = max(max_existing_x, pos.x)
+			min_existing_y = min(min_existing_y, pos.y)
+			max_existing_y = max(max_existing_y, pos.y)
+
+		# For each option, calculate if x or y would go negative
+		# We want to avoid BOTH negative x AND negative y
+		var min_x_option1 = min_existing_x + shift_if_anchor1_target.x
+		var min_y_option1 = min_existing_y + shift_if_anchor1_target.y
+		var creates_negative_option1 = (min_x_option1 < 0) or (min_y_option1 < 0)
+
+		var min_x_option2 = min_existing_x + shift_if_anchor2_target.x
+		var min_y_option2 = min_existing_y + shift_if_anchor2_target.y
+		var creates_negative_option2 = (min_x_option2 < 0) or (min_y_option2 < 0)
+
+		# Also calculate maximum coordinates (for positive expansion preference)
+		var max_x_option1 = max_existing_x + shift_if_anchor1_target.x
+		var max_y_option1 = max_existing_y + shift_if_anchor1_target.y
+		var max_x_option2 = max_existing_x + shift_if_anchor2_target.x
+		var max_y_option2 = max_existing_y + shift_if_anchor2_target.y
+
+		# DEBUG: Print normalization decision
+		if DEBUG_FOLD_EXECUTION:
+			print("\n=== Diagonal Fold Normalization ===")
+			print("anchor1=%s, anchor2=%s" % [anchor1, anchor2])
+			print("shift_if_anchor1_target=%s, shift_if_anchor2_target=%s" % [shift_if_anchor1_target, shift_if_anchor2_target])
+			print("Grid bounds: x=[%d,%d], y=[%d,%d]" % [min_existing_x, max_existing_x, min_existing_y, max_existing_y])
+			print("Option1: min_x=%d, min_y=%d, creates_negative=%s" % [min_x_option1, min_y_option1, creates_negative_option1])
+			print("Option2: min_x=%d, min_y=%d, creates_negative=%s" % [min_x_option2, min_y_option2, creates_negative_option2])
+			print("Option1: max_x=%d, max_y=%d" % [max_x_option1, max_y_option1])
+			print("Option2: max_x=%d, max_y=%d" % [max_x_option2, max_y_option2])
+
+		# Choose the option that avoids negative coordinates
+		# If only one avoids negatives, choose it
+		# If both avoid or both create negatives, prefer positive expansion over negative
+		if not creates_negative_option1 and creates_negative_option2:
+			# Option 1 avoids negatives
+			target_anchor = anchor1
+			source_anchor = anchor2
+			if DEBUG_FOLD_EXECUTION:
+				print("→ Chose anchor1 as target (avoids negatives)")
+		elif not creates_negative_option2 and creates_negative_option1:
+			# Option 2 avoids negatives
+			target_anchor = anchor2
+			source_anchor = anchor1
+			if DEBUG_FOLD_EXECUTION:
+				print("→ Chose anchor2 as target (avoids negatives)")
+		else:
+			# Both create negatives OR both avoid negatives
+			# Prefer positive expansion (larger max) over negative expansion (negative min)
+			# Calculate "badness" score: negative values are bad, positive expansion is ok
+			var badness1 = 0
+			if min_x_option1 < 0:
+				badness1 += abs(min_x_option1)
+			if min_y_option1 < 0:
+				badness1 += abs(min_y_option1)
+
+			var badness2 = 0
+			if min_x_option2 < 0:
+				badness2 += abs(min_x_option2)
+			if min_y_option2 < 0:
+				badness2 += abs(min_y_option2)
+
+			if badness1 < badness2:
+				target_anchor = anchor1
+				source_anchor = anchor2
+				if DEBUG_FOLD_EXECUTION:
+					print("→ Chose anchor1 (less negative expansion: %d vs %d)" % [badness1, badness2])
+			elif badness2 < badness1:
+				target_anchor = anchor2
+				source_anchor = anchor1
+				if DEBUG_FOLD_EXECUTION:
+					print("→ Chose anchor2 (less negative expansion: %d vs %d)" % [badness2, badness1])
+			else:
+				# Equal badness - prefer positive expansion
+				var expansion1 = max(max_x_option1, max_y_option1)
+				var expansion2 = max(max_x_option2, max_y_option2)
+				if expansion1 <= expansion2:
+					target_anchor = anchor1
+					source_anchor = anchor2
+				else:
+					target_anchor = anchor2
+					source_anchor = anchor1
+				if DEBUG_FOLD_EXECUTION:
+					print("→ Equal badness, chose based on expansion")
+
 	# Convert to LOCAL coordinates (cell centers)
-	# Cells use LOCAL coordinates relative to GridManager
 	var cell_size = grid_manager.cell_size
-	var anchor1_local = Vector2(anchor1) * cell_size + Vector2(cell_size / 2, cell_size / 2)
-	var anchor2_local = Vector2(anchor2) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var target_local = Vector2(target_anchor) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var source_local = Vector2(source_anchor) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
-	# 1. Calculate cut lines (using LOCAL coordinates)
-	var cut_lines = calculate_cut_lines(anchor1_local, anchor2_local)
+	# 1. Calculate cut lines (perpendicular to fold axis)
+	var cut_lines = calculate_cut_lines(target_local, source_local)
 
-	# 2. Classify all cells
-	var cells_by_region = {
-		"kept_left": [],
-		"removed": [],
-		"kept_right": [],
-		"split_line1": [],
-		"split_line2": []
-	}
+	# 2. Classify all cells relative to cut lines
+	# Now classification always treats target_anchor as stationary side
+	var classification = _classify_cells_for_diagonal_fold(target_anchor, source_anchor, cut_lines)
+
+	# DEBUG: Print classification results
+	if DEBUG_FOLD_EXECUTION:
+		print("\n=== Diagonal Fold Classification ===")
+		print("anchor1: %s, anchor2: %s (original parameters)" % [anchor1, anchor2])
+		print("target_anchor: %s, source_anchor: %s (normalized)" % [target_anchor, source_anchor])
+		
+		var stationary_positions = []
+		for c in classification.stationary:
+			stationary_positions.append(c.grid_position)
+		print("stationary: %d cells at %s" % [classification.stationary.size(), stationary_positions])
+		
+		var line1_positions = []
+		for c in classification.on_line1:
+			line1_positions.append(c.grid_position)
+		print("on_line1: %d cells at %s" % [classification.on_line1.size(), line1_positions])
+		
+		var removed_pos_debug = []
+		for c in classification.removed:
+			removed_pos_debug.append(c.grid_position)
+		print("removed: %d cells at %s" % [classification.removed.size(), removed_pos_debug])
+		
+		var line2_positions = []
+		for c in classification.on_line2:
+			line2_positions.append(c.grid_position)
+		print("on_line2: %d cells at %s" % [classification.on_line2.size(), line2_positions])
+		
+		var shift_positions = []
+		for c in classification.to_shift:
+			shift_positions.append(c.grid_position)
+		print("to_shift: %d cells at %s" % [classification.to_shift.size(), shift_positions])
+
+	# 3. Split cells on cut lines and store split parts
+	var split_parts_line1 = _process_split_cells_on_line1(classification.on_line1, cut_lines, target_anchor, source_anchor)
+	var split_parts_line2 = _process_split_cells_on_line2(classification.on_line2, cut_lines, target_anchor, source_anchor)
+
+	# 4. Remove cells in removed region
+	_remove_cells_in_region(classification.removed)
+
+	# 5. Shift cells from source side toward target
+	var shift_vector = target_anchor - source_anchor  # Grid units
+	_shift_cells_with_merge(classification.to_shift, shift_vector, split_parts_line2)
+
+	# 6. Cells on line1 are already split in-place at anchor1
+	# The merge happens automatically in _shift_cells_with_merge when cells shift to anchor1
+	# No additional merge step needed for line1 cells
+
+	# 7. Create seam visualization
+	create_diagonal_seam_visual(cut_lines)
+
+	# 8. Update player position if affected
+	if player and player.grid_position in classification.to_shift:
+		player.grid_position += Vector2i(shift_vector)
+		var new_cell = grid_manager.get_cell(player.grid_position)
+		if new_cell:
+			player.global_position = grid_manager.to_global(new_cell.get_center())
+
+	# 9. Record fold operation
+	var removed_positions: Array[Vector2i] = []
+	for cell in classification.removed:
+		removed_positions.append(cell.grid_position)
+	var fold_record = create_fold_record(anchor1, anchor2, removed_positions, "diagonal")
+	fold_history.append(fold_record)
+
+	# 10. Clean up any freed cell references from the dictionary
+	grid_manager.cleanup_freed_cells()
+
+## Classify all cells for diagonal fold algorithm
+##
+## Returns cells organized by their role in the fold:
+## - stationary: Cells on anchor1 side that don't move
+## - on_line1: Cells intersecting line1 (at anchor1)
+## - removed: Cells strictly between the two lines
+## - on_line2: Cells intersecting line2 (at anchor2)
+## - to_shift: Cells past line2 (away from line1) that need to shift
+##
+## @param anchor1: First anchor (stationary side)
+## @param anchor2: Second anchor (shifting side)
+## @param cut_lines: Cut line data from calculate_cut_lines()
+## @return: Dictionary with cell arrays
+func _classify_cells_for_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i, cut_lines: Dictionary) -> Dictionary:
+	var stationary = []
+	var on_line1 = []
+	var removed = []
+	var on_line2 = []
+	var to_shift = []
 
 	for pos in grid_manager.cells.keys():
 		var cell = grid_manager.get_cell(pos)
-		if cell:
-			var region = classify_cell_region(cell, cut_lines)
-			cells_by_region[region].append(cell)
+		if not cell:
+			continue
 
-	# 3. Process split cells
-	# For now, we'll handle splits by keeping the appropriate half
-	# Full merging logic will be added in a future iteration
+		# Don't skip any cells - even anchors need to be classified and split
+		# Check if cell intersects cut lines
+		var intersects_line1 = does_cell_intersect_line(cell, cut_lines.line1.point, cut_lines.line1.normal)
+		var intersects_line2 = does_cell_intersect_line(cell, cut_lines.line2.point, cut_lines.line2.normal)
 
-	for cell in cells_by_region.split_line1:
+		if intersects_line1:
+			on_line1.append(cell)
+		elif intersects_line2:
+			on_line2.append(cell)
+		else:
+			# Cell doesn't intersect - classify by which region it's in
+			var cell_center = cell.get_center()
+
+			# Calculate signed distance from each line
+			var dist1 = (cell_center - cut_lines.line1.point).dot(cut_lines.line1.normal)
+			var dist2 = (cell_center - cut_lines.line2.point).dot(cut_lines.line2.normal)
+
+			# Cell is BETWEEN lines if it's on opposite sides of each line
+			# (one positive, one negative distance)
+			var between_lines = (dist1 > 0 and dist2 < 0) or (dist1 < 0 and dist2 > 0)
+
+			if between_lines:
+				# Cell is in the removed region
+				removed.append(cell)
+			else:
+				# Cell is on one side or the other
+				# Determine which side of line1 has anchor2
+				var anchor2_center = Vector2(anchor2) * grid_manager.cell_size + Vector2(grid_manager.cell_size / 2, grid_manager.cell_size / 2)
+				var anchor2_dist = (anchor2_center - cut_lines.line1.point).dot(cut_lines.line1.normal)
+
+				# If cell is on same side as anchor2, it needs to shift
+				# Same side means same sign of distance
+				if (dist1 > 0 and anchor2_dist > 0) or (dist1 < 0 and anchor2_dist < 0):
+					to_shift.append(cell)
+				else:
+					# Cell is on opposite side from anchor2 (anchor1 side) - stationary
+					stationary.append(cell)
+
+	return {
+		"stationary": stationary,
+		"on_line1": on_line1,
+		"removed": removed,
+		"on_line2": on_line2,
+		"to_shift": to_shift
+	}
+
+
+## Process cells on line1 (at anchor1) - split and keep anchor1 side
+##
+## @param cells: Array of cells intersecting line1
+## @param cut_lines: Cut line data
+## @param anchor1: First anchor position
+## @param anchor2: Second anchor position
+## @return: Array of split cell geometries to merge at anchor1
+func _process_split_cells_on_line1(cells: Array, cut_lines: Dictionary, anchor1: Vector2i, anchor2: Vector2i) -> Array:
+	var split_parts = []
+
+	# Determine which side of line1 to keep (away from anchor2)
+	var anchor2_local = Vector2(anchor2) * grid_manager.cell_size + Vector2(grid_manager.cell_size / 2, grid_manager.cell_size / 2)
+	var anchor2_side = GeometryCore.point_side_of_line(anchor2_local, cut_lines.line1.point, cut_lines.line1.normal)
+	var keep_side = "right" if anchor2_side < 0 else "left"
+
+	for cell in cells:
 		var split_result = GeometryCore.split_polygon_by_line(
 			cell.geometry, cut_lines.line1.point, cut_lines.line1.normal
 		)
-		if split_result.intersections.size() > 0:
-			# Keep the right half (negative side of normal, away from removed region)
-			# Line1 is at the start of the removed region, so we keep the side opposite the normal
-			var new_cell = cell.apply_split(split_result, cut_lines.line1.point, cut_lines.line1.normal, "right")
-			if new_cell:
-				# New cell goes to removed region
-				new_cell.queue_free()
 
-	for cell in cells_by_region.split_line2:
+		if split_result.intersections.size() > 0:
+			# Update cell geometry to kept side
+			if keep_side == "left":
+				cell.geometry = split_result.left
+			else:
+				cell.geometry = split_result.right
+
+			cell.is_partial = true
+			cell.update_visual()
+
+			# Store the kept part for potential merging
+			split_parts.append({
+				"cell": cell,
+				"geometry": cell.geometry,
+				"position": anchor1
+			})
+
+	return split_parts
+
+
+## Process cells on line2 (at anchor2) - split and prepare for shifting
+##
+## @param cells: Array of cells intersecting line2
+## @param cut_lines: Cut line data
+## @param anchor1: First anchor position
+## @param anchor2: Second anchor position
+## @return: Array of split cell data to shift and merge
+func _process_split_cells_on_line2(cells: Array, cut_lines: Dictionary, anchor1: Vector2i, anchor2: Vector2i) -> Array:
+	var split_parts = []
+
+	# Determine which side of line2 to keep (away from anchor1, toward shifting direction)
+	var anchor1_local = Vector2(anchor1) * grid_manager.cell_size + Vector2(grid_manager.cell_size / 2, grid_manager.cell_size / 2)
+	var anchor1_side = GeometryCore.point_side_of_line(anchor1_local, cut_lines.line2.point, cut_lines.line2.normal)
+	var keep_side = "right" if anchor1_side < 0 else "left"
+
+	for cell in cells:
 		var split_result = GeometryCore.split_polygon_by_line(
 			cell.geometry, cut_lines.line2.point, cut_lines.line2.normal
 		)
-		if split_result.intersections.size() > 0:
-			# Keep the left half (positive side of normal, away from removed region)
-			# Line2 is at the end of the removed region, so we keep the side in direction of normal
-			var new_cell = cell.apply_split(split_result, cut_lines.line2.point, cut_lines.line2.normal, "left")
-			if new_cell:
-				# New cell goes to removed region
-				new_cell.queue_free()
 
-	# 4. Remove cells in removed region
-	var removed_cells: Array[Vector2i] = []
-	for cell in cells_by_region.removed:
-		removed_cells.append(cell.grid_position)
-		grid_manager.cells.erase(cell.grid_position)
+		if split_result.intersections.size() > 0:
+			# Update cell geometry to kept side
+			if keep_side == "left":
+				cell.geometry = split_result.left
+			else:
+				cell.geometry = split_result.right
+
+			cell.is_partial = true
+			cell.update_visual()
+
+			# This cell will shift - store it
+			split_parts.append(cell)
+
+	return split_parts
+
+
+## Remove cells in the removed region
+##
+## @param cells: Array of cells to remove
+func _remove_cells_in_region(cells: Array):
+	for cell in cells:
+		var pos = cell.grid_position
+		grid_manager.cells.erase(pos)
 		if cell.get_parent():
 			cell.get_parent().remove_child(cell)
 		cell.queue_free()
 
-	# 5. For diagonal folds, we don't shift cells spatially (complex geometry)
-	# Instead, cells remain in their grid positions but their visual geometry
-	# has been updated by the splits
 
-	# 6. Create seam visualization
-	create_diagonal_seam_visual(cut_lines)
+## Shift cells and handle merging when they overlap
+##
+## @param cells_to_shift: Array of cells that need to shift
+## @param shift_vector: Vector2i shift amount in grid coordinates
+## @param additional_cells: Additional cells from line2 splits to include
+func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, additional_cells: Array):
+	# Combine regular cells with split cells from line2
+	var all_shifting = cells_to_shift + additional_cells
 
-	# 7. Record fold operation
-	var fold_record = create_fold_record(anchor1, anchor2, removed_cells, "diagonal")
-	fold_history.append(fold_record)
+	# TWO-PASS APPROACH to avoid false collisions:
+	# Pass 1: Remove all cells from old positions and update their properties
+	# Pass 2: Place all cells at new positions (checking for REAL collisions)
+
+	# PASS 1: Remove from old positions and update cell data
+	for cell in all_shifting:
+		var old_pos = cell.grid_position
+		var new_pos = old_pos + shift_vector
+
+		# Remove from old position
+		grid_manager.cells.erase(old_pos)
+
+		# Update cell position
+		cell.grid_position = new_pos
+
+		# Translate geometry
+		var shift_pixels = Vector2(shift_vector) * grid_manager.cell_size
+		var new_geometry = PackedVector2Array()
+		for vertex in cell.geometry:
+			new_geometry.append(vertex + shift_pixels)
+		cell.geometry = new_geometry
+		cell.update_visual()
+
+	# PASS 2: Place cells at new positions and handle REAL merges
+	for cell in all_shifting:
+		var new_pos = cell.grid_position
+
+		# Check if new position is already occupied (by a cell NOT in shift queue)
+		var existing = grid_manager.get_cell(new_pos)
+		if existing:
+			# Merge with existing cell (this is a REAL collision, not a false one)
+			_merge_cells_simple(existing, cell, new_pos)
+		else:
+			# Place cell at new position
+			grid_manager.cells[new_pos] = cell
+
+
+## Merge split parts from line1 with any cells at anchor1
+##
+## @param split_parts: Array of split cell data from line1
+## @param anchor1: Position where merging occurs
+func _merge_split_parts_at_anchor1(split_parts: Array, anchor1: Vector2i):
+	# Check if there are shifted cells at anchor1 that need merging
+	var cell_at_anchor1 = grid_manager.get_cell(anchor1)
+
+	if cell_at_anchor1 and split_parts.size() > 0:
+		# Merge all split parts into the cell at anchor1
+		for part_data in split_parts:
+			var part_cell = part_data.cell
+			if part_cell != cell_at_anchor1:
+				# Simple merge: mark both as partial with seams
+				cell_at_anchor1.is_partial = true
+				# In a full implementation, would combine geometries
+				# For now, keep the existing cell
+				part_cell.queue_free()
+
+
+## Simple cell merge - combines two cells at the same position
+## In full implementation, this would do proper polygon union
+##
+## @param existing: Cell already at the position
+## @param incoming: Cell being moved to this position
+## @param pos: Grid position where merge occurs
+func _merge_cells_simple(existing: Cell, incoming: Cell, pos: Vector2i):
+	# Mark both as partial (they've been affected by folds)
+	existing.is_partial = true
+	incoming.is_partial = true
+
+	# For now, keep the existing cell and free the incoming one
+	# A full implementation would:
+	# 1. Combine geometries (polygon union)
+	# 2. Merge seam data
+	# 3. Create visual indication of the merge
+
+	# Update visual to show it's been merged
+	existing.update_visual()
+
+	# Free the incoming cell
+	incoming.queue_free()
+
+	# Keep existing cell in dictionary (already there)
