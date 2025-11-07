@@ -1173,6 +1173,15 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	# 2. Classify all cells relative to cut lines
 	var classification = _classify_cells_for_diagonal_fold(anchor1, anchor2, cut_lines)
 
+	# DEBUG: Print classification results
+	print("\n=== Diagonal Fold Classification ===")
+	print("anchor1: %s, anchor2: %s" % [anchor1, anchor2])
+	print("stationary: %d cells" % classification.stationary.size())
+	print("on_line1: %d cells at %s" % [classification.on_line1.size(), [c.grid_position for c in classification.on_line1]])
+	print("removed: %d cells at %s" % [classification.removed.size(), [c.grid_position for c in classification.removed]])
+	print("on_line2: %d cells at %s" % [classification.on_line2.size(), [c.grid_position for c in classification.on_line2]])
+	print("to_shift: %d cells at %s" % [classification.to_shift.size(), [c.grid_position for c in classification.to_shift]])
+
 	# 3. Split cells on cut lines and store split parts
 	var split_parts_line1 = _process_split_cells_on_line1(classification.on_line1, cut_lines, anchor1, anchor2)
 	var split_parts_line2 = _process_split_cells_on_line2(classification.on_line2, cut_lines, anchor1, anchor2)
@@ -1184,8 +1193,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	var shift_vector = anchor1 - anchor2  # Grid units
 	_shift_cells_with_merge(classification.to_shift, shift_vector, split_parts_line2)
 
-	# 6. Merge split parts from line1 with shifted cells (if they overlap)
-	_merge_split_parts_at_anchor1(split_parts_line1, anchor1)
+	# 6. Cells on line1 are already split in-place at anchor1
+	# The merge happens automatically in _shift_cells_with_merge when cells shift to anchor1
+	# No additional merge step needed for line1 cells
 
 	# 7. Create seam visualization
 	create_diagonal_seam_visual(cut_lines)
@@ -1232,10 +1242,7 @@ func _classify_cells_for_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i, cut
 		if not cell:
 			continue
 
-		# Skip anchor1 (it stays at its position)
-		if pos == anchor1:
-			continue
-
+		# Don't skip any cells - even anchors need to be classified and split
 		# Check if cell intersects cut lines
 		var intersects_line1 = does_cell_intersect_line(cell, cut_lines.line1.point, cut_lines.line1.normal)
 		var intersects_line2 = does_cell_intersect_line(cell, cut_lines.line2.point, cut_lines.line2.normal)
