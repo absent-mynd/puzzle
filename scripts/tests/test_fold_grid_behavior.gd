@@ -4,6 +4,37 @@ extends GutTest
 ## This test suite validates exact grid behavior for different fold angles
 ## including cell removal, shifting, merging, and sequential fold operations.
 ##
+## FOLD MECHANICS (CRITICAL FOR UNDERSTANDING TEST EXPECTATIONS):
+##
+## When a fold is executed from anchor1 to anchor2:
+##
+## 1. REMOVAL: Cells between anchors (exclusive) are completely removed
+##    - For horizontal fold (3,5) → (7,5): removes columns 4,5,6 (30 cells)
+##    - For vertical fold (5,2) → (5,6): removes rows 3,4,5 (30 cells)
+##
+## 2. SHIFTING: Cells beyond anchor2 shift toward anchor1
+##    - Shift vector = anchor1 - anchor2
+##    - For fold (3,5) → (7,5): shift vector = (-4, 0)
+##    - Cells at column 7 shift to column 3, column 8 → 4, column 9 → 5
+##
+## 3. MERGING: When shifted cells land on existing cells, they MERGE
+##    - CompoundCell.merge_with() combines fragments from both cells
+##    - The shifted cell is FREED after merging (queue_free())
+##    - Dictionary only keeps the existing cell at that position
+##    - This REDUCES the total cell count by number of merged cells!
+##
+## CELL COUNT FORMULA:
+## Final Count = Initial - Removed - Merged
+##
+## Example: Fold (3,5) → (7,5) on 10x10 grid:
+## - Initial: 100 cells
+## - Removed: columns 4,5,6 = 30 cells
+## - Merged: column 7 shifts to column 3 (merges) = 10 cells freed
+## - Final: 100 - 30 - 10 = 60 cells in dictionary
+##
+## Note: Each CompoundCell may contain multiple fragments after merging,
+## but grid_manager.cells.size() only counts CompoundCell objects.
+##
 ## Test structure:
 ## - Single folds at various angles (horizontal, vertical, diagonal)
 ## - Exact cell position validation after folds
@@ -97,24 +128,32 @@ func test_horizontal_fold_middle_exact_positions():
 	var success = fold_system.execute_fold(anchor1, anchor2, false)
 	assert_true(success, "Fold should succeed")
 
-	# After fold: columns 4,5,6 were removed
-	# Columns 7,8,9 shifted left by 4 to become columns 3,4,5
-	# Final grid has columns 0-5 (6 columns × 10 rows = 60 cells)
+	# EXPECTED BEHAVIOR:
+	# 1. Removed: columns 4,5,6 (between anchors, exclusive) = 30 cells removed
+	# 2. Shift vector: (3,5) - (7,5) = (-4, 0)
+	# 3. Shifted cells: columns 7,8,9 all shift LEFT by 4
+	#    - Column 7 → column 3 (MERGES with existing, 10 cells freed)
+	#    - Column 8 → column 4 (no merge)
+	#    - Column 9 → column 5 (no merge)
+	# 4. Final grid: columns 0,1,2,3,4,5 (6 columns × 10 rows = 60 cells)
+	#
+	# CELL COUNT: 100 - 30 (removed) - 10 (merged) = 60 cells ✓
 
-	# Verify columns 0-3 exist
-	assert_true(cell_exists(Vector2i(0, 0)), "Column 0 exists")
-	assert_true(cell_exists(Vector2i(3, 0)), "Column 3 exists (merged)")
+	# Verify untouched columns exist
+	assert_true(cell_exists(Vector2i(0, 0)), "Column 0 exists (untouched)")
+	assert_true(cell_exists(Vector2i(3, 0)), "Column 3 exists (merged with column 7)")
 
-	# Verify shifted columns
+	# Verify shifted columns at new positions
 	assert_true(cell_exists(Vector2i(4, 0)), "Column 4 exists (was column 8)")
 	assert_true(cell_exists(Vector2i(5, 0)), "Column 5 exists (was column 9)")
 
-	# Verify columns 6-9 no longer exist
-	assert_false(cell_exists(Vector2i(6, 0)), "Column 6 no longer exists")
-	assert_false(cell_exists(Vector2i(9, 0)), "Column 9 no longer exists")
+	# Verify removed/shifted columns no longer exist at old positions
+	assert_false(cell_exists(Vector2i(6, 0)), "Column 6 no longer exists (was removed)")
+	assert_false(cell_exists(Vector2i(7, 0)), "Column 7 no longer exists (shifted to 3)")
+	assert_false(cell_exists(Vector2i(9, 0)), "Column 9 no longer exists (shifted to 5)")
 
-	# Total: 6 columns × 10 rows = 60 cells
-	assert_eq(count_cells(), 60, "Should have 60 cells after fold")
+	# Final cell count verification
+	assert_eq(count_cells(), 60, "Should have 60 cells: 100 - 30 removed - 10 merged = 60")
 
 
 func test_horizontal_fold_near_left_edge():
@@ -179,25 +218,35 @@ func test_vertical_fold_middle_exact_positions():
 
 	fold_system.execute_fold(anchor1, anchor2, false)
 
-	# After fold: rows 3,4,5 were removed
-	# Rows 6-9 shifted up by 4 positions to become rows 2-5
-	# Final grid has rows 0-5 (6 rows × 10 columns = 60 cells)
+	# EXPECTED BEHAVIOR:
+	# 1. Removed: rows 3,4,5 (between anchors, exclusive) = 30 cells removed
+	# 2. Shift vector: (5,2) - (5,6) = (0, -4)
+	# 3. Shifted cells: rows 6,7,8,9 all shift UP by 4
+	#    - Row 6 → row 2 (MERGES with existing, 10 cells freed)
+	#    - Row 7 → row 3 (no merge)
+	#    - Row 8 → row 4 (no merge)
+	#    - Row 9 → row 5 (no merge)
+	# 4. Final grid: rows 0,1,2,3,4,5 (6 rows × 10 columns = 60 cells)
+	#
+	# CELL COUNT: 100 - 30 (removed) - 10 (merged) = 60 cells ✓
 
-	# Verify rows 0-2 exist (row 2 is merged)
-	assert_true(cell_exists(Vector2i(0, 0)), "Row 0 exists")
-	assert_true(cell_exists(Vector2i(0, 1)), "Row 1 exists")
-	assert_true(cell_exists(Vector2i(0, 2)), "Row 2 exists (merged)")
+	# Verify untouched rows exist
+	assert_true(cell_exists(Vector2i(0, 0)), "Row 0 exists (untouched)")
+	assert_true(cell_exists(Vector2i(0, 1)), "Row 1 exists (untouched)")
+	assert_true(cell_exists(Vector2i(0, 2)), "Row 2 exists (merged with row 6)")
 
-	# Verify shifted rows exist at new positions
+	# Verify shifted rows at new positions
 	assert_true(cell_exists(Vector2i(0, 3)), "Row 3 exists (was row 7)")
+	assert_true(cell_exists(Vector2i(0, 4)), "Row 4 exists (was row 8)")
 	assert_true(cell_exists(Vector2i(0, 5)), "Row 5 exists (was row 9)")
 
-	# Verify rows 6-9 no longer exist (shifted up)
-	assert_false(cell_exists(Vector2i(0, 6)), "Row 6 no longer exists")
-	assert_false(cell_exists(Vector2i(0, 9)), "Row 9 no longer exists")
+	# Verify removed/shifted rows no longer exist at old positions
+	assert_false(cell_exists(Vector2i(0, 6)), "Row 6 no longer exists (shifted to 2)")
+	assert_false(cell_exists(Vector2i(0, 7)), "Row 7 no longer exists (shifted to 3)")
+	assert_false(cell_exists(Vector2i(0, 9)), "Row 9 no longer exists (shifted to 5)")
 
-	# Total: 6 rows × 10 columns = 60 cells
-	assert_eq(count_cells(), 60, "Should have 60 cells after fold")
+	# Final cell count verification
+	assert_eq(count_cells(), 60, "Should have 60 cells: 100 - 30 removed - 10 merged = 60")
 
 
 func test_vertical_fold_near_top_edge():
@@ -302,38 +351,44 @@ func test_diagonal_fold_30_degrees():
 # ============================================================================
 
 func test_sequential_horizontal_folds_same_row():
+	# Test two sequential folds on the same row to validate cumulative behavior
 	# First fold: (2,5) to (5,5) - removes columns 3,4
 	# Second fold: (1,5) to (3,5) - removes column 2
 
 	assert_eq(count_cells(), 100, "Start with 100 cells")
 
-	# First fold
+	# FIRST FOLD: (2,5) to (5,5)
 	fold_system.execute_fold(Vector2i(2, 5), Vector2i(5, 5), false)
 
-	# After first fold: removed columns 3,4 (20 cells)
-	# Columns 5-9 shift left by 3 and merge into positions 2-6
-	# Result: 100 - 20 = 80 cells
-	# Wait, test shows 70... let me recalculate:
-	# Start: 0,1,2,3,4,5,6,7,8,9 (100 cells)
-	# Remove 3,4 (20 cells)
-	# Shift: 5→2, 6→3, 7→4, 8→5, 9→6
-	# Final columns: 0,1,2,3,4,5,6 (70 cells total = 7 columns × 10 rows)
-	assert_eq(count_cells(), 70, "After first fold: 70 cells")
+	# EXPECTED AFTER FIRST FOLD:
+	# 1. Removed: columns 3,4 (20 cells)
+	# 2. Shift vector: (2,5) - (5,5) = (-3, 0)
+	# 3. Shifted: columns 5,6,7,8,9 shift LEFT by 3
+	#    - Column 5 → column 2 (MERGE, 10 freed)
+	#    - Column 6 → column 3, 7 → 4, 8 → 5, 9 → 6
+	# 4. Final columns: 0,1,2,3,4,5,6 (7 columns × 10 rows = 70 cells)
+	# CELL COUNT: 100 - 20 (removed) - 10 (merged) = 70 cells ✓
+	assert_eq(count_cells(), 70, "After first fold: 100 - 20 - 10 = 70 cells")
 
 	# Verify specific positions after first fold
 	assert_true(cell_exists(Vector2i(2, 5)), "Left anchor still exists (merged)")
-	assert_false(cell_exists(Vector2i(7, 5)), "Column 7 no longer exists")
-	assert_true(cell_exists(Vector2i(4, 5)), "Shifted column exists at 4")
+	assert_false(cell_exists(Vector2i(7, 5)), "Column 7 no longer exists (shifted to 4)")
+	assert_true(cell_exists(Vector2i(4, 5)), "Column 4 exists (was column 7)")
 
-	# Second fold on already-folded grid
+	# SECOND FOLD: (1,5) to (3,5) on already-folded grid
 	var result = fold_system.execute_fold(Vector2i(1, 5), Vector2i(3, 5), false)
 	assert_true(result, "Second fold should succeed")
 
-	# After second fold: remove column 2 (10 cells)
-	# Columns 3-6 shift to 1-4
-	# Result: 70 - 10 = 60, but actually 50 because more merging
-	# Final: 0,1,2,3,4 (50 cells = 5 columns × 10 rows)
-	assert_eq(count_cells(), 50, "After two folds: 50 cells")
+	# EXPECTED AFTER SECOND FOLD:
+	# Grid before: columns 0,1,2,3,4,5,6 (70 cells)
+	# 1. Removed: column 2 (10 cells)
+	# 2. Shift vector: (1,5) - (3,5) = (-2, 0)
+	# 3. Shifted: columns 3,4,5,6 shift LEFT by 2
+	#    - Column 3 → column 1 (MERGE, 10 freed)
+	#    - Column 4 → column 2, 5 → 3, 6 → 4
+	# 4. Final columns: 0,1,2,3,4 (5 columns × 10 rows = 50 cells)
+	# CELL COUNT: 70 - 10 (removed) - 10 (merged) = 50 cells ✓
+	assert_eq(count_cells(), 50, "After second fold: 70 - 10 - 10 = 50 cells")
 
 	# Verify merge at left anchor of second fold
 	assert_true(cell_exists(Vector2i(1, 5)), "Left anchor exists with merged cells")

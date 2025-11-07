@@ -443,9 +443,11 @@ func validate_fold(anchor1: Vector2i, anchor2: Vector2i) -> Dictionary:
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
-## @return: true if both anchors are valid positions
+## @return: true if both anchors are valid positions AND cells exist at those positions
 func validate_anchors_exist(anchor1: Vector2i, anchor2: Vector2i) -> bool:
-	return grid_manager.is_valid_position(anchor1) and grid_manager.is_valid_position(anchor2)
+	# Check if positions are within grid bounds AND cells actually exist
+	return grid_manager.is_valid_position(anchor1) and grid_manager.cells.has(anchor1) and \
+		   grid_manager.is_valid_position(anchor2) and grid_manager.cells.has(anchor2)
 
 
 ## Check if anchors are not the same cell
