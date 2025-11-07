@@ -1196,7 +1196,7 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		# TRUE DIAGONAL FOLD - use negative-avoidance algorithm
 		# Calculate both possible shift vectors
 		var shift_if_anchor1_target = anchor1 - anchor2  # anchor2 side shifts toward anchor1
-		var shift_if_anchor2_target = anchor2 - anchor1  # anchor1 side shifts toward anchor1
+		var shift_if_anchor2_target = anchor2 - anchor1  # anchor1 side shifts toward anchor2
 
 		# Get actual grid bounds from existing cells
 		var min_existing_x = 0
