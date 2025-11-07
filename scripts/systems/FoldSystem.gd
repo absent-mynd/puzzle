@@ -206,8 +206,8 @@ func _classify_all_cells(fold_line: Dictionary, anchor1: Vector2i, anchor2: Vect
 	for pos in grid_manager.cells.keys():
 		var cell = grid_manager.cells[pos]
 
-		# Skip anchor cells themselves
-		if pos == anchor1 or pos == anchor2:
+		# Skip anchor1 (stationary side), but include anchor2 (will shift to anchor1)
+		if pos == anchor1:
 			continue
 
 		# Get cell center
@@ -251,17 +251,19 @@ func _determine_removed_region(anchor1: Vector2i, anchor2: Vector2i, shifted_cel
 
 	# Check if horizontal or vertical fold
 	if anchor1.y == anchor2.y:
-		# Horizontal fold - remove cells between anchors in X direction
+		# Horizontal fold - remove ENTIRE COLUMNS between anchors (all rows)
 		for x in range(min_x + 1, max_x):
-			var pos = Vector2i(x, anchor1.y)
-			if grid_manager.cells.has(pos):
-				removed.append(pos)
+			for y in range(grid_manager.grid_size.y):
+				var pos = Vector2i(x, y)
+				if grid_manager.cells.has(pos):
+					removed.append(pos)
 	elif anchor1.x == anchor2.x:
-		# Vertical fold - remove cells between anchors in Y direction
+		# Vertical fold - remove ENTIRE ROWS between anchors (all columns)
 		for y in range(min_y + 1, max_y):
-			var pos = Vector2i(anchor1.x, y)
-			if grid_manager.cells.has(pos):
-				removed.append(pos)
+			for x in range(grid_manager.grid_size.x):
+				var pos = Vector2i(x, y)
+				if grid_manager.cells.has(pos):
+					removed.append(pos)
 	else:
 		# Diagonal fold - more complex removed region
 		# For now, use simplified approach: cells in bounding box between anchors

@@ -1,12 +1,12 @@
 extends GutTest
 ## Unit Tests for FoldSystem
 ##
-## This test suite validates the FoldSystem class functionality including:
-## - Fold detection (horizontal, vertical, diagonal)
-## - Horizontal fold execution
-## - Vertical fold execution
+## This test suite validates the unified FoldSystem class functionality including:
+## - Fold orientation detection
+## - Unified fold execution (horizontal, vertical, diagonal)
 ## - Cell removal
 ## - Cell shifting and position updates
+## - Cell merging with CompoundCell
 ## - Fold history tracking
 ## - Edge cases and boundary conditions
 
@@ -40,30 +40,7 @@ func after_all():
 	gut.p("=== FoldSystem Tests Complete ===")
 
 
-# ===== Fold Detection Tests =====
-
-func test_horizontal_fold_detection():
-	var anchor1 = Vector2i(2, 5)
-	var anchor2 = Vector2i(7, 5)
-	assert_true(fold_system.is_horizontal_fold(anchor1, anchor2),
-		"Should detect horizontal fold (same Y coordinate)")
-
-
-func test_vertical_fold_detection():
-	var anchor1 = Vector2i(5, 2)
-	var anchor2 = Vector2i(5, 7)
-	assert_true(fold_system.is_vertical_fold(anchor1, anchor2),
-		"Should detect vertical fold (same X coordinate)")
-
-
-func test_diagonal_fold_detection():
-	var anchor1 = Vector2i(2, 2)
-	var anchor2 = Vector2i(7, 7)
-	assert_false(fold_system.is_horizontal_fold(anchor1, anchor2),
-		"Diagonal should not be horizontal")
-	assert_false(fold_system.is_vertical_fold(anchor1, anchor2),
-		"Diagonal should not be vertical")
-
+# ===== Fold Orientation Detection Tests =====
 
 func test_get_fold_orientation_horizontal():
 	var anchor1 = Vector2i(2, 5)
@@ -86,73 +63,7 @@ func test_get_fold_orientation_diagonal():
 		"Should return 'diagonal' for non-aligned anchors")
 
 
-# ===== Helper Method Tests =====
-
-func test_calculate_removed_cells_horizontal():
-	var anchor1 = Vector2i(2, 5)
-	var anchor2 = Vector2i(6, 5)
-	var removed = fold_system.calculate_removed_cells(anchor1, anchor2)
-
-	# Horizontal fold removes entire rectangular region between vertical lines
-	# Columns 3, 4, 5 (3 columns) across all 10 rows = 30 cells
-	assert_eq(removed.size(), 30, "Should remove 30 cells (3 columns x 10 rows)")
-
-	# Verify cells from all rows are included
-	for y in range(10):
-		assert_has(removed, Vector2i(3, y), "Should include cell at (3, " + str(y) + ")")
-		assert_has(removed, Vector2i(4, y), "Should include cell at (4, " + str(y) + ")")
-		assert_has(removed, Vector2i(5, y), "Should include cell at (5, " + str(y) + ")")
-
-
-func test_calculate_removed_cells_vertical():
-	var anchor1 = Vector2i(5, 2)
-	var anchor2 = Vector2i(5, 6)
-	var removed = fold_system.calculate_removed_cells(anchor1, anchor2)
-
-	# Vertical fold removes entire rectangular region between horizontal lines
-	# Rows 3, 4, 5 (3 rows) across all 10 columns = 30 cells
-	assert_eq(removed.size(), 30, "Should remove 30 cells (10 columns x 3 rows)")
-
-	# Verify cells from all columns are included
-	for x in range(10):
-		assert_has(removed, Vector2i(x, 3), "Should include cell at (" + str(x) + ", 3)")
-		assert_has(removed, Vector2i(x, 4), "Should include cell at (" + str(x) + ", 4)")
-		assert_has(removed, Vector2i(x, 5), "Should include cell at (" + str(x) + ", 5)")
-
-
-func test_calculate_removed_cells_adjacent():
-	var anchor1 = Vector2i(2, 5)
-	var anchor2 = Vector2i(3, 5)
-	var removed = fold_system.calculate_removed_cells(anchor1, anchor2)
-
-	assert_eq(removed.size(), 0, "Adjacent anchors should have no cells between them")
-
-
-func test_get_fold_distance_horizontal():
-	var anchor1 = Vector2i(2, 5)
-	var anchor2 = Vector2i(7, 5)
-	var distance = fold_system.get_fold_distance(anchor1, anchor2)
-
-	assert_eq(distance, 4, "Distance should be 4 cells")
-
-
-func test_get_fold_distance_vertical():
-	var anchor1 = Vector2i(5, 2)
-	var anchor2 = Vector2i(5, 7)
-	var distance = fold_system.get_fold_distance(anchor1, anchor2)
-
-	assert_eq(distance, 4, "Distance should be 4 cells")
-
-
-func test_get_fold_distance_adjacent():
-	var anchor1 = Vector2i(2, 5)
-	var anchor2 = Vector2i(3, 5)
-	var distance = fold_system.get_fold_distance(anchor1, anchor2)
-
-	assert_eq(distance, 0, "Adjacent anchors should have 0 distance")
-
-
-# ===== Horizontal Fold Execution Tests =====
+# ===== Horizontal Fold Execution Tests (using unified execute_fold) =====
 
 func test_horizontal_fold_removes_correct_cells():
 	var anchor1 = Vector2i(2, 5)
@@ -169,8 +80,8 @@ func test_horizontal_fold_removes_correct_cells():
 	for cell in cells_to_remove:
 		assert_not_null(cell, "Cell should exist before fold")
 
-	# Execute fold
-	fold_system.execute_horizontal_fold(anchor1, anchor2)
+	# Execute fold using unified method
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Verify the original cells were removed (not in dictionary anymore)
 	# Note: positions may be occupied by shifted cells
@@ -186,7 +97,7 @@ func test_horizontal_fold_keeps_anchor_cells():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	fold_system.execute_horizontal_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Left anchor should remain at original position
 	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain at original position")
@@ -211,7 +122,7 @@ func test_horizontal_fold_shifts_cells_correctly():
 		assert_not_null(cell, "Cell should exist before fold")
 
 	# Execute fold
-	fold_system.execute_horizontal_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Cells that were at x=7 should now be at x=3 (shift distance is 6 - 2 = 4, so 7 - 4 = 3)
 	# This should happen for ALL rows
@@ -237,7 +148,7 @@ func test_horizontal_fold_updates_world_positions():
 	var anchor2 = Vector2i(6, 5)
 
 	# Execute fold
-	fold_system.execute_horizontal_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Check that shifted cells have correct local positions
 	# (Cells are children of GridManager, so geometry is in local coordinates)
@@ -268,7 +179,7 @@ func test_horizontal_fold_with_reversed_anchors():
 		grid_manager.get_cell(Vector2i(5, 9))
 	]
 
-	fold_system.execute_horizontal_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Verify the original cells were removed
 	var found_removed_cells = 0
@@ -297,7 +208,7 @@ func test_vertical_fold_removes_correct_cells():
 		assert_not_null(cell, "Cell should exist before fold")
 
 	# Execute fold
-	fold_system.execute_vertical_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Verify the original cells were removed (not in dictionary anymore)
 	# Note: positions may be occupied by shifted cells
@@ -313,7 +224,7 @@ func test_vertical_fold_keeps_anchor_cells():
 	var anchor1 = Vector2i(5, 2)
 	var anchor2 = Vector2i(5, 6)
 
-	fold_system.execute_vertical_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Top anchor should remain at original position
 	assert_not_null(grid_manager.get_cell(anchor1), "Anchor1 cell should remain at original position")
@@ -338,7 +249,7 @@ func test_vertical_fold_shifts_cells_correctly():
 		assert_not_null(cell, "Cell should exist before fold")
 
 	# Execute fold
-	fold_system.execute_vertical_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Cells that were at y=7 should now be at y=3 (shift distance is 6 - 2 = 4, so 7 - 4 = 3)
 	# This should happen for ALL columns
@@ -364,7 +275,7 @@ func test_vertical_fold_updates_world_positions():
 	var anchor2 = Vector2i(5, 6)
 
 	# Execute fold
-	fold_system.execute_vertical_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Check that shifted cells have correct local positions
 	# (Cells are children of GridManager, so geometry is in local coordinates)
@@ -395,7 +306,7 @@ func test_vertical_fold_with_reversed_anchors():
 		grid_manager.get_cell(Vector2i(9, 5))
 	]
 
-	fold_system.execute_vertical_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Verify the original cells were removed
 	var found_removed_cells = 0
@@ -415,7 +326,7 @@ func test_execute_fold_horizontal():
 	# Store reference to a cell that should be removed
 	var cell_to_remove = grid_manager.get_cell(Vector2i(3, 5))
 
-	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
+	var result = fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_true(result, "Horizontal fold should succeed")
 
@@ -435,7 +346,7 @@ func test_execute_fold_vertical():
 	# Store reference to a cell that should be removed
 	var cell_to_remove = grid_manager.get_cell(Vector2i(5, 3))
 
-	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
+	var result = fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_true(result, "Vertical fold should succeed")
 
@@ -455,7 +366,7 @@ func test_execute_fold_diagonal_succeeds():
 
 	# No player validation needed for this test (player-specific tests are in test_player_fold_validation.gd)
 
-	var result = await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
+	var result = fold_system.execute_fold(anchor1, anchor2, false)
 
 	assert_true(result, "Diagonal fold should succeed in Phase 4")
 
@@ -466,9 +377,9 @@ func test_fold_history_records_operation():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(6, 5)
 
-	await fold_system.execute_fold(anchor1, anchor2, false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(anchor1, anchor2, false)
 
-	var history = fold_system.get_fold_history()
+	var history = fold_system.fold_history
 	assert_eq(history.size(), 1, "Should have one fold in history")
 
 	var record = history[0]
@@ -476,26 +387,29 @@ func test_fold_history_records_operation():
 	assert_has(record, "anchor1", "Record should have anchor1")
 	assert_has(record, "anchor2", "Record should have anchor2")
 	assert_has(record, "removed_cells", "Record should have removed_cells")
-	assert_has(record, "orientation", "Record should have orientation")
+	assert_has(record, "affected_cells", "Record should have affected_cells")
 	assert_has(record, "timestamp", "Record should have timestamp")
 
 
 func test_fold_history_multiple_folds():
-	await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
-	await fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4), false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)
+	fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4), false)
 
-	var history = fold_system.get_fold_history()
+	var history = fold_system.fold_history
 	assert_eq(history.size(), 2, "Should have two folds in history")
 
-	assert_eq(history[0].orientation, "horizontal", "First fold should be horizontal")
-	assert_eq(history[1].orientation, "vertical", "Second fold should be vertical")
+	# Verify both folds are recorded with correct anchors
+	assert_eq(history[0].anchor1, Vector2i(2, 5), "First fold anchor1 should be recorded")
+	assert_eq(history[0].anchor2, Vector2i(6, 5), "First fold anchor2 should be recorded")
+	assert_eq(history[1].anchor1, Vector2i(3, 2), "Second fold anchor1 should be recorded")
+	assert_eq(history[1].anchor2, Vector2i(3, 4), "Second fold anchor2 should be recorded")
 
 
 func test_fold_history_incrementing_ids():
-	await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
-	await fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4), false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)
+	fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4), false)
 
-	var history = fold_system.get_fold_history()
+	var history = fold_system.fold_history
 	assert_eq(history[0].fold_id, 0, "First fold should have ID 0")
 	assert_eq(history[1].fold_id, 1, "Second fold should have ID 1")
 
@@ -506,10 +420,10 @@ func test_horizontal_fold_adjacent_anchors():
 	var anchor1 = Vector2i(2, 5)
 	var anchor2 = Vector2i(3, 5)
 
-	fold_system.execute_horizontal_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# No cells should be removed (adjacent anchors)
-	assert_eq(fold_system.get_fold_history()[0].removed_cells.size(), 0,
+	assert_eq(fold_system.fold_history[0].removed_cells.size(), 0,
 		"Adjacent anchors should remove no cells")
 
 
@@ -517,10 +431,10 @@ func test_vertical_fold_adjacent_anchors():
 	var anchor1 = Vector2i(5, 2)
 	var anchor2 = Vector2i(5, 3)
 
-	fold_system.execute_vertical_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# No cells should be removed (adjacent anchors)
-	assert_eq(fold_system.get_fold_history()[0].removed_cells.size(), 0,
+	assert_eq(fold_system.fold_history[0].removed_cells.size(), 0,
 		"Adjacent anchors should remove no cells")
 
 
@@ -529,7 +443,7 @@ func test_horizontal_fold_at_grid_edge():
 	var anchor1 = Vector2i(7, 5)
 	var anchor2 = Vector2i(9, 5)
 
-	fold_system.execute_horizontal_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Should remove entire column 8 (all rows)
 	for y in range(10):
@@ -545,7 +459,7 @@ func test_vertical_fold_at_grid_edge():
 	var anchor1 = Vector2i(5, 7)
 	var anchor2 = Vector2i(5, 9)
 
-	fold_system.execute_vertical_fold(anchor1, anchor2)
+	fold_system.execute_fold(anchor1, anchor2, false)
 
 	# Should remove entire row 8 (all columns)
 	for x in range(10):
@@ -560,42 +474,42 @@ func test_vertical_fold_at_grid_edge():
 
 func test_multiple_sequential_horizontal_folds():
 	# First fold
-	await fold_system.execute_fold(Vector2i(1, 3), Vector2i(5, 3), false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(Vector2i(1, 3), Vector2i(5, 3), false)  # Use await since execute_fold is a coroutine
 
 	# Second fold on same row
-	await fold_system.execute_fold(Vector2i(0, 3), Vector2i(2, 3), false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(Vector2i(0, 3), Vector2i(2, 3), false)  # Use await since execute_fold is a coroutine
 
 	# Verify history
-	var history = fold_system.get_fold_history()
+	var history = fold_system.fold_history
 	assert_eq(history.size(), 2, "Should have two folds in history")
 
 
 func test_multiple_sequential_vertical_folds():
 	# First fold
-	await fold_system.execute_fold(Vector2i(4, 1), Vector2i(4, 5), false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(Vector2i(4, 1), Vector2i(4, 5), false)  # Use await since execute_fold is a coroutine
 
 	# Second fold on same column
-	await fold_system.execute_fold(Vector2i(4, 0), Vector2i(4, 2), false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(Vector2i(4, 0), Vector2i(4, 2), false)  # Use await since execute_fold is a coroutine
 
 	# Verify history
-	var history = fold_system.get_fold_history()
+	var history = fold_system.fold_history
 	assert_eq(history.size(), 2, "Should have two folds in history")
 
 
 func test_mixed_folds():
 	# Horizontal fold
-	await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
 
 	# Vertical fold (different row/column)
-	await fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4), false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 4), false)  # Use await since execute_fold is a coroutine
 
 	# Both should succeed
-	var history = fold_system.get_fold_history()
+	var history = fold_system.fold_history
 	assert_eq(history.size(), 2, "Should have two folds in history")
 
 
 func test_grid_remains_consistent_after_fold():
-	await fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(6, 5), false)  # Use await since execute_fold is a coroutine
 
 	# Check that all remaining cells are valid
 	for pos in grid_manager.cells.keys():

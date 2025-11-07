@@ -31,7 +31,7 @@ var grid_origin: Vector2 = Vector2.ZERO
 var preview_line: Line2D
 
 ## Currently hovered cell
-var hovered_cell: Cell = null
+var hovered_cell: CompoundCell = null
 
 ## Reference to FoldSystem for validation (set externally)
 var fold_system: FoldSystem = null
