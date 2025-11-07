@@ -77,9 +77,17 @@ func center_grid_on_screen() -> void:
 
 ## Get cell at grid position
 ## @param grid_pos: Grid coordinates
-## @return: Cell at position, or null if out of bounds
+## @return: Cell at position, or null if out of bounds or cell has been freed
 func get_cell(grid_pos: Vector2i) -> Cell:
-	return cells.get(grid_pos, null)
+	var cell = cells.get(grid_pos, null)
+
+	# Validate cell hasn't been freed
+	if cell and not is_instance_valid(cell):
+		# Cell has been freed - remove from dictionary
+		cells.erase(grid_pos)
+		return null
+
+	return cell
 
 
 ## Get cell at world position
@@ -100,6 +108,9 @@ func get_cell_at_world_pos(world_pos: Vector2) -> Cell:
 	# For partial cells, check all cells for containment
 	# (This becomes important after folding splits cells)
 	for c in cells.values():
+		# Skip freed cells
+		if not is_instance_valid(c):
+			continue
 		if c.contains_point(local_pos):
 			return c
 
@@ -325,3 +336,26 @@ func set_goal_cell(grid_pos: Vector2i) -> bool:
 		cell.set_cell_type(3)  # Goal type
 		return true
 	return false
+
+
+## Clean up freed cell references from the dictionary
+## Call this after fold operations to ensure dictionary integrity
+func cleanup_freed_cells() -> int:
+	var freed_count = 0
+	var positions_to_remove = []
+
+	# Find all positions with freed cells
+	for pos in cells.keys():
+		var cell = cells[pos]
+		if not is_instance_valid(cell):
+			positions_to_remove.append(pos)
+			freed_count += 1
+
+	# Remove them from dictionary
+	for pos in positions_to_remove:
+		cells.erase(pos)
+
+	if freed_count > 0:
+		push_warning("GridManager: Cleaned up %d freed cell references" % freed_count)
+
+	return freed_count

@@ -601,6 +601,9 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
 	fold_history.append(fold_record)
 
+	# 7. Clean up any freed cell references
+	grid_manager.cleanup_freed_cells()
+
 
 ## Vertical Fold Implementation
 
@@ -704,6 +707,9 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 	# 6. Record fold operation
 	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
 	fold_history.append(fold_record)
+
+	# 7. Clean up any freed cell references
+	grid_manager.cleanup_freed_cells()
 
 
 ## Execute a horizontal fold with animation (Issue #9)
@@ -809,6 +815,9 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
 	fold_history.append(fold_record)
 
+	# 11. Clean up any freed cell references
+	grid_manager.cleanup_freed_cells()
+
 
 ## Execute a vertical fold with animation (Issue #9)
 ##
@@ -912,6 +921,9 @@ func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> voi
 	# 10. Record fold operation
 	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
 	fold_history.append(fold_record)
+
+	# 11. Clean up any freed cell references
+	grid_manager.cleanup_freed_cells()
 
 
 ## Main Fold Execution Method
@@ -1191,6 +1203,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		removed_positions.append(cell.grid_position)
 	var fold_record = create_fold_record(anchor1, anchor2, removed_positions, "diagonal")
 	fold_history.append(fold_record)
+
+	# 10. Clean up any freed cell references from the dictionary
+	grid_manager.cleanup_freed_cells()
 
 ## Classify all cells for diagonal fold algorithm
 ##
