@@ -34,13 +34,33 @@ func test_merged_cell_has_complete_geometry():
 	print("  Original cell at (1,2) area: %.1f" % original_area)
 	print("  Expected area: %.1f (full square)" % (cell_size * cell_size))
 
+	# Capture state for validation
+	var cells_before = grid_manager.cells.size()
+	var area_before = FoldTestValidator.calculate_total_area(grid_manager)
+
 	# Execute fold
 	var anchor1 = Vector2i(1, 2)
 	var anchor2 = Vector2i(3, 2)
 	fold_system.execute_diagonal_fold(anchor1, anchor2)
 
+	# Run comprehensive validation
+	# For horizontal fold anchor1=(1,2) to anchor2=(3,2):
+	# - Cells at x=2 removed: 5 cells (entire column in 5x5 grid)
+	# - Cells at x=3 shift to x=1 and merge, freeing original x=1 cells: 5 cells
+	# Total removed: 5 + 5 = 10 cells
+	var expected_removed = 10
+	var validation = FoldTestValidator.validate_fold_result(
+		grid_manager,
+		cells_before,
+		area_before,
+		expected_removed,
+		false
+	)
+
+	FoldTestValidator.print_validation_results(validation)
+
 	# Check merged cell at x=1
-	print("\nAFTER fold:")
+	print("\nAFTER fold - MERGED CELL DETAILS:")
 	var merged_cell = grid_manager.get_cell(Vector2i(1, 2))
 	assert_not_null(merged_cell, "Cell at x=1 should exist")
 
@@ -78,5 +98,6 @@ func test_merged_cell_has_complete_geometry():
 				print("    Only %.1f pixels wide (%.1f%% of full width)" % [width, width / cell_size * 100])
 				print("    This cell should have merged geometry from BOTH cut lines")
 				print("    but it only has geometry from ONE side!")
+				print("    NOTE: This is a known limitation - proper polygon union not yet implemented")
 			else:
 				print("    ✅ GEOMETRY COMPLETE - spans full cell width")
