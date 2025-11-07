@@ -1436,6 +1436,17 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 		var old_pos = cell.grid_position
 		var new_pos = old_pos + shift_vector
 
+		# Remove from old position first
+		grid_manager.cells.erase(old_pos)
+
+		# CRITICAL: Check if new position is within grid bounds
+		if new_pos.x < 0 or new_pos.x >= grid_manager.grid_size.x or \
+		   new_pos.y < 0 or new_pos.y >= grid_manager.grid_size.y:
+			# Cell shifts out of bounds - free it and skip
+			cell.queue_free()
+			push_warning("Cell at %s shifts to out-of-bounds position %s - removed" % [old_pos, new_pos])
+			continue
+
 		# Update cell position
 		cell.grid_position = new_pos
 
@@ -1446,9 +1457,6 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 			new_geometry.append(vertex + shift_pixels)
 		cell.geometry = new_geometry
 		cell.update_visual()
-
-		# Remove from old position
-		grid_manager.cells.erase(old_pos)
 
 		# Check if new position is occupied - need to merge
 		var existing = grid_manager.get_cell(new_pos)
