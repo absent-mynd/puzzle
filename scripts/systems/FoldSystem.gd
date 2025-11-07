@@ -917,6 +917,13 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 
 	# 5. Shift cells from source side toward target
 	var shift_vector = target_anchor - source_anchor  # Grid units
+
+	# IMPORTANT: Build list of shifting positions BEFORE shifting cells
+	# (cells will have their grid_position updated during shift)
+	var shifting_positions: Array[Vector2i] = []
+	for cell in classification.to_shift:
+		shifting_positions.append(cell.grid_position)
+
 	_shift_cells_with_merge(classification.to_shift, shift_vector, split_parts_line2)
 
 	# 6. Cells on line1 are already split in-place at anchor1
@@ -928,12 +935,7 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 
 	# 8. Update player position if affected
 	if player:
-		# Build list of positions that are shifting
-		var shifting_positions: Array[Vector2i] = []
-		for cell in classification.to_shift:
-			shifting_positions.append(cell.grid_position)
-
-		# Check if player is on a shifting cell
+		# Check if player is on a shifting cell (using positions from BEFORE shift)
 		if player.grid_position in shifting_positions:
 			player.grid_position += Vector2i(shift_vector)
 			var new_cell = grid_manager.get_cell(player.grid_position)
