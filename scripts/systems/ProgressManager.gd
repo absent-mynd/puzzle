@@ -126,18 +126,11 @@ func unlock_next_level(completed_level_id: String) -> void:
 ## Gets the next level ID in sequence
 ## Assumes format like "01_introduction", "02_basic_folding", etc.
 func get_sequential_next_level(level_id: String) -> String:
-	# Hardcoded mapping for common campaign levels
-	# In production, this would query LevelManager for available levels
+	# Main campaign sequence (3 levels)
 	var level_sequence = {
 		"01_introduction": "02_basic_folding",
 		"02_basic_folding": "03_diagonal_challenge",
-		"03_diagonal_challenge": "04_advanced_puzzle",
-		"04_advanced_puzzle": "05_multi_fold",
-		"05_multi_fold": "06_complex_shapes",
-		"06_complex_shapes": "07_master_challenge",
-		"07_master_challenge": "08_expert_level",
-		"08_expert_level": "09_final_test",
-		"09_final_test": "10_ultimate_puzzle"
+		"03_diagonal_challenge": ""  # End of campaign
 	}
 
 	return level_sequence.get(level_id, "")

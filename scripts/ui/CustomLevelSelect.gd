@@ -19,21 +19,19 @@ func populate_levels() -> void:
 	for child in level_grid.get_children():
 		child.queue_free()
 
-	# Get all custom levels
-	var levels_dir = GameManager.CUSTOM_LEVELS_DIR
-	var level_files = FileUtils.get_custom_level_files(levels_dir)
+	# Get all custom levels from res://levels/custom/
+	var level_files = GameManager.get_custom_levels()
 
 	if level_files.is_empty():
 		# Show "no levels" message
 		var label = Label.new()
-		label.text = "No custom levels found.\nCreate one in the Level Editor!"
+		label.text = "No custom levels found. Create one in the Level Editor!"
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.add_theme_font_size_override("font_size", 24)
 		level_grid.add_child(label)
 		return
 
-	for level_filename in level_files:
-		var level_path = levels_dir + level_filename + ".json"
+	for level_path in level_files:
 		var level_data = GameManager.level_manager.load_level(level_path)
 		if level_data:
 			create_level_button(level_data, level_path)
