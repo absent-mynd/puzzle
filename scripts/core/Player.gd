@@ -123,26 +123,42 @@ func attempt_move(direction: Vector2i) -> bool:
 ## @param target_grid_pos: Target grid position
 ## @return: true if move is valid, false otherwise
 ##
-## PHASE 5: Uses dominant type for multi-piece cells
+## PHASE 5: Checks ALL pieces in multi-polygon cells
+## After folds, cells can exist outside original grid bounds
 func can_move_to(target_grid_pos: Vector2i) -> bool:
-	# Check if position is within grid bounds
-	if not grid_manager.is_valid_position(target_grid_pos):
-		return false
-
-	# Get target cell
+	# Get target cell - cell existence is the source of truth (no bounds check)
+	# After folds, cells can exist outside original grid bounds
 	var target_cell = grid_manager.get_cell(target_grid_pos)
 	if not target_cell:
-		return false
+		return false  # No cell at this position
 
-	# PHASE 5: Check dominant type for collision
-	# Cell types: 0=empty, 1=wall, 2=water, 3=goal
-	var dominant_type = target_cell.get_dominant_type()
+	# PHASE 5: Check ALL pieces in multi-polygon cells for blocking
+	# Cell types: 0=empty, 1=wall, 2=water (walkable), 3=goal
 
-	# Can't move into walls
-	if dominant_type == 1:
-		return false
+	# First pass: check for walls (always block)
+	for piece in target_cell.geometry_pieces:
+		if piece.cell_type == 1:
+			return false  # Wall piece blocks movement
 
-	# Can move into empty, water, or goal
+	# Second pass: check if there's any walkable non-empty piece (water or goal)
+	var has_walkable_piece = false
+	for piece in target_cell.geometry_pieces:
+		if piece.cell_type == 2 or piece.cell_type == 3:  # Water or goal
+			has_walkable_piece = true
+			break
+
+	# If there's a walkable piece (water/goal), allow movement
+	if has_walkable_piece:
+		return true
+
+	# Otherwise, check for empty pieces with geometry in merged cells
+	# This represents void created by fold - blocks movement
+	if target_cell.geometry_pieces.size() > 1:
+		for piece in target_cell.geometry_pieces:
+			if piece.cell_type == 0 and not piece.geometry.is_empty():
+				return false  # Empty void in merged cell blocks
+
+	# Pure empty cell (single piece) or cell with only metadata pieces is walkable
 	return true
 
 
