@@ -1162,23 +1162,27 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 ## @param anchor1: First anchor grid position (stationary side)
 ## @param anchor2: Second anchor grid position (shifting side)
 func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
-	# NORMALIZE ANCHORS for symmetric behavior
-	# Always shift toward the "target" anchor (left-most for horizontal, top-most for vertical)
-	var fold_vector = anchor2 - anchor1
+	# NORMALIZE ANCHORS to avoid negative coordinate shifts
+	# Strategy: Choose target anchor that maximizes positive shift directions
+	# shift_vector = target - source, so we want target to be "larger" than source
+	# This ensures cells shift toward positive coordinates (right/down)
 	var target_anchor: Vector2i
 	var source_anchor: Vector2i
 
-	if abs(fold_vector.x) > abs(fold_vector.y):
-		# Primarily horizontal fold - use left-most as target
-		if anchor1.x < anchor2.x:
-			target_anchor = anchor1
-			source_anchor = anchor2
-		else:
-			target_anchor = anchor2
-			source_anchor = anchor1
+	# Use the "larger" anchor as target (more right + more down = larger)
+	# This ensures shift_vector components are as positive as possible
+	var anchor1_score = anchor1.x + anchor1.y
+	var anchor2_score = anchor2.x + anchor2.y
+
+	if anchor1_score > anchor2_score:
+		target_anchor = anchor1
+		source_anchor = anchor2
+	elif anchor2_score > anchor1_score:
+		target_anchor = anchor2
+		source_anchor = anchor1
 	else:
-		# Primarily vertical fold - use top-most as target
-		if anchor1.y < anchor2.y:
+		# Equal scores - prefer the one with larger x (rightmost)
+		if anchor1.x >= anchor2.x:
 			target_anchor = anchor1
 			source_anchor = anchor2
 		else:
@@ -1439,15 +1443,7 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 		# Remove from old position first
 		grid_manager.cells.erase(old_pos)
 
-		# CRITICAL: Check if new position is within grid bounds
-		if new_pos.x < 0 or new_pos.x >= grid_manager.grid_size.x or \
-		   new_pos.y < 0 or new_pos.y >= grid_manager.grid_size.y:
-			# Cell shifts out of bounds - free it and skip
-			cell.queue_free()
-			push_warning("Cell at %s shifts to out-of-bounds position %s - removed" % [old_pos, new_pos])
-			continue
-
-		# Update cell position
+		# Update cell position (allow negative coordinates - grid can expand)
 		cell.grid_position = new_pos
 
 		# Translate geometry
@@ -1466,7 +1462,7 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 			# Full polygon union would be more complex
 			_merge_cells_simple(existing, cell, new_pos)
 		else:
-			# Place cell at new position
+			# Place cell at new position (even if outside original grid bounds)
 			grid_manager.cells[new_pos] = cell
 
 

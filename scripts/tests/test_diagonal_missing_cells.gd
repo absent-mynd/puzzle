@@ -64,9 +64,24 @@ func test_diagonal_fold_with_missing_cells():
 			print("  (%d,%d): MISSING ❌" % [pos.x, pos.y])
 
 func print_grid():
-	for y in range(grid_manager.grid_size.y):
-		var row = "  Row %d: " % y
-		for x in range(grid_manager.grid_size.x):
+	# First, find actual bounds
+	var min_x = 0
+	var max_x = grid_manager.grid_size.x - 1
+	var min_y = 0
+	var max_y = grid_manager.grid_size.y - 1
+
+	for pos in grid_manager.cells.keys():
+		min_x = min(min_x, pos.x)
+		max_x = max(max_x, pos.x)
+		min_y = min(min_y, pos.y)
+		max_y = max(max_y, pos.y)
+
+	print("  Grid bounds: x=[%d, %d], y=[%d, %d]" % [min_x, max_x, min_y, max_y])
+	print("  Total cells: %d" % grid_manager.cells.size())
+
+	for y in range(min_y, max_y + 1):
+		var row = "  Row %2d: " % y
+		for x in range(min_x, max_x + 1):
 			var cell = grid_manager.get_cell(Vector2i(x, y))
 			if cell:
 				if cell.is_partial:
