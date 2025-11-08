@@ -917,6 +917,64 @@ func can_undo_fold_seam_based(fold_id: int) -> Dictionary:
 	}
 
 
+## PHASE 6 TASK 4: Mouse Input for Seam Clicking
+##
+## Detects if a mouse click (in LOCAL coordinates) is on a seam's clickable zone.
+## Returns information about the clicked seam, or null if no seam was clicked.
+##
+## @param click_pos_local: Mouse click position in LOCAL coordinates (relative to GridManager)
+## @return: Dictionary with {fold_id, seam_line, can_undo} or null if no seam clicked
+func detect_seam_click(click_pos_local: Vector2):
+	if not grid_manager:
+		return null
+
+	var cell_size = grid_manager.cell_size
+	var zone_radius = cell_size * 0.25  # Click tolerance
+
+	# Track best match (highest fold_id if multiple seams overlap)
+	var best_match = null
+	var best_fold_id = -1
+
+	# Check all seam lines
+	for seam_line in seam_lines:
+		if not seam_line or not is_instance_valid(seam_line):
+			continue
+
+		# Get clickable zones for this seam
+		var zones = seam_line.get_meta("clickable_zones", [])
+		if zones.is_empty():
+			continue
+
+		# Check each clickable zone
+		for zone_grid_pos in zones:
+			# Calculate zone center in LOCAL coordinates
+			var zone_center = Vector2(zone_grid_pos) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+			# Check if click is within tolerance of zone center
+			var distance = click_pos_local.distance_to(zone_center)
+			if distance <= zone_radius:
+				# Clicked on this seam!
+				var fold_id = seam_line.get_meta("fold_id", -1)
+
+				# If this is the first match, or has higher fold_id, use it
+				if fold_id > best_fold_id:
+					best_fold_id = fold_id
+
+					# Check if this seam can be undone
+					var validation = can_undo_fold_seam_based(fold_id)
+
+					best_match = {
+						"fold_id": fold_id,
+						"seam_line": seam_line,
+						"can_undo": validation["valid"]
+					}
+
+				# No need to check other zones for this seam
+				break
+
+	return best_match
+
+
 ## ============================================================================
 ## PHASE 4: GEOMETRIC FOLDING (DIAGONAL FOLDS)
 ## ============================================================================

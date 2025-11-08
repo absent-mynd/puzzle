@@ -549,3 +549,125 @@ func test_undo_validation_reason_messages():
 			"newer" in reason_lower
 		)
 		assert_true(has_meaningful_message, "Reason should mention blocking/intersection")
+
+
+## ============================================================================
+## TASK 4: MOUSE INPUT FOR SEAM CLICKING TESTS
+## ============================================================================
+
+func test_detect_seam_click_method_exists():
+	# Verify the method exists
+	assert_true(fold_system.has_method("detect_seam_click"),
+		"FoldSystem should have detect_seam_click method")
+
+
+func test_click_on_valid_zone_detects_seam():
+	# Execute a horizontal fold
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)  # fold_id 0
+
+	# Click at the center of a cell that the seam passes through
+	# The seam should pass through cells at y=4
+	# Get the center of cell (3, 4) in LOCAL coordinates
+	var cell_size = grid_manager.cell_size
+	var click_pos_local = Vector2(3, 4) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+	# Detect seam at this position
+	var result = fold_system.detect_seam_click(click_pos_local)
+
+	assert_not_null(result, "Should detect a seam at valid zone")
+	assert_true(result.has("fold_id"), "Result should contain fold_id")
+	assert_eq(result["fold_id"], 0, "Should detect fold_id 0")
+
+
+func test_click_outside_zones_returns_null():
+	# Execute a horizontal fold at y=4
+	# This creates VERTICAL seam lines at x=3 and x=4
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)
+
+	# Click at a position NOT on the seam lines (not at x=3 or x=4)
+	var cell_size = grid_manager.cell_size
+	var click_pos_local = Vector2(6, 7) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+	var result = fold_system.detect_seam_click(click_pos_local)
+
+	assert_null(result, "Should not detect seam outside clickable zones")
+
+
+func test_click_tolerance_radius():
+	# Execute a fold
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)
+
+	# Click near but not exactly at zone center
+	var cell_size = grid_manager.cell_size
+	var zone_center = Vector2(3, 4) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+	var tolerance = cell_size * 0.25
+
+	# Click just inside tolerance
+	var click_inside = zone_center + Vector2(tolerance * 0.9, 0)
+	var result_inside = fold_system.detect_seam_click(click_inside)
+	assert_not_null(result_inside, "Should detect seam within tolerance radius")
+
+	# Click just outside tolerance
+	var click_outside = zone_center + Vector2(tolerance * 1.1, 0)
+	var result_outside = fold_system.detect_seam_click(click_outside)
+	assert_null(result_outside, "Should not detect seam outside tolerance radius")
+
+
+func test_multiple_seams_selects_newest():
+	# Execute two folds that pass through the same grid cell center
+	# Both horizontal folds will have overlapping clickable zones
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)  # fold_id 0
+	fold_system.execute_fold(Vector2i(3, 5), Vector2i(4, 5), false)  # fold_id 1
+
+	# Click at a position where both seams might be (test at fold 1's position)
+	var cell_size = grid_manager.cell_size
+	var click_pos = Vector2(3, 5) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+	var result = fold_system.detect_seam_click(click_pos)
+
+	assert_not_null(result, "Should detect a seam")
+	# Should prefer the newer fold (higher fold_id)
+	assert_eq(result["fold_id"], 1, "Should select newest fold when multiple seams overlap")
+
+
+func test_click_returns_complete_fold_info():
+	# Execute a fold
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)
+
+	# Click on the seam
+	var cell_size = grid_manager.cell_size
+	var click_pos = Vector2(3, 4) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+	var result = fold_system.detect_seam_click(click_pos)
+
+	assert_not_null(result, "Should detect seam")
+	assert_true(result.has("fold_id"), "Should have fold_id")
+	assert_true(result.has("seam_line"), "Should have seam_line reference")
+	assert_true(result.has("can_undo"), "Should have can_undo flag")
+
+
+func test_click_blocked_seam_returns_blocked_status():
+	# Execute two intersecting folds
+	fold_system.execute_fold(Vector2i(4, 2), Vector2i(4, 3), false)  # fold_id 0 (vertical)
+	fold_system.execute_fold(Vector2i(2, 4), Vector2i(3, 4), false)  # fold_id 1 (horizontal)
+
+	# Click on the older seam (should be blocked)
+	var cell_size = grid_manager.cell_size
+	var click_pos = Vector2(4, 2) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+	var result = fold_system.detect_seam_click(click_pos)
+
+	assert_not_null(result, "Should detect the seam")
+	assert_eq(result["fold_id"], 0, "Should detect fold 0")
+	assert_false(result["can_undo"], "Should indicate seam is blocked")
+
+
+func test_no_seams_returns_null():
+	# Don't execute any folds
+	# Click anywhere
+	var cell_size = grid_manager.cell_size
+	var click_pos = Vector2(3, 4) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+	var result = fold_system.detect_seam_click(click_pos)
+
+	assert_null(result, "Should return null when no seams exist")
