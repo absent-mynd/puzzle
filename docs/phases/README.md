@@ -21,11 +21,12 @@ Located in `completed/` directory:
 | 2 | Basic Grid System | ✅ Complete | 41 | 2025-11-05 |
 | 3 | Simple Axis-Aligned Folding | ✅ Complete | 95 | 2025-11-06 |
 | 4 | Geometric Folding | ✅ Complete | 22 | 2025-11-07 |
+| 5 | Multi-Seam Handling | ✅ Complete | ~50 | 2025-11-08 |
 | 7 | Player Character | ✅ Complete | 48 | 2025-11-06 |
 | 9 | Level Management | ⚙️ Substantial | 73 | In Progress |
 | 10 | GUI & Audio | ⚙️ Substantial | 30 | In Progress |
 
-**Total Tests:** 361 / 363 (99.4%)
+**Total Tests:** 474 (and growing - includes NullPieces: 7, PlayerBounds: 30+, improved validation: 42)
 
 ---
 
@@ -35,9 +36,8 @@ Located in `pending/` directory:
 
 | Phase | Name | Priority | Est. Time | Dependencies |
 |-------|------|----------|-----------|--------------|
-| 5 | Multi-Seam Handling | P1 | 4-6h | Phase 4 ✅ |
-| 6 | Undo System | P1 | 4-5h | Phases 3, 4 |
-| 8 | Cell Types & Visuals | P2 | 3-4h | Phases 4, 5 |
+| 6 | Undo System | P1 | 4-6h | Phases 4, 5 ✅ |
+| 8 | Cell Types & Visuals | P2 | 3-4h | Phases 4, 5 ✅ |
 | 9 | Level Management | P2 | 3-4h | Phase 3, 7 |
 | 10 | Graphics, GUI & Audio | P3 | 4-6h | Parallel |
 | 11 | Testing & Validation | P4 | 4-5h | All phases |
@@ -79,21 +79,25 @@ Each phase document contains:
 
 ---
 
-## Next Phase: Phase 5 - Multi-Seam Handling
+## Next Phase: Phase 6 - Undo System
 
 **Status:** 🚧 Ready to start
 **Priority:** P1
-**Document:** [`pending/phase_5.md`](pending/phase_5.md) (to be created)
+**Document:** [`pending/phase_6.md`](pending/phase_6.md)
 
-Enables cells with multiple intersecting seams through tessellation.
+Implements complete undo/redo system for fold operations with strict undo ordering.
 
 **Key Challenges:**
-- Recursive polygon subdivision
-- Seam metadata tracking
-- Visual representation
-- Performance optimization
+- Maintaining game state consistency
+- Efficient state snapshots
+- Strict undo ordering validation
+- Memory management for undo stack
 
 **Estimated Time:** 4-6 hours
+
+**Dependencies Met:**
+- ✅ Phase 4: Geometric Folding complete
+- ✅ Phase 5: Multi-Seam Handling complete
 
 ---
 
@@ -102,16 +106,16 @@ Enables cells with multiple intersecting seams through tessellation.
 ```
 Phase 1, 2, 3, 7 (COMPLETE)
     ↓
-Phase 4: Geometric Folding (NEXT - CRITICAL PATH)
+Phase 4: Geometric Folding (COMPLETE)
     ↓
-Phase 5: Multi-Seam Handling
+Phase 5: Multi-Seam Handling (COMPLETE)
     ↓
-Phase 6: Undo System
+Phase 6: Undo System (NEXT - CRITICAL PATH) 🚧
     ↓
 Phase 11: Final Testing
 
 Parallel tracks (can be done anytime):
-- Phase 8: Cell Types
+- Phase 8: Cell Types (depends on Phase 5 ✅)
 - Phase 9: Level Management (partial - GUI done)
 - Phase 10: Graphics & Audio (partial - GUI done)
 ```
