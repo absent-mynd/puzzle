@@ -236,8 +236,14 @@ func is_player_in_removed_region(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 
 ## Check if player's cell would be split by the fold
 ##
-## For diagonal folds, cells can be split by the cut lines.
-## This checks if the player is on such a cell.
+## All fold types (horizontal, vertical, diagonal) create cut lines that can split cells.
+## - Horizontal folds create VERTICAL cut lines (perpendicular to the fold axis)
+## - Vertical folds create HORIZONTAL cut lines (perpendicular to the fold axis)
+## - Diagonal folds create DIAGONAL cut lines
+##
+## This checks if the player is on a cell that would be split by either cut line.
+##
+## EXCEPTION: Players at anchor positions are allowed (you can fold from where you stand)
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
@@ -246,19 +252,18 @@ func is_player_cell_split_by_fold(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 	if not player:
 		return false
 
+	# Special case: Player at anchor position is allowed (you can fold from where you stand)
+	if player.grid_position == anchor1 or player.grid_position == anchor2:
+		return false
+
 	# Get the player's current cell
 	var player_cell = grid_manager.get_cell(player.grid_position)
 	if not player_cell:
 		return false
 
-	# For axis-aligned folds, cells on the fold line are anchors and are allowed
-	# (they don't truly "split" in the geometric sense for horizontal/vertical folds)
-	var orientation = get_fold_orientation(anchor1, anchor2)
-	if orientation == "horizontal" or orientation == "vertical":
-		# Axis-aligned folds don't split cells in a way that blocks the player
-		return false
-
-	# For diagonal folds, check if player's cell intersects either cut line
+	# Calculate cut lines for the fold
+	# NOTE: All fold types (horizontal, vertical, diagonal) use the same algorithm
+	# since execute_horizontal_fold and execute_vertical_fold both call execute_diagonal_fold
 	var cell_size = grid_manager.cell_size
 	var anchor1_local = Vector2(anchor1) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 	var anchor2_local = Vector2(anchor2) * cell_size + Vector2(cell_size / 2, cell_size / 2)
