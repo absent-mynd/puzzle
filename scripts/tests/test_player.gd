@@ -303,3 +303,61 @@ func test_player_goal_detection_non_dominant():
 	player.check_goal()
 
 	assert_signal_emitted(player, "goal_reached", "Should detect goal regardless of dominance")
+
+
+## ============================================================================
+## GRID BOUNDARY MOVEMENT TESTS
+## Tests for cells moved outside original grid bounds
+## ============================================================================
+
+## Test: Player can move to full cell moved outside original grid bounds
+func test_player_can_move_to_cell_outside_grid_bounds():
+	await wait_physics_frames(2)
+
+	# Manually create a full cell at position (10, 5) (outside original [0,9] x [0,9] grid)
+	var out_of_bounds_pos = Vector2i(10, 5)
+	var local_pos = Vector2(out_of_bounds_pos) * grid_manager.cell_size
+	var cell = Cell.new(out_of_bounds_pos, local_pos, grid_manager.cell_size)
+
+	# Add to grid manager's cells dictionary
+	grid_manager.cells[out_of_bounds_pos] = cell
+	grid_manager.add_child(cell)
+
+	# Cell should NOT be partial (it's a complete square)
+	assert_false(cell.is_partial, "Full cell outside bounds should not be partial")
+
+	# Player should be able to move to it
+	assert_true(player.can_move_to(out_of_bounds_pos), "Should be able to move to full cell outside grid bounds")
+
+
+## Test: Player cannot move to partial cell
+func test_player_cannot_move_to_partial_cell():
+	await wait_physics_frames(2)
+
+	var cell = grid_manager.get_cell(Vector2i(5, 5))
+
+	# Mark cell as partial (simulating a fold split)
+	cell.is_partial = true
+
+	# Player should not be able to move to partial cell
+	assert_false(player.can_move_to(Vector2i(5, 5)), "Should not be able to move to partial cell")
+
+
+## Test: Player cannot move to partial cell outside grid bounds
+func test_player_cannot_move_to_partial_cell_outside_bounds():
+	await wait_physics_frames(2)
+
+	# Create a partial cell at position (11, 6) (outside original grid)
+	var out_of_bounds_pos = Vector2i(11, 6)
+	var local_pos = Vector2(out_of_bounds_pos) * grid_manager.cell_size
+	var cell = Cell.new(out_of_bounds_pos, local_pos, grid_manager.cell_size)
+
+	# Mark as partial (simulating half of a split cell moved outside bounds)
+	cell.is_partial = true
+
+	# Add to grid manager's cells dictionary
+	grid_manager.cells[out_of_bounds_pos] = cell
+	grid_manager.add_child(cell)
+
+	# Player should not be able to move to partial cell, even outside bounds
+	assert_false(player.can_move_to(out_of_bounds_pos), "Should not be able to move to partial cell outside grid bounds")

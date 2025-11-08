@@ -124,14 +124,17 @@ func attempt_move(direction: Vector2i) -> bool:
 ## @return: true if move is valid, false otherwise
 ##
 ## PHASE 5: Uses dominant type for multi-piece cells
+## Updated: Allows movement to cells moved outside original grid bounds,
+##          but blocks movement to partial cells (split and incomplete)
 func can_move_to(target_grid_pos: Vector2i) -> bool:
-	# Check if position is within grid bounds
-	if not grid_manager.is_valid_position(target_grid_pos):
-		return false
-
-	# Get target cell
+	# Get target cell (no grid bounds check - cells can be moved outside original grid)
 	var target_cell = grid_manager.get_cell(target_grid_pos)
 	if not target_cell:
+		return false
+
+	# Cannot walk on partial cells (cells split by folds that didn't fully merge)
+	# Partial cells are incomplete polygons, regardless of their position
+	if target_cell.is_partial:
 		return false
 
 	# PHASE 5: Check dominant type for collision
