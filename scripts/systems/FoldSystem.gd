@@ -1117,6 +1117,48 @@ func _classify_cells_for_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i, cut
 ## @param anchor1: First anchor position
 ## @param anchor2: Second anchor position
 ## @return: Array of split cell geometries to merge at anchor1
+## Classify a piece relative to a cut line
+##
+## For multi-piece cells, we need to know:
+## - "split": Piece is intersected by the line (has vertices on both sides)
+## - "keep": Piece is entirely on the keep side (all vertices on keep side)
+## - "remove": Piece is entirely on the remove side (all vertices on remove side)
+##
+## @param piece: The piece to classify
+## @param line_point: A point on the cut line
+## @param line_normal: The normal of the cut line
+## @param keep_side: Which side should be kept ("left" or "right")
+## @return: String indicating classification
+func _classify_piece_relative_to_line(piece: CellPiece, line_point: Vector2, line_normal: Vector2, keep_side: String) -> String:
+	var has_positive = false
+	var has_negative = false
+
+	# Check all vertices
+	for vertex in piece.geometry:
+		var side = GeometryCore.point_side_of_line(vertex, line_point, line_normal)
+		if side > GeometryCore.EPSILON:
+			has_positive = true
+		elif side < -GeometryCore.EPSILON:
+			has_negative = true
+
+	# If vertices on both sides, piece is split
+	if has_positive and has_negative:
+		return "split"
+
+	# All vertices on one side - determine which side
+	var keep_is_positive = (keep_side == "left")  # "left" is positive side in GeometryCore
+
+	if has_positive and not has_negative:
+		# All on positive side
+		return "keep" if keep_is_positive else "remove"
+	elif has_negative and not has_positive:
+		# All on negative side
+		return "keep" if not keep_is_positive else "remove"
+	else:
+		# All vertices on the line (degenerate case)
+		return "keep"
+
+
 func _process_split_cells_on_line1(cells: Array, cut_lines: Dictionary, anchor1: Vector2i, anchor2: Vector2i) -> Array:
 	var split_parts = []
 
@@ -1134,13 +1176,26 @@ func _process_split_cells_on_line1(cells: Array, cut_lines: Dictionary, anchor1:
 		for i in range(cell.geometry_pieces.size()):
 			var piece = cell.geometry_pieces[i]
 
-			# Split this piece by line1
-			var split_result = GeometryCore.split_polygon_by_line(
-				piece.geometry, cut_lines.line1.point, cut_lines.line1.normal
+			# Classify this piece relative to line1
+			var classification = _classify_piece_relative_to_line(
+				piece, cut_lines.line1.point, cut_lines.line1.normal, keep_side
 			)
 
-			if split_result.intersections.size() > 0:
-				# This piece is split by line1
+			if classification == "keep":
+				# Piece is entirely on the keep side - keep as-is, no duplication needed
+				new_pieces.append(piece)
+				pieces_to_remove.append(i)
+
+			elif classification == "remove":
+				# Piece is entirely on the remove side - discard it
+				pieces_to_remove.append(i)
+
+			else:  # classification == "split"
+				# This piece is split by line1 - need to split and keep only one part
+				var split_result = GeometryCore.split_polygon_by_line(
+					piece.geometry, cut_lines.line1.point, cut_lines.line1.normal
+				)
+
 				var kept_geometry: PackedVector2Array
 
 				# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
@@ -1155,16 +1210,6 @@ func _process_split_cells_on_line1(cells: Array, cut_lines: Dictionary, anchor1:
 				for seam in piece.seams:
 					kept_piece.add_seam(seam.duplicate_seam())
 				new_pieces.append(kept_piece)
-				pieces_to_remove.append(i)
-			else:
-				# This piece is not split - check which side it's on
-				var piece_center = piece.get_center()
-				var side = GeometryCore.point_side_of_line(piece_center, cut_lines.line1.point, cut_lines.line1.normal)
-
-				# Keep pieces on the "keep" side
-				if (keep_side == "right" and side < 0) or (keep_side == "left" and side > 0):
-					new_pieces.append(piece.duplicate_piece())
-
 				pieces_to_remove.append(i)
 
 		# Remove old pieces (in reverse order to avoid index shifts)
@@ -1222,13 +1267,26 @@ func _process_split_cells_on_line2(cells: Array, cut_lines: Dictionary, anchor1:
 		for i in range(cell.geometry_pieces.size()):
 			var piece = cell.geometry_pieces[i]
 
-			# Split this piece by line2
-			var split_result = GeometryCore.split_polygon_by_line(
-				piece.geometry, cut_lines.line2.point, cut_lines.line2.normal
+			# Classify this piece relative to line2
+			var classification = _classify_piece_relative_to_line(
+				piece, cut_lines.line2.point, cut_lines.line2.normal, keep_side
 			)
 
-			if split_result.intersections.size() > 0:
-				# This piece is split by line2
+			if classification == "keep":
+				# Piece is entirely on the keep side - keep as-is, no duplication needed
+				new_pieces.append(piece)
+				pieces_to_remove.append(i)
+
+			elif classification == "remove":
+				# Piece is entirely on the remove side - discard it
+				pieces_to_remove.append(i)
+
+			else:  # classification == "split"
+				# This piece is split by line2 - need to split and keep only one part
+				var split_result = GeometryCore.split_polygon_by_line(
+					piece.geometry, cut_lines.line2.point, cut_lines.line2.normal
+				)
+
 				var kept_geometry: PackedVector2Array
 
 				# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
@@ -1243,16 +1301,6 @@ func _process_split_cells_on_line2(cells: Array, cut_lines: Dictionary, anchor1:
 				for seam in piece.seams:
 					kept_piece.add_seam(seam.duplicate_seam())
 				new_pieces.append(kept_piece)
-				pieces_to_remove.append(i)
-			else:
-				# This piece is not split - check which side it's on
-				var piece_center = piece.get_center()
-				var side = GeometryCore.point_side_of_line(piece_center, cut_lines.line2.point, cut_lines.line2.normal)
-
-				# Keep pieces on the "keep" side
-				if (keep_side == "right" and side < 0) or (keep_side == "left" and side > 0):
-					new_pieces.append(piece.duplicate_piece())
-
 				pieces_to_remove.append(i)
 
 		# Remove old pieces (in reverse order to avoid index shifts)
