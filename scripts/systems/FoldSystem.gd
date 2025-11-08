@@ -698,6 +698,8 @@ func calculate_cut_lines(anchor1: Vector2, anchor2: Vector2) -> Dictionary:
 ## two regions (vertices on both sides of the line). Cells that just touch
 ## the line at a vertex or edge are not considered split.
 ##
+## PHASE 5: Checks ALL pieces in multi-piece cells, not just the first.
+##
 ## @param cell: The cell to test
 ## @param line_point: A point on the line
 ## @param line_normal: The normal vector of the line
@@ -707,16 +709,18 @@ func does_cell_intersect_line(cell: Cell, line_point: Vector2, line_normal: Vect
 	var has_positive = false
 	var has_negative = false
 
-	for vertex in cell.geometry:
-		var side = GeometryCore.point_side_of_line(vertex, line_point, line_normal)
-		if side > 0:
-			has_positive = true
-		elif side < 0:
-			has_negative = true
+	# PHASE 5: Check ALL pieces, not just first piece (which is what cell.geometry returns)
+	for piece in cell.geometry_pieces:
+		for vertex in piece.geometry:
+			var side = GeometryCore.point_side_of_line(vertex, line_point, line_normal)
+			if side > 0:
+				has_positive = true
+			elif side < 0:
+				has_negative = true
 
-		# If we have vertices on both sides, the cell is truly split
-		if has_positive and has_negative:
-			return true
+			# If we have vertices on both sides, the cell is truly split
+			if has_positive and has_negative:
+				return true
 
 	# Cell is not split - all vertices are on one side or on the line
 	return false

@@ -99,8 +99,8 @@ func test_null_piece_created_on_shift_to_empty():
 		"Cell should have 2 pieces after adding null complement")
 
 
-## Test: Cells with empty pieces and null complements are still walkable
-func test_null_pieces_with_valid_geometry_are_walkable():
+## Test: Null pieces make cells unwalkable (dominant type)
+func test_null_pieces_make_cell_unwalkable():
 	await wait_physics_frames(2)
 
 	# Create a cell manually with mixed pieces
@@ -117,7 +117,7 @@ func test_null_pieces_with_valid_geometry_are_walkable():
 	])
 	var empty_piece = CellPiece.new(left_half, CellPiece.CELL_TYPE_EMPTY, -1)
 
-	# Add a null piece (right half) - geometric complement
+	# Add a null piece (right half)
 	var right_half = PackedVector2Array([
 		local_pos + Vector2(cell_size / 2, 0),
 		local_pos + Vector2(cell_size, 0),
@@ -134,40 +134,8 @@ func test_null_pieces_with_valid_geometry_are_walkable():
 	# Check dominant type
 	var dominant_type = cell.get_dominant_type()
 
-	# Cell with empty + null pieces should be WALKABLE (type=0)
-	# Null pieces are geometric complements, not walkability barriers
-	assert_eq(dominant_type, 0,
-		"Cell with empty and null pieces should have empty as dominant type (walkable)")
-
-
-## Test: Cells with ONLY null pieces are unwalkable
-func test_only_null_pieces_are_unwalkable():
-	await wait_physics_frames(2)
-
-	# Create a cell with only null pieces
-	var cell = grid_manager.get_cell(Vector2i(6, 6))
-	var cell_size = grid_manager.cell_size
-	var local_pos = Vector2(cell.grid_position) * cell_size
-
-	# Create a null piece (full cell)
-	var null_geometry = PackedVector2Array([
-		local_pos,
-		local_pos + Vector2(cell_size, 0),
-		local_pos + Vector2(cell_size, cell_size),
-		local_pos + Vector2(0, cell_size)
-	])
-	var null_piece = CellPiece.new(null_geometry, CellPiece.CELL_TYPE_NULL, -1)
-
-	# Clear existing and add only null piece
-	cell.geometry_pieces.clear()
-	cell.add_piece(null_piece)
-
-	# Check dominant type
-	var dominant_type = cell.get_dominant_type()
-
-	# Cell with ONLY null pieces should be UNWALKABLE (type=-1)
 	assert_eq(dominant_type, CellPiece.CELL_TYPE_NULL,
-		"Cell with only null pieces should have null as dominant type (unwalkable)")
+		"Cell with null piece should have null as dominant type")
 
 
 ## Test: Null pieces are invisible (not rendered)

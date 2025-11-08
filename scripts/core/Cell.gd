@@ -518,51 +518,43 @@ func get_cell_types() -> Array[int]:
 	return types
 
 
-## Get the dominant cell type based on hierarchy: Goal > Wall > Water > Empty
+## Get the dominant cell type based on hierarchy: Null > Goal > Wall > Water > Empty
 ##
-## Null pieces are geometric complements that maintain invariants, not walkability barriers.
-## A cell is only unwalkable due to null if it has ONLY null pieces (no valid geometry).
-##
-## Priority: Goal > Wall > Water > Empty > Null
-## (Only returns Null if cell contains no valid pieces)
+## Null type is most dominant because any null piece makes the cell unwalkable
+## (it represents missing/void geometry from folds with no merge partner)
 ##
 ## @return: Dominant cell type
 func get_dominant_type() -> int:
 	if geometry_pieces.is_empty():
 		return 0  # Empty
 
+	var has_null = false
 	var has_goal = false
 	var has_wall = false
 	var has_water = false
-	var has_empty = false
-	var has_null = false
 
 	for piece in geometry_pieces:
-		match piece.cell_type:
-			CellPiece.CELL_TYPE_NULL:  # -1
-				has_null = true
-			0:  # Empty
-				has_empty = true
-			1:  # Wall
-				has_wall = true
-			2:  # Water
-				has_water = true
-			3:  # Goal
-				has_goal = true
+		if piece.cell_type == CellPiece.CELL_TYPE_NULL:  # Null/void
+			has_null = true
+		elif piece.cell_type == 3:  # Goal
+			has_goal = true
+		elif piece.cell_type == 1:  # Wall
+			has_wall = true
+		elif piece.cell_type == 2:  # Water
+			has_water = true
 
-	# Priority: Goal > Wall > Water > Empty
-	# (Null pieces don't determine walkability if valid pieces exist)
-	if has_goal:
+	# Priority: Null > Goal > Wall > Water > Empty
+	if has_null:
+		return CellPiece.CELL_TYPE_NULL
+	elif has_goal:
 		return 3
 	elif has_wall:
 		return 1
 	elif has_water:
 		return 2
-	elif has_empty:
-		return 0
 	else:
-		# Cell has ONLY null pieces - it's a void
-		return CellPiece.CELL_TYPE_NULL
+		# Return first piece's type if all are empty/other
+		return geometry_pieces[0].cell_type
 
 
 ## Check if cell contains a specific type
