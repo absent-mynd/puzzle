@@ -132,11 +132,11 @@ func can_move_to(target_grid_pos: Vector2i) -> bool:
 		return false
 
 	# PHASE 5: Check dominant type for collision
-	# Cell types: 0=empty, 1=wall, 2=water, 3=goal
+	# Cell types: -1=null, 0=empty, 1=wall, 2=water, 3=goal
 	var dominant_type = target_cell.get_dominant_type()
 
-	# Can't move into walls
-	if dominant_type == 1:
+	# Can't move into walls or null (void) cells
+	if dominant_type == 1 or dominant_type == CellPiece.CELL_TYPE_NULL:
 		return false
 
 	# Can move into empty, water, or goal

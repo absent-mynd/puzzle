@@ -171,19 +171,29 @@ func update_visual():
 
 	# If single piece, use legacy rendering for backward compatibility
 	if geometry_pieces.size() == 1:
+		var piece = geometry_pieces[0]
+
+		# Skip rendering if piece is null type (invisible)
+		if piece.cell_type == CellPiece.CELL_TYPE_NULL:
+			if polygon_visual:
+				polygon_visual.visible = false
+			if border_line:
+				border_line.visible = false
+			return
+
 		if polygon_visual:
-			polygon_visual.polygon = geometry_pieces[0].geometry
-			polygon_visual.color = get_cell_color_for_type(geometry_pieces[0].cell_type)
+			polygon_visual.polygon = piece.geometry
+			polygon_visual.color = get_cell_color_for_type(piece.cell_type)
 			polygon_visual.visible = true
 
 		if border_line:
-			border_line.points = geometry_pieces[0].geometry
+			border_line.points = piece.geometry
 			border_line.default_color = darken_color(polygon_visual.color, 0.6)
 			border_line.visible = true
 
 		# Update highlight overlay
 		if highlight_overlay:
-			highlight_overlay.polygon = geometry_pieces[0].geometry
+			highlight_overlay.polygon = piece.geometry
 	else:
 		# Multi-piece rendering: hide legacy visuals, use piece_visuals container
 		if polygon_visual:
@@ -194,6 +204,10 @@ func update_visual():
 		# Create separate visual for each piece
 		for i in range(geometry_pieces.size()):
 			var piece = geometry_pieces[i]
+
+			# Skip rendering null pieces (invisible)
+			if piece.cell_type == CellPiece.CELL_TYPE_NULL:
+				continue
 
 			# Create polygon visual for this piece
 			var piece_polygon = Polygon2D.new()
@@ -229,10 +243,11 @@ func get_cell_color() -> Color:
 
 ## Get the color for a specific cell type
 ##
-## @param type: Cell type (0=empty, 1=wall, 2=water, 3=goal)
+## @param type: Cell type (-1=null, 0=empty, 1=wall, 2=water, 3=goal)
 ## @return: Color for the given type
 func get_cell_color_for_type(type: int) -> Color:
 	match type:
+		CellPiece.CELL_TYPE_NULL: return Color(0.0, 0.0, 0.0, 0.0)  # Null - completely transparent
 		0: return Color(0.8, 0.8, 0.8)  # Empty - light gray
 		1: return Color(0.2, 0.2, 0.2)  # Wall - dark gray
 		2: return Color(0.2, 0.4, 1.0)  # Water - blue
@@ -503,27 +518,35 @@ func get_cell_types() -> Array[int]:
 	return types
 
 
-## Get the dominant cell type based on hierarchy: Goal > Wall > Water > Empty
+## Get the dominant cell type based on hierarchy: Null > Goal > Wall > Water > Empty
+##
+## Null type is most dominant because any null piece makes the cell unwalkable
+## (it represents missing/void geometry from folds with no merge partner)
 ##
 ## @return: Dominant cell type
 func get_dominant_type() -> int:
 	if geometry_pieces.is_empty():
 		return 0  # Empty
 
+	var has_null = false
 	var has_goal = false
 	var has_wall = false
 	var has_water = false
 
 	for piece in geometry_pieces:
-		if piece.cell_type == 3:  # Goal
+		if piece.cell_type == CellPiece.CELL_TYPE_NULL:  # Null/void
+			has_null = true
+		elif piece.cell_type == 3:  # Goal
 			has_goal = true
 		elif piece.cell_type == 1:  # Wall
 			has_wall = true
 		elif piece.cell_type == 2:  # Water
 			has_water = true
 
-	# Priority: Goal > Wall > Water > Empty
-	if has_goal:
+	# Priority: Null > Goal > Wall > Water > Empty
+	if has_null:
+		return CellPiece.CELL_TYPE_NULL
+	elif has_goal:
 		return 3
 	elif has_wall:
 		return 1

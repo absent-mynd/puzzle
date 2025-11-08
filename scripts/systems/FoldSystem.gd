@@ -1238,8 +1238,57 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 			# Merge with existing cell (this is a REAL collision, not a false one)
 			_merge_cells_multi_polygon(existing, cell, new_pos)
 		else:
+			# No cell at destination - create null pieces to complete the cell
+			_add_null_pieces_to_complete_cell(cell, new_pos)
+
 			# Place cell at new position
 			grid_manager.cells[new_pos] = cell
+
+
+## Add null pieces to complete a cell when it has no merge partner
+##
+## When a split cell shifts to a position with no existing cell, we need to
+## create "null" pieces to represent the missing/void geometry. This maintains
+## the invariant that all cells are geometrically complete.
+##
+## @param cell: The cell to complete with null pieces
+## @param pos: Grid position of the cell
+func _add_null_pieces_to_complete_cell(cell: Cell, pos: Vector2i):
+	# Calculate the complement geometry (the missing piece)
+	var complement_geometry = GeometryCore.calculate_complement_geometry(
+		pos,
+		grid_manager.cell_size,
+		cell.geometry_pieces
+	)
+
+	# If there's no complement (cell is already complete), do nothing
+	if complement_geometry.is_empty() or complement_geometry.size() < 3:
+		return
+
+	# Create a null piece with the complement geometry
+	var null_piece = CellPiece.new(
+		complement_geometry,
+		CellPiece.CELL_TYPE_NULL,
+		next_fold_id - 1  # Track which fold created this null piece (current fold)
+	)
+
+	# Add the null piece to the cell
+	cell.add_piece(null_piece)
+
+	# Update dominant type (will be null if any null pieces exist)
+	cell.cell_type = cell.get_dominant_type()
+
+	# Mark as partial since it contains null geometry
+	cell.is_partial = true
+
+	# Update visual (null pieces are invisible)
+	cell.update_visual()
+
+	if DEBUG_FOLD_EXECUTION:
+		print("  Added null piece to cell at %s (complement area: %.1f)" % [
+			pos,
+			GeometryCore.polygon_area(complement_geometry)
+		])
 
 
 ## Merge split parts from line1 with any cells at anchor1

@@ -5,11 +5,25 @@ class_name CellPiece extends Resource
 ## Represents a single polygon piece within a Cell. When cells are split by folds,
 ## each resulting piece is stored as a CellPiece. Cells can contain multiple
 ## CellPiece objects to represent complex merged geometry.
+##
+## CELL TYPES:
+## -1 = null/void (unwalkable, invisible, represents absence of geometry)
+##  0 = empty (walkable, default)
+##  1 = wall (unwalkable)
+##  2 = water (walkable)
+##  3 = goal (walkable)
+
+## Cell type constants
+const CELL_TYPE_NULL: int = -1
+const CELL_TYPE_EMPTY: int = 0
+const CELL_TYPE_WALL: int = 1
+const CELL_TYPE_WATER: int = 2
+const CELL_TYPE_GOAL: int = 3
 
 ## Polygon vertices (LOCAL coordinates relative to GridManager)
 @export var geometry: PackedVector2Array
 
-## Cell type of this piece (0=empty, 1=wall, 2=water, 3=goal)
+## Cell type of this piece (-1=null, 0=empty, 1=wall, 2=water, 3=goal)
 @export var cell_type: int = 0
 
 ## ID of the fold that created this piece (-1 if original cell)
