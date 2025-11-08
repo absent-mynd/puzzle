@@ -734,6 +734,45 @@ func clear_all_seams() -> void:
 
 
 ## ============================================================================
+## PHASE 6: CLICKABLE ZONE CALCULATION (TASK 2)
+## ============================================================================
+
+## Calculate which grid cell centers a seam line passes through
+##
+## A seam is clickable at grid cells whose center is within tolerance distance
+## of the seam line. This creates spatial constraints for player interaction.
+##
+## @param line_point: A point on the seam line (LOCAL coordinates)
+## @param line_normal: Normal vector of the seam line (perpendicular to line)
+## @return: Array[Vector2i] of grid positions whose centers the seam passes through
+func calculate_clickable_zones(line_point: Vector2, line_normal: Vector2) -> Array[Vector2i]:
+	var zones: Array[Vector2i] = []
+
+	if not grid_manager:
+		return zones
+
+	var cell_size = grid_manager.cell_size
+	var tolerance = cell_size * 0.15  # Generous tolerance for debug/testing
+
+	# Iterate through all grid positions
+	for y in range(grid_manager.grid_size.y):
+		for x in range(grid_manager.grid_size.x):
+			# Calculate grid cell center in LOCAL coordinates
+			# Center = grid_pos * cell_size + (cell_size/2, cell_size/2)
+			var cell_center = Vector2(x, y) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+			# Calculate distance from cell center to seam line
+			# Distance from point P to line (point + t*normal) is: |(P - point) · normal|
+			var distance = abs((cell_center - line_point).dot(line_normal))
+
+			# If center is within tolerance of the line, it's a clickable zone
+			if distance <= tolerance:
+				zones.append(Vector2i(x, y))
+
+	return zones
+
+
+## ============================================================================
 ## PHASE 4: GEOMETRIC FOLDING (DIAGONAL FOLDS)
 ## ============================================================================
 
@@ -856,11 +895,19 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 	# PHASE 6: Add metadata for fold_id tracking
 	seam_line1.set_meta("fold_id", current_fold_id)
 
+	# PHASE 6 TASK 2: Add line geometry metadata
+	seam_line1.set_meta("line_point", cut_lines.line1.point)
+	seam_line1.set_meta("line_normal", cut_lines.line1.normal)
+
 	grid_manager.add_child(seam_line1)
 	seam_lines.append(seam_line1)
 
 	# PHASE 6: Add to seam-to-fold mapping
 	seam_to_fold_map[seam_line1.get_instance_id()] = current_fold_id
+
+	# PHASE 6 TASK 2: Calculate and store clickable zones
+	var zones1 = calculate_clickable_zones(cut_lines.line1.point, cut_lines.line1.normal)
+	seam_line1.set_meta("clickable_zones", zones1)
 
 	# Second seam line
 	var seam_line2 = Line2D.new()
@@ -874,11 +921,19 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 	# PHASE 6: Add metadata for fold_id tracking
 	seam_line2.set_meta("fold_id", current_fold_id)
 
+	# PHASE 6 TASK 2: Add line geometry metadata
+	seam_line2.set_meta("line_point", cut_lines.line2.point)
+	seam_line2.set_meta("line_normal", cut_lines.line2.normal)
+
 	grid_manager.add_child(seam_line2)
 	seam_lines.append(seam_line2)
 
 	# PHASE 6: Add to seam-to-fold mapping
 	seam_to_fold_map[seam_line2.get_instance_id()] = current_fold_id
+
+	# PHASE 6 TASK 2: Calculate and store clickable zones
+	var zones2 = calculate_clickable_zones(cut_lines.line2.point, cut_lines.line2.normal)
+	seam_line2.set_meta("clickable_zones", zones2)
 
 
 ## Execute a diagonal fold (Phase 4)
