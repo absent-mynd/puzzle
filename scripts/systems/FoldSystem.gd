@@ -1251,6 +1251,12 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 ## create "null" pieces to represent the missing/void geometry. This maintains
 ## the invariant that all cells are geometrically complete.
 ##
+## This extends to handle both:
+## - Cells shifting outside grid bounds
+## - Cells shifting to empty positions within grid bounds
+##
+## Both cases result in the cell becoming unwalkable (marked with null pieces).
+##
 ## @param cell: The cell to complete with null pieces
 ## @param pos: Grid position of the cell
 func _add_null_pieces_to_complete_cell(cell: Cell, pos: Vector2i):
@@ -1261,19 +1267,45 @@ func _add_null_pieces_to_complete_cell(cell: Cell, pos: Vector2i):
 		cell.geometry_pieces
 	)
 
-	# If there's no complement (cell is already complete), do nothing
-	if complement_geometry.is_empty() or complement_geometry.size() < 3:
-		return
+	# Check if cell already has null pieces
+	var already_has_null = cell.has_cell_type(CellPiece.CELL_TYPE_NULL)
 
-	# Create a null piece with the complement geometry
-	var null_piece = CellPiece.new(
-		complement_geometry,
-		CellPiece.CELL_TYPE_NULL,
-		next_fold_id - 1  # Track which fold created this null piece (current fold)
-	)
+	# If there's complement geometry, create a null piece
+	if complement_geometry.size() >= 3:
+		var null_piece = CellPiece.new(
+			complement_geometry,
+			CellPiece.CELL_TYPE_NULL,
+			next_fold_id - 1  # Track which fold created this null piece (current fold)
+		)
+		cell.add_piece(null_piece)
 
-	# Add the null piece to the cell
-	cell.add_piece(null_piece)
+		if DEBUG_FOLD_EXECUTION:
+			print("  Added null piece to cell at %s (complement area: %.1f)" % [
+				pos,
+				GeometryCore.polygon_area(complement_geometry)
+			])
+	elif not already_has_null:
+		# Cell is geometrically complete but shifting to empty position
+		# Mark it as unwalkable by creating a null piece covering the full cell
+		# This ensures consistent behavior: any cell shifting to empty position becomes unwalkable
+		var cell_size = grid_manager.cell_size
+		var local_pos = Vector2(pos) * cell_size
+		var full_null_geometry = PackedVector2Array([
+			local_pos,
+			local_pos + Vector2(cell_size, 0),
+			local_pos + Vector2(cell_size, cell_size),
+			local_pos + Vector2(0, cell_size)
+		])
+
+		var null_piece = CellPiece.new(
+			full_null_geometry,
+			CellPiece.CELL_TYPE_NULL,
+			next_fold_id - 1
+		)
+		cell.add_piece(null_piece)
+
+		if DEBUG_FOLD_EXECUTION:
+			print("  Added full null piece to geometrically complete cell at %s (to mark as unwalkable)" % [pos])
 
 	# Update dominant type (will be null if any null pieces exist)
 	cell.cell_type = cell.get_dominant_type()
@@ -1283,12 +1315,6 @@ func _add_null_pieces_to_complete_cell(cell: Cell, pos: Vector2i):
 
 	# Update visual (null pieces are invisible)
 	cell.update_visual()
-
-	if DEBUG_FOLD_EXECUTION:
-		print("  Added null piece to cell at %s (complement area: %.1f)" % [
-			pos,
-			GeometryCore.polygon_area(complement_geometry)
-		])
 
 
 ## Merge split parts from line1 with any cells at anchor1
