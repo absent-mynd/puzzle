@@ -314,8 +314,8 @@ func test_execute_fold_checks_player_validation_after_basic_validation():
 	assert_false(result, "Should fail basic validation for same cell before checking player")
 
 
-func test_execute_fold_with_player_at_anchor_succeeds():
-	# Player at anchor cell should be OK
+func test_execute_fold_with_player_at_anchor_blocked():
+	# Player at anchor cell is blocked (cell would be split by fold line)
 	player.set_grid_position(Vector2i(2, 5))
 
 	var anchor1 = Vector2i(2, 5)
@@ -323,11 +323,11 @@ func test_execute_fold_with_player_at_anchor_succeeds():
 
 	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
-	assert_true(result, "Fold should succeed when player at anchor")
+	assert_false(result, "Fold should be blocked when player at anchor")
 
-	# Verify fold was executed
+	# Verify fold was NOT executed
 	var history = fold_system.get_fold_history()
-	assert_eq(history.size(), 1, "Fold should be recorded in history")
+	assert_eq(history.size(), 0, "Fold should not be recorded when player at anchor")
 
 
 # ===== Minimum Distance Edge Cases =====
@@ -496,9 +496,8 @@ func test_validation_success_message_is_empty():
 
 # ===== Diagonal Fold Tests - Player on Fold Line =====
 
-func test_diagonal_fold_succeeds_when_player_at_anchor1():
-	# Player at anchor position is allowed (you can fold from where you stand)
-	# This is consistent with horizontal/vertical fold behavior
+func test_diagonal_fold_blocked_when_player_at_anchor1():
+	# Player at anchor position is blocked (cell would be split by fold line)
 	player.set_grid_position(Vector2i(2, 2))
 
 	var anchor1 = Vector2i(2, 2)
@@ -506,13 +505,13 @@ func test_diagonal_fold_succeeds_when_player_at_anchor1():
 
 	var result = fold_system.validate_fold_with_player(anchor1, anchor2)
 
-	assert_true(result.valid, "Diagonal fold should succeed when player at anchor position")
-	assert_eq(result.reason, "",
-		"Should have empty reason for valid fold")
+	assert_false(result.valid, "Diagonal fold should be blocked when player at anchor position")
+	assert_eq(result.reason, "Cannot fold - player in the way",
+		"Should provide correct error message")
 
 
-func test_diagonal_fold_succeeds_when_player_at_anchor2():
-	# Player at anchor2 position is also allowed
+func test_diagonal_fold_blocked_when_player_at_anchor2():
+	# Player at anchor2 position is also blocked
 	player.set_grid_position(Vector2i(5, 5))
 
 	var anchor1 = Vector2i(2, 2)
@@ -520,9 +519,9 @@ func test_diagonal_fold_succeeds_when_player_at_anchor2():
 
 	var result = fold_system.validate_fold_with_player(anchor1, anchor2)
 
-	assert_true(result.valid, "Diagonal fold should succeed when player at anchor2 position")
-	assert_eq(result.reason, "",
-		"Should have empty reason for valid fold")
+	assert_false(result.valid, "Diagonal fold should be blocked when player at anchor2 position")
+	assert_eq(result.reason, "Cannot fold - player in the way",
+		"Should provide correct error message")
 
 
 func test_diagonal_fold_blocked_when_player_on_cell_intersecting_line1():
@@ -564,8 +563,8 @@ func test_diagonal_fold_succeeds_when_player_not_on_fold_lines():
 	assert_true(result.valid, "Diagonal fold should succeed when player not on fold lines or removed region")
 
 
-func test_execute_diagonal_fold_succeeds_when_player_at_anchor():
-	# Integration test: Player at anchor is allowed for diagonal folds too
+func test_execute_diagonal_fold_blocked_when_player_at_anchor():
+	# Integration test: Player at anchor is blocked for diagonal folds
 	player.set_grid_position(Vector2i(3, 3))
 
 	var anchor1 = Vector2i(3, 3)
@@ -573,11 +572,11 @@ func test_execute_diagonal_fold_succeeds_when_player_at_anchor():
 
 	var result = await fold_system.execute_fold(anchor1, anchor2, false)
 
-	assert_true(result, "execute_fold should succeed when player at anchor")
+	assert_false(result, "execute_fold should be blocked when player at anchor")
 
-	# Verify fold WAS executed
+	# Verify fold was NOT executed
 	var history = fold_system.get_fold_history()
-	assert_eq(history.size(), 1, "Fold should be recorded when player at anchor")
+	assert_eq(history.size(), 0, "Fold should not be recorded when player at anchor")
 
 
 # ===== Horizontal/Vertical Fold Tests - Player on Cut Line =====

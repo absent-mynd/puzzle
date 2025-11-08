@@ -242,18 +242,13 @@ func is_player_in_removed_region(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 ## - Diagonal folds create DIAGONAL cut lines
 ##
 ## This checks if the player is on a cell that would be split by either cut line.
-##
-## EXCEPTION: Players at anchor positions are allowed (you can fold from where you stand)
+## Players on anchor positions are also blocked (cannot fold from where you stand).
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 ## @return: true if player's cell would be split by the fold
 func is_player_cell_split_by_fold(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 	if not player:
-		return false
-
-	# Special case: Player at anchor position is allowed (you can fold from where you stand)
-	if player.grid_position == anchor1 or player.grid_position == anchor2:
 		return false
 
 	# Get the player's current cell
