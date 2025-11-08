@@ -825,3 +825,74 @@ func test_undo_fold_with_removed_cells():
 	# Grid should restore the removed cells
 	var after_undo_count = grid_manager.cells.size()
 	assert_gt(after_undo_count, after_fold_count, "Cells should be restored")
+
+
+## ============================================================================
+## TASK 6: SEAM VISUAL STATE TESTS
+## ============================================================================
+
+func test_update_seam_visual_states_method_exists():
+	# Verify the method exists
+	assert_true(fold_system.has_method("update_seam_visual_states"),
+		"FoldSystem should have update_seam_visual_states method")
+
+
+func test_undoable_seam_is_green():
+	# Execute a single fold
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)
+
+	# Update visual states
+	fold_system.update_seam_visual_states()
+
+	# Check that seam lines are green (undoable)
+	assert_gt(fold_system.seam_lines.size(), 0, "Should have seam lines")
+	for seam_line in fold_system.seam_lines:
+		if seam_line and is_instance_valid(seam_line):
+			# Should be green for undoable seam
+			assert_eq(seam_line.default_color, Color.GREEN, "Undoable seam should be green")
+
+
+func test_blocked_seam_is_red():
+	# Execute two intersecting folds
+	fold_system.execute_fold(Vector2i(4, 2), Vector2i(4, 3), false)  # fold_id 0
+	fold_system.execute_fold(Vector2i(2, 4), Vector2i(3, 4), false)  # fold_id 1
+
+	# Update visual states
+	fold_system.update_seam_visual_states()
+
+	# Find seams for fold 0 (should be red/blocked)
+	for seam_line in fold_system.seam_lines:
+		if seam_line and is_instance_valid(seam_line):
+			var seam_fold_id = seam_line.get_meta("fold_id", -1)
+			if seam_fold_id == 0:
+				# Older fold should be red (blocked)
+				assert_eq(seam_line.default_color, Color.RED, "Blocked seam should be red")
+			elif seam_fold_id == 1:
+				# Newer fold should be green (undoable)
+				assert_eq(seam_line.default_color, Color.GREEN, "Undoable seam should be green")
+
+
+func test_seam_colors_update_after_undo():
+	# Execute three folds
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)  # fold_id 0
+	fold_system.execute_fold(Vector2i(3, 5), Vector2i(4, 5), false)  # fold_id 1
+	fold_system.execute_fold(Vector2i(3, 6), Vector2i(4, 6), false)  # fold_id 2
+
+	# Update visual states
+	fold_system.update_seam_visual_states()
+
+	# All should be green (non-intersecting parallel folds)
+	for seam_line in fold_system.seam_lines:
+		if seam_line and is_instance_valid(seam_line):
+			assert_eq(seam_line.default_color, Color.GREEN, "All seams should be green initially")
+
+	# Undo the newest fold
+	fold_system.undo_fold_by_id(2)
+
+	# Update visual states again
+	fold_system.update_seam_visual_states()
+
+	# Remaining seams should still be green
+	for seam_line in fold_system.seam_lines:
+		if seam_line and is_instance_valid(seam_line):
+			assert_eq(seam_line.default_color, Color.GREEN, "Remaining seams should be green after undo")

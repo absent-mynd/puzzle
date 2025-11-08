@@ -990,6 +990,32 @@ func detect_seam_click(click_pos_local: Vector2):
 	return best_match
 
 
+## PHASE 6 TASK 6: Seam Visual State Updates
+##
+## Updates the visual appearance of all seam lines based on their undoable state.
+## Undoable seams are shown in green, blocked seams in red.
+## Should be called after executing or undoing a fold.
+func update_seam_visual_states() -> void:
+	# Update color for each seam based on whether it can be undone
+	for seam_line in seam_lines:
+		if not seam_line or not is_instance_valid(seam_line):
+			continue
+
+		var fold_id = seam_line.get_meta("fold_id", -1)
+		if fold_id < 0:
+			continue
+
+		# Check if this seam can be undone
+		var validation = can_undo_fold_seam_based(fold_id)
+
+		if validation["valid"]:
+			# Undoable: Green
+			seam_line.default_color = Color.GREEN
+		else:
+			# Blocked: Red
+			seam_line.default_color = Color.RED
+
+
 ## PHASE 6 TASK 5: Undo Execution
 ##
 ## Undoes a fold by restoring grid state from the fold record.
@@ -1085,7 +1111,10 @@ func undo_fold_by_id(fold_id: int) -> bool:
 	if GameManager:
 		GameManager.fold_count -= 1
 
-	# 7. Play undo sound effect (if available)
+	# 7. Update seam visual states (PHASE 6)
+	update_seam_visual_states()
+
+	# 8. Play undo sound effect (if available)
 	if AudioManager:
 		AudioManager.play_sfx("undo")
 
@@ -1477,6 +1506,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 
 	# 7. Create seam visualization
 	create_diagonal_seam_visual(cut_lines)
+
+	# PHASE 6: Update seam visual states after creating new seams
+	update_seam_visual_states()
 
 	# 8. Update player position if affected
 	if player:

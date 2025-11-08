@@ -194,10 +194,28 @@ func _on_restart_requested() -> void:
 	GameManager.restart_level()
 
 
-## Handle undo request
+## Handle undo request (from UI button)
 func _on_undo_requested() -> void:
-	# TODO: Implement undo system (Phase 6)
-	print("Undo not yet implemented")
+	# PHASE 6: Implement sequential undo (undo newest fold)
+	if not fold_system or fold_system.fold_history.is_empty():
+		print("No folds to undo")
+		return
+
+	# Find the newest fold (highest fold_id)
+	var newest_fold_id = -1
+	for record in fold_system.fold_history:
+		if record["fold_id"] > newest_fold_id:
+			newest_fold_id = record["fold_id"]
+
+	if newest_fold_id >= 0:
+		var success = fold_system.undo_fold_by_id(newest_fold_id)
+		if success:
+			# Update HUD
+			if hud:
+				hud.set_fold_count(GameManager.fold_count)
+			print("Undo successful! Folds: %d" % GameManager.fold_count)
+		else:
+			print("Cannot undo fold %d - it's blocked by newer folds" % newest_fold_id)
 
 
 ## Handle main menu request
@@ -231,15 +249,55 @@ func check_win_condition() -> bool:
 	return is_level_complete
 
 
-## Handle input for fold execution (Issue #9)
+## Handle input for fold execution (Issue #9) and seam clicking (Phase 6)
 func _unhandled_input(event: InputEvent) -> void:
 	# Block input if level is complete
 	if is_level_complete:
 		return
 
+	# PHASE 6: Handle mouse clicks on seams for undo
+	if event is InputEventMouseButton:
+		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			handle_mouse_click(event.position)
+			return
+
 	# Execute fold when ENTER/SPACE is pressed
 	if event.is_action_pressed("ui_accept"):
 		execute_fold()
+
+
+## Handle mouse click for seam-based undo (Phase 6)
+func handle_mouse_click(mouse_position: Vector2) -> void:
+	if not fold_system or not grid_manager:
+		return
+
+	# Convert mouse position from global (screen) to local (GridManager) coordinates
+	var local_pos = grid_manager.to_local(mouse_position)
+
+	# Check if click is on a seam
+	var click_result = fold_system.detect_seam_click(local_pos)
+
+	if not click_result:
+		# Not clicking on a seam, ignore
+		return
+
+	# Clicked on a seam!
+	var fold_id = click_result["fold_id"]
+	var can_undo = click_result["can_undo"]
+
+	if can_undo:
+		# Undo this fold
+		var success = fold_system.undo_fold_by_id(fold_id)
+		if success:
+			# Update HUD
+			if hud:
+				hud.set_fold_count(GameManager.fold_count)
+			print("Seam-based undo successful! Fold %d undone. Total folds: %d" % [fold_id, GameManager.fold_count])
+		else:
+			print("Unexpected: Undo failed for fold %d" % fold_id)
+	else:
+		# Seam is blocked
+		print("Cannot undo fold %d - it's blocked by newer intersecting folds" % fold_id)
 
 
 ## Execute fold with selected anchors
