@@ -671,3 +671,157 @@ func test_no_seams_returns_null():
 	var result = fold_system.detect_seam_click(click_pos)
 
 	assert_null(result, "Should return null when no seams exist")
+
+
+## ============================================================================
+## TASK 5: UNDO EXECUTION TESTS
+## ============================================================================
+
+func test_undo_fold_by_id_method_exists():
+	# Verify the method exists
+	assert_true(fold_system.has_method("undo_fold_by_id"),
+		"FoldSystem should have undo_fold_by_id method")
+
+
+func test_undo_fold_restores_grid_state():
+	# Save initial grid state
+	var initial_cell_count = grid_manager.cells.size()
+
+	# Execute a fold (even adjacent anchors remove cells due to cut lines)
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)
+
+	# Grid will have fewer cells after fold (cells between cut lines are removed)
+	var after_fold_count = grid_manager.cells.size()
+	assert_true(after_fold_count <= initial_cell_count, "Fold may remove cells")
+
+	# Undo the fold
+	var undo_result = fold_system.undo_fold_by_id(0)
+
+	assert_true(undo_result, "Undo should succeed")
+	assert_eq(grid_manager.cells.size(), initial_cell_count, "Cell count should be restored to pre-fold state")
+
+
+func test_undo_fold_removes_seam_visuals():
+	# Execute a fold
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)
+
+	# Should have seam lines
+	var seam_count_before = fold_system.seam_lines.size()
+	assert_gt(seam_count_before, 0, "Should have seam lines after fold")
+
+	# Undo the fold
+	fold_system.undo_fold_by_id(0)
+
+	# Seam lines should be removed
+	assert_eq(fold_system.seam_lines.size(), 0, "Seam lines should be removed after undo")
+
+
+func test_undo_fold_clears_seam_to_fold_map():
+	# Execute a fold
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)
+
+	# Should have entries in seam_to_fold_map
+	var map_size_before = fold_system.seam_to_fold_map.size()
+	assert_gt(map_size_before, 0, "Should have seam mappings after fold")
+
+	# Undo the fold
+	fold_system.undo_fold_by_id(0)
+
+	# Map should be cleared
+	assert_eq(fold_system.seam_to_fold_map.size(), 0, "Seam map should be cleared after undo")
+
+
+func test_undo_fold_restores_player_position():
+	# Set initial player position
+	player.grid_position = Vector2i(5, 5)
+	var initial_pos = player.grid_position
+
+	# Execute a fold that shifts the player
+	# Vertical fold - player should shift
+	fold_system.execute_fold(Vector2i(3, 2), Vector2i(3, 3), false)
+
+	# Player position should have changed (shifted)
+	var after_fold_pos = player.grid_position
+
+	# Undo the fold
+	fold_system.undo_fold_by_id(0)
+
+	# Player should be back at initial position
+	assert_eq(player.grid_position, initial_pos, "Player position should be restored")
+
+
+func test_undo_fold_removes_from_history():
+	# Execute a fold
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)
+
+	# Should have 1 fold in history
+	var history_size_before = fold_system.fold_history.size()
+	assert_eq(history_size_before, 1, "Should have 1 fold in history")
+
+	# Undo the fold
+	fold_system.undo_fold_by_id(0)
+
+	# History should be empty
+	assert_eq(fold_system.fold_history.size(), 0, "Fold should be removed from history")
+
+
+func test_undo_invalid_fold_id_returns_false():
+	# Execute a fold
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)
+
+	# Try to undo non-existent fold
+	var result = fold_system.undo_fold_by_id(999)
+
+	assert_false(result, "Undo of non-existent fold should return false")
+
+
+func test_undo_blocked_fold_returns_false():
+	# Execute two intersecting folds
+	fold_system.execute_fold(Vector2i(4, 2), Vector2i(4, 3), false)  # fold_id 0
+	fold_system.execute_fold(Vector2i(2, 4), Vector2i(3, 4), false)  # fold_id 1
+
+	# Try to undo the blocked fold (fold 0)
+	var result = fold_system.undo_fold_by_id(0)
+
+	assert_false(result, "Undo of blocked fold should return false")
+	# Fold should still be in history
+	assert_eq(fold_system.fold_history.size(), 2, "Both folds should still be in history")
+
+
+func test_multiple_undos_in_sequence():
+	# Execute three folds
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(4, 4), false)  # fold_id 0
+	fold_system.execute_fold(Vector2i(3, 5), Vector2i(4, 5), false)  # fold_id 1
+	fold_system.execute_fold(Vector2i(3, 6), Vector2i(4, 6), false)  # fold_id 2
+
+	assert_eq(fold_system.fold_history.size(), 3, "Should have 3 folds")
+
+	# Undo newest first (fold 2)
+	var result1 = fold_system.undo_fold_by_id(2)
+	assert_true(result1, "First undo should succeed")
+	assert_eq(fold_system.fold_history.size(), 2, "Should have 2 folds remaining")
+
+	# Undo next (fold 1)
+	var result2 = fold_system.undo_fold_by_id(1)
+	assert_true(result2, "Second undo should succeed")
+	assert_eq(fold_system.fold_history.size(), 1, "Should have 1 fold remaining")
+
+	# Undo last (fold 0)
+	var result3 = fold_system.undo_fold_by_id(0)
+	assert_true(result3, "Third undo should succeed")
+	assert_eq(fold_system.fold_history.size(), 0, "Should have no folds remaining")
+
+
+func test_undo_fold_with_removed_cells():
+	# Execute a fold that removes cells (non-adjacent anchors)
+	fold_system.execute_fold(Vector2i(3, 4), Vector2i(6, 4), false)
+
+	var after_fold_count = grid_manager.cells.size()
+
+	# Undo the fold
+	var result = fold_system.undo_fold_by_id(0)
+
+	assert_true(result, "Undo should succeed")
+	# Grid should restore the removed cells
+	var after_undo_count = grid_manager.cells.size()
+	assert_gt(after_undo_count, after_fold_count, "Cells should be restored")

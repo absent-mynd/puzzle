@@ -702,19 +702,34 @@ func remove_seam_from_map(seam_line: Line2D) -> void:
 
 
 ## Remove all seams for a specific fold from the mapping
+## UPDATED FOR PHASE 6 TASK 5: Also removes visual seam Line2D nodes
 ##
 ## @param fold_id: The fold ID whose seams should be removed
 func remove_seams_for_fold(fold_id: int) -> void:
-	# Find all seam IDs that map to this fold
-	var seams_to_remove = []
+	# Find all seam Line2D nodes with this fold_id
+	var seam_lines_to_remove = []
+	for seam_line in seam_lines:
+		if seam_line and is_instance_valid(seam_line):
+			if seam_line.get_meta("fold_id", -1) == fold_id:
+				seam_lines_to_remove.append(seam_line)
 
-	for seam_id in seam_to_fold_map.keys():
-		if seam_to_fold_map[seam_id] == fold_id:
-			seams_to_remove.append(seam_id)
+	# Remove each seam visual
+	for seam_line in seam_lines_to_remove:
+		# Remove from scene tree
+		if seam_line.get_parent():
+			seam_line.get_parent().remove_child(seam_line)
 
-	# Remove them from the map
-	for seam_id in seams_to_remove:
+		# Remove from seam_lines array
+		var index = seam_lines.find(seam_line)
+		if index >= 0:
+			seam_lines.remove_at(index)
+
+		# Remove from seam_to_fold_map
+		var seam_id = seam_line.get_instance_id()
 		seam_to_fold_map.erase(seam_id)
+
+		# Free the node
+		seam_line.queue_free()
 
 
 ## Clear all seams (visuals and mapping)
@@ -973,6 +988,108 @@ func detect_seam_click(click_pos_local: Vector2):
 				break
 
 	return best_match
+
+
+## PHASE 6 TASK 5: Undo Execution
+##
+## Undoes a fold by restoring grid state from the fold record.
+## Only allows undo if the fold passes seam intersection validation.
+##
+## @param fold_id: The ID of the fold to undo
+## @return: true if undo succeeded, false if validation failed or fold not found
+func undo_fold_by_id(fold_id: int) -> bool:
+	if not grid_manager:
+		push_error("FoldSystem: GridManager not initialized")
+		return false
+
+	# Find the fold record
+	var target_fold = null
+	var fold_index = -1
+	for i in range(fold_history.size()):
+		if fold_history[i]["fold_id"] == fold_id:
+			target_fold = fold_history[i]
+			fold_index = i
+			break
+
+	if target_fold == null:
+		push_warning("FoldSystem: Fold ID %d not found in history" % fold_id)
+		return false
+
+	# Validate that this fold can be undone (check seam intersections)
+	var validation = can_undo_fold_seam_based(fold_id)
+	if not validation["valid"]:
+		push_warning("FoldSystem: Cannot undo fold %d: %s" % [fold_id, validation["reason"]])
+		return false
+
+	# 1. Remove seam visuals for this fold
+	remove_seams_for_fold(fold_id)
+
+	# 2. Restore grid state from fold record
+	# CRITICAL: Free all existing cells first to prevent memory leaks
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[pos]
+		if cell and is_instance_valid(cell):
+			if cell.get_parent():
+				cell.get_parent().remove_child(cell)
+			cell.queue_free()
+
+	grid_manager.cells.clear()
+
+	# 3. Deserialize and recreate cells from saved state
+	var cells_state = target_fold["cells_state"]
+	var cell_size = grid_manager.cell_size
+
+	for pos_str in cells_state.keys():
+		var cell_data = cells_state[pos_str]
+
+		# Parse grid position from string
+		var pos = str_to_var(pos_str) as Vector2i
+
+		# Calculate local position for this cell
+		var local_pos = Vector2(pos) * cell_size
+
+		# Create new Cell node with required constructor arguments
+		var cell = Cell.new(pos, local_pos, cell_size)
+
+		# Restore cell properties
+		var geometry_array = cell_data.get("geometry", [])
+		var geometry_points = PackedVector2Array()
+		for point_dict in geometry_array:
+			geometry_points.append(Vector2(point_dict["x"], point_dict["y"]))
+		cell.geometry = geometry_points
+
+		cell.cell_type = cell_data.get("cell_type", 0)
+		cell.is_partial = cell_data.get("is_partial", false)
+		cell.seams = cell_data.get("seams", [])
+
+		# Add cell to grid
+		grid_manager.add_child(cell)
+		grid_manager.cells[pos] = cell
+
+		# Update cell visual
+		cell.update_visual()
+
+	# 4. Restore player position
+	if player and target_fold.has("player_position"):
+		var saved_player_pos = target_fold["player_position"]
+		if saved_player_pos != Vector2i(-1, -1):
+			player.grid_position = saved_player_pos
+			var cell_at_pos = grid_manager.get_cell(saved_player_pos)
+			if cell_at_pos:
+				player.global_position = grid_manager.to_global(cell_at_pos.get_center())
+
+	# 5. Remove fold from history
+	fold_history.remove_at(fold_index)
+
+	# 6. Update GameManager fold count if it exists
+	if GameManager:
+		GameManager.fold_count -= 1
+
+	# 7. Play undo sound effect (if available)
+	if AudioManager:
+		AudioManager.play_sfx("undo")
+
+	return true
 
 
 ## ============================================================================
@@ -1294,6 +1411,10 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	var target_local = Vector2(target_anchor) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 	var source_local = Vector2(source_anchor) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
+	# PHASE 6: Save grid state BEFORE fold operations (for undo functionality)
+	var pre_fold_grid_state = serialize_grid_state()
+	var pre_fold_player_pos = player.grid_position if player else Vector2i(-1, -1)
+
 	# 1. Calculate cut lines (perpendicular to fold axis)
 	var cut_lines = calculate_cut_lines(target_local, source_local)
 
@@ -1378,7 +1499,19 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	elif is_vertical:
 		orientation = "vertical"
 
-	var fold_record = create_fold_record(anchor1, anchor2, removed_positions, orientation)
+	# Create fold record using PRE-fold state (saved earlier)
+	var fold_record = {
+		"fold_id": next_fold_id,
+		"anchor1": anchor1,
+		"anchor2": anchor2,
+		"removed_cells": removed_positions.duplicate(),
+		"orientation": orientation,
+		"timestamp": Time.get_ticks_msec(),
+		"cells_state": pre_fold_grid_state,  # Use pre-saved state
+		"player_position": pre_fold_player_pos,  # Use pre-saved player position
+		"fold_count": GameManager.fold_count if GameManager else 0
+	}
+	next_fold_id += 1
 	fold_history.append(fold_record)
 
 	# 10. Clean up any freed cell references from the dictionary
