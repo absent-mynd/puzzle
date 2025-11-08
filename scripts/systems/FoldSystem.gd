@@ -210,9 +210,12 @@ func validate_fold_with_player(anchor1: Vector2i, anchor2: Vector2i) -> Dictiona
 		return {valid = true, reason = ""}
 
 	# Check if player is in removed region (between fold lines)
-	# This is the only blocking condition - cells on fold lines are allowed
-	# because they remain in the game (just with split/merged geometry)
 	if is_player_in_removed_region(anchor1, anchor2):
+		return {valid = false, reason = "Cannot fold - player in the way"}
+
+	# Check if player's cell would be split by the fold (Phase 4+)
+	# This is critical for diagonal folds where cells can be split by cut lines
+	if is_player_cell_split_by_fold(anchor1, anchor2):
 		return {valid = false, reason = "Cannot fold - player in the way"}
 
 	return {valid = true, reason = ""}
@@ -229,6 +232,45 @@ func is_player_in_removed_region(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 
 	var removed_cells = calculate_removed_cells(anchor1, anchor2)
 	return player.grid_position in removed_cells
+
+
+## Check if player's cell would be split by the fold
+##
+## For diagonal folds, cells can be split by the cut lines.
+## This checks if the player is on such a cell.
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true if player's cell would be split by the fold
+func is_player_cell_split_by_fold(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	if not player:
+		return false
+
+	# Get the player's current cell
+	var player_cell = grid_manager.get_cell(player.grid_position)
+	if not player_cell:
+		return false
+
+	# For axis-aligned folds, cells on the fold line are anchors and are allowed
+	# (they don't truly "split" in the geometric sense for horizontal/vertical folds)
+	var orientation = get_fold_orientation(anchor1, anchor2)
+	if orientation == "horizontal" or orientation == "vertical":
+		# Axis-aligned folds don't split cells in a way that blocks the player
+		return false
+
+	# For diagonal folds, check if player's cell intersects either cut line
+	var cell_size = grid_manager.cell_size
+	var anchor1_local = Vector2(anchor1) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var anchor2_local = Vector2(anchor2) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var cut_lines = calculate_cut_lines(anchor1_local, anchor2_local)
+
+	# Check if player's cell would be split by either cut line
+	if does_cell_intersect_line(player_cell, cut_lines.line1.point, cut_lines.line1.normal):
+		return true
+	if does_cell_intersect_line(player_cell, cut_lines.line2.point, cut_lines.line2.normal):
+		return true
+
+	return false
 
 
 ## Helper Methods

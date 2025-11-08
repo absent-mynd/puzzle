@@ -492,3 +492,92 @@ func test_validation_success_message_is_empty():
 
 	assert_eq(result.reason, "",
 		"Success message should be empty")
+
+
+# ===== Diagonal Fold Tests - Player on Fold Line =====
+
+func test_diagonal_fold_blocked_when_player_on_fold_line_anchor1():
+	# Bug reproduction: Player on a cell that would be split by fold line at anchor1
+	# For a diagonal fold from (2,2) to (5,5), the fold line at (2,2) should split
+	# cells that intersect it. If player is on such a cell, fold should be blocked.
+
+	# Place player at (2,2) - this cell will be split by the fold line
+	player.set_grid_position(Vector2i(2, 2))
+
+	var anchor1 = Vector2i(2, 2)
+	var anchor2 = Vector2i(5, 5)
+
+	var result = fold_system.validate_fold_with_player(anchor1, anchor2)
+
+	assert_false(result.valid, "Diagonal fold should be blocked when player on cell that would be split at anchor1")
+	assert_eq(result.reason, "Cannot fold - player in the way",
+		"Should provide correct error message")
+
+
+func test_diagonal_fold_blocked_when_player_on_fold_line_anchor2():
+	# Bug reproduction: Player on a cell that would be split by fold line at anchor2
+	player.set_grid_position(Vector2i(5, 5))
+
+	var anchor1 = Vector2i(2, 2)
+	var anchor2 = Vector2i(5, 5)
+
+	var result = fold_system.validate_fold_with_player(anchor1, anchor2)
+
+	assert_false(result.valid, "Diagonal fold should be blocked when player on cell that would be split at anchor2")
+	assert_eq(result.reason, "Cannot fold - player in the way",
+		"Should provide correct error message")
+
+
+func test_diagonal_fold_blocked_when_player_on_cell_intersecting_line1():
+	# Test with a cell that intersects line1 (not at anchor position)
+	# For a diagonal fold from (1,1) to (5,5), a cell at (2,1) would be split by line1
+	player.set_grid_position(Vector2i(2, 1))
+
+	var anchor1 = Vector2i(1, 1)
+	var anchor2 = Vector2i(5, 5)
+
+	var result = fold_system.validate_fold_with_player(anchor1, anchor2)
+
+	assert_false(result.valid, "Diagonal fold should be blocked when player on cell intersecting line1")
+
+
+func test_diagonal_fold_blocked_when_player_on_cell_intersecting_line2():
+	# Test with a cell that intersects line2
+	# For a diagonal fold from (1,1) to (5,5), a cell at (5,4) would be split by line2
+	player.set_grid_position(Vector2i(5, 4))
+
+	var anchor1 = Vector2i(1, 1)
+	var anchor2 = Vector2i(5, 5)
+
+	var result = fold_system.validate_fold_with_player(anchor1, anchor2)
+
+	assert_false(result.valid, "Diagonal fold should be blocked when player on cell intersecting line2")
+
+
+func test_diagonal_fold_succeeds_when_player_not_on_fold_lines():
+	# Player on a cell that won't be split or removed
+	# For a diagonal fold from (2,2) to (6,6), player at (0,0) is safe
+	player.set_grid_position(Vector2i(0, 0))
+
+	var anchor1 = Vector2i(2, 2)
+	var anchor2 = Vector2i(6, 6)
+
+	var result = fold_system.validate_fold_with_player(anchor1, anchor2)
+
+	assert_true(result.valid, "Diagonal fold should succeed when player not on fold lines or removed region")
+
+
+func test_execute_diagonal_fold_blocked_when_player_on_fold_line():
+	# Integration test: execute_fold should respect player validation for diagonal folds
+	player.set_grid_position(Vector2i(3, 3))
+
+	var anchor1 = Vector2i(3, 3)
+	var anchor2 = Vector2i(6, 6)
+
+	var result = await fold_system.execute_fold(anchor1, anchor2, false)
+
+	assert_false(result, "execute_fold should fail when player on fold line")
+
+	# Verify fold was NOT executed
+	var history = fold_system.get_fold_history()
+	assert_eq(history.size(), 0, "Fold should not be recorded when blocked by player on fold line")
