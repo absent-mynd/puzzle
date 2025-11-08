@@ -236,7 +236,7 @@ static func segments_intersect(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector
 ## Splits a polygon by a line using the Sutherland-Hodgman algorithm.
 ##
 ## This is the CRITICAL function for the space-folding mechanic. It divides a polygon
-## into two parts: vertices on the left (positive) side and right (negative) side of the line.
+## into two parts: vertices on the left (negative) side and right (positive) side of the line.
 ##
 ## Algorithm:
 ##   1. Iterate through all edges of the polygon
@@ -246,10 +246,10 @@ static func segments_intersect(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector
 ##
 ## @param vertices: Array of vertices defining the polygon (counter-clockwise winding)
 ## @param line_point: A point on the splitting line
-## @param line_normal: The normal vector of the line (should be normalized)
+## @param line_normal: The normal vector of the line (should be normalized, points to RIGHT/positive side)
 ## @return: Dictionary with keys:
-##          - "left": PackedVector2Array of vertices on positive side
-##          - "right": PackedVector2Array of vertices on negative side
+##          - "left": PackedVector2Array of vertices on negative side (normal points away)
+##          - "right": PackedVector2Array of vertices on positive side (normal points toward)
 ##          - "intersections": PackedVector2Array of intersection points
 ##
 ## Edge cases handled:
@@ -264,9 +264,9 @@ static func segments_intersect(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector
 ##   var result = GeometryCore.split_polygon_by_line(
 ##       square, Vector2(50, 0), Vector2(1, 0).normalized()
 ##   )
-##   # Splits square vertically at x=50
-##   # result["left"] contains right half (positive x direction)
-##   # result["right"] contains left half (negative x direction)
+##   # Splits square vertically at x=50 with normal pointing right
+##   # result["left"] contains left half (negative x direction)
+##   # result["right"] contains right half (positive x direction)
 ##   # result["intersections"] contains two points where line crosses edges
 static func split_polygon_by_line(vertices: PackedVector2Array,
 								  line_point: Vector2,
@@ -293,9 +293,10 @@ static func split_polygon_by_line(vertices: PackedVector2Array,
 		var next_side = point_side_of_line(next, line_point, line_normal)
 
 		# Add current vertex to appropriate side(s)
-		if current_side >= 0:  # On line or positive side
+		# Normal vector points to the RIGHT/positive side
+		if current_side <= 0:  # On line or negative side (LEFT)
 			left_verts.append(current)
-		if current_side <= 0:  # On line or negative side
+		if current_side >= 0:  # On line or positive side (RIGHT)
 			right_verts.append(current)
 
 		# If current vertex is exactly on the line, count it as an intersection
