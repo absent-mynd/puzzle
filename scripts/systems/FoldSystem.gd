@@ -1105,6 +1105,9 @@ func _classify_cells_for_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i, cut
 
 ## Process cells on line1 (at anchor1) - split and keep anchor1 side
 ##
+## PHASE 5: Now processes ALL pieces in multi-piece cells, not just the first one.
+## This fixes the multi-seam merging bug where pieces would disappear.
+##
 ## @param cells: Array of cells intersecting line1
 ## @param cut_lines: Cut line data
 ## @param anchor1: First anchor position
@@ -1119,33 +1122,79 @@ func _process_split_cells_on_line1(cells: Array, cut_lines: Dictionary, anchor1:
 	var keep_side = "right" if anchor2_side < 0 else "left"
 
 	for cell in cells:
-		var split_result = GeometryCore.split_polygon_by_line(
-			cell.geometry, cut_lines.line1.point, cut_lines.line1.normal
-		)
+		# PHASE 5: Process ALL pieces in the cell, not just the first one
+		# This fixes the multi-seam bug where only cell.geometry (first piece) was split
+		var new_pieces: Array[CellPiece] = []
+		var pieces_to_remove: Array[int] = []
 
-		if split_result.intersections.size() > 0:
-			# Update cell geometry to kept side
-			# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
-			# So we swap the assignment to get the correct polygon half
-			if keep_side == "left":
-				cell.geometry = split_result.right  # SWAPPED: use right for left
+		for i in range(cell.geometry_pieces.size()):
+			var piece = cell.geometry_pieces[i]
+
+			# Split this piece by line1
+			var split_result = GeometryCore.split_polygon_by_line(
+				piece.geometry, cut_lines.line1.point, cut_lines.line1.normal
+			)
+
+			if split_result.intersections.size() > 0:
+				# This piece is split by line1
+				var kept_geometry: PackedVector2Array
+
+				# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
+				if keep_side == "left":
+					kept_geometry = split_result.right  # SWAPPED
+				else:
+					kept_geometry = split_result.left   # SWAPPED
+
+				# Create new piece with kept geometry
+				var kept_piece = CellPiece.new(kept_geometry, piece.cell_type, piece.source_fold_id)
+				# Copy seams from original piece
+				for seam in piece.seams:
+					kept_piece.add_seam(seam.duplicate_seam())
+				new_pieces.append(kept_piece)
+				pieces_to_remove.append(i)
 			else:
-				cell.geometry = split_result.left   # SWAPPED: use left for right
+				# This piece is not split - check which side it's on
+				var piece_center = piece.get_center()
+				var side = GeometryCore.point_side_of_line(piece_center, cut_lines.line1.point, cut_lines.line1.normal)
 
+				# Keep pieces on the "keep" side
+				if (keep_side == "right" and side < 0) or (keep_side == "left" and side > 0):
+					new_pieces.append(piece.duplicate_piece())
+
+				pieces_to_remove.append(i)
+
+		# Remove old pieces (in reverse order to avoid index shifts)
+		for i in range(pieces_to_remove.size() - 1, -1, -1):
+			cell.geometry_pieces.remove_at(pieces_to_remove[i])
+
+		# Add new pieces
+		for piece in new_pieces:
+			cell.geometry_pieces.append(piece)
+
+		# Update cell state
+		if cell.geometry_pieces.size() > 0:
 			cell.is_partial = true
+			cell.cell_type = cell.get_dominant_type()
 			cell.update_visual()
 
-			# Store the kept part for potential merging
+			# Store the cell for potential merging
 			split_parts.append({
 				"cell": cell,
-				"geometry": cell.geometry,
+				"geometry": cell.geometry_pieces[0].geometry,
 				"position": anchor1
 			})
+		else:
+			# No pieces left - cell becomes empty
+			if DEBUG_FOLD_EXECUTION:
+				print("  WARNING: Cell at %s has no pieces after splitting on line1" % cell.grid_position)
 
 	return split_parts
 
 
 ## Process cells on line2 (at anchor2) - split and prepare for shifting
+##
+## PHASE 5: Now processes ALL pieces in multi-piece cells, not just the first one.
+## This fixes the multi-seam merging bug where pieces would disappear.
 ##
 ## @param cells: Array of cells intersecting line2
 ## @param cut_lines: Cut line data
@@ -1161,24 +1210,67 @@ func _process_split_cells_on_line2(cells: Array, cut_lines: Dictionary, anchor1:
 	var keep_side = "right" if anchor1_side < 0 else "left"
 
 	for cell in cells:
-		var split_result = GeometryCore.split_polygon_by_line(
-			cell.geometry, cut_lines.line2.point, cut_lines.line2.normal
-		)
+		# PHASE 5: Process ALL pieces in the cell, not just the first one
+		# This fixes the multi-seam bug where only cell.geometry (first piece) was split
+		var new_pieces: Array[CellPiece] = []
+		var pieces_to_remove: Array[int] = []
 
-		if split_result.intersections.size() > 0:
-			# Update cell geometry to kept side
-			# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
-			# So we swap the assignment to get the correct polygon half
-			if keep_side == "left":
-				cell.geometry = split_result.right  # SWAPPED: use right for left
+		for i in range(cell.geometry_pieces.size()):
+			var piece = cell.geometry_pieces[i]
+
+			# Split this piece by line2
+			var split_result = GeometryCore.split_polygon_by_line(
+				piece.geometry, cut_lines.line2.point, cut_lines.line2.normal
+			)
+
+			if split_result.intersections.size() > 0:
+				# This piece is split by line2
+				var kept_geometry: PackedVector2Array
+
+				# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
+				if keep_side == "left":
+					kept_geometry = split_result.right  # SWAPPED
+				else:
+					kept_geometry = split_result.left   # SWAPPED
+
+				# Create new piece with kept geometry
+				var kept_piece = CellPiece.new(kept_geometry, piece.cell_type, piece.source_fold_id)
+				# Copy seams from original piece
+				for seam in piece.seams:
+					kept_piece.add_seam(seam.duplicate_seam())
+				new_pieces.append(kept_piece)
+				pieces_to_remove.append(i)
 			else:
-				cell.geometry = split_result.left   # SWAPPED: use left for right
+				# This piece is not split - check which side it's on
+				var piece_center = piece.get_center()
+				var side = GeometryCore.point_side_of_line(piece_center, cut_lines.line2.point, cut_lines.line2.normal)
 
+				# Keep pieces on the "keep" side
+				if (keep_side == "right" and side < 0) or (keep_side == "left" and side > 0):
+					new_pieces.append(piece.duplicate_piece())
+
+				pieces_to_remove.append(i)
+
+		# Remove old pieces (in reverse order to avoid index shifts)
+		for i in range(pieces_to_remove.size() - 1, -1, -1):
+			cell.geometry_pieces.remove_at(pieces_to_remove[i])
+
+		# Add new pieces
+		for piece in new_pieces:
+			cell.geometry_pieces.append(piece)
+
+		# Update cell state
+		if cell.geometry_pieces.size() > 0:
 			cell.is_partial = true
+			cell.cell_type = cell.get_dominant_type()
 			cell.update_visual()
 
 			# This cell will shift - store it
 			split_parts.append(cell)
+		else:
+			# No pieces left - mark for debug
+			if DEBUG_FOLD_EXECUTION:
+				print("  WARNING: Cell at %s has no pieces after splitting on line2" % cell.grid_position)
 
 	return split_parts
 
