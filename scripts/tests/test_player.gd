@@ -303,3 +303,69 @@ func test_player_goal_detection_non_dominant():
 	player.check_goal()
 
 	assert_signal_emitted(player, "goal_reached", "Should detect goal regardless of dominance")
+
+
+## Test: Player can move to cells outside initial grid bounds
+func test_player_can_move_to_shifted_cells():
+	await wait_physics_frames(2)
+
+	# Create a cell at position outside the initial grid (10x10 grid, so x=10 is outside)
+	var shifted_pos = Vector2i(10, 5)
+
+	# Manually create a cell outside the grid bounds (simulating a fold that shifted it)
+	var cell_size = grid_manager.cell_size
+	var local_pos = Vector2(shifted_pos) * cell_size
+	var shifted_cell = Cell.new(shifted_pos, local_pos, cell_size)
+	shifted_cell.cell_type = 0  # Empty (walkable)
+
+	# Add cell to grid manager
+	grid_manager.add_child(shifted_cell)
+	grid_manager.cells[shifted_pos] = shifted_cell
+
+	# Place player adjacent to the shifted cell
+	player.set_grid_position(Vector2i(9, 5))
+
+	# Attempt to move to the shifted cell (outside initial bounds)
+	var can_move = player.can_move_to(shifted_pos)
+	assert_true(can_move, "Player should be able to move to cells outside initial grid bounds")
+
+	# Execute the move
+	var success = player.attempt_move(Vector2i(1, 0))
+	assert_true(success, "Move to shifted cell should succeed")
+	assert_eq(player.grid_position, shifted_pos, "Player should be at shifted cell position")
+
+
+## Test: Player cannot move to non-existent cells
+func test_player_cannot_move_to_nonexistent_cells():
+	# Try to move to a position where no cell exists (even if within initial bounds)
+	var nonexistent_pos = Vector2i(15, 15)
+
+	var can_move = player.can_move_to(nonexistent_pos)
+	assert_false(can_move, "Player should not be able to move to positions with no cell")
+
+
+## Test: set_grid_position works with shifted cells
+func test_set_grid_position_with_shifted_cells():
+	await wait_physics_frames(2)
+
+	# Create a cell outside initial bounds
+	var shifted_pos = Vector2i(12, 8)
+
+	# Calculate geometry
+	var cell_size = grid_manager.cell_size
+	var local_pos = Vector2(shifted_pos) * cell_size
+	var shifted_cell = Cell.new(shifted_pos, local_pos, cell_size)
+	shifted_cell.cell_type = 0  # Empty
+
+	grid_manager.add_child(shifted_cell)
+	grid_manager.cells[shifted_pos] = shifted_cell
+
+	# Teleport player to the shifted cell
+	player.set_grid_position(shifted_pos)
+
+	assert_eq(player.grid_position, shifted_pos, "Player should be teleported to shifted cell")
+
+	# Verify player world position is correct
+	var expected_world_pos = grid_manager.to_global(shifted_cell.get_center())
+	assert_almost_eq(player.global_position.x, expected_world_pos.x, 1.0, "Player world X should be at cell center")
+	assert_almost_eq(player.global_position.y, expected_world_pos.y, 1.0, "Player world Y should be at cell center")
