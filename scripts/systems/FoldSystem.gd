@@ -210,9 +210,12 @@ func validate_fold_with_player(anchor1: Vector2i, anchor2: Vector2i) -> Dictiona
 		return {valid = true, reason = ""}
 
 	# Check if player is in removed region (between fold lines)
-	# This is the only blocking condition - cells on fold lines are allowed
-	# because they remain in the game (just with split/merged geometry)
 	if is_player_in_removed_region(anchor1, anchor2):
+		return {valid = false, reason = "Cannot fold - player in the way"}
+
+	# Check if player's cell would be split by the fold (Phase 4+)
+	# This is critical for diagonal folds where cells can be split by cut lines
+	if is_player_cell_split_by_fold(anchor1, anchor2):
 		return {valid = false, reason = "Cannot fold - player in the way"}
 
 	return {valid = true, reason = ""}
@@ -229,6 +232,45 @@ func is_player_in_removed_region(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 
 	var removed_cells = calculate_removed_cells(anchor1, anchor2)
 	return player.grid_position in removed_cells
+
+
+## Check if player's cell would be split by the fold
+##
+## All fold types (horizontal, vertical, diagonal) create cut lines that can split cells.
+## - Horizontal folds create VERTICAL cut lines (perpendicular to the fold axis)
+## - Vertical folds create HORIZONTAL cut lines (perpendicular to the fold axis)
+## - Diagonal folds create DIAGONAL cut lines
+##
+## This checks if the player is on a cell that would be split by either cut line.
+## Players on anchor positions are also blocked (cannot fold from where you stand).
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @return: true if player's cell would be split by the fold
+func is_player_cell_split_by_fold(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	if not player:
+		return false
+
+	# Get the player's current cell
+	var player_cell = grid_manager.get_cell(player.grid_position)
+	if not player_cell:
+		return false
+
+	# Calculate cut lines for the fold
+	# NOTE: All fold types (horizontal, vertical, diagonal) use the same algorithm
+	# since execute_horizontal_fold and execute_vertical_fold both call execute_diagonal_fold
+	var cell_size = grid_manager.cell_size
+	var anchor1_local = Vector2(anchor1) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var anchor2_local = Vector2(anchor2) * cell_size + Vector2(cell_size / 2, cell_size / 2)
+	var cut_lines = calculate_cut_lines(anchor1_local, anchor2_local)
+
+	# Check if player's cell would be split by either cut line
+	if does_cell_intersect_line(player_cell, cut_lines.line1.point, cut_lines.line1.normal):
+		return true
+	if does_cell_intersect_line(player_cell, cut_lines.line2.point, cut_lines.line2.normal):
+		return true
+
+	return false
 
 
 ## Helper Methods
@@ -1196,8 +1238,57 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 			# Merge with existing cell (this is a REAL collision, not a false one)
 			_merge_cells_multi_polygon(existing, cell, new_pos)
 		else:
+			# No cell at destination - create null pieces to complete the cell
+			_add_null_pieces_to_complete_cell(cell, new_pos)
+
 			# Place cell at new position
 			grid_manager.cells[new_pos] = cell
+
+
+## Add null pieces to complete a cell when it has no merge partner
+##
+## When a split cell shifts to a position with no existing cell, we need to
+## create "null" pieces to represent the missing/void geometry. This maintains
+## the invariant that all cells are geometrically complete.
+##
+## @param cell: The cell to complete with null pieces
+## @param pos: Grid position of the cell
+func _add_null_pieces_to_complete_cell(cell: Cell, pos: Vector2i):
+	# Calculate the complement geometry (the missing piece)
+	var complement_geometry = GeometryCore.calculate_complement_geometry(
+		pos,
+		grid_manager.cell_size,
+		cell.geometry_pieces
+	)
+
+	# If there's no complement (cell is already complete), do nothing
+	if complement_geometry.is_empty() or complement_geometry.size() < 3:
+		return
+
+	# Create a null piece with the complement geometry
+	var null_piece = CellPiece.new(
+		complement_geometry,
+		CellPiece.CELL_TYPE_NULL,
+		next_fold_id - 1  # Track which fold created this null piece (current fold)
+	)
+
+	# Add the null piece to the cell
+	cell.add_piece(null_piece)
+
+	# Update dominant type (will be null if any null pieces exist)
+	cell.cell_type = cell.get_dominant_type()
+
+	# Mark as partial since it contains null geometry
+	cell.is_partial = true
+
+	# Update visual (null pieces are invisible)
+	cell.update_visual()
+
+	if DEBUG_FOLD_EXECUTION:
+		print("  Added null piece to cell at %s (complement area: %.1f)" % [
+			pos,
+			GeometryCore.polygon_area(complement_geometry)
+		])
 
 
 ## Merge split parts from line1 with any cells at anchor1

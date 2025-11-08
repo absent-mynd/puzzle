@@ -372,3 +372,74 @@ static func point_in_polygon(point: Vector2, vertices: PackedVector2Array) -> bo
 		p1 = p2
 
 	return inside
+
+
+## Calculate the complement geometry to complete a cell
+##
+## Given a cell position, cell size, and existing piece geometry,
+## calculates the "missing" geometry needed to form a complete square cell.
+## This is used to create null pieces when a fold splits a cell and one
+## piece shifts to a location with no merge partner.
+##
+## @param grid_pos: Grid position of the cell
+## @param cell_size: Size of cells in the grid
+## @param existing_pieces: Array of CellPiece objects already in the cell
+## @return: PackedVector2Array representing the complement geometry, or empty array if cell is already complete
+##
+## Example:
+##   If a cell has a piece covering the left half,
+##   this returns geometry for the right half
+static func calculate_complement_geometry(
+	grid_pos: Vector2i,
+	cell_size: float,
+	existing_pieces: Array[CellPiece]
+) -> PackedVector2Array:
+	# Calculate full cell square in LOCAL coordinates
+	var local_pos = Vector2(grid_pos) * cell_size
+	var full_square = PackedVector2Array([
+		local_pos,                          # Top-left
+		local_pos + Vector2(cell_size, 0),       # Top-right
+		local_pos + Vector2(cell_size, cell_size),    # Bottom-right
+		local_pos + Vector2(0, cell_size)        # Bottom-left
+	])
+
+	# If no existing pieces, return the full square as complement
+	if existing_pieces.is_empty():
+		return full_square
+
+	# Start with the full square
+	var remaining = [full_square]
+
+	# Subtract each existing piece from the remaining geometry
+	for piece in existing_pieces:
+		if piece.geometry.is_empty():
+			continue
+
+		var new_remaining = []
+		for polygon in remaining:
+			# Use Godot's clip_polygons to subtract the piece
+			# clip_polygons returns the difference: polygon - piece.geometry
+			var difference = Geometry2D.clip_polygons(polygon, piece.geometry)
+
+			# Add all resulting polygons to new_remaining
+			for diff_poly in difference:
+				if diff_poly.size() >= 3:  # Valid polygon
+					new_remaining.append(diff_poly)
+
+		remaining = new_remaining
+
+	# Return the largest remaining polygon (or empty if fully covered)
+	if remaining.is_empty():
+		return PackedVector2Array()
+
+	# Find the largest polygon by area
+	var largest = remaining[0]
+	var largest_area = polygon_area(largest)
+
+	for i in range(1, remaining.size()):
+		var area = polygon_area(remaining[i])
+		if area > largest_area:
+			largest = remaining[i]
+			largest_area = area
+
+	return largest

@@ -124,22 +124,19 @@ func attempt_move(direction: Vector2i) -> bool:
 ## @return: true if move is valid, false otherwise
 ##
 ## PHASE 5: Uses dominant type for multi-piece cells
+## NOTE: Does NOT check initial grid bounds - allows movement to shifted cells
 func can_move_to(target_grid_pos: Vector2i) -> bool:
-	# Check if position is within grid bounds
-	if not grid_manager.is_valid_position(target_grid_pos):
-		return false
-
-	# Get target cell
+	# Get target cell (this is the real validation - does a cell exist there?)
 	var target_cell = grid_manager.get_cell(target_grid_pos)
 	if not target_cell:
 		return false
 
 	# PHASE 5: Check dominant type for collision
-	# Cell types: 0=empty, 1=wall, 2=water, 3=goal
+	# Cell types: -1=null, 0=empty, 1=wall, 2=water, 3=goal
 	var dominant_type = target_cell.get_dominant_type()
 
-	# Can't move into walls
-	if dominant_type == 1:
+	# Can't move into walls or null (void) cells
+	if dominant_type == 1 or dominant_type == CellPiece.CELL_TYPE_NULL:
 		return false
 
 	# Can move into empty, water, or goal
@@ -214,13 +211,17 @@ func get_grid_position() -> Vector2i:
 
 ## Set grid position (teleport)
 ## @param new_pos: New grid position
+## NOTE: Does NOT check initial grid bounds - allows teleporting to shifted cells
 func set_grid_position(new_pos: Vector2i) -> void:
-	if not grid_manager or not grid_manager.is_valid_position(new_pos):
+	if not grid_manager:
+		return
+
+	# Check if a cell exists at the target position
+	var cell = grid_manager.get_cell(new_pos)
+	if not cell:
 		return
 
 	grid_position = new_pos
 	# Cell centers are in GridManager's local space, so convert to global
-	var cell = grid_manager.get_cell(grid_position)
-	if cell:
-		global_position = grid_manager.to_global(cell.get_center())
-		target_position = global_position
+	global_position = grid_manager.to_global(cell.get_center())
+	target_position = global_position
