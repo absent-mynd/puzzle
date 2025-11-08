@@ -1198,11 +1198,11 @@ func _process_split_cells_on_line1(cells: Array, cut_lines: Dictionary, anchor1:
 
 				var kept_geometry: PackedVector2Array
 
-				# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
+				# Get the appropriate side based on keep_side
 				if keep_side == "left":
-					kept_geometry = split_result.right  # SWAPPED
+					kept_geometry = split_result.left
 				else:
-					kept_geometry = split_result.left   # SWAPPED
+					kept_geometry = split_result.right
 
 				# Create new piece with kept geometry
 				var kept_piece = CellPiece.new(kept_geometry, piece.cell_type, piece.source_fold_id)
@@ -1289,11 +1289,11 @@ func _process_split_cells_on_line2(cells: Array, cut_lines: Dictionary, anchor1:
 
 				var kept_geometry: PackedVector2Array
 
-				# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
+				# Get the appropriate side based on keep_side
 				if keep_side == "left":
-					kept_geometry = split_result.right  # SWAPPED
+					kept_geometry = split_result.left
 				else:
-					kept_geometry = split_result.left   # SWAPPED
+					kept_geometry = split_result.right
 
 				# Create new piece with kept geometry
 				var kept_piece = CellPiece.new(kept_geometry, piece.cell_type, piece.source_fold_id)
