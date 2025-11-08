@@ -124,17 +124,13 @@ func attempt_move(direction: Vector2i) -> bool:
 ## @return: true if move is valid, false otherwise
 ##
 ## PHASE 5: Checks ALL pieces in multi-polygon cells
-## Cells outside original grid bounds are treated as walls
+## After folds, cells can exist outside original grid bounds
 func can_move_to(target_grid_pos: Vector2i) -> bool:
-	# Get target cell - must exist
+	# Get target cell - cell existence is the source of truth (no bounds check)
+	# After folds, cells can exist outside original grid bounds
 	var target_cell = grid_manager.get_cell(target_grid_pos)
 	if not target_cell:
 		return false  # No cell at this position
-
-	# Cells outside original grid bounds are treated as walls (blocked)
-	# This includes cells that shifted beyond the grid during folds
-	if not grid_manager.is_valid_position(target_grid_pos):
-		return false
 
 	# PHASE 5: Check ALL pieces in multi-polygon cells for blocking
 	# Cell types: 0=empty, 1=wall, 2=water (walkable), 3=goal
@@ -162,7 +158,7 @@ func can_move_to(target_grid_pos: Vector2i) -> bool:
 			if piece.cell_type == 0 and not piece.geometry.is_empty():
 				return false  # Empty void in merged cell blocks
 
-	# Pure empty cell (single piece) within grid bounds is walkable
+	# Pure empty cell (single piece) or cell with only metadata pieces is walkable
 	return true
 
 
