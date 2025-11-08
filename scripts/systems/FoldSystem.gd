@@ -290,25 +290,65 @@ func get_fold_distance(anchor1: Vector2i, anchor2: Vector2i) -> int:
 		return -1  # Invalid for diagonal folds
 
 
-## Create a fold record for the history system
+## Create a fold record for the history system (ENHANCED for Phase 5/6)
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 ## @param removed_cells: Array of cells that were removed
-## @param orientation: Fold orientation ("horizontal" or "vertical")
-## @return: Dictionary containing fold metadata
+## @param orientation: Fold orientation ("horizontal", "vertical", "diagonal")
+## @return: Dictionary containing fold metadata and complete grid state
 func create_fold_record(anchor1: Vector2i, anchor2: Vector2i, removed_cells: Array[Vector2i], orientation: String) -> Dictionary:
+	# Serialize all cells in the grid (BEFORE the fold)
+	var cells_state = serialize_grid_state()
+
+	# Store player position (if player exists)
+	var player_position = Vector2i(-1, -1)
+	if player:
+		player_position = player.grid_position
+
 	var record = {
 		"fold_id": next_fold_id,
 		"anchor1": anchor1,
 		"anchor2": anchor2,
 		"removed_cells": removed_cells.duplicate(),
 		"orientation": orientation,
-		"timestamp": Time.get_ticks_msec()
+		"timestamp": Time.get_ticks_msec(),
+		"cells_state": cells_state,  # Complete cell state snapshot
+		"player_position": player_position,  # Player position before fold
+		"fold_count": GameManager.fold_count if GameManager else 0  # Global fold counter
 	}
 
 	next_fold_id += 1
 	return record
+
+
+## Serialize the entire grid state (all cells)
+##
+## @return: Dictionary mapping grid positions to cell state dictionaries
+func serialize_grid_state() -> Dictionary:
+	var state = {}
+
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[pos]
+		if cell:
+			state[var_to_str(pos)] = cell.to_dict()
+
+	return state
+
+
+## Deserialize grid state from a fold record
+##
+## @param state: Dictionary mapping grid positions to cell state dictionaries
+## @return: Dictionary of restored cell states (without visual nodes)
+func deserialize_grid_state(state: Dictionary) -> Dictionary:
+	var restored_cells = {}
+
+	for pos_str in state.keys():
+		var cell_data = state[pos_str]
+		# Store the cell data - actual Cell node creation happens in undo system
+		restored_cells[pos_str] = cell_data
+
+	return restored_cells
 
 
 ## Animation Methods (Issue #9)
@@ -390,118 +430,6 @@ func shift_cells_animated(cells_to_shift: Array[Dictionary], duration: float) ->
 ## @param anchor1: First anchor position
 ## @param anchor2: Second anchor position
 ## @param orientation: Fold orientation ("horizontal" or "vertical")
-func create_seam_visual(anchor1: Vector2i, anchor2: Vector2i, orientation: String) -> void:
-	var seam_line = Line2D.new()
-	seam_line.width = 2.0
-	seam_line.default_color = Color.CYAN
-
-	var cell_size = grid_manager.cell_size
-
-	# For axis-aligned folds, draw perpendicular line spanning the entire grid
-	# Use LOCAL coordinates since Line2D is a child of GridManager
-	if orientation == "horizontal":
-		# Horizontal fold: draw VERTICAL line at the merged point (center of left anchor)
-		var left_anchor = anchor1 if anchor1.x < anchor2.x else anchor2
-		# Seam is at the center of the left anchor (where cells overlap/merge)
-		var seam_x = left_anchor.x * cell_size + cell_size / 2
-
-		# Span from top to bottom of grid (local coordinates)
-		var top_y = 0.0
-		var bottom_y = grid_manager.grid_size.y * cell_size
-
-		seam_line.points = PackedVector2Array([
-			Vector2(seam_x, top_y),
-			Vector2(seam_x, bottom_y)
-		])
-	elif orientation == "vertical":
-		# Vertical fold: draw HORIZONTAL line at the merged point (center of top anchor)
-		var top_anchor = anchor1 if anchor1.y < anchor2.y else anchor2
-		# Seam is at the center of the top anchor (where cells overlap/merge)
-		var seam_y = top_anchor.y * cell_size + cell_size / 2
-
-		# Span from left to right of grid (local coordinates)
-		var left_x = 0.0
-		var right_x = grid_manager.grid_size.x * cell_size
-
-		seam_line.points = PackedVector2Array([
-			Vector2(left_x, seam_y),
-			Vector2(right_x, seam_y)
-		])
-
-	# Add to scene tree
-	grid_manager.add_child(seam_line)
-	seam_lines.append(seam_line)
-
-
-## Remove seam lines that fall within the removed region
-##
-## For horizontal folds, removes vertical seams in the removed column range
-## For vertical folds, removes horizontal seams in the removed row range
-##
-## @param start_coord: Start coordinate (x for horizontal, y for vertical)
-## @param end_coord: End coordinate (x for horizontal, y for vertical)
-## @param seam_orientation: Orientation of seams to check ("vertical" or "horizontal")
-func remove_seams_in_removed_region(start_coord: int, end_coord: int, seam_orientation: String) -> void:
-	var cell_size = grid_manager.cell_size
-	var seams_to_remove: Array[Line2D] = []
-
-	for seam in seam_lines:
-		if not seam or not is_instance_valid(seam):
-			continue
-
-		# Get seam position based on orientation
-		if seam_orientation == "vertical":
-			# Vertical seams - check x position
-			var seam_x = seam.points[0].x
-			# Seam coordinates are already in local coordinates (relative to GridManager)
-			var seam_grid_x = int(seam_x / cell_size + 0.5)
-
-			# Remove if seam is between the anchors (exclusive)
-			if seam_grid_x > start_coord and seam_grid_x < end_coord:
-				seams_to_remove.append(seam)
-		elif seam_orientation == "horizontal":
-			# Horizontal seams - check y position
-			var seam_y = seam.points[0].y
-			# Seam coordinates are already in local coordinates (relative to GridManager)
-			var seam_grid_y = int(seam_y / cell_size + 0.5)
-
-			# Remove if seam is between the anchors (exclusive)
-			if seam_grid_y > start_coord and seam_grid_y < end_coord:
-				seams_to_remove.append(seam)
-
-	# Remove the seams
-	for seam in seams_to_remove:
-		seam_lines.erase(seam)
-		seam.queue_free()
-
-
-## Shift seam lines after cells have been shifted
-##
-## @param shift_amount: Number of cells to shift
-## @param fold_orientation: Direction of fold ("horizontal" or "vertical")
-func shift_seam_lines(shift_amount: int, fold_orientation: String) -> void:
-	var cell_size = grid_manager.cell_size
-	var shift_pixels = shift_amount * cell_size
-
-	for seam in seam_lines:
-		if not seam or not is_instance_valid(seam):
-			continue
-
-		# Shift seams perpendicular to fold direction
-		if fold_orientation == "horizontal":
-			# Horizontal fold shifts cells left/right, so shift vertical seams
-			var new_points = PackedVector2Array()
-			for point in seam.points:
-				new_points.append(Vector2(point.x - shift_pixels, point.y))
-			seam.points = new_points
-		elif fold_orientation == "vertical":
-			# Vertical fold shifts cells up/down, so shift horizontal seams
-			var new_points = PackedVector2Array()
-			for point in seam.points:
-				new_points.append(Vector2(point.x, point.y - shift_pixels))
-			seam.points = new_points
-
-
 ## Horizontal Fold Implementation
 
 ## Execute a horizontal fold between two anchors
@@ -517,96 +445,9 @@ func shift_seam_lines(shift_amount: int, fold_orientation: String) -> void:
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
-	# 1. Normalize anchor order (ensure anchor1 is leftmost)
-	var left_anchor = anchor1 if anchor1.x < anchor2.x else anchor2
-	var right_anchor = anchor2 if anchor1.x < anchor2.x else anchor1
-
-	# 2. Calculate removed region (entire rectangular region)
-	var removed_cells = calculate_removed_cells(left_anchor, right_anchor)
-
-	# 3. Remove cells from grid and clean up seam lines
-	for pos in removed_cells:
-		var cell = grid_manager.get_cell(pos)
-		if cell:
-			# Remove from dictionary first
-			grid_manager.cells.erase(pos)
-			# Remove from scene tree
-			if cell.get_parent():
-				cell.get_parent().remove_child(cell)
-			# Free the cell
-			cell.queue_free()
-
-	# Remove seam lines that are in the removed column range
-	remove_seams_in_removed_region(left_anchor.x, right_anchor.x, "vertical")
-
-	# 4. Shift ALL cells from right_anchor onwards (across ALL rows)
-	# Cells overlap at the left anchor (merging behavior)
-	var shift_distance = right_anchor.x - left_anchor.x
-
-	# Collect cells that need to be shifted
-	var cells_to_shift: Array[Dictionary] = []
-	for y in range(grid_manager.grid_size.y):
-		for x in range(right_anchor.x, grid_manager.grid_size.x):
-			var old_pos = Vector2i(x, y)
-			var cell = grid_manager.get_cell(old_pos)
-			if cell:
-				var new_x = x - shift_distance
-				var new_pos = Vector2i(new_x, y)
-				cells_to_shift.append({
-					"cell": cell,
-					"old_pos": old_pos,
-					"new_pos": new_pos
-				})
-
-	# Actually move the cells
-	for data in cells_to_shift:
-		var cell = data.cell
-		var old_pos = data.old_pos
-		var new_pos = data.new_pos
-
-		# Update cell's grid position
-		cell.grid_position = new_pos
-
-		# Update local position (recalculate geometry using local coords, not world coords!)
-		# Cells are children of GridManager, so geometry should be relative to GridManager
-		var new_local_pos = Vector2(new_pos) * grid_manager.cell_size
-		var cell_size = grid_manager.cell_size
-		cell.geometry = PackedVector2Array([
-			new_local_pos,
-			new_local_pos + Vector2(cell_size, 0),
-			new_local_pos + Vector2(cell_size, cell_size),
-			new_local_pos + Vector2(0, cell_size)
-		])
-		cell.update_visual()
-
-		# Update grid manager's dictionary
-		grid_manager.cells.erase(old_pos)
-
-		# Remove any existing cell at the target position (overlapping/merging)
-		var existing_cell = grid_manager.cells.get(new_pos)
-		if existing_cell:
-			grid_manager.cells.erase(new_pos)
-			if existing_cell.get_parent():
-				existing_cell.get_parent().remove_child(existing_cell)
-			existing_cell.queue_free()
-
-		grid_manager.cells[new_pos] = cell
-
-	# 5. Update player position if in shifted region
-	if player and player.grid_position.x >= right_anchor.x:
-		player.grid_position.x -= shift_distance
-		# Update player's world position to match new grid position
-		var new_cell = grid_manager.get_cell(player.grid_position)
-		if new_cell:
-			# Convert from local coordinates (relative to GridManager) to world coordinates
-			player.global_position = grid_manager.to_global(new_cell.get_center())
-
-	# 6. Record fold operation
-	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
-	fold_history.append(fold_record)
-
-	# 7. Clean up any freed cell references
-	grid_manager.cleanup_freed_cells()
+	# Horizontal folds are just a special case of diagonal folds
+	# where both anchors have the same y-coordinate
+	execute_diagonal_fold(anchor1, anchor2)
 
 
 ## Vertical Fold Implementation
@@ -624,310 +465,37 @@ func execute_horizontal_fold(anchor1: Vector2i, anchor2: Vector2i):
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
-	# 1. Normalize anchor order (ensure anchor1 is topmost)
-	var top_anchor = anchor1 if anchor1.y < anchor2.y else anchor2
-	var bottom_anchor = anchor2 if anchor1.y < anchor2.y else anchor1
-
-	# 2. Calculate removed region (entire rectangular region)
-	var removed_cells = calculate_removed_cells(top_anchor, bottom_anchor)
-
-	# 3. Remove cells from grid and clean up seam lines
-	for pos in removed_cells:
-		var cell = grid_manager.get_cell(pos)
-		if cell:
-			# Remove from dictionary first
-			grid_manager.cells.erase(pos)
-			# Remove from scene tree
-			if cell.get_parent():
-				cell.get_parent().remove_child(cell)
-			# Free the cell
-			cell.queue_free()
-
-	# Remove seam lines that are in the removed row range
-	remove_seams_in_removed_region(top_anchor.y, bottom_anchor.y, "horizontal")
-
-	# 4. Shift ALL cells from bottom_anchor onwards (across ALL columns)
-	# Cells overlap at the top anchor (merging behavior)
-	var shift_distance = bottom_anchor.y - top_anchor.y
-
-	# Collect cells that need to be shifted
-	var cells_to_shift: Array[Dictionary] = []
-	for x in range(grid_manager.grid_size.x):
-		for y in range(bottom_anchor.y, grid_manager.grid_size.y):
-			var old_pos = Vector2i(x, y)
-			var cell = grid_manager.get_cell(old_pos)
-			if cell:
-				var new_y = y - shift_distance
-				var new_pos = Vector2i(x, new_y)
-				cells_to_shift.append({
-					"cell": cell,
-					"old_pos": old_pos,
-					"new_pos": new_pos
-				})
-
-	# Actually move the cells
-	for data in cells_to_shift:
-		var cell = data.cell
-		var old_pos = data.old_pos
-		var new_pos = data.new_pos
-
-		# Update cell's grid position
-		cell.grid_position = new_pos
-
-		# Update local position (recalculate geometry using local coords, not world coords!)
-		# Cells are children of GridManager, so geometry should be relative to GridManager
-		var new_local_pos = Vector2(new_pos) * grid_manager.cell_size
-		var cell_size = grid_manager.cell_size
-		cell.geometry = PackedVector2Array([
-			new_local_pos,
-			new_local_pos + Vector2(cell_size, 0),
-			new_local_pos + Vector2(cell_size, cell_size),
-			new_local_pos + Vector2(0, cell_size)
-		])
-		cell.update_visual()
-
-		# Update grid manager's dictionary
-		grid_manager.cells.erase(old_pos)
-
-		# Remove any existing cell at the target position (overlapping/merging)
-		var existing_cell = grid_manager.cells.get(new_pos)
-		if existing_cell:
-			grid_manager.cells.erase(new_pos)
-			if existing_cell.get_parent():
-				existing_cell.get_parent().remove_child(existing_cell)
-			existing_cell.queue_free()
-
-		grid_manager.cells[new_pos] = cell
-
-	# 5. Update player position if in shifted region
-	if player and player.grid_position.y >= bottom_anchor.y:
-		player.grid_position.y -= shift_distance
-		# Update player's world position to match new grid position
-		var new_cell = grid_manager.get_cell(player.grid_position)
-		if new_cell:
-			# Convert from local coordinates (relative to GridManager) to world coordinates
-			player.global_position = grid_manager.to_global(new_cell.get_center())
-
-	# 6. Record fold operation
-	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
-	fold_history.append(fold_record)
-
-	# 7. Clean up any freed cell references
-	grid_manager.cleanup_freed_cells()
+	# Vertical folds are just a special case of diagonal folds
+	# where both anchors have the same x-coordinate
+	execute_diagonal_fold(anchor1, anchor2)
 
 
 ## Execute a horizontal fold with animation (Issue #9)
 ##
 ## Same as execute_horizontal_fold but with visual animations
+## NOTE: Currently animations are not supported for diagonal folds,
+## so this falls back to non-animated diagonal fold
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> void:
-	# 1. Normalize anchor order (ensure anchor1 is leftmost)
-	var left_anchor = anchor1 if anchor1.x < anchor2.x else anchor2
-	var right_anchor = anchor2 if anchor1.x < anchor2.x else anchor1
-
-	# 2. Calculate removed region (entire rectangular region)
-	var removed_cells = calculate_removed_cells(left_anchor, right_anchor)
-
-	# 3. Collect ALL cells that need to be shifted (across ALL rows)
-	# Cells overlap at the left anchor (merging behavior)
-	var shift_distance = right_anchor.x - left_anchor.x
-	var cells_to_shift: Array[Dictionary] = []
-	for y in range(grid_manager.grid_size.y):
-		for x in range(right_anchor.x, grid_manager.grid_size.x):
-			var old_pos = Vector2i(x, y)
-			var cell = grid_manager.get_cell(old_pos)
-			if cell:
-				var new_x = x - shift_distance
-				var new_pos = Vector2i(new_x, y)
-				cells_to_shift.append({
-					"cell": cell,
-					"old_pos": old_pos,
-					"new_pos": new_pos
-				})
-
-	# 4. Animate fade out of removed cells
-	await fade_out_cells(removed_cells, fade_duration)
-
-	# 5. Remove cells from grid and clean up seam lines
-	for pos in removed_cells:
-		var cell = grid_manager.get_cell(pos)
-		if cell:
-			grid_manager.cells.erase(pos)
-			if cell.get_parent():
-				cell.get_parent().remove_child(cell)
-			cell.queue_free()
-
-	# Remove seam lines that are in the removed column range
-	remove_seams_in_removed_region(left_anchor.x, right_anchor.x, "vertical")
-	# Shift remaining seam lines
-	shift_seam_lines(shift_distance, "horizontal")
-
-	# 6. Animate cell shifting
-	await shift_cells_animated(cells_to_shift, shift_duration)
-
-	# 7. Update grid positions after animation
-	for data in cells_to_shift:
-		var cell = data.cell
-		var old_pos = data.old_pos
-		var new_pos = data.new_pos
-
-		# Update cell's grid position
-		cell.grid_position = new_pos
-
-		# Update final geometry using local coordinates
-		var new_local_pos = Vector2(new_pos) * grid_manager.cell_size
-		var cell_size = grid_manager.cell_size
-		cell.geometry = PackedVector2Array([
-			new_local_pos,
-			new_local_pos + Vector2(cell_size, 0),
-			new_local_pos + Vector2(cell_size, cell_size),
-			new_local_pos + Vector2(0, cell_size)
-		])
-		cell.update_visual()
-
-		# Reset modulate (in case it was changed)
-		cell.modulate = Color.WHITE
-
-		# Update grid manager's dictionary
-		grid_manager.cells.erase(old_pos)
-
-		# Remove any existing cell at the target position (overlapping/merging)
-		var existing_cell = grid_manager.cells.get(new_pos)
-		if existing_cell:
-			grid_manager.cells.erase(new_pos)
-			if existing_cell.get_parent():
-				existing_cell.get_parent().remove_child(existing_cell)
-			existing_cell.queue_free()
-
-		grid_manager.cells[new_pos] = cell
-
-	# 8. Update player position if in shifted region
-	if player and player.grid_position.x >= right_anchor.x:
-		player.grid_position.x -= shift_distance
-		# Update player's world position to match new grid position
-		var new_cell = grid_manager.get_cell(player.grid_position)
-		if new_cell:
-			# Convert from local coordinates (relative to GridManager) to world coordinates
-			player.global_position = grid_manager.to_global(new_cell.get_center())
-
-	# 9. Create seam visualization
-	create_seam_visual(left_anchor, right_anchor, "horizontal")
-
-	# 10. Record fold operation
-	var fold_record = create_fold_record(left_anchor, right_anchor, removed_cells, "horizontal")
-	fold_history.append(fold_record)
-
-	# 11. Clean up any freed cell references
-	grid_manager.cleanup_freed_cells()
+	# TODO: Implement animated diagonal fold and use it here
+	# For now, use non-animated diagonal fold
+	execute_diagonal_fold(anchor1, anchor2)
 
 
 ## Execute a vertical fold with animation (Issue #9)
 ##
 ## Same as execute_vertical_fold but with visual animations
+## NOTE: Currently animations are not supported for diagonal folds,
+## so this falls back to non-animated diagonal fold
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> void:
-	# 1. Normalize anchor order (ensure anchor1 is topmost)
-	var top_anchor = anchor1 if anchor1.y < anchor2.y else anchor2
-	var bottom_anchor = anchor2 if anchor1.y < anchor2.y else anchor1
-
-	# 2. Calculate removed region (entire rectangular region)
-	var removed_cells = calculate_removed_cells(top_anchor, bottom_anchor)
-
-	# 3. Collect ALL cells that need to be shifted (across ALL columns)
-	# Cells overlap at the top anchor (merging behavior)
-	var shift_distance = bottom_anchor.y - top_anchor.y
-	var cells_to_shift: Array[Dictionary] = []
-	for x in range(grid_manager.grid_size.x):
-		for y in range(bottom_anchor.y, grid_manager.grid_size.y):
-			var old_pos = Vector2i(x, y)
-			var cell = grid_manager.get_cell(old_pos)
-			if cell:
-				var new_y = y - shift_distance
-				var new_pos = Vector2i(x, new_y)
-				cells_to_shift.append({
-					"cell": cell,
-					"old_pos": old_pos,
-					"new_pos": new_pos
-				})
-
-	# 4. Animate fade out of removed cells
-	await fade_out_cells(removed_cells, fade_duration)
-
-	# 5. Remove cells from grid and clean up seam lines
-	for pos in removed_cells:
-		var cell = grid_manager.get_cell(pos)
-		if cell:
-			grid_manager.cells.erase(pos)
-			if cell.get_parent():
-				cell.get_parent().remove_child(cell)
-			cell.queue_free()
-
-	# Remove seam lines that are in the removed row range
-	remove_seams_in_removed_region(top_anchor.y, bottom_anchor.y, "horizontal")
-	# Shift remaining seam lines
-	shift_seam_lines(shift_distance, "vertical")
-
-	# 6. Animate cell shifting
-	await shift_cells_animated(cells_to_shift, shift_duration)
-
-	# 7. Update grid positions after animation
-	for data in cells_to_shift:
-		var cell = data.cell
-		var old_pos = data.old_pos
-		var new_pos = data.new_pos
-
-		# Update cell's grid position
-		cell.grid_position = new_pos
-
-		# Update final geometry using local coordinates
-		var new_local_pos = Vector2(new_pos) * grid_manager.cell_size
-		var cell_size = grid_manager.cell_size
-		cell.geometry = PackedVector2Array([
-			new_local_pos,
-			new_local_pos + Vector2(cell_size, 0),
-			new_local_pos + Vector2(cell_size, cell_size),
-			new_local_pos + Vector2(0, cell_size)
-		])
-		cell.update_visual()
-
-		# Reset modulate (in case it was changed)
-		cell.modulate = Color.WHITE
-
-		# Update grid manager's dictionary
-		grid_manager.cells.erase(old_pos)
-
-		# Remove any existing cell at the target position (overlapping/merging)
-		var existing_cell = grid_manager.cells.get(new_pos)
-		if existing_cell:
-			grid_manager.cells.erase(new_pos)
-			if existing_cell.get_parent():
-				existing_cell.get_parent().remove_child(existing_cell)
-			existing_cell.queue_free()
-
-		grid_manager.cells[new_pos] = cell
-
-	# 8. Update player position if in shifted region
-	if player and player.grid_position.y >= bottom_anchor.y:
-		player.grid_position.y -= shift_distance
-		# Update player's world position to match new grid position
-		var new_cell = grid_manager.get_cell(player.grid_position)
-		if new_cell:
-			# Convert from local coordinates (relative to GridManager) to world coordinates
-			player.global_position = grid_manager.to_global(new_cell.get_center())
-
-	# 9. Create seam visualization
-	create_seam_visual(top_anchor, bottom_anchor, "vertical")
-
-	# 10. Record fold operation
-	var fold_record = create_fold_record(top_anchor, bottom_anchor, removed_cells, "vertical")
-	fold_history.append(fold_record)
-
-	# 11. Clean up any freed cell references
-	grid_manager.cleanup_freed_cells()
+	# TODO: Implement animated diagonal fold and use it here
+	# For now, use non-animated diagonal fold
+	execute_diagonal_fold(anchor1, anchor2)
 
 
 ## Main Fold Execution Method
@@ -1349,6 +917,13 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 
 	# 5. Shift cells from source side toward target
 	var shift_vector = target_anchor - source_anchor  # Grid units
+
+	# IMPORTANT: Build list of shifting positions BEFORE shifting cells
+	# (cells will have their grid_position updated during shift)
+	var shifting_positions: Array[Vector2i] = []
+	for cell in classification.to_shift:
+		shifting_positions.append(cell.grid_position)
+
 	_shift_cells_with_merge(classification.to_shift, shift_vector, split_parts_line2)
 
 	# 6. Cells on line1 are already split in-place at anchor1
@@ -1359,17 +934,27 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	create_diagonal_seam_visual(cut_lines)
 
 	# 8. Update player position if affected
-	if player and player.grid_position in classification.to_shift:
-		player.grid_position += Vector2i(shift_vector)
-		var new_cell = grid_manager.get_cell(player.grid_position)
-		if new_cell:
-			player.global_position = grid_manager.to_global(new_cell.get_center())
+	if player:
+		# Check if player is on a shifting cell (using positions from BEFORE shift)
+		if player.grid_position in shifting_positions:
+			player.grid_position += Vector2i(shift_vector)
+			var new_cell = grid_manager.get_cell(player.grid_position)
+			if new_cell:
+				player.global_position = grid_manager.to_global(new_cell.get_center())
 
 	# 9. Record fold operation
 	var removed_positions: Array[Vector2i] = []
 	for cell in classification.removed:
 		removed_positions.append(cell.grid_position)
-	var fold_record = create_fold_record(anchor1, anchor2, removed_positions, "diagonal")
+
+	# Determine orientation for fold record (use specific orientation for axis-aligned folds)
+	var orientation = "diagonal"
+	if is_horizontal:
+		orientation = "horizontal"
+	elif is_vertical:
+		orientation = "vertical"
+
+	var fold_record = create_fold_record(anchor1, anchor2, removed_positions, orientation)
 	fold_history.append(fold_record)
 
 	# 10. Clean up any freed cell references from the dictionary
@@ -1469,10 +1054,12 @@ func _process_split_cells_on_line1(cells: Array, cut_lines: Dictionary, anchor1:
 
 		if split_result.intersections.size() > 0:
 			# Update cell geometry to kept side
+			# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
+			# So we swap the assignment to get the correct polygon half
 			if keep_side == "left":
-				cell.geometry = split_result.left
+				cell.geometry = split_result.right  # SWAPPED: use right for left
 			else:
-				cell.geometry = split_result.right
+				cell.geometry = split_result.left   # SWAPPED: use left for right
 
 			cell.is_partial = true
 			cell.update_visual()
@@ -1509,10 +1096,12 @@ func _process_split_cells_on_line2(cells: Array, cut_lines: Dictionary, anchor1:
 
 		if split_result.intersections.size() > 0:
 			# Update cell geometry to kept side
+			# NOTE: GeometryCore naming is inverted: "left" = positive side, "right" = negative side
+			# So we swap the assignment to get the correct polygon half
 			if keep_side == "left":
-				cell.geometry = split_result.left
+				cell.geometry = split_result.right  # SWAPPED: use right for left
 			else:
-				cell.geometry = split_result.right
+				cell.geometry = split_result.left   # SWAPPED: use left for right
 
 			cell.is_partial = true
 			cell.update_visual()
@@ -1559,12 +1148,13 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 		# Update cell position
 		cell.grid_position = new_pos
 
-		# Translate geometry
+		# Translate geometry for ALL pieces (Phase 5 multi-polygon support)
 		var shift_pixels = Vector2(shift_vector) * grid_manager.cell_size
-		var new_geometry = PackedVector2Array()
-		for vertex in cell.geometry:
-			new_geometry.append(vertex + shift_pixels)
-		cell.geometry = new_geometry
+		for piece in cell.geometry_pieces:
+			var new_geometry = PackedVector2Array()
+			for vertex in piece.geometry:
+				new_geometry.append(vertex + shift_pixels)
+			piece.geometry = new_geometry
 		cell.update_visual()
 
 	# PASS 2: Place cells at new positions and handle REAL merges
@@ -1575,7 +1165,7 @@ func _shift_cells_with_merge(cells_to_shift: Array, shift_vector: Vector2i, addi
 		var existing = grid_manager.get_cell(new_pos)
 		if existing:
 			# Merge with existing cell (this is a REAL collision, not a false one)
-			_merge_cells_simple(existing, cell, new_pos)
+			_merge_cells_multi_polygon(existing, cell, new_pos)
 		else:
 			# Place cell at new position
 			grid_manager.cells[new_pos] = cell
@@ -1601,27 +1191,39 @@ func _merge_split_parts_at_anchor1(split_parts: Array, anchor1: Vector2i):
 				part_cell.queue_free()
 
 
-## Simple cell merge - combines two cells at the same position
-## In full implementation, this would do proper polygon union
+## PHASE 5: Multi-polygon cell merge
+##
+## Merges two cells by transferring all pieces from incoming to existing.
+## This maintains visual distinction between different cell types instead
+## of performing geometric union.
 ##
 ## @param existing: Cell already at the position
 ## @param incoming: Cell being moved to this position
 ## @param pos: Grid position where merge occurs
-func _merge_cells_simple(existing: Cell, incoming: Cell, pos: Vector2i):
-	# Mark both as partial (they've been affected by folds)
+func _merge_cells_multi_polygon(existing: Cell, incoming: Cell, pos: Vector2i):
+	# Mark both as affected by merge
 	existing.is_partial = true
 	incoming.is_partial = true
 
-	# For now, keep the existing cell and free the incoming one
-	# A full implementation would:
-	# 1. Combine geometries (polygon union)
-	# 2. Merge seam data
-	# 3. Create visual indication of the merge
+	# Transfer all pieces from incoming to existing
+	for piece in incoming.geometry_pieces:
+		var piece_copy = piece.duplicate_piece()
+		existing.add_piece(piece_copy)
 
-	# Update visual to show it's been merged
+	# Update dominant cell type based on new composition
+	# (add_piece already does this, but be explicit)
+	existing.cell_type = existing.get_dominant_type()
+
+	# Update visual to show all pieces
 	existing.update_visual()
 
-	# Free the incoming cell
+	# Free the incoming cell (its pieces are now in existing)
 	incoming.queue_free()
 
-	# Keep existing cell in dictionary (already there)
+	# Log merge for debugging (if enabled)
+	if DEBUG_FOLD_EXECUTION:
+		print("  Merged cells at %s: now has %d pieces with types %s" % [
+			pos,
+			existing.geometry_pieces.size(),
+			existing.get_cell_types()
+		])

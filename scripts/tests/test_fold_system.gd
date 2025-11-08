@@ -602,3 +602,79 @@ func test_grid_remains_consistent_after_fold():
 		var cell = grid_manager.cells[pos]
 		assert_not_null(cell, "All cells in dictionary should be valid")
 		assert_eq(cell.grid_position, pos, "Cell grid_position should match dictionary key")
+
+
+## ============================================================================
+## PHASE 5: MULTI-POLYGON MERGE TESTS
+## ============================================================================
+
+func test_merge_combines_pieces():
+	var cell1 = grid_manager.get_cell(Vector2i(2, 2))
+	var cell2 = grid_manager.get_cell(Vector2i(2, 3))
+
+	# Set different types for pieces
+	cell1.geometry_pieces[0].cell_type = 1  # Wall
+	cell2.geometry_pieces[0].cell_type = 2  # Water
+
+	var original_pieces1 = cell1.geometry_pieces.size()
+	var original_pieces2 = cell2.geometry_pieces.size()
+
+	# Merge
+	fold_system._merge_cells_multi_polygon(cell1, cell2, Vector2i(2, 2))
+
+	# Check pieces combined
+	assert_eq(
+		cell1.geometry_pieces.size(),
+		original_pieces1 + original_pieces2,
+		"Pieces should be combined"
+	)
+
+	# Check types present
+	assert_true(cell1.has_cell_type(1), "Should have wall type")
+	assert_true(cell1.has_cell_type(2), "Should have water type")
+
+
+func test_merge_maintains_visual_distinction():
+	var cell1 = grid_manager.get_cell(Vector2i(1, 1))
+	var cell2 = grid_manager.get_cell(Vector2i(1, 2))
+
+	cell1.geometry_pieces[0].cell_type = 1  # Wall
+	cell2.geometry_pieces[0].cell_type = 3  # Goal
+
+	fold_system._merge_cells_multi_polygon(cell1, cell2, Vector2i(1, 1))
+
+	# Dominant type should be goal
+	assert_eq(cell1.get_dominant_type(), 3, "Goal should dominate")
+
+	# Should have both types
+	var types = cell1.get_cell_types()
+	assert_has(types, 1, "Should contain wall type")
+	assert_has(types, 3, "Should contain goal type")
+
+
+func test_merge_updates_dominant_type():
+	var cell1 = grid_manager.get_cell(Vector2i(0, 0))
+	var cell2 = grid_manager.get_cell(Vector2i(0, 1))
+
+	# cell1 is empty (type 0), cell2 is water (type 2)
+	cell1.geometry_pieces[0].cell_type = 0
+	cell2.geometry_pieces[0].cell_type = 2
+
+	assert_eq(cell1.cell_type, 0, "Initial cell1 should be empty")
+
+	fold_system._merge_cells_multi_polygon(cell1, cell2, Vector2i(0, 0))
+
+	# Dominant type should now be water
+	assert_eq(cell1.cell_type, 2, "cell_type should update to water after merge")
+
+
+func test_merge_marks_cells_as_partial():
+	var cell1 = grid_manager.get_cell(Vector2i(3, 3))
+	var cell2 = grid_manager.get_cell(Vector2i(3, 4))
+
+	assert_false(cell1.is_partial, "cell1 should not be partial initially")
+	assert_false(cell2.is_partial, "cell2 should not be partial initially")
+
+	fold_system._merge_cells_multi_polygon(cell1, cell2, Vector2i(3, 3))
+
+	assert_true(cell1.is_partial, "cell1 should be marked as partial after merge")

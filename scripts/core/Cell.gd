@@ -12,12 +12,29 @@ class_name Cell
 
 ## Properties
 var grid_position: Vector2i        # Position in grid
-var geometry: PackedVector2Array   # Polygon vertices (initially square)
-var cell_type: int = 0             # 0=empty, 1=wall, 2=water, 3=goal
+var geometry_pieces: Array[CellPiece] = []  # PHASE 5: Array of geometric pieces
+var cell_type: int = 0             # 0=empty, 1=wall, 2=water, 3=goal (dominant type)
 var is_partial: bool = false       # True if cell has been split
-var seams: Array[Dictionary] = []  # Track seam information
-var polygon_visual: Polygon2D      # Visual representation
+var seams: Array[Dictionary] = []  # Track seam information (legacy)
+var polygon_visual: Polygon2D      # Visual representation (legacy - first piece)
 var border_line: Line2D            # Cell border/outline
+var piece_visuals: Node2D = null   # PHASE 5: Container for multi-piece visuals
+var seam_visuals: Node2D = null    # PHASE 5: Container for seam lines
+
+## Legacy geometry accessor for backward compatibility
+## Returns geometry of first piece, or empty array if no pieces
+var geometry: PackedVector2Array:
+	get:
+		if geometry_pieces.is_empty():
+			return PackedVector2Array()
+		return geometry_pieces[0].geometry
+	set(value):
+		# When setting geometry, update first piece or create new piece
+		if geometry_pieces.is_empty():
+			var piece = CellPiece.new(value, cell_type, -1)
+			geometry_pieces.append(piece)
+		else:
+			geometry_pieces[0].geometry = value
 
 ## Visual feedback properties (for anchor selection system - Issue #6)
 var outline_color: Color = Color.TRANSPARENT
@@ -36,12 +53,16 @@ func _init(pos: Vector2i, local_pos: Vector2, size: float):
 
 	# Create square geometry using LOCAL coordinates (relative to GridManager)
 	# Cells are children of GridManager, so geometry is in local space
-	geometry = PackedVector2Array([
+	var square_geometry = PackedVector2Array([
 		local_pos,                          # Top-left
 		local_pos + Vector2(size, 0),       # Top-right
 		local_pos + Vector2(size, size),    # Bottom-right
 		local_pos + Vector2(0, size)        # Bottom-left
 	])
+
+	# PHASE 5: Create initial piece with square geometry
+	var initial_piece = CellPiece.new(square_geometry, cell_type, -1)
+	geometry_pieces.append(initial_piece)
 
 	# Set up visual representation
 	polygon_visual = Polygon2D.new()
@@ -55,22 +76,56 @@ func _init(pos: Vector2i, local_pos: Vector2, size: float):
 
 	# Set up highlight overlay (for selection/hover feedback)
 	highlight_overlay = Polygon2D.new()
-	highlight_overlay.polygon = geometry
+	highlight_overlay.polygon = geometry  # Uses getter which returns first piece
 	highlight_overlay.color = Color.TRANSPARENT
 	highlight_overlay.z_index = 1  # Above the main visual
 	add_child(highlight_overlay)
+
+	# PHASE 5: Create containers for multi-piece rendering
+	piece_visuals = Node2D.new()
+	piece_visuals.name = "PieceVisuals"
+	piece_visuals.z_index = 0  # Below highlight
+	add_child(piece_visuals)
+
+	seam_visuals = Node2D.new()
+	seam_visuals.name = "SeamVisuals"
+	seam_visuals.z_index = 2  # Above everything
+	add_child(seam_visuals)
 
 	update_visual()
 
 
 ## Get the center point of the cell
 ##
-## Uses GeometryCore.polygon_centroid() to calculate the geometric center
-## of the cell's polygon geometry.
+## PHASE 5: Calculates weighted centroid of all pieces
 ##
-## @return: Center point of cell geometry
+## @return: Center point of cell geometry (weighted by area)
 func get_center() -> Vector2:
-	return GeometryCore.polygon_centroid(geometry)
+	if geometry_pieces.is_empty():
+		return Vector2.ZERO
+
+	# If only one piece, use its centroid directly
+	if geometry_pieces.size() == 1:
+		return geometry_pieces[0].get_center()
+
+	# Calculate weighted centroid based on piece areas
+	var total_area = 0.0
+	var weighted_center = Vector2.ZERO
+
+	for piece in geometry_pieces:
+		var area = piece.get_area()
+		var center = piece.get_center()
+		weighted_center += center * area
+		total_area += area
+
+	if total_area > GeometryCore.EPSILON:
+		return weighted_center / total_area
+	else:
+		# Fallback: average of all centroids
+		var avg = Vector2.ZERO
+		for piece in geometry_pieces:
+			avg += piece.get_center()
+		return avg / geometry_pieces.size()
 
 
 ## Add seam information to the cell
@@ -88,37 +143,96 @@ func add_seam(seam_data: Dictionary):
 ## Set the cell type and update visual appearance
 ##
 ## @param type: Cell type (0=empty, 1=wall, 2=water, 3=goal)
+##
+## PHASE 5: Also updates first piece's type for backward compatibility
 func set_cell_type(type: int):
 	cell_type = type
+
+	# PHASE 5: Update first piece's type if it exists
+	if not geometry_pieces.is_empty():
+		geometry_pieces[0].cell_type = type
+
 	update_visual()
 
 
 ## Update the visual representation of the cell
 ##
-## Refreshes the Polygon2D node with current geometry and applies
-## the appropriate color based on cell_type. Also updates the border
-## outline to follow the cell's perimeter.
+## PHASE 5: Renders all pieces with separate visuals for multi-polygon cells.
+## Each piece gets its own Polygon2D with type-appropriate coloring and borders.
 func update_visual():
-	if polygon_visual:
-		polygon_visual.polygon = geometry
-		var cell_color = get_cell_color()
-		polygon_visual.color = cell_color
+	if geometry_pieces.is_empty():
+		return
 
-		# Update border outline
+	# Clear existing piece visuals
+	if piece_visuals:
+		for child in piece_visuals.get_children():
+			piece_visuals.remove_child(child)
+			child.queue_free()
+
+	# If single piece, use legacy rendering for backward compatibility
+	if geometry_pieces.size() == 1:
+		if polygon_visual:
+			polygon_visual.polygon = geometry_pieces[0].geometry
+			polygon_visual.color = get_cell_color_for_type(geometry_pieces[0].cell_type)
+			polygon_visual.visible = true
+
 		if border_line:
-			border_line.points = geometry
-			border_line.default_color = darken_color(cell_color, 0.6)
+			border_line.points = geometry_pieces[0].geometry
+			border_line.default_color = darken_color(polygon_visual.color, 0.6)
+			border_line.visible = true
 
-		# Update highlight overlay geometry to match cell
+		# Update highlight overlay
 		if highlight_overlay:
-			highlight_overlay.polygon = geometry
+			highlight_overlay.polygon = geometry_pieces[0].geometry
+	else:
+		# Multi-piece rendering: hide legacy visuals, use piece_visuals container
+		if polygon_visual:
+			polygon_visual.visible = false
+		if border_line:
+			border_line.visible = false
+
+		# Create separate visual for each piece
+		for i in range(geometry_pieces.size()):
+			var piece = geometry_pieces[i]
+
+			# Create polygon visual for this piece
+			var piece_polygon = Polygon2D.new()
+			piece_polygon.polygon = piece.geometry
+			piece_polygon.color = get_cell_color_for_type(piece.cell_type)
+			piece_polygon.name = "Piece_%d" % i
+			piece_visuals.add_child(piece_polygon)
+
+			# Create border for this piece
+			var piece_border = Line2D.new()
+			piece_border.points = piece.geometry
+			piece_border.closed = true
+			piece_border.width = 1.5
+			piece_border.default_color = darken_color(piece_polygon.color, 0.6)
+			piece_border.name = "PieceBorder_%d" % i
+			piece_visuals.add_child(piece_border)
+
+		# Update highlight overlay to cover all pieces (use first piece's geometry)
+		if highlight_overlay:
+			highlight_overlay.polygon = geometry_pieces[0].geometry
+
+	# Visualize seams if multiple pieces exist
+	if geometry_pieces.size() > 1:
+		visualize_seams()
 
 
-## Get the color for the current cell type
+## Get the color for the current cell type (using cell_type property)
 ##
 ## @return: Color based on cell_type
 func get_cell_color() -> Color:
-	match cell_type:
+	return get_cell_color_for_type(cell_type)
+
+
+## Get the color for a specific cell type
+##
+## @param type: Cell type (0=empty, 1=wall, 2=water, 3=goal)
+## @return: Color for the given type
+func get_cell_color_for_type(type: int) -> Color:
+	match type:
 		0: return Color(0.8, 0.8, 0.8)  # Empty - light gray
 		1: return Color(0.2, 0.2, 0.2)  # Wall - dark gray
 		2: return Color(0.2, 0.4, 1.0)  # Water - blue
@@ -227,6 +341,49 @@ func update_highlight():
 		highlight_overlay.z_index = 0
 
 
+## Visualize seams between pieces (PHASE 5)
+##
+## Draws seam lines to show where folds have split the cell.
+## Seams are rendered as colored lines based on fold order.
+func visualize_seams():
+	if not seam_visuals:
+		return
+
+	# Clear existing seam visuals
+	for child in seam_visuals.get_children():
+		seam_visuals.remove_child(child)
+		child.queue_free()
+
+	# Collect all unique seams across all pieces
+	var all_seams = get_all_seams()
+
+	# Draw each seam as a line
+	for seam in all_seams:
+		var seam_line = Line2D.new()
+		seam_line.points = seam.intersection_points
+		seam_line.width = 2.0
+		seam_line.default_color = get_seam_color(seam.fold_id)
+		seam_line.name = "Seam_Fold_%d" % seam.fold_id
+		seam_visuals.add_child(seam_line)
+
+
+## Get a color for a seam based on fold ID
+##
+## @param fold_id: ID of the fold that created this seam
+## @return: Color for the seam line
+func get_seam_color(fold_id: int) -> Color:
+	# Cycle through distinct colors for different folds
+	var colors = [
+		Color(1.0, 0.0, 0.0, 0.8),  # Red
+		Color(0.0, 1.0, 0.0, 0.8),  # Green
+		Color(0.0, 0.0, 1.0, 0.8),  # Blue
+		Color(1.0, 1.0, 0.0, 0.8),  # Yellow
+		Color(1.0, 0.0, 1.0, 0.8),  # Magenta
+		Color(0.0, 1.0, 1.0, 0.8),  # Cyan
+	]
+	return colors[fold_id % colors.size()]
+
+
 ## ============================================================================
 ## PHASE 4: POLYGON SPLITTING SUPPORT
 ## ============================================================================
@@ -288,3 +445,127 @@ func apply_split(split_result: Dictionary, line_point: Vector2, line_normal: Vec
 	new_cell.update_visual()
 
 	return new_cell
+
+
+## ============================================================================
+## SERIALIZATION (FOR FOLD HISTORY AND UNDO SYSTEM)
+## ============================================================================
+
+## Serialize cell to dictionary (for fold history/save states)
+##
+## @return: Dictionary containing all cell data
+func to_dict() -> Dictionary:
+	var geometry_array = []
+	for v in geometry:
+		geometry_array.append({"x": v.x, "y": v.y})
+
+	return {
+		"grid_position": {"x": grid_position.x, "y": grid_position.y},
+		"geometry": geometry_array,
+		"cell_type": cell_type,
+		"is_partial": is_partial,
+		"seams": seams.duplicate(true)  # Deep copy
+	}
+
+
+## Create a cell state snapshot (excludes visual nodes)
+##
+## @return: Dictionary containing cell state data only
+func create_state_snapshot() -> Dictionary:
+	return to_dict()
+
+
+## ============================================================================
+## PHASE 5: MULTI-POLYGON SUPPORT
+## ============================================================================
+
+## Add a piece to this cell
+##
+## @param piece: CellPiece to add
+func add_piece(piece: CellPiece) -> void:
+	geometry_pieces.append(piece)
+	# Update dominant type after adding piece
+	cell_type = get_dominant_type()
+	# Update visual to show new piece
+	update_visual()
+
+
+## Get all unique cell types present in this cell
+##
+## @return: Array of unique cell types
+func get_cell_types() -> Array[int]:
+	var types: Array[int] = []
+
+	for piece in geometry_pieces:
+		if piece.cell_type not in types:
+			types.append(piece.cell_type)
+
+	return types
+
+
+## Get the dominant cell type based on hierarchy: Goal > Wall > Water > Empty
+##
+## @return: Dominant cell type
+func get_dominant_type() -> int:
+	if geometry_pieces.is_empty():
+		return 0  # Empty
+
+	var has_goal = false
+	var has_wall = false
+	var has_water = false
+
+	for piece in geometry_pieces:
+		if piece.cell_type == 3:  # Goal
+			has_goal = true
+		elif piece.cell_type == 1:  # Wall
+			has_wall = true
+		elif piece.cell_type == 2:  # Water
+			has_water = true
+
+	# Priority: Goal > Wall > Water > Empty
+	if has_goal:
+		return 3
+	elif has_wall:
+		return 1
+	elif has_water:
+		return 2
+	else:
+		# Return first piece's type if all are empty/other
+		return geometry_pieces[0].cell_type
+
+
+## Check if cell contains a specific type
+##
+## @param type: Cell type to check for
+## @return: true if cell contains this type
+func has_cell_type(type: int) -> bool:
+	for piece in geometry_pieces:
+		if piece.cell_type == type:
+			return true
+	return false
+
+
+## Get total area of all pieces
+##
+## @return: Total area in square pixels
+func get_total_area() -> float:
+	var total = 0.0
+	for piece in geometry_pieces:
+		total += piece.get_area()
+	return total
+
+
+## Get all unique seams across all pieces
+##
+## @return: Array of unique Seam objects
+func get_all_seams() -> Array[Seam]:
+	var all_seams: Array[Seam] = []
+	var seam_ids = []
+
+	for piece in geometry_pieces:
+		for seam in piece.seams:
+			if seam.fold_id not in seam_ids:
+				all_seams.append(seam)
+				seam_ids.append(seam.fold_id)
+
+	return all_seams
