@@ -2,7 +2,7 @@
 
 **Purpose:** This document explains **WHY** things are designed the way they are.
 
-**Last Updated:** 2025-11-07
+**Last Updated:** 2025-11-08
 
 ---
 
@@ -74,13 +74,15 @@ var is_partial: bool = false         # True if split by fold
 **The Decision:**
 Folds are blocked if:
 1. Player is in the removed region (between fold lines), OR
-2. Player is on a cell that would be split by the fold
+2. Player cell would be split by the fold, OR
+3. Player is on a cell that contains an anchor point (fold line passes through it)
 
 **Rationale:**
 - **Simplifies player logic:** No need to relocate player during fold
 - **Prevents edge cases:** What if player on split cell? What if split creates unreachable region?
 - **Intuitive gameplay:** Players understand "can't fold through myself"
 - **Cleaner code:** Validation is simple check before fold
+- **Anchor consistency:** Fold lines cut through anchor positions, so player would be split
 
 **Implementation:**
 ```gdscript
@@ -98,14 +100,22 @@ func validate_fold_with_player(anchor1, anchor2, player) -> bool:
     return true
 ```
 
+**Key Points:**
+- ✅ Players CAN stand on non-anchor cells along the fold line (edge of fold)
+- ❌ Players CANNOT stand on anchor cells (cut line passes through anchor)
+- ❌ Players CANNOT stand in removed region (between fold lines)
+- ❌ Players CANNOT stand on cells that would be split
+
 **Alternatives Considered:**
 - ❌ **Move player automatically:** Complex, unpredictable, can trap player
 - ❌ **Allow splits, track player in half-cell:** Very complex geometry
 - ❌ **Kill player if in removed region:** Frustrating gameplay
+- ❌ **Allow player on anchors (removed Nov 8):** Cut line would split player cell
 - ✅ **Block folds that affect player:** Simple, intuitive, reliable
 
 **Impact on Future Development:**
 - Phase 4: Same validation applies to diagonal folds
+- Phase 5: Player validation still applies to tessellated cells
 - Phase 6: Undo system doesn't need to restore player state
 - Level design: Levels can be designed knowing this constraint
 
@@ -351,6 +361,51 @@ func can_undo_fold(fold_id: int) -> bool:
 - Gameplay: Encourages thoughtful planning
 - Level design: Can design around undo limitations
 - UI: Clear visual feedback for undo availability
+
+---
+
+### Decision 9: Null Piece System for Geometric Consistency ✨ NEW
+
+**The Decision:**
+When a polygon piece shifts to an empty grid location (no merge partner), create a "null piece" to fill the missing geometry. Null pieces have type -1, are invisible, unwalkable, and represent the "void" left by the fold.
+
+**Rationale:**
+- **Maintains geometric invariants:** Cells remain geometrically complete through multiple folds
+- **Simplifies future operations:** Future folds can split null pieces like any other piece - no special cases
+- **Proper visibility:** Null pieces are invisible but have real geometry for calculations
+- **Player blocking:** Cells with null pieces block player movement (null is highest priority type)
+- **Clean undo:** Null pieces are restored with other pieces in undo operations
+
+**Implementation:**
+```gdscript
+# When a piece shifts to empty location:
+# 1. Calculate complement geometry (what's missing)
+var complement = GeometryCore.calculate_complement_geometry(original_geometry, shifted_piece_geometry)
+
+# 2. Create null piece to fill the gap
+var null_piece = CellPiece.new(complement, CellPiece.CELL_TYPE_NULL, fold_id)
+shifted_cell.geometry_pieces.append(null_piece)
+
+# 3. Update dominant type (null is highest priority)
+shifted_cell.update_dominant_type()
+```
+
+**Rendering:**
+- Null pieces are completely invisible (no polygon rendered)
+- Only real piece types (0-3) are rendered
+- Multi-piece cells skip null pieces in rendering loop
+
+**Alternatives Considered:**
+- ❌ **Leave gap (incomplete geometry):** Breaks invariants, complex split logic
+- ❌ **Mark cell as special (unwalkable):** Limited - what if partial null?
+- ❌ **Reconstruct on demand:** Expensive, complex caching
+- ✅ **Null pieces with real geometry:** Simple, handles all cases, natural extension
+
+**Impact on Future Development:**
+- Phase 4: No special handling needed for split null pieces
+- Phase 5: Tessellation naturally includes null pieces
+- Phase 6: Undo system doesn't need null-specific logic
+- Tests: null_pieces test suite (7+ tests) ensures consistency
 
 ---
 

@@ -2,8 +2,8 @@
 
 **START HERE** - Essential context for AI agents working on this project.
 
-**Last Updated:** 2025-11-07
-**Current Phase:** Phase 4 (Geometric Folding) - NEXT CRITICAL PRIORITY
+**Last Updated:** 2025-11-08
+**Current Phase:** Phase 4 (Geometric Folding) - IN PROGRESS
 
 ---
 
@@ -39,7 +39,7 @@ See **[STATUS.md](STATUS.md)** for detailed progress tracking.
 - ✅ Phase 3: Simple Axis-Aligned Folding (horizontal/vertical)
 - ✅ Phase 7: Player Character (movement, validation, goal detection)
 
-**Tests Passing:** 225 (GeometryCore: 41, Cell: 14, GridManager: 27, FoldSystem: 63, Player: 36, FoldValidation: 32, WinCondition: 12)
+**Tests Passing:** 474 (GeometryCore: 41, Cell: 14, GridManager: 27, FoldSystem: 63, Player: 36, FoldValidation: 42, WinCondition: 12, NullPieces: 7, PlayerBounds: 30+)
 
 **Next Priority:** Phase 4 - Geometric Folding (diagonal folds at arbitrary angles)
 
@@ -77,7 +77,14 @@ These shape the entire implementation - **do not deviate** without careful consi
 - MIN_FOLD_DISTANCE = 0 (adjacent anchors allowed)
 - **Must FREE overlapped cells** to prevent memory leaks
 
-### 5. Other Key Decisions
+### 5. Null Piece System (Geometric Consistency)
+- **Null pieces** (CELL_TYPE_NULL = -1) represent missing geometry from folds
+- When a piece shifts to empty location, complement geometry is filled with null piece
+- Null pieces are **invisible and unwalkable** but geometrically complete
+- Treated as highest priority in dominant type (makes cell unwalkable)
+- **Why:** Maintains geometric invariants, simplifies future fold operations, no special cases needed
+
+### 6. Other Key Decisions
 - **Sutherland-Hodgman** for polygon splitting (industry standard)
 - **Bounded Grid Model** - folds clip at boundaries
 - **Tessellation** for multi-seam handling (subdivide into convex regions)
@@ -128,17 +135,28 @@ See **[docs/REFERENCE.md](docs/REFERENCE.md)** for detailed API.
 
 ### GeometryCore (`scripts/utils/GeometryCore.gd`)
 Static utility class for geometric calculations.
-- `split_polygon_by_line()` - Sutherland-Hodgman algorithm
+- `split_polygon_by_line()` - Sutherland-Hodgman algorithm for polygon splitting
 - `point_side_of_line()` - Point-line relationship
 - `segment_line_intersection()` - Line intersection
+- `calculate_complement_geometry()` - Computes missing geometry for null pieces
 - **EPSILON = 0.0001** - Never use `==` with floats!
 
 ### Cell (`scripts/core/Cell.gd`)
-Represents a grid cell.
+Represents a grid cell with support for multiple geometry pieces.
 - `grid_position: Vector2i` - Grid coordinates
+- `geometry_pieces: Array[CellPiece]` - Array of polygonal pieces (LOCAL coords)
+- `geometry: PackedVector2Array` - Legacy accessor (first piece's geometry)
+- `cell_type: int` - Dominant type (1=wall, 2=water, 3=goal, -1=null, 0=empty)
+- `is_partial: bool` - True if cell has been split by a fold
+- **Note:** Null pieces (-1) are invisible, unwalkable representations of missing geometry
+
+### CellPiece (`scripts/core/CellPiece.gd`)
+Represents a single polygon piece within a cell.
 - `geometry: PackedVector2Array` - Polygon vertices (LOCAL coords)
-- `cell_type: int` - 0=empty, 1=wall, 2=water, 3=goal
-- `is_partial: bool` - True if split by fold
+- `cell_type: int` - Type of this piece (-1=null, 0=empty, 1=wall, 2=water, 3=goal)
+- `source_fold_id: int` - ID of fold that created this piece (-1 if original)
+- Used when cells are split by folds or merged after shifts
+- **Null pieces:** Created when geometry needs to be completed after splits
 
 ### GridManager (`scripts/core/GridManager.gd`)
 Manages the grid.
