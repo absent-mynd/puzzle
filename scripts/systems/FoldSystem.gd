@@ -38,6 +38,10 @@ var shift_duration: float = 0.5  # Shift duration for moved cells
 ## Seam lines for visualization (Issue #9)
 var seam_lines: Array[Line2D] = []
 
+## Seam-to-fold mapping for undo system (Phase 6)
+## Maps Line2D instance IDs to fold IDs
+var seam_to_fold_map: Dictionary = {}
+
 
 ## Initialize the FoldSystem with a reference to GridManager
 ##
@@ -661,6 +665,75 @@ func clear_fold_history():
 
 
 ## ============================================================================
+## PHASE 6: SEAM-TO-FOLD MAPPING (TASK 1)
+## ============================================================================
+
+## Get the fold record for a given seam Line2D
+##
+## @param seam_line: The Line2D seam to look up
+## @return: Dictionary containing fold record, or null if not found
+func get_fold_for_seam(seam_line: Line2D) -> Dictionary:
+	if not seam_line:
+		return {}
+
+	var seam_id = seam_line.get_instance_id()
+	var fold_id = seam_to_fold_map.get(seam_id)
+
+	if fold_id == null:
+		return {}
+
+	# Find fold record with matching ID
+	for record in fold_history:
+		if record["fold_id"] == fold_id:
+			return record
+
+	return {}
+
+
+## Remove a seam from the mapping
+##
+## @param seam_line: The Line2D seam to remove from map
+func remove_seam_from_map(seam_line: Line2D) -> void:
+	if not seam_line:
+		return
+
+	var seam_id = seam_line.get_instance_id()
+	seam_to_fold_map.erase(seam_id)
+
+
+## Remove all seams for a specific fold from the mapping
+##
+## @param fold_id: The fold ID whose seams should be removed
+func remove_seams_for_fold(fold_id: int) -> void:
+	# Find all seam IDs that map to this fold
+	var seams_to_remove = []
+
+	for seam_id in seam_to_fold_map.keys():
+		if seam_to_fold_map[seam_id] == fold_id:
+			seams_to_remove.append(seam_id)
+
+	# Remove them from the map
+	for seam_id in seams_to_remove:
+		seam_to_fold_map.erase(seam_id)
+
+
+## Clear all seams (visuals and mapping)
+##
+## Removes all seam Line2D nodes and clears the seam-to-fold map
+func clear_all_seams() -> void:
+	# Remove all seam visuals from scene tree
+	for seam_line in seam_lines:
+		if seam_line and is_instance_valid(seam_line):
+			if seam_line.get_parent():
+				seam_line.get_parent().remove_child(seam_line)
+			seam_line.queue_free()
+
+	# Clear arrays and dictionaries
+	seam_lines.clear()
+	seam_to_fold_map.clear()
+
+
+## ============================================================================
 ## PHASE 4: GEOMETRIC FOLDING (DIAGONAL FOLDS)
 ## ============================================================================
 
@@ -767,6 +840,9 @@ func classify_cell_region(cell: Cell, cut_lines: Dictionary) -> String:
 ##
 ## @param cut_lines: Dictionary from calculate_cut_lines()
 func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
+	# Get current fold_id (will be incremented after fold record is created)
+	var current_fold_id = next_fold_id
+
 	# For diagonal folds, we create two seam lines (at each cut)
 	var seam_line1 = Line2D.new()
 	seam_line1.width = 2.0
@@ -777,8 +853,14 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 	var line1_end = cut_lines.line1.point + cut_lines.line1.normal * 1000
 	seam_line1.points = PackedVector2Array([line1_start, line1_end])
 
+	# PHASE 6: Add metadata for fold_id tracking
+	seam_line1.set_meta("fold_id", current_fold_id)
+
 	grid_manager.add_child(seam_line1)
 	seam_lines.append(seam_line1)
+
+	# PHASE 6: Add to seam-to-fold mapping
+	seam_to_fold_map[seam_line1.get_instance_id()] = current_fold_id
 
 	# Second seam line
 	var seam_line2 = Line2D.new()
@@ -789,8 +871,14 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 	var line2_end = cut_lines.line2.point + cut_lines.line2.normal * 1000
 	seam_line2.points = PackedVector2Array([line2_start, line2_end])
 
+	# PHASE 6: Add metadata for fold_id tracking
+	seam_line2.set_meta("fold_id", current_fold_id)
+
 	grid_manager.add_child(seam_line2)
 	seam_lines.append(seam_line2)
+
+	# PHASE 6: Add to seam-to-fold mapping
+	seam_to_fold_map[seam_line2.get_instance_id()] = current_fold_id
 
 
 ## Execute a diagonal fold (Phase 4)
