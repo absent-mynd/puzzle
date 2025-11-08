@@ -209,11 +209,13 @@ func validate_fold_with_player(anchor1: Vector2i, anchor2: Vector2i) -> Dictiona
 	if not player:
 		return {valid = true, reason = ""}
 
-	# Check if player is in removed region (between fold lines)
-	# This is the only blocking condition - cells on fold lines are allowed
-	# because they remain in the game (just with split/merged geometry)
+	# Check if player is in removed region
 	if is_player_in_removed_region(anchor1, anchor2):
 		return {valid = false, reason = "Cannot fold - player in the way"}
+
+	# Future (Phase 4): Check if player's cell would be split
+	# if would_split_player_cell(anchor1, anchor2):
+	#     return {valid = false, reason = "Cannot fold - player's cell would be split"}
 
 	return {valid = true, reason = ""}
 
@@ -242,7 +244,6 @@ func is_player_in_removed_region(anchor1: Vector2i, anchor2: Vector2i) -> bool:
 ##   - Remove ALL cells where left < x < right (across all rows)
 ## For vertical folds: Two horizontal lines at anchor1.y and anchor2.y
 ##   - Remove ALL cells where top < y < bottom (across all columns)
-## For diagonal folds: Uses geometric classification to determine removed region
 ##
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
@@ -271,36 +272,6 @@ func calculate_removed_cells(anchor1: Vector2i, anchor2: Vector2i) -> Array[Vect
 		for x in range(grid_manager.grid_size.x):
 			for y in range(top + 1, bottom):
 				removed_cells.append(Vector2i(x, y))
-	else:
-		# Diagonal fold: Use geometric classification
-		# Calculate cut lines (same logic as execute_diagonal_fold)
-		var cell_size = grid_manager.cell_size
-		var anchor1_local = Vector2(anchor1) * cell_size + Vector2(cell_size / 2, cell_size / 2)
-		var anchor2_local = Vector2(anchor2) * cell_size + Vector2(cell_size / 2, cell_size / 2)
-		var cut_lines = calculate_cut_lines(anchor1_local, anchor2_local)
-
-		# Check all cells to see which are in removed region
-		for pos in grid_manager.cells.keys():
-			var cell = grid_manager.get_cell(pos)
-			if not cell:
-				continue
-
-			# Skip cells that intersect cut lines
-			if does_cell_intersect_line(cell, cut_lines.line1.point, cut_lines.line1.normal):
-				continue
-			if does_cell_intersect_line(cell, cut_lines.line2.point, cut_lines.line2.normal):
-				continue
-
-			# Check if cell is between the two lines
-			var cell_center = cell.get_center()
-			var dist1 = (cell_center - cut_lines.line1.point).dot(cut_lines.line1.normal)
-			var dist2 = (cell_center - cut_lines.line2.point).dot(cut_lines.line2.normal)
-
-			# Cell is BETWEEN lines if on opposite sides of each line
-			var between_lines = (dist1 > 0 and dist2 < 0) or (dist1 < 0 and dist2 > 0)
-
-			if between_lines:
-				removed_cells.append(pos)
 
 	return removed_cells
 
