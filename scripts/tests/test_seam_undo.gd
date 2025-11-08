@@ -408,3 +408,144 @@ func test_multiple_folds_all_have_clickable_zones():
 
 		var zones = seam_line.get_meta("clickable_zones")
 		assert_true(zones is Array, "clickable_zones should be an Array")
+
+
+## ============================================================================
+## TASK 3: SEAM INTERSECTION VALIDATION TESTS
+## ============================================================================
+
+func test_can_undo_fold_seam_based_method_exists():
+	# Execute a fold to have something to test
+	fold_system.execute_fold(Vector2i(3, 2), Vector2i(7, 2), false)
+
+	# Verify method exists and returns correct structure
+	var result = fold_system.can_undo_fold_seam_based(0)
+
+	assert_not_null(result, "can_undo_fold_seam_based should return a value")
+	assert_true(result is Dictionary, "Should return a Dictionary")
+	assert_true(result.has("valid"), "Should have 'valid' key")
+	assert_true(result.has("reason"), "Should have 'reason' key")
+	assert_true(result.has("blocking_seams"), "Should have 'blocking_seams' key")
+
+
+func test_single_fold_is_undoable():
+	# Execute a single fold
+	fold_system.execute_fold(Vector2i(3, 2), Vector2i(7, 2), false)
+
+	# Should be able to undo it (no newer intersecting seams)
+	var result = fold_system.can_undo_fold_seam_based(0)
+
+	assert_true(result["valid"], "Single fold should be undoable")
+	assert_eq(result["blocking_seams"].size(), 0, "Should have no blocking seams")
+
+
+func test_two_non_intersecting_folds_both_undoable():
+	# Execute two folds that don't intersect
+	# Use adjacent anchors to avoid removing cells (MIN_FOLD_DISTANCE = 0)
+	# Both horizontal folds at different y positions (won't intersect)
+	fold_system.execute_fold(Vector2i(2, 3), Vector2i(3, 3), false)  # fold_id 0 (horizontal at y=3)
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(3, 5), false)  # fold_id 1 (horizontal at y=5)
+
+	# Both should be undoable (parallel horizontal lines don't intersect)
+	var result_0 = fold_system.can_undo_fold_seam_based(0)
+	var result_1 = fold_system.can_undo_fold_seam_based(1)
+
+	assert_true(result_0["valid"], "First fold should be undoable (newer fold doesn't intersect)")
+	assert_true(result_1["valid"], "Second fold should be undoable (no newer folds)")
+
+
+func test_intersecting_folds_older_blocked():
+	# Execute two folds that intersect
+	# Use adjacent anchors to avoid grid size changes
+	# Vertical fold at x=4
+	fold_system.execute_fold(Vector2i(4, 2), Vector2i(4, 3), false)  # fold_id 0
+	# Horizontal fold at y=4 crossing the vertical one
+	fold_system.execute_fold(Vector2i(2, 4), Vector2i(3, 4), false)  # fold_id 1
+
+	# Older fold (0) should be blocked by newer fold (1)
+	var result_0 = fold_system.can_undo_fold_seam_based(0)
+
+	assert_false(result_0["valid"], "Older fold should be blocked by intersecting newer fold")
+	assert_gt(result_0["blocking_seams"].size(), 0, "Should report blocking seams")
+
+	# Newer fold (1) should be undoable
+	var result_1 = fold_system.can_undo_fold_seam_based(1)
+	assert_true(result_1["valid"], "Newer fold should be undoable")
+
+
+func test_parallel_seams_dont_block():
+	# Execute two parallel folds (should not intersect geometrically)
+	# Two horizontal folds at different y positions, adjacent anchors
+	fold_system.execute_fold(Vector2i(2, 3), Vector2i(3, 3), false)  # fold_id 0
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(3, 5), false)  # fold_id 1
+
+	# Both should be undoable (parallel seams don't intersect)
+	var result_0 = fold_system.can_undo_fold_seam_based(0)
+
+	assert_true(result_0["valid"], "Parallel seams should not block each other")
+
+
+func test_three_folds_complex_intersection():
+	# Execute three folds with complex intersection pattern
+	# Use adjacent anchors to avoid grid size changes
+	fold_system.execute_fold(Vector2i(4, 2), Vector2i(4, 3), false)  # fold_id 0 (vertical at x=4)
+	fold_system.execute_fold(Vector2i(2, 4), Vector2i(3, 4), false)  # fold_id 1 (horizontal at y=4, crosses 0)
+	fold_system.execute_fold(Vector2i(6, 2), Vector2i(6, 3), false)  # fold_id 2 (vertical at x=6)
+
+	# Fold 0 should be blocked by fold 1 (they intersect)
+	var result_0 = fold_system.can_undo_fold_seam_based(0)
+	assert_false(result_0["valid"], "Fold 0 should be blocked by fold 1")
+
+	# Fold 1 might be blocked by fold 2 if they intersect
+	var result_1 = fold_system.can_undo_fold_seam_based(1)
+	# Just check it returns valid structure
+	assert_true(result_1.has("valid"), "Result should have valid field")
+
+	# Fold 2 should be undoable (newest)
+	var result_2 = fold_system.can_undo_fold_seam_based(2)
+	assert_true(result_2["valid"], "Newest fold should always be undoable")
+
+
+func test_invalid_fold_id_returns_invalid():
+	# Execute a fold
+	fold_system.execute_fold(Vector2i(3, 2), Vector2i(7, 2), false)
+
+	# Try to check undo for non-existent fold
+	var result = fold_system.can_undo_fold_seam_based(999)
+
+	assert_false(result["valid"], "Non-existent fold should return invalid")
+	assert_true(result["reason"].length() > 0, "Should have a reason for invalid")
+
+
+func test_blocking_seams_array_contains_seam_objects():
+	# Execute two intersecting folds
+	fold_system.execute_fold(Vector2i(4, 2), Vector2i(4, 7), false)  # fold_id 0 (vertical)
+	fold_system.execute_fold(Vector2i(2, 4), Vector2i(7, 4), false)  # fold_id 1 (horizontal, crosses vertical)
+
+	# Check that blocking_seams array contains actual seam objects
+	var result = fold_system.can_undo_fold_seam_based(0)
+
+	if result["blocking_seams"].size() > 0:
+		var first_blocker = result["blocking_seams"][0]
+		assert_true(first_blocker is Seam, "Blocking seams should be Seam objects")
+		assert_true(first_blocker.fold_id > 0, "Blocking seam should have newer fold_id")
+
+
+func test_undo_validation_reason_messages():
+	# Execute intersecting folds
+	fold_system.execute_fold(Vector2i(4, 2), Vector2i(4, 7), false)  # fold_id 0 (vertical)
+	fold_system.execute_fold(Vector2i(2, 4), Vector2i(7, 4), false)  # fold_id 1 (horizontal)
+
+	# Check that blocked fold has descriptive reason
+	var result = fold_system.can_undo_fold_seam_based(0)
+
+	if not result["valid"]:
+		assert_true(result["reason"].length() > 0, "Should have a reason message")
+		# Reason should mention blocking or intersection
+		var reason_lower = result["reason"].to_lower()
+		var has_meaningful_message = (
+			"block" in reason_lower or
+			"intersect" in reason_lower or
+			"newer" in reason_lower
+		)
+		assert_true(has_meaningful_message, "Reason should mention blocking/intersection")

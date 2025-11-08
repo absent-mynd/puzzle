@@ -772,6 +772,151 @@ func calculate_clickable_zones(line_point: Vector2, line_normal: Vector2) -> Arr
 	return zones
 
 
+## Add Seam objects to cells affected by a diagonal fold
+##
+## Creates Seam objects for the fold lines and adds them to all cells
+## that the seam lines pass through. This enables intersection validation.
+##
+## @param cut_lines: Dictionary from calculate_cut_lines()
+## @param fold_id: ID of the fold creating these seams
+func add_seams_to_cells(cut_lines: Dictionary, fold_id: int) -> void:
+	var timestamp = Time.get_ticks_msec()
+
+	# Calculate seam endpoints spanning the entire grid
+	# This creates line segments that can be checked for intersection
+	var grid_span = grid_manager.grid_size.x * grid_manager.cell_size
+
+	# Line 1 endpoints
+	var line1_start = cut_lines.line1.point - cut_lines.line1.normal * grid_span
+	var line1_end = cut_lines.line1.point + cut_lines.line1.normal * grid_span
+	var line1_points = PackedVector2Array([line1_start, line1_end])
+
+	# Line 2 endpoints
+	var line2_start = cut_lines.line2.point - cut_lines.line2.normal * grid_span
+	var line2_end = cut_lines.line2.point + cut_lines.line2.normal * grid_span
+	var line2_points = PackedVector2Array([line2_start, line2_end])
+
+	# Create Seam objects for both cut lines
+	var seam1 = Seam.new(
+		cut_lines.line1.point,
+		cut_lines.line1.normal,
+		line1_points,
+		fold_id,
+		timestamp,
+		"diagonal"
+	)
+
+	var seam2 = Seam.new(
+		cut_lines.line2.point,
+		cut_lines.line2.normal,
+		line2_points,
+		fold_id,
+		timestamp,
+		"diagonal"
+	)
+
+	# Add seams to all cells (they'll be stored in the cells' pieces)
+	# NOTE: This adds seams to ALL cells for simplicity. Could be optimized
+	# to only add to cells the seam actually passes through.
+	for cell_pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[cell_pos]
+
+		# Add seams to the first non-null piece in each cell
+		for piece in cell.geometry_pieces:
+			if piece.cell_type != CellPiece.CELL_TYPE_NULL:
+				piece.add_seam(seam1.duplicate_seam())
+				piece.add_seam(seam2.duplicate_seam())
+				break  # Only add once per cell
+
+
+## ============================================================================
+## PHASE 6: SEAM INTERSECTION VALIDATION (TASK 3)
+## ============================================================================
+
+## Check if a fold can be undone based on seam intersection rules
+##
+## A fold can be undone iff no newer seams intersect with its seams.
+## This prevents undoing folds that have been "cut" by subsequent folds.
+##
+## @param fold_id: The ID of the fold to check for undo
+## @return: Dictionary with {valid: bool, reason: String, blocking_seams: Array[Seam]}
+func can_undo_fold_seam_based(fold_id: int) -> Dictionary:
+	# Find the fold record
+	var target_fold = null
+	for record in fold_history:
+		if record["fold_id"] == fold_id:
+			target_fold = record
+			break
+
+	if target_fold == null:
+		return {
+			"valid": false,
+			"reason": "Fold ID %d not found in history" % fold_id,
+			"blocking_seams": []
+		}
+
+	# Collect all seams from all current cells
+	var target_seams: Array[Seam] = []
+	var potential_blockers: Array[Seam] = []
+
+	for cell_pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[cell_pos]
+		var cell_seams = cell.get_all_seams()
+
+		for seam in cell_seams:
+			if seam.fold_id == fold_id:
+				# This is a seam from the target fold
+				target_seams.append(seam)
+			elif seam.timestamp > target_fold["timestamp"]:
+				# This is a newer seam that might block
+				potential_blockers.append(seam)
+
+	# If there are no seams from this fold, it can be undone (fold already removed or no seams left)
+	if target_seams.is_empty():
+		return {
+			"valid": true,
+			"reason": "",
+			"blocking_seams": []
+		}
+
+	# Check if any potential blocker intersects with any target seam
+	var blocking_seams: Array[Seam] = []
+	var seen_blockers = {}  # Track unique blockers by fold_id
+
+	for target_seam in target_seams:
+		for blocker in potential_blockers:
+			# Skip if we've already identified this fold as blocking
+			if seen_blockers.has(blocker.fold_id):
+				continue
+
+			# Check if they intersect
+			var intersection = target_seam.intersects_with(blocker)
+			if intersection != Vector2.INF:
+				# They intersect! This blocks the undo
+				blocking_seams.append(blocker)
+				seen_blockers[blocker.fold_id] = true
+
+	# If we found blocking seams, undo is not allowed
+	if not blocking_seams.is_empty():
+		var blocker_ids = []
+		for seam in blocking_seams:
+			if seam.fold_id not in blocker_ids:
+				blocker_ids.append(seam.fold_id)
+
+		return {
+			"valid": false,
+			"reason": "Blocked by newer intersecting fold(s): %s" % str(blocker_ids),
+			"blocking_seams": blocking_seams
+		}
+
+	# No blocking seams found, undo is allowed
+	return {
+		"valid": true,
+		"reason": "",
+		"blocking_seams": []
+	}
+
+
 ## ============================================================================
 ## PHASE 4: GEOMETRIC FOLDING (DIAGONAL FOLDS)
 ## ============================================================================
@@ -934,6 +1079,9 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 	# PHASE 6 TASK 2: Calculate and store clickable zones
 	var zones2 = calculate_clickable_zones(cut_lines.line2.point, cut_lines.line2.normal)
 	seam_line2.set_meta("clickable_zones", zones2)
+
+	# PHASE 6 TASK 3: Add Seam objects to affected cells for intersection validation
+	add_seams_to_cells(cut_lines, current_fold_id)
 
 
 ## Execute a diagonal fold (Phase 4)
