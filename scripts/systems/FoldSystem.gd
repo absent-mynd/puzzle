@@ -1146,7 +1146,8 @@ func _classify_piece_relative_to_line(piece: CellPiece, line_point: Vector2, lin
 		return "split"
 
 	# All vertices on one side - determine which side
-	var keep_is_positive = (keep_side == "left")  # "left" is positive side in GeometryCore
+	# Normal vector points to the RIGHT/positive side
+	var keep_is_positive = (keep_side == "right")  # "right" is positive side (normal points there)
 
 	if has_positive and not has_negative:
 		# All on positive side
