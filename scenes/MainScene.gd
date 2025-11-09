@@ -11,6 +11,9 @@ extends Node2D
 ## Fold system for grid transformations
 var fold_system: FoldSystem = null
 
+## Action history for sequential undo (Phase 6 Task 7)
+var action_history: ActionHistory = null
+
 ## Game state
 var is_level_complete: bool = false
 
@@ -43,6 +46,9 @@ func _ready() -> void:
 	fold_system = FoldSystem.new()
 	fold_system.initialize(grid_manager)
 	add_child(fold_system)
+
+	# Initialize ActionHistory (Phase 6 Task 7)
+	action_history = ActionHistory.new()
 
 	# Initialize player with grid manager
 	if player and grid_manager:
@@ -196,26 +202,39 @@ func _on_restart_requested() -> void:
 
 ## Handle undo request (from UI button)
 func _on_undo_requested() -> void:
-	# PHASE 6: Implement sequential undo (undo newest fold)
-	if not fold_system or fold_system.fold_history.is_empty():
-		print("No folds to undo")
+	# PHASE 6 TASK 7: Use ActionHistory for sequential undo
+	if not action_history or not action_history.can_undo():
+		print("No actions to undo")
 		return
 
-	# Find the newest fold (highest fold_id)
-	var newest_fold_id = -1
-	for record in fold_system.fold_history:
-		if record["fold_id"] > newest_fold_id:
-			newest_fold_id = record["fold_id"]
+	# Pop the most recent action
+	var action = action_history.pop_action()
 
-	if newest_fold_id >= 0:
-		var success = fold_system.undo_fold_by_id(newest_fold_id)
-		if success:
-			# Update HUD
-			if hud:
-				hud.set_fold_count(GameManager.fold_count)
-			print("Undo successful! Folds: %d" % GameManager.fold_count)
-		else:
-			print("Cannot undo fold %d - it's blocked by newer folds" % newest_fold_id)
+	if action.is_empty():
+		print("No actions to undo")
+		return
+
+	# Handle different action types
+	match action["action_type"]:
+		"fold":
+			var fold_id = action["fold_id"]
+			var success = fold_system.undo_fold_by_id(fold_id)
+			if success:
+				# Update HUD
+				if hud:
+					hud.set_fold_count(GameManager.fold_count)
+				print("Undo successful! Folds: %d" % GameManager.fold_count)
+			else:
+				# Undo failed, push action back
+				action_history.push_action(action)
+				print("Cannot undo fold %d - it's blocked by newer folds" % fold_id)
+
+		"move":
+			# Future: Handle player movement undo
+			print("Move undo not yet implemented")
+
+		_:
+			print("Unknown action type: %s" % action["action_type"])
 
 
 ## Handle main menu request
@@ -289,6 +308,11 @@ func handle_mouse_click(mouse_position: Vector2) -> void:
 		# Undo this fold
 		var success = fold_system.undo_fold_by_id(fold_id)
 		if success:
+			# PHASE 6 TASK 7: Remove this fold action from ActionHistory
+			# Seam-based undo can undo non-sequential folds, so search and remove
+			if action_history:
+				remove_fold_action_from_history(fold_id)
+
 			# Update HUD
 			if hud:
 				hud.set_fold_count(GameManager.fold_count)
@@ -326,6 +350,38 @@ func execute_fold() -> void:
 		if hud:
 			hud.set_fold_count(GameManager.fold_count)
 
+		# PHASE 6 TASK 7: Record fold action in ActionHistory
+		if action_history and fold_system and not fold_system.fold_history.is_empty():
+			# Get the fold_id of the most recent fold
+			var newest_fold_id = -1
+			for record in fold_system.fold_history:
+				if record["fold_id"] > newest_fold_id:
+					newest_fold_id = record["fold_id"]
+
+			if newest_fold_id >= 0:
+				action_history.push_action({
+					"action_type": "fold",
+					"fold_id": newest_fold_id
+				})
+
 		print("Fold executed successfully! Total folds: %d" % GameManager.fold_count)
 	else:
 		print("Fold failed - check validation messages")
+
+
+## Remove a specific fold action from ActionHistory (Phase 6 Task 7)
+##
+## Used when seam-based undo removes a non-sequential fold.
+## Searches through action history and removes the fold action with matching fold_id.
+##
+## @param fold_id: The fold_id to remove
+func remove_fold_action_from_history(fold_id: int) -> void:
+	if not action_history:
+		return
+
+	# Search for the fold action with this fold_id
+	for i in range(action_history.actions.size() - 1, -1, -1):
+		var action = action_history.actions[i]
+		if action["action_type"] == "fold" and action["fold_id"] == fold_id:
+			action_history.actions.remove_at(i)
+			return  # Found and removed, done
