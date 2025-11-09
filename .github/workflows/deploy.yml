@@ -34,11 +34,27 @@ jobs:
 
       - name: Download and extract HTML5 export template
         run: |
+          set -e
           mkdir -p ~/.local/share/godot/export_templates/4.3.stable
           cd ~/.local/share/godot/export_templates/4.3.stable
-          wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
-          tar -xf Godot_v4.3-stable_export_templates.tpz
+
+          # Download export templates with error checking
+          echo "Downloading Godot 4.3 export templates..."
+          wget --show-progress https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
+
+          # Verify file exists and is valid
+          if [ ! -f "Godot_v4.3-stable_export_templates.tpz" ]; then
+            echo "Error: Failed to download export templates"
+            exit 1
+          fi
+
+          # Extract with tar (tpz is tar.gz format)
+          echo "Extracting export templates..."
+          tar -xzf Godot_v4.3-stable_export_templates.tpz
           rm Godot_v4.3-stable_export_templates.tpz
+
+          echo "Export templates ready at: $(pwd)"
+          ls -la
 
       - name: Export game to HTML5
         run: |
