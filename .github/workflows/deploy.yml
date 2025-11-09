@@ -32,6 +32,22 @@ jobs:
       - name: Verify Godot installation
         run: godot --version
 
+      - name: Download HTML5 export templates
+        run: |
+          set -e
+          echo "Creating export templates directory..."
+          mkdir -p ~/.local/share/godot/export_templates/4.3.stable
+          cd ~/.local/share/godot/export_templates/4.3.stable
+
+          echo "Downloading web_nothreads_debug template..."
+          curl -L -o web_nothreads_debug.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_debug.zip
+
+          echo "Downloading web_nothreads_release template..."
+          curl -L -o web_nothreads_release.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_release.zip
+
+          echo "Export templates downloaded"
+          ls -lh *.zip
+
       - name: Export game to HTML5
         run: |
           mkdir -p build/web
