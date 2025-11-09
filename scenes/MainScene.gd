@@ -304,7 +304,7 @@ func _on_undo_requested() -> void:
 			if fold_system and action.has("anchor1") and action.has("anchor2"):
 				var anchor1 = action["anchor1"]
 				var anchor2 = action["anchor2"]
-				var success = fold_system.execute_fold(anchor1, anchor2, false)
+				var success = fold_system.execute_fold_sync(anchor1, anchor2)
 
 				if success:
 					# Update HUD

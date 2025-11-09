@@ -670,6 +670,52 @@ func clear_fold_history():
 	next_fold_id = 0
 
 
+## Execute fold without animation - synchronous version for undo (Phase 6 Task 8)
+## This is non-async so it can be called from _on_undo_requested without await
+##
+## @param anchor1: First anchor point
+## @param anchor2: Second anchor point
+## @return: true if fold succeeded, false otherwise
+func execute_fold_sync(anchor1: Vector2i, anchor2: Vector2i) -> bool:
+	if not grid_manager:
+		push_error("FoldSystem: GridManager not initialized")
+		return false
+
+	# Validate fold before execution
+	var validation = validate_fold(anchor1, anchor2)
+	if not validation.valid:
+		push_warning("FoldSystem: Fold validation failed: " + validation.reason)
+		AudioManager.play_sfx("error")
+		return false
+
+	# Validate with player position
+	var player_validation = validate_fold_with_player(anchor1, anchor2)
+	if not player_validation.valid:
+		push_warning("FoldSystem: Player validation failed: " + player_validation.reason)
+		AudioManager.play_sfx("error")
+		return false
+
+	var orientation = get_fold_orientation(anchor1, anchor2)
+
+	# Play fold sound effect
+	AudioManager.play_sfx("fold")
+
+	# Execute without animation
+	match orientation:
+		"horizontal":
+			execute_horizontal_fold(anchor1, anchor2)
+			return true
+		"vertical":
+			execute_vertical_fold(anchor1, anchor2)
+			return true
+		"diagonal":
+			execute_diagonal_fold(anchor1, anchor2)
+			return true
+		_:
+			push_error("FoldSystem: Unknown fold orientation")
+			return false
+
+
 ## ============================================================================
 ## PHASE 6: SEAM-TO-FOLD MAPPING (TASK 1)
 ## ============================================================================
