@@ -51,8 +51,8 @@ jobs:
           file templates.tpz
 
           echo "Extracting export templates..."
-          # The .tpz file is actually a tar.gz archive
-          tar -xzf templates.tpz
+          # The .tpz file is actually a ZIP archive
+          unzip -q templates.tpz
 
           rm -f templates.tpz
 
