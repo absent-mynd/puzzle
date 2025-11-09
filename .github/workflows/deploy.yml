@@ -57,7 +57,16 @@ jobs:
           rm -f templates.tpz
 
           echo "Export templates extracted"
+          echo "Contents of export templates directory:"
           ls -lh
+
+          echo ""
+          echo "Looking for template files recursively:"
+          find . -name "*.zip" -type f
+
+          echo ""
+          echo "Full directory tree:"
+          ls -lhR
 
       - name: Export game to HTML5
         run: |
