@@ -40,12 +40,28 @@ jobs:
           cd ~/.local/share/godot/export_templates/4.3.stable
 
           echo "Downloading web_nothreads_debug template..."
-          curl -L -o web_nothreads_debug.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_debug.zip
+          curl -L --show-progress -f -o web_nothreads_debug.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_debug.zip
+
+          if [ ! -f "web_nothreads_debug.zip" ] || [ ! -s "web_nothreads_debug.zip" ]; then
+            echo "ERROR: Failed to download debug template"
+            exit 1
+          fi
+
+          echo "Verifying debug template integrity..."
+          unzip -t web_nothreads_debug.zip > /dev/null || { echo "ERROR: Debug template is corrupted"; exit 1; }
 
           echo "Downloading web_nothreads_release template..."
-          curl -L -o web_nothreads_release.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_release.zip
+          curl -L --show-progress -f -o web_nothreads_release.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_release.zip
 
-          echo "Export templates downloaded"
+          if [ ! -f "web_nothreads_release.zip" ] || [ ! -s "web_nothreads_release.zip" ]; then
+            echo "ERROR: Failed to download release template"
+            exit 1
+          fi
+
+          echo "Verifying release template integrity..."
+          unzip -t web_nothreads_release.zip > /dev/null || { echo "ERROR: Release template is corrupted"; exit 1; }
+
+          echo "Export templates downloaded and verified"
           ls -lh *.zip
 
       - name: Export game to HTML5
