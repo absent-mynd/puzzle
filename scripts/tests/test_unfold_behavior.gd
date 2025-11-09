@@ -294,14 +294,11 @@ func test_unfold_and_undo_are_different():
 	player.grid_position = Vector2i(7, 5)
 	var initial_player_pos = player.grid_position
 
-	# Execute fold
+	# Test UNDO path first
 	fold_system.execute_fold(Vector2i(3, 5), Vector2i(4, 5), false)
 	var player_after_fold = player.grid_position
 
-	# Store grid state after fold
-	var cells_after_fold = grid_manager.cells.size()
-
-	# Test UNDO path
+	# UNDO the fold
 	fold_system.undo_fold_by_id(0)
 	var player_after_undo = player.grid_position
 	var cells_after_undo = grid_manager.cells.size()
@@ -310,19 +307,18 @@ func test_unfold_and_undo_are_different():
 	assert_eq(player_after_undo, initial_player_pos,
 		"UNDO restores player position")
 
-	# Re-execute the same fold for UNFOLD test
-	player.grid_position = initial_player_pos  # Reset
-	fold_system.execute_fold(Vector2i(3, 5), Vector2i(4, 5), false)
+	# Test UNFOLD path (separate fold)
+	player.grid_position = initial_player_pos  # Reset player
+	fold_system.execute_fold(Vector2i(3, 5), Vector2i(4, 5), false)  # This will be fold_id 1
+	var player_after_fold2 = player.grid_position
 
-	# Test UNFOLD path
-	player.grid_position = Vector2i(0, 0)  # Move player off seam
-	fold_system.unfold_seam(0)
+	# Move player off seam before unfold
+	player.grid_position = Vector2i(0, 0)
+
+	# UNFOLD the fold (note: this is fold_id 1, not 0, since we already undid fold 0)
+	fold_system.unfold_seam(1)
 	var player_after_unfold = player.grid_position
 	var cells_after_unfold = grid_manager.cells.size()
-
-	# UNFOLD should NOT restore player to initial position
-	# (player was moved to (0,0) before unfold, so they should still be there or nearby)
-	# The key point is that unfold doesn't use the saved player position from the fold record
 
 	# Both should restore cell count
 	assert_eq(cells_after_undo, cells_after_unfold,
@@ -331,6 +327,6 @@ func test_unfold_and_undo_are_different():
 	# But only UNDO restores player position from fold record
 	assert_eq(player_after_undo, initial_player_pos,
 		"UNDO uses saved player position")
-	# UNFOLD keeps player wherever they are now
-	assert_ne(player_after_unfold, initial_player_pos,
-		"UNFOLD does not use saved player position")
+	# UNFOLD keeps player at their current position (0,0)
+	assert_eq(player_after_unfold, Vector2i(0, 0),
+		"UNFOLD keeps player at current position")

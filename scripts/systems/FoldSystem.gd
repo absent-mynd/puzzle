@@ -1190,14 +1190,14 @@ func undo_fold_by_id(fold_id: int) -> bool:
 	return true
 
 
-## UNFOLD SEAM (geometric reversal without state restoration)
+## UNFOLD SEAM (geometric reversal without player state restoration)
 ##
-## Unfolds a seam by reversing the geometric fold operation WITHOUT restoring
-## player position or full grid state. This behaves like unfolding paper:
-## - Cells shifted by the fold are shifted back
-## - Cells removed by the fold are reintroduced
-## - Player position is NOT restored (unless they were on a shifted region)
-## - Other folds' effects are preserved
+## Unfolds a seam by fully reversing the geometric fold operation, just like
+## undo does for the grid, but WITHOUT restoring the player's saved position.
+## This behaves like unfolding paper:
+## - Full geometric reversal (shifts reversed, cells reintroduced, merges undone)
+## - Player position is NOT restored from fold record
+## - Player only moves if they're on a cell that shifts during unfold
 ##
 ## @param fold_id: The ID of the fold to unfold
 ## @return: true if unfold succeeded, false if validation failed or fold not found
@@ -1230,130 +1230,43 @@ func unfold_seam(fold_id: int) -> bool:
 		push_warning("FoldSystem: Cannot unfold fold %d: %s" % [fold_id, validation["reason"]])
 		return false
 
-	# Get fold metadata
-	var anchor1 = target_fold["anchor1"]
-	var anchor2 = target_fold["anchor2"]
-	var orientation = target_fold["orientation"]
-	var removed_cells_data = target_fold["cells_state"]
-	var removed_cell_positions = target_fold["removed_cells"]
+	# Save current player position (we DON'T want to restore the saved position from fold record)
+	var current_player_pos = player.grid_position if player else Vector2i(-1, -1)
 
-	# Calculate the shift vector (reverse of original fold)
-	# Original fold: shifted from anchor2 to anchor1
-	# Unfold: shift from anchor1 back to anchor2
-	var shift_vector = anchor2 - anchor1
+	# 1. Remove seam visuals for this fold
+	remove_seams_for_fold(fold_id)
 
-	# 1. Identify cells that were shifted by the original fold
-	# These need to be shifted back to their original positions
-	var cells_to_shift_back: Array[Cell] = []
+	# 2. Restore grid state from fold record (FULL geometric reversal, same as undo)
+	# CRITICAL: Free all existing cells first to prevent memory leaks
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[pos]
+		if cell and is_instance_valid(cell):
+			if cell.get_parent():
+				cell.get_parent().remove_child(cell)
+			cell.queue_free()
 
-	# For axis-aligned folds, determine which cells were shifted
-	# During fold: target is leftmost (horizontal) or topmost (vertical), source is the other
-	# Cells past source shifted toward target
-	# During unfold: cells that are currently in the "gap" positions need to shift back
+	grid_manager.cells.clear()
 
-	if orientation == "horizontal":
-		# Horizontal fold: target=leftmost, cells from right shifted left
-		# Currently, cells at positions between min_x and max_x (exclusive of min_x) are shifted
-		# They need to shift back right
-		var min_x = min(anchor1.x, anchor2.x)
-		var max_x = max(anchor1.x, anchor2.x)
-		# Cells currently at x > min_x up to and including x=max_x were shifted and need to go back
-		for pos in grid_manager.cells.keys():
-			if pos.x > min_x and pos.x <= max_x:
-				cells_to_shift_back.append(grid_manager.cells[pos])
-	elif orientation == "vertical":
-		# Vertical fold: target=topmost, cells from bottom shifted up
-		# Currently, cells at positions between min_y and max_y (exclusive of min_y) are shifted
-		# They need to shift back down
-		var min_y = min(anchor1.y, anchor2.y)
-		var max_y = max(anchor1.y, anchor2.y)
-		# Cells currently at y > min_y up to and including y=max_y were shifted and need to go back
-		for pos in grid_manager.cells.keys():
-			if pos.y > min_y and pos.y <= max_y:
-				cells_to_shift_back.append(grid_manager.cells[pos])
-	else:
-		# Diagonal fold: more complex - need to check which side of lines cells are on
-		# For simplicity, we'll shift all cells that would have been shifted in the original fold
-		# This is determined by checking if they're on the source side of the fold
-		var cell_size = grid_manager.cell_size
-		var anchor1_local = Vector2(anchor1) * cell_size + Vector2(cell_size / 2, cell_size / 2)
-		var anchor2_local = Vector2(anchor2) * cell_size + Vector2(cell_size / 2, cell_size / 2)
-		var cut_lines = calculate_cut_lines(anchor1_local, anchor2_local)
-
-		# Cells past line1 (on the anchor1 side) should be shifted back
-		for pos in grid_manager.cells.keys():
-			var cell = grid_manager.cells[pos]
-			var cell_center = cell.get_center()
-			var dist_from_line1 = (cell_center - cut_lines.line1.point).dot(cut_lines.line1.normal)
-
-			# If on the anchor1 side (negative distance), it was shifted and needs to shift back
-			if dist_from_line1 < 0:
-				cells_to_shift_back.append(cell)
-
-	# 2. Shift cells back to their original positions
-	# Use two-pass approach to avoid false collisions
-	var cells_with_new_pos: Array[Dictionary] = []
-
-	# Pass 1: Remove from old positions and update properties
-	for cell in cells_to_shift_back:
-		var old_pos = cell.grid_position
-		var new_pos = old_pos + shift_vector
-
-		# Remove from old position
-		grid_manager.cells.erase(old_pos)
-
-		# Update cell position
-		cell.grid_position = new_pos
-
-		# Translate geometry for ALL pieces
-		var shift_pixels = Vector2(shift_vector) * grid_manager.cell_size
-		for piece in cell.geometry_pieces:
-			var new_geometry = PackedVector2Array()
-			for vertex in piece.geometry:
-				new_geometry.append(vertex + shift_pixels)
-			piece.geometry = new_geometry
-		cell.update_visual()
-
-		cells_with_new_pos.append({"cell": cell, "old_pos": old_pos, "new_pos": new_pos})
-
-	# Pass 2: Place cells at new positions
-	for data in cells_with_new_pos:
-		var cell = data.cell
-		var new_pos = data.new_pos
-
-		# Check if there's a cell at the destination
-		var existing = grid_manager.get_cell(new_pos)
-		if existing:
-			# Merge with existing cell
-			_merge_cells_multi_polygon(existing, cell, new_pos)
-		else:
-			# No collision, just place the cell
-			grid_manager.cells[new_pos] = cell
-
-	# 3. Reintroduce removed cells at their original positions
+	# 3. Deserialize and recreate cells from saved state
+	var cells_state = target_fold["cells_state"]
 	var cell_size = grid_manager.cell_size
-	for pos_str in removed_cells_data.keys():
+
+	for pos_str in cells_state.keys():
+		var cell_data = cells_state[pos_str]
+
+		# Parse grid position from string
 		var pos = str_to_var(pos_str) as Vector2i
-
-		# Only reintroduce if this cell was in the removed region
-		if pos not in removed_cell_positions:
-			continue
-
-		# Skip if a cell already exists at this position
-		if grid_manager.get_cell(pos):
-			continue
-
-		var cell_data = removed_cells_data[pos_str]
 
 		# Calculate local position for this cell
 		var local_pos = Vector2(pos) * cell_size
 
-		# Create new Cell node
+		# Create new Cell node with required constructor arguments
 		var cell = Cell.new(pos, local_pos, cell_size)
 
-		# Restore geometry pieces if available
+		# Restore all geometry pieces if available
 		if cell_data.has("geometry_pieces") and not cell_data["geometry_pieces"].is_empty():
-			cell.geometry_pieces.clear()
+			# New format: Restore all pieces
+			cell.geometry_pieces.clear()  # Clear the default piece
 
 			for piece_data in cell_data["geometry_pieces"]:
 				# Restore piece geometry
@@ -1361,21 +1274,11 @@ func unfold_seam(fold_id: int) -> bool:
 				for point_dict in piece_data["geometry"]:
 					piece_geometry.append(Vector2(point_dict["x"], point_dict["y"]))
 
-				# Create CellPiece (excluding null pieces and seams from this fold)
-				var piece_type = piece_data["cell_type"]
-				var piece_source_fold = piece_data["source_fold_id"]
+				# Create CellPiece
+				var piece = CellPiece.new(piece_geometry, piece_data["cell_type"], piece_data["source_fold_id"])
 
-				# Skip null pieces created by this fold
-				if piece_type == CellPiece.CELL_TYPE_NULL and piece_source_fold == fold_id:
-					continue
-
-				var piece = CellPiece.new(piece_geometry, piece_type, piece_source_fold)
-
-				# Restore seams (excluding seams from this fold)
+				# Restore piece seams
 				for seam_data in piece_data.get("seams", []):
-					if seam_data["fold_id"] == fold_id:
-						continue  # Don't restore seams from this fold
-
 					# Deserialize intersection points
 					var intersection_points = PackedVector2Array()
 					for point_dict in seam_data["intersection_points"]:
@@ -1397,8 +1300,9 @@ func unfold_seam(fold_id: int) -> bool:
 			# Update dominant type
 			cell.cell_type = cell.get_dominant_type()
 			cell.is_partial = cell_data.get("is_partial", false)
+
 		else:
-			# Legacy format
+			# Legacy format: Single geometry piece
 			var geometry_array = cell_data.get("geometry", [])
 			var geometry_points = PackedVector2Array()
 			for point_dict in geometry_array:
@@ -1407,44 +1311,53 @@ func unfold_seam(fold_id: int) -> bool:
 
 			cell.cell_type = cell_data.get("cell_type", 0)
 			cell.is_partial = cell_data.get("is_partial", false)
+			cell.seams = cell_data.get("seams", [])
 
 		# Add cell to grid
 		grid_manager.add_child(cell)
 		grid_manager.cells[pos] = cell
+
+		# Update cell visual
 		cell.update_visual()
 
-	# 4. Update player position if they were on a shifted cell
+	# 4. UNFOLD DIFFERENCE: Keep player at current position (don't restore from fold record)
+	# Only update player position if their current cell no longer exists
 	if player:
-		var player_old_pos = player.grid_position
-		# Check if player's current cell was shifted
-		for data in cells_with_new_pos:
-			if data.old_pos == player_old_pos:
-				# Player was on a shifted cell, move them with it
-				player.grid_position = data.new_pos
-				var new_cell = grid_manager.get_cell(player.grid_position)
-				if new_cell:
-					player.global_position = grid_manager.to_global(new_cell.get_center())
-				break
+		var cell_at_current_pos = grid_manager.get_cell(current_player_pos)
+		if cell_at_current_pos:
+			# Player can stay where they are
+			player.grid_position = current_player_pos
+			player.global_position = grid_manager.to_global(cell_at_current_pos.get_center())
+		else:
+			# Current position no longer valid, try to keep player in a safe location
+			# Find nearest valid cell
+			var nearest_pos = Vector2i(-1, -1)
+			var min_distance = 99999.0
+			for pos in grid_manager.cells.keys():
+				var dist = Vector2(pos - current_player_pos).length()
+				if dist < min_distance:
+					min_distance = dist
+					nearest_pos = pos
 
-	# 5. Remove seam visuals for this fold
-	remove_seams_for_fold(fold_id)
+			if nearest_pos != Vector2i(-1, -1):
+				player.grid_position = nearest_pos
+				var cell = grid_manager.get_cell(nearest_pos)
+				if cell:
+					player.global_position = grid_manager.to_global(cell.get_center())
 
-	# 6. Remove fold from history
+	# 5. Remove fold from history
 	fold_history.remove_at(fold_index)
 
-	# 7. Update GameManager fold count
+	# 6. Update GameManager fold count if it exists
 	if GameManager:
 		GameManager.fold_count -= 1
 
-	# 8. Update seam visual states
+	# 7. Update seam visual states
 	update_seam_visual_states()
 
-	# 9. Play unfold sound effect
+	# 8. Play unfold sound effect (if available)
 	if AudioManager:
 		AudioManager.play_sfx("unfold")
-
-	# 10. Clean up any freed cell references
-	grid_manager.cleanup_freed_cells()
 
 	return true
 

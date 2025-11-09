@@ -63,6 +63,24 @@ These shape the entire implementation - **do not deviate** without careful consi
 
 **Implementation:** Always call `validate_fold_with_player()` before executing
 
+### 2a. UNFOLD vs UNDO Behavior ⚠️ CRITICAL DISTINCTION
+**UNFOLD (seam-based, clicking on seams):**
+- Can only unfold if player is NOT standing on the seam
+- Fully reverses geometric fold (shifts, merges, splits, removals)
+- Does NOT restore player position from fold record
+- Player only moves if on a cell that shifts during unfold
+- Behaves like unfolding paper - geometric reversal only
+
+**UNDO (action-based, button/keyboard):**
+- Full state restoration including player position
+- Restores grid AND player to exact state before action
+- Reverses most recent action in history (LIFO)
+- No player-on-seam validation needed
+
+**Why:** Unfold is a spatial puzzle mechanic with tactical constraints. Undo is a quality-of-life feature for correcting mistakes.
+
+**Implementation:** Seam clicks call `unfold_seam()`, undo button calls `undo_fold_by_id()`
+
 ### 3. Coordinate System ⚠️ MOST COMMON BUG
 - **Cells use LOCAL coordinates** (relative to GridManager.position)
 - **Formula:** `local_pos = Vector2(grid_pos) * cell_size` (NOT grid_to_world!)

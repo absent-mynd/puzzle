@@ -70,24 +70,40 @@ The following systems are already in place and can be leveraged:
 
 **Two Independent Undo Mechanisms:**
 
-1. **Seam-Based Undo (Puzzle Mechanic)**
-   - Click directly on a seam to undo that specific fold
+1. **Seam-Based UNFOLD (Puzzle Mechanic)**
+   - Click directly on a seam to unfold that specific fold
    - Spatial constraint: seam must pass through grid cell center
-   - Dependency validation: can't undo if newer seams intersect it
+   - Dependency validation: can't unfold if newer seams intersect it
+   - **Player validation: can't unfold if player is standing on the seam**
+   - **Behavior: Full geometric reversal WITHOUT player position restoration**
    - Visual feedback on hover/click
    - Mouse-only interaction
 
-2. **Sequential Undo Button (QOL Feature)**
+2. **Sequential UNDO Button (QOL Feature)**
    - Traditional undo button that reverses most recent action
    - Actions include: folds AND player moves
    - Separate action history from fold history
-   - Always undoes in FIFO order
+   - Always undoes in LIFO order (Last In, First Out)
+   - **Behavior: Full state restoration INCLUDING player position**
    - Keyboard shortcut 'U'
 
+**CRITICAL DISTINCTION:**
+- **UNFOLD (seam click):**
+  - Fully reverses the geometric fold (shifts, merges, splits, removals)
+  - Does NOT restore player position from fold record
+  - Player blocked if standing on seam (new validation)
+  - Behaves like unfolding paper - geometric reversal only
+
+- **UNDO (button/keyboard):**
+  - Fully restores game state including player position
+  - Restores grid AND player to exact state before action
+  - Reverses the most recent action in history
+
 **Rationale:**
-- Seam-based undo is the core puzzle mechanic
+- Seam-based unfold is the core puzzle mechanic - spatial and geometric
 - Sequential undo prevents frustration from misclicks
-- Two systems don't conflict - operate on different histories
+- Two systems don't conflict - operate on different histories and behaviors
+- Unfold's player-on-seam validation adds tactical depth to puzzle solving
 
 ### Decision 2: Seam Click Target Constraint
 
