@@ -51,22 +51,20 @@ jobs:
           file templates.tpz
 
           echo "Extracting export templates..."
-          # The .tpz file is actually a ZIP archive
+          # The .tpz file is actually a ZIP archive that extracts to a 'templates' subdirectory
           unzip -q templates.tpz
-
           rm -f templates.tpz
 
-          echo "Export templates extracted"
+          # Move templates from subdirectory to current directory
+          if [ -d "templates" ]; then
+            echo "Moving templates from subdirectory..."
+            mv templates/* .
+            rmdir templates
+          fi
+
+          echo "Export templates ready"
           echo "Contents of export templates directory:"
-          ls -lh
-
-          echo ""
-          echo "Looking for template files recursively:"
-          find . -name "*.zip" -type f
-
-          echo ""
-          echo "Full directory tree:"
-          ls -lhR
+          ls -lh web_nothreads*.zip
 
       - name: Export game to HTML5
         run: |
