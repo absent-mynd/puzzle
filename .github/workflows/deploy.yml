@@ -39,30 +39,25 @@ jobs:
           mkdir -p ~/.local/share/godot/export_templates/4.3.stable
           cd ~/.local/share/godot/export_templates/4.3.stable
 
-          echo "Downloading web_nothreads_debug template..."
-          curl -L -f -o web_nothreads_debug.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_debug.zip
+          echo "Downloading Godot 4.3 export templates..."
+          curl -L -f -o templates.tpz https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
 
-          if [ ! -f "web_nothreads_debug.zip" ] || [ ! -s "web_nothreads_debug.zip" ]; then
-            echo "ERROR: Failed to download debug template"
+          if [ ! -f "templates.tpz" ] || [ ! -s "templates.tpz" ]; then
+            echo "ERROR: Failed to download export templates"
             exit 1
           fi
 
-          echo "Verifying debug template integrity..."
-          unzip -t web_nothreads_debug.zip > /dev/null || { echo "ERROR: Debug template is corrupted"; exit 1; }
+          echo "File downloaded, checking type..."
+          file templates.tpz
 
-          echo "Downloading web_nothreads_release template..."
-          curl -L -f -o web_nothreads_release.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_release.zip
+          echo "Extracting export templates..."
+          # The .tpz file is actually a tar.gz archive
+          tar -xzf templates.tpz
 
-          if [ ! -f "web_nothreads_release.zip" ] || [ ! -s "web_nothreads_release.zip" ]; then
-            echo "ERROR: Failed to download release template"
-            exit 1
-          fi
+          rm -f templates.tpz
 
-          echo "Verifying release template integrity..."
-          unzip -t web_nothreads_release.zip > /dev/null || { echo "ERROR: Release template is corrupted"; exit 1; }
-
-          echo "Export templates downloaded and verified"
-          ls -lh *.zip
+          echo "Export templates extracted"
+          ls -lh
 
       - name: Export game to HTML5
         run: |
