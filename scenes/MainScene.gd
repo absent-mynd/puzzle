@@ -305,23 +305,23 @@ func handle_mouse_click(mouse_position: Vector2) -> void:
 	var can_undo = click_result["can_undo"]
 
 	if can_undo:
-		# Undo this fold
-		var success = fold_system.undo_fold_by_id(fold_id)
+		# UNFOLD this seam (geometric reversal without state restoration)
+		var success = fold_system.unfold_seam(fold_id)
 		if success:
 			# PHASE 6 TASK 7: Remove this fold action from ActionHistory
-			# Seam-based undo can undo non-sequential folds, so search and remove
+			# Seam-based unfold can unfold non-sequential folds, so search and remove
 			if action_history:
 				remove_fold_action_from_history(fold_id)
 
 			# Update HUD
 			if hud:
 				hud.set_fold_count(GameManager.fold_count)
-			print("Seam-based undo successful! Fold %d undone. Total folds: %d" % [fold_id, GameManager.fold_count])
+			print("Seam unfold successful! Fold %d unfolded. Total folds: %d" % [fold_id, GameManager.fold_count])
 		else:
-			print("Unexpected: Undo failed for fold %d" % fold_id)
+			print("Cannot unfold fold %d - player may be standing on seam" % fold_id)
 	else:
 		# Seam is blocked
-		print("Cannot undo fold %d - it's blocked by newer intersecting folds" % fold_id)
+		print("Cannot unfold fold %d - it's blocked by newer intersecting folds" % fold_id)
 
 
 ## Execute fold with selected anchors
