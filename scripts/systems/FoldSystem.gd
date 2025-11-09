@@ -1336,7 +1336,7 @@ func unfold_seam(fold_id: int) -> bool:
 		# If current position didn't exist before fold, player is on a shifted cell
 		if not current_pos_existed_before_fold:
 			# Calculate reverse shift to find original position
-			# Use same anchor normalization logic as execute_diagonal_fold
+			# Use EXACT same anchor normalization logic as execute_diagonal_fold
 			var anchor1 = target_fold["anchor1"]
 			var anchor2 = target_fold["anchor2"]
 			var target_anchor: Vector2i
@@ -1363,10 +1363,74 @@ func unfold_seam(fold_id: int) -> bool:
 					target_anchor = anchor2
 					source_anchor = anchor1
 			else:
-				# Diagonal: simplified - just use anchor1 as target
-				# (The full algorithm is complex, but this should work for most cases)
-				target_anchor = anchor1
-				source_anchor = anchor2
+				# TRUE DIAGONAL FOLD - use same negative-avoidance algorithm as execute_diagonal_fold
+				var shift_if_anchor1_target = anchor1 - anchor2
+				var shift_if_anchor2_target = anchor2 - anchor1
+
+				# Get grid bounds from saved state
+				var min_existing_x = 0
+				var max_existing_x = grid_manager.grid_size.x - 1
+				var min_existing_y = 0
+				var max_existing_y = grid_manager.grid_size.y - 1
+
+				for pos_str in target_fold["cells_state"].keys():
+					var pos = str_to_var(pos_str)
+					min_existing_x = min(min_existing_x, pos.x)
+					max_existing_x = max(max_existing_x, pos.x)
+					min_existing_y = min(min_existing_y, pos.y)
+					max_existing_y = max(max_existing_y, pos.y)
+
+				# Calculate if each option creates negative coordinates
+				var min_x_option1 = min_existing_x + shift_if_anchor1_target.x
+				var min_y_option1 = min_existing_y + shift_if_anchor1_target.y
+				var creates_negative_option1 = (min_x_option1 < 0) or (min_y_option1 < 0)
+
+				var min_x_option2 = min_existing_x + shift_if_anchor2_target.x
+				var min_y_option2 = min_existing_y + shift_if_anchor2_target.y
+				var creates_negative_option2 = (min_x_option2 < 0) or (min_y_option2 < 0)
+
+				var max_x_option1 = max_existing_x + shift_if_anchor1_target.x
+				var max_y_option1 = max_existing_y + shift_if_anchor1_target.y
+				var max_x_option2 = max_existing_x + shift_if_anchor2_target.x
+				var max_y_option2 = max_existing_y + shift_if_anchor2_target.y
+
+				# Choose same anchor as during fold
+				if not creates_negative_option1 and creates_negative_option2:
+					target_anchor = anchor1
+					source_anchor = anchor2
+				elif not creates_negative_option2 and creates_negative_option1:
+					target_anchor = anchor2
+					source_anchor = anchor1
+				else:
+					# Both create negatives OR both avoid negatives
+					var badness1 = 0
+					if min_x_option1 < 0:
+						badness1 += abs(min_x_option1)
+					if min_y_option1 < 0:
+						badness1 += abs(min_y_option1)
+
+					var badness2 = 0
+					if min_x_option2 < 0:
+						badness2 += abs(min_x_option2)
+					if min_y_option2 < 0:
+						badness2 += abs(min_y_option2)
+
+					if badness1 < badness2:
+						target_anchor = anchor1
+						source_anchor = anchor2
+					elif badness2 < badness1:
+						target_anchor = anchor2
+						source_anchor = anchor1
+					else:
+						# Equal badness - prefer positive expansion
+						var expansion1 = max(max_x_option1, max_y_option1)
+						var expansion2 = max(max_x_option2, max_y_option2)
+						if expansion1 <= expansion2:
+							target_anchor = anchor1
+							source_anchor = anchor2
+						else:
+							target_anchor = anchor2
+							source_anchor = anchor1
 
 			# Reverse the shift: original = current - shift_vector
 			var shift_vector = target_anchor - source_anchor
