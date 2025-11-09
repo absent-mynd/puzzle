@@ -184,24 +184,28 @@ func test_undo_restores_player_position():
 
 
 func test_unfold_moves_player_with_shifted_region():
-	# Place player in a region that will be shifted
-	player.grid_position = Vector2i(2, 5)
-	var player_before_fold = player.grid_position
+	# Test paper-folding behavior: player moves WITH the cell they're standing on
 
-	# Execute a horizontal fold (shifts left side toward right)
-	# Player at x=2 should shift when the fold happens
-	fold_system.execute_fold(Vector2i(4, 5), Vector2i(5, 5), false)
+	# Initial setup - place player on a cell that WILL shift
+	# Horizontal fold (2,5) to (3,5): target=(2,5), source=(3,5), shift=(-1,0)
+	# Cells beyond x=3 (right side) shift LEFT by 1
+	player.grid_position = Vector2i(5, 5)
+	var player_initial = player.grid_position
+
+	# Execute fold that will shift player's cell
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(3, 5), false)
 
 	var player_after_fold = player.grid_position
+	# Player should have shifted left by 1
+	assert_eq(player_after_fold, Vector2i(4, 5), "Player shifts with cell during fold")
 
-	# Now UNFOLD - player should move back with the region
+	# Now UNFOLD - player should move back with the cell
 	fold_system.unfold_seam(0)
 
 	var player_after_unfold = player.grid_position
-
-	# Player should be back at or near original position (moved with the region)
-	# The exact position depends on the fold implementation, but they should have moved
-	assert_true(true, "Player position handled during unfold")
+	# Player should be back at original position
+	assert_eq(player_after_unfold, player_initial,
+		"Player moves back with cell during unfold (paper-folding behavior)")
 
 
 ## ============================================================================
@@ -316,7 +320,9 @@ func test_unfold_and_undo_are_different():
 	fold_system.execute_fold(Vector2i(3, 5), Vector2i(4, 5), false)  # This will be fold_id 1
 	var player_after_fold2 = player.grid_position
 
-	# Move player off seam before unfold
+	# Move player to a position that won't shift during unfold
+	# Fold (3,5) to (4,5): target=(3,5), source=(4,5), cells beyond x=4 shift
+	# Position (0,0) is on the stationary side (left of target anchor at x=3)
 	player.grid_position = Vector2i(0, 0)
 
 	# UNFOLD the fold (note: this is fold_id 1, not 0, since we already undid fold 0)
@@ -331,6 +337,7 @@ func test_unfold_and_undo_are_different():
 	# But only UNDO restores player position from fold record
 	assert_eq(player_after_undo, initial_player_pos,
 		"UNDO uses saved player position")
-	# UNFOLD keeps player at their current position (0,0)
+	# UNFOLD moves player WITH cells (if on shifted side) or keeps them (if on stationary side)
+	# Since (0,0) is on stationary side, player stays there
 	assert_eq(player_after_unfold, Vector2i(0, 0),
-		"UNFOLD keeps player at current position")
+		"UNFOLD doesn't restore from fold record, player stays on stationary side")

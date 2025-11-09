@@ -1324,118 +1324,123 @@ func unfold_seam(fold_id: int) -> bool:
 		cell.update_visual()
 
 	# 4. UNFOLD DIFFERENCE: Player moves WITH their cell (if on shifted cell)
-	# Check if player's current position existed in pre-fold state
+	# Determine if player is standing on a cell that shifted during the fold
 	if player:
-		var player_was_on_shifted_cell = false
 		var original_player_pos = current_player_pos
 
-		# Check if current player position existed in pre-fold state
-		# cells_state keys are string representations of Vector2i positions
-		var current_pos_existed_before_fold = target_fold["cells_state"].has(var_to_str(current_player_pos))
+		# First, calculate shift vector using EXACT same logic as fold execution
+		var anchor1 = target_fold["anchor1"]
+		var anchor2 = target_fold["anchor2"]
+		var target_anchor: Vector2i
+		var source_anchor: Vector2i
 
-		# If current position didn't exist before fold, player is on a shifted cell
-		if not current_pos_existed_before_fold:
-			# Calculate reverse shift to find original position
-			# Use EXACT same anchor normalization logic as execute_diagonal_fold
-			var anchor1 = target_fold["anchor1"]
-			var anchor2 = target_fold["anchor2"]
-			var target_anchor: Vector2i
-			var source_anchor: Vector2i
+		# Determine target/source using same logic as fold
+		var is_horizontal = anchor1.y == anchor2.y
+		var is_vertical = anchor1.x == anchor2.x
 
-			# Determine target/source using same logic as fold
-			var is_horizontal = anchor1.y == anchor2.y
-			var is_vertical = anchor1.x == anchor2.x
-
-			if is_horizontal:
-				# Horizontal: target is leftmost
-				if anchor1.x < anchor2.x:
-					target_anchor = anchor1
-					source_anchor = anchor2
-				else:
-					target_anchor = anchor2
-					source_anchor = anchor1
-			elif is_vertical:
-				# Vertical: target is topmost
-				if anchor1.y < anchor2.y:
-					target_anchor = anchor1
-					source_anchor = anchor2
-				else:
-					target_anchor = anchor2
-					source_anchor = anchor1
+		if is_horizontal:
+			# Horizontal: target is leftmost
+			if anchor1.x < anchor2.x:
+				target_anchor = anchor1
+				source_anchor = anchor2
 			else:
-				# TRUE DIAGONAL FOLD - use same negative-avoidance algorithm as execute_diagonal_fold
-				var shift_if_anchor1_target = anchor1 - anchor2
-				var shift_if_anchor2_target = anchor2 - anchor1
+				target_anchor = anchor2
+				source_anchor = anchor1
+		elif is_vertical:
+			# Vertical: target is topmost
+			if anchor1.y < anchor2.y:
+				target_anchor = anchor1
+				source_anchor = anchor2
+			else:
+				target_anchor = anchor2
+				source_anchor = anchor1
+		else:
+			# TRUE DIAGONAL FOLD - use same negative-avoidance algorithm as execute_diagonal_fold
+			var shift_if_anchor1_target = anchor1 - anchor2
+			var shift_if_anchor2_target = anchor2 - anchor1
 
-				# Get grid bounds from saved state
-				var min_existing_x = 0
-				var max_existing_x = grid_manager.grid_size.x - 1
-				var min_existing_y = 0
-				var max_existing_y = grid_manager.grid_size.y - 1
+			# Get grid bounds from saved state
+			var min_existing_x = 0
+			var max_existing_x = grid_manager.grid_size.x - 1
+			var min_existing_y = 0
+			var max_existing_y = grid_manager.grid_size.y - 1
 
-				for pos_str in target_fold["cells_state"].keys():
-					var pos = str_to_var(pos_str)
-					min_existing_x = min(min_existing_x, pos.x)
-					max_existing_x = max(max_existing_x, pos.x)
-					min_existing_y = min(min_existing_y, pos.y)
-					max_existing_y = max(max_existing_y, pos.y)
+			for pos_str in target_fold["cells_state"].keys():
+				var pos = str_to_var(pos_str)
+				min_existing_x = min(min_existing_x, pos.x)
+				max_existing_x = max(max_existing_x, pos.x)
+				min_existing_y = min(min_existing_y, pos.y)
+				max_existing_y = max(max_existing_y, pos.y)
 
-				# Calculate if each option creates negative coordinates
-				var min_x_option1 = min_existing_x + shift_if_anchor1_target.x
-				var min_y_option1 = min_existing_y + shift_if_anchor1_target.y
-				var creates_negative_option1 = (min_x_option1 < 0) or (min_y_option1 < 0)
+			# Calculate if each option creates negative coordinates
+			var min_x_option1 = min_existing_x + shift_if_anchor1_target.x
+			var min_y_option1 = min_existing_y + shift_if_anchor1_target.y
+			var creates_negative_option1 = (min_x_option1 < 0) or (min_y_option1 < 0)
 
-				var min_x_option2 = min_existing_x + shift_if_anchor2_target.x
-				var min_y_option2 = min_existing_y + shift_if_anchor2_target.y
-				var creates_negative_option2 = (min_x_option2 < 0) or (min_y_option2 < 0)
+			var min_x_option2 = min_existing_x + shift_if_anchor2_target.x
+			var min_y_option2 = min_existing_y + shift_if_anchor2_target.y
+			var creates_negative_option2 = (min_x_option2 < 0) or (min_y_option2 < 0)
 
-				var max_x_option1 = max_existing_x + shift_if_anchor1_target.x
-				var max_y_option1 = max_existing_y + shift_if_anchor1_target.y
-				var max_x_option2 = max_existing_x + shift_if_anchor2_target.x
-				var max_y_option2 = max_existing_y + shift_if_anchor2_target.y
+			var max_x_option1 = max_existing_x + shift_if_anchor1_target.x
+			var max_y_option1 = max_existing_y + shift_if_anchor1_target.y
+			var max_x_option2 = max_existing_x + shift_if_anchor2_target.x
+			var max_y_option2 = max_existing_y + shift_if_anchor2_target.y
 
-				# Choose same anchor as during fold
-				if not creates_negative_option1 and creates_negative_option2:
+			# Choose same anchor as during fold
+			if not creates_negative_option1 and creates_negative_option2:
+				target_anchor = anchor1
+				source_anchor = anchor2
+			elif not creates_negative_option2 and creates_negative_option1:
+				target_anchor = anchor2
+				source_anchor = anchor1
+			else:
+				# Both create negatives OR both avoid negatives
+				var badness1 = 0
+				if min_x_option1 < 0:
+					badness1 += abs(min_x_option1)
+				if min_y_option1 < 0:
+					badness1 += abs(min_y_option1)
+
+				var badness2 = 0
+				if min_x_option2 < 0:
+					badness2 += abs(min_x_option2)
+				if min_y_option2 < 0:
+					badness2 += abs(min_y_option2)
+
+				if badness1 < badness2:
 					target_anchor = anchor1
 					source_anchor = anchor2
-				elif not creates_negative_option2 and creates_negative_option1:
+				elif badness2 < badness1:
 					target_anchor = anchor2
 					source_anchor = anchor1
 				else:
-					# Both create negatives OR both avoid negatives
-					var badness1 = 0
-					if min_x_option1 < 0:
-						badness1 += abs(min_x_option1)
-					if min_y_option1 < 0:
-						badness1 += abs(min_y_option1)
-
-					var badness2 = 0
-					if min_x_option2 < 0:
-						badness2 += abs(min_x_option2)
-					if min_y_option2 < 0:
-						badness2 += abs(min_y_option2)
-
-					if badness1 < badness2:
+					# Equal badness - prefer positive expansion
+					var expansion1 = max(max_x_option1, max_y_option1)
+					var expansion2 = max(max_x_option2, max_y_option2)
+					if expansion1 <= expansion2:
 						target_anchor = anchor1
 						source_anchor = anchor2
-					elif badness2 < badness1:
+					else:
 						target_anchor = anchor2
 						source_anchor = anchor1
-					else:
-						# Equal badness - prefer positive expansion
-						var expansion1 = max(max_x_option1, max_y_option1)
-						var expansion2 = max(max_x_option2, max_y_option2)
-						if expansion1 <= expansion2:
-							target_anchor = anchor1
-							source_anchor = anchor2
-						else:
-							target_anchor = anchor2
-							source_anchor = anchor1
 
-			# Reverse the shift: original = current - shift_vector
-			var shift_vector = target_anchor - source_anchor
+		# Calculate shift vector that was used during fold
+		var shift_vector = target_anchor - source_anchor
+
+		# Use saved shifted_positions to determine if player is on a shifted cell
+		# shifted_positions contains the positions BEFORE they shifted
+		# After shift, those cells are at: shifted_positions + shift_vector
+		var shifted_positions = target_fold.get("shifted_positions", [])
+
+		# Calculate where shifted cells ended up after the fold
+		var shifted_to_positions: Array[Vector2i] = []
+		for pos in shifted_positions:
+			shifted_to_positions.append(pos + Vector2i(shift_vector))
+
+		# If player is at one of the shifted-to positions, they should shift back
+		if current_player_pos in shifted_to_positions:
+			# Player is on a shifted cell - move them back
 			original_player_pos = current_player_pos - Vector2i(shift_vector)
-			player_was_on_shifted_cell = true
 
 		# Update player position
 		var final_pos = original_player_pos
@@ -1894,6 +1899,7 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		"anchor1": anchor1,
 		"anchor2": anchor2,
 		"removed_cells": removed_positions.duplicate(),
+		"shifted_positions": shifting_positions.duplicate(),  # Positions that shifted (BEFORE shift)
 		"orientation": orientation,
 		"timestamp": Time.get_ticks_msec(),
 		"cells_state": pre_fold_grid_state,  # Use pre-saved state
