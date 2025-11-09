@@ -139,6 +139,7 @@ func setup_gui() -> void:
 		var par_folds = GameManager.current_level_data.par_folds if GameManager.current_level_data else -1
 		hud.set_level_info(level_name, par_folds)
 		hud.set_fold_count(GameManager.fold_count)
+		hud.set_can_undo(false)  # Initialize undo button as disabled
 		hud.pause_requested.connect(_on_pause_requested)
 		hud.restart_requested.connect(_on_restart_requested)
 		hud.undo_requested.connect(_on_undo_requested)
@@ -223,6 +224,7 @@ func _on_undo_requested() -> void:
 				# Update HUD
 				if hud:
 					hud.set_fold_count(GameManager.fold_count)
+					hud.set_can_undo(action_history.can_undo())
 				print("Undo successful! Folds: %d" % GameManager.fold_count)
 			else:
 				# Undo failed, push action back
@@ -232,9 +234,15 @@ func _on_undo_requested() -> void:
 		"move":
 			# Future: Handle player movement undo
 			print("Move undo not yet implemented")
+			# Update undo button state
+			if hud:
+				hud.set_can_undo(action_history.can_undo())
 
 		_:
 			print("Unknown action type: %s" % action["action_type"])
+			# Update undo button state anyway
+			if hud:
+				hud.set_can_undo(action_history.can_undo())
 
 
 ## Handle main menu request
@@ -274,11 +282,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_level_complete:
 		return
 
-	# PHASE 6: Handle mouse clicks on seams for undo
+	# PHASE 6: Handle mouse clicks on seams for unfold
 	if event is InputEventMouseButton:
 		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			handle_mouse_click(event.position)
 			return
+
+	# PHASE 6: Handle keyboard undo (U key)
+	if event.is_action_pressed("ui_undo"):
+		_on_undo_requested()
+		return
 
 	# Execute fold when ENTER/SPACE is pressed
 	if event.is_action_pressed("ui_accept"):
@@ -305,23 +318,24 @@ func handle_mouse_click(mouse_position: Vector2) -> void:
 	var can_undo = click_result["can_undo"]
 
 	if can_undo:
-		# Undo this fold
-		var success = fold_system.undo_fold_by_id(fold_id)
+		# UNFOLD this seam (geometric reversal without state restoration)
+		var success = fold_system.unfold_seam(fold_id)
 		if success:
 			# PHASE 6 TASK 7: Remove this fold action from ActionHistory
-			# Seam-based undo can undo non-sequential folds, so search and remove
+			# Seam-based unfold can unfold non-sequential folds, so search and remove
 			if action_history:
 				remove_fold_action_from_history(fold_id)
 
 			# Update HUD
 			if hud:
 				hud.set_fold_count(GameManager.fold_count)
-			print("Seam-based undo successful! Fold %d undone. Total folds: %d" % [fold_id, GameManager.fold_count])
+				hud.set_can_undo(action_history.can_undo())
+			print("Seam unfold successful! Fold %d unfolded. Total folds: %d" % [fold_id, GameManager.fold_count])
 		else:
-			print("Unexpected: Undo failed for fold %d" % fold_id)
+			print("Cannot unfold fold %d - player may be standing on seam" % fold_id)
 	else:
 		# Seam is blocked
-		print("Cannot undo fold %d - it's blocked by newer intersecting folds" % fold_id)
+		print("Cannot unfold fold %d - it's blocked by newer intersecting folds" % fold_id)
 
 
 ## Execute fold with selected anchors
@@ -363,6 +377,9 @@ func execute_fold() -> void:
 					"action_type": "fold",
 					"fold_id": newest_fold_id
 				})
+				# Update undo button state
+				if hud:
+					hud.set_can_undo(action_history.can_undo())
 
 		print("Fold executed successfully! Total folds: %d" % GameManager.fold_count)
 	else:

@@ -932,6 +932,39 @@ func can_undo_fold_seam_based(fold_id: int) -> Dictionary:
 	}
 
 
+## Check if player would block unfold operation
+##
+## Player blocks unfold only if they're at a position that will be restored
+## from the removed cells (positions that were deleted during the fold).
+## Player does NOT block if they're on a shifted cell - they'll just move with it.
+##
+## @param fold_id: The ID of the fold to check
+## @return: true if player would block the unfold
+func is_player_on_seam(fold_id: int) -> bool:
+	if not player:
+		return false
+
+	var player_pos = player.grid_position
+
+	# Find the fold record
+	var target_fold = null
+	for record in fold_history:
+		if record["fold_id"] == fold_id:
+			target_fold = record
+			break
+
+	if target_fold == null:
+		return false
+
+	# Check if player is at a position that was removed during the fold
+	# These positions will be restored during unfold, which would conflict with player
+	var removed_positions = target_fold.get("removed_cells", [])
+	if player_pos in removed_positions:
+		return true
+
+	return false
+
+
 ## PHASE 6 TASK 4: Mouse Input for Seam Clicking
 ##
 ## Detects if a mouse click (in LOCAL coordinates) is on a seam's clickable zone.
@@ -1156,6 +1189,296 @@ func undo_fold_by_id(fold_id: int) -> bool:
 	# 8. Play undo sound effect (if available)
 	if AudioManager:
 		AudioManager.play_sfx("undo")
+
+	return true
+
+
+## UNFOLD SEAM (geometric reversal without player state restoration)
+##
+## Unfolds a seam by fully reversing the geometric fold operation, just like
+## undo does for the grid, but WITHOUT restoring the player's saved position.
+## This behaves like unfolding paper:
+## - Full geometric reversal (shifts reversed, cells reintroduced, merges undone)
+## - Player position is NOT restored from fold record
+## - Player only moves if they're on a cell that shifts during unfold
+##
+## @param fold_id: The ID of the fold to unfold
+## @return: true if unfold succeeded, false if validation failed or fold not found
+func unfold_seam(fold_id: int) -> bool:
+	if not grid_manager:
+		push_error("FoldSystem: GridManager not initialized")
+		return false
+
+	# Check if player is standing on the seam
+	if is_player_on_seam(fold_id):
+		push_warning("FoldSystem: Cannot unfold - player is standing on the seam")
+		return false
+
+	# Find the fold record
+	var target_fold = null
+	var fold_index = -1
+	for i in range(fold_history.size()):
+		if fold_history[i]["fold_id"] == fold_id:
+			target_fold = fold_history[i]
+			fold_index = i
+			break
+
+	if target_fold == null:
+		push_warning("FoldSystem: Fold ID %d not found in history" % fold_id)
+		return false
+
+	# Validate that this fold can be undone (check seam intersections)
+	var validation = can_undo_fold_seam_based(fold_id)
+	if not validation["valid"]:
+		push_warning("FoldSystem: Cannot unfold fold %d: %s" % [fold_id, validation["reason"]])
+		return false
+
+	# Save current player position (we DON'T want to restore the saved position from fold record)
+	var current_player_pos = player.grid_position if player else Vector2i(-1, -1)
+
+	# 1. Remove seam visuals for this fold
+	remove_seams_for_fold(fold_id)
+
+	# 2. Restore grid state from fold record (FULL geometric reversal, same as undo)
+	# CRITICAL: Free all existing cells first to prevent memory leaks
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[pos]
+		if cell and is_instance_valid(cell):
+			if cell.get_parent():
+				cell.get_parent().remove_child(cell)
+			cell.queue_free()
+
+	grid_manager.cells.clear()
+
+	# 3. Deserialize and recreate cells from saved state
+	var cells_state = target_fold["cells_state"]
+	var cell_size = grid_manager.cell_size
+
+	for pos_str in cells_state.keys():
+		var cell_data = cells_state[pos_str]
+
+		# Parse grid position from string
+		var pos = str_to_var(pos_str) as Vector2i
+
+		# Calculate local position for this cell
+		var local_pos = Vector2(pos) * cell_size
+
+		# Create new Cell node with required constructor arguments
+		var cell = Cell.new(pos, local_pos, cell_size)
+
+		# Restore all geometry pieces if available
+		if cell_data.has("geometry_pieces") and not cell_data["geometry_pieces"].is_empty():
+			# New format: Restore all pieces
+			cell.geometry_pieces.clear()  # Clear the default piece
+
+			for piece_data in cell_data["geometry_pieces"]:
+				# Restore piece geometry
+				var piece_geometry = PackedVector2Array()
+				for point_dict in piece_data["geometry"]:
+					piece_geometry.append(Vector2(point_dict["x"], point_dict["y"]))
+
+				# Create CellPiece
+				var piece = CellPiece.new(piece_geometry, piece_data["cell_type"], piece_data["source_fold_id"])
+
+				# Restore piece seams
+				for seam_data in piece_data.get("seams", []):
+					# Deserialize intersection points
+					var intersection_points = PackedVector2Array()
+					for point_dict in seam_data["intersection_points"]:
+						intersection_points.append(Vector2(point_dict["x"], point_dict["y"]))
+
+					# Create Seam object
+					var seam = Seam.new(
+						Vector2(seam_data["line_point"]["x"], seam_data["line_point"]["y"]),
+						Vector2(seam_data["line_normal"]["x"], seam_data["line_normal"]["y"]),
+						intersection_points,
+						seam_data["fold_id"],
+						seam_data["timestamp"],
+						seam_data["fold_type"]
+					)
+					piece.add_seam(seam)
+
+				cell.geometry_pieces.append(piece)
+
+			# Update dominant type
+			cell.cell_type = cell.get_dominant_type()
+			cell.is_partial = cell_data.get("is_partial", false)
+
+		else:
+			# Legacy format: Single geometry piece
+			var geometry_array = cell_data.get("geometry", [])
+			var geometry_points = PackedVector2Array()
+			for point_dict in geometry_array:
+				geometry_points.append(Vector2(point_dict["x"], point_dict["y"]))
+			cell.geometry = geometry_points
+
+			cell.cell_type = cell_data.get("cell_type", 0)
+			cell.is_partial = cell_data.get("is_partial", false)
+			cell.seams = cell_data.get("seams", [])
+
+		# Add cell to grid
+		grid_manager.add_child(cell)
+		grid_manager.cells[pos] = cell
+
+		# Update cell visual
+		cell.update_visual()
+
+	# 4. UNFOLD DIFFERENCE: Player moves WITH their cell (if on shifted cell)
+	# Determine if player is standing on a cell that shifted during the fold
+	if player:
+		var original_player_pos = current_player_pos
+
+		# First, calculate shift vector using EXACT same logic as fold execution
+		var anchor1 = target_fold["anchor1"]
+		var anchor2 = target_fold["anchor2"]
+		var target_anchor: Vector2i
+		var source_anchor: Vector2i
+
+		# Determine target/source using same logic as fold
+		var is_horizontal = anchor1.y == anchor2.y
+		var is_vertical = anchor1.x == anchor2.x
+
+		if is_horizontal:
+			# Horizontal: target is leftmost
+			if anchor1.x < anchor2.x:
+				target_anchor = anchor1
+				source_anchor = anchor2
+			else:
+				target_anchor = anchor2
+				source_anchor = anchor1
+		elif is_vertical:
+			# Vertical: target is topmost
+			if anchor1.y < anchor2.y:
+				target_anchor = anchor1
+				source_anchor = anchor2
+			else:
+				target_anchor = anchor2
+				source_anchor = anchor1
+		else:
+			# TRUE DIAGONAL FOLD - use same negative-avoidance algorithm as execute_diagonal_fold
+			var shift_if_anchor1_target = anchor1 - anchor2
+			var shift_if_anchor2_target = anchor2 - anchor1
+
+			# Get grid bounds from saved state
+			var min_existing_x = 0
+			var max_existing_x = grid_manager.grid_size.x - 1
+			var min_existing_y = 0
+			var max_existing_y = grid_manager.grid_size.y - 1
+
+			for pos_str in target_fold["cells_state"].keys():
+				var pos = str_to_var(pos_str)
+				min_existing_x = min(min_existing_x, pos.x)
+				max_existing_x = max(max_existing_x, pos.x)
+				min_existing_y = min(min_existing_y, pos.y)
+				max_existing_y = max(max_existing_y, pos.y)
+
+			# Calculate if each option creates negative coordinates
+			var min_x_option1 = min_existing_x + shift_if_anchor1_target.x
+			var min_y_option1 = min_existing_y + shift_if_anchor1_target.y
+			var creates_negative_option1 = (min_x_option1 < 0) or (min_y_option1 < 0)
+
+			var min_x_option2 = min_existing_x + shift_if_anchor2_target.x
+			var min_y_option2 = min_existing_y + shift_if_anchor2_target.y
+			var creates_negative_option2 = (min_x_option2 < 0) or (min_y_option2 < 0)
+
+			var max_x_option1 = max_existing_x + shift_if_anchor1_target.x
+			var max_y_option1 = max_existing_y + shift_if_anchor1_target.y
+			var max_x_option2 = max_existing_x + shift_if_anchor2_target.x
+			var max_y_option2 = max_existing_y + shift_if_anchor2_target.y
+
+			# Choose same anchor as during fold
+			if not creates_negative_option1 and creates_negative_option2:
+				target_anchor = anchor1
+				source_anchor = anchor2
+			elif not creates_negative_option2 and creates_negative_option1:
+				target_anchor = anchor2
+				source_anchor = anchor1
+			else:
+				# Both create negatives OR both avoid negatives
+				var badness1 = 0
+				if min_x_option1 < 0:
+					badness1 += abs(min_x_option1)
+				if min_y_option1 < 0:
+					badness1 += abs(min_y_option1)
+
+				var badness2 = 0
+				if min_x_option2 < 0:
+					badness2 += abs(min_x_option2)
+				if min_y_option2 < 0:
+					badness2 += abs(min_y_option2)
+
+				if badness1 < badness2:
+					target_anchor = anchor1
+					source_anchor = anchor2
+				elif badness2 < badness1:
+					target_anchor = anchor2
+					source_anchor = anchor1
+				else:
+					# Equal badness - prefer positive expansion
+					var expansion1 = max(max_x_option1, max_y_option1)
+					var expansion2 = max(max_x_option2, max_y_option2)
+					if expansion1 <= expansion2:
+						target_anchor = anchor1
+						source_anchor = anchor2
+					else:
+						target_anchor = anchor2
+						source_anchor = anchor1
+
+		# Calculate shift vector that was used during fold
+		var shift_vector = target_anchor - source_anchor
+
+		# Use saved shifted_positions to determine if player is on a shifted cell
+		# shifted_positions contains the positions BEFORE they shifted
+		# After shift, those cells are at: shifted_positions + shift_vector
+		var shifted_positions = target_fold.get("shifted_positions", [])
+
+		# Calculate where shifted cells ended up after the fold
+		var shifted_to_positions: Array[Vector2i] = []
+		for pos in shifted_positions:
+			shifted_to_positions.append(pos + Vector2i(shift_vector))
+
+		# If player is at one of the shifted-to positions, they should shift back
+		if current_player_pos in shifted_to_positions:
+			# Player is on a shifted cell - move them back
+			original_player_pos = current_player_pos - Vector2i(shift_vector)
+
+		# Update player position
+		var final_pos = original_player_pos
+		var cell_at_final_pos = grid_manager.get_cell(final_pos)
+
+		if cell_at_final_pos:
+			# Move player to final position
+			player.grid_position = final_pos
+			player.global_position = grid_manager.to_global(cell_at_final_pos.get_center())
+		else:
+			# Fallback: find nearest valid cell
+			var nearest_pos = Vector2i(-1, -1)
+			var min_distance = 99999.0
+			for pos in grid_manager.cells.keys():
+				var dist = Vector2(pos - final_pos).length()
+				if dist < min_distance:
+					min_distance = dist
+					nearest_pos = pos
+
+			if nearest_pos != Vector2i(-1, -1):
+				player.grid_position = nearest_pos
+				var cell = grid_manager.get_cell(nearest_pos)
+				if cell:
+					player.global_position = grid_manager.to_global(cell.get_center())
+
+	# 5. Remove fold from history
+	fold_history.remove_at(fold_index)
+
+	# 6. Update GameManager fold count if it exists
+	if GameManager:
+		GameManager.fold_count -= 1
+
+	# 7. Update seam visual states
+	update_seam_visual_states()
+
+	# 8. Play unfold sound effect (if available)
+	if AudioManager:
+		AudioManager.play_sfx("unfold")
 
 	return true
 
@@ -1576,6 +1899,7 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		"anchor1": anchor1,
 		"anchor2": anchor2,
 		"removed_cells": removed_positions.duplicate(),
+		"shifted_positions": shifting_positions.duplicate(),  # Positions that shifted (BEFORE shift)
 		"orientation": orientation,
 		"timestamp": Time.get_ticks_msec(),
 		"cells_state": pre_fold_grid_state,  # Use pre-saved state
