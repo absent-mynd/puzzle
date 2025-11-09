@@ -40,7 +40,7 @@ jobs:
           cd ~/.local/share/godot/export_templates/4.3.stable
 
           echo "Downloading web_nothreads_debug template..."
-          curl -L --show-progress -f -o web_nothreads_debug.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_debug.zip
+          curl -L -f -o web_nothreads_debug.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_debug.zip
 
           if [ ! -f "web_nothreads_debug.zip" ] || [ ! -s "web_nothreads_debug.zip" ]; then
             echo "ERROR: Failed to download debug template"
@@ -51,7 +51,7 @@ jobs:
           unzip -t web_nothreads_debug.zip > /dev/null || { echo "ERROR: Debug template is corrupted"; exit 1; }
 
           echo "Downloading web_nothreads_release template..."
-          curl -L --show-progress -f -o web_nothreads_release.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_release.zip
+          curl -L -f -o web_nothreads_release.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_web_nothreads_release.zip
 
           if [ ! -f "web_nothreads_release.zip" ] || [ ! -s "web_nothreads_release.zip" ]; then
             echo "ERROR: Failed to download release template"
