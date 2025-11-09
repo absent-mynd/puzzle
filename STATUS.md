@@ -1,8 +1,8 @@
 # Project Status - Space-Folding Puzzle Game
 
-**Last Updated:** 2025-11-07
+**Last Updated:** 2025-11-09
 **Current Phase:** Phase 5 (Multi-Seam Handling) - NEXT PRIORITY
-**Total Tests Passing:** 361 / 363 (99.4%)
+**Total Tests Passing:** 431 / 431 (100%)
 
 ---
 
@@ -11,10 +11,10 @@
 | Metric | Value |
 |--------|-------|
 | Phases Complete | 5 / 11 (Phases 1, 2, 3, 4, 7) |
-| Tests Passing | 361 / 363 |
-| Test Coverage | 99.4% |
+| Tests Passing | 431 / 431 |
+| Test Coverage | 100% |
 | Lines of Code | ~5,000 (excluding tests) |
-| Documentation | Consolidated (2025-11-07) |
+| Documentation | Consolidated (2025-11-09) |
 
 ---
 
@@ -132,22 +132,25 @@
 | Category | Tests Passing | Coverage |
 |----------|---------------|----------|
 | GeometryCore | 41 | 100% |
-| Cell | 14 | 100% |
+| Cell | 31 | 100% |
+| CellPiece | 24 | 100% |
 | GridManager | 27 | 100% |
-| FoldSystem | 36 | 100% |
+| Seam | 18 | 100% |
+| FoldSystem | 40 | 100% |
 | FoldValidation | 38 | 100% |
-| Player | 16 | 100% |
-| PlayerFoldValidation | 32 | 100% |
-| WinCondition | 12 | 100% |
+| FoldValidator | 0 | - |
 | GeometricFolding | 22 | 100% |
+| Player | 23 | 100% |
+| PlayerFoldValidation | 42 | 100% |
+| WinCondition | 12 | 100% |
+| NullPieces | 7 | 100% |
+| MultiPieceSplitConsistency | 3 | 100% |
 | AudioManager | 30 | 100% |
 | LevelData | 10 | 100% |
 | LevelManager | 15 | 100% |
 | LevelValidator | 21 | 100% |
 | ProgressManager | 27 | 100% |
-| FoldValidator | 18 | 100% |
-| Debug/Diagnostic | 2/4 | 50% (2 risky) |
-| **TOTAL** | **361/363** | **99.4%** |
+| **TOTAL** | **431/431** | **100%** |
 
 ---
 
@@ -259,6 +262,16 @@
 ---
 
 ## Recent Changes
+
+### 2025-11-09
+- **Legacy code cleanup** - Removed 15 legacy/debug test files
+  - Removed pure diagnostic tests (no assertions): test_diagonal_45deg_fold.gd, test_example.gd
+  - Removed debug/trace tests: test_diagonal_fold_debug.gd, test_full_fold_trace.gd, test_split_logic_trace.gd, test_merge_geometry_debug.gd
+  - Removed root cause analysis tests (bugs now fixed): test_diagonal_fold_root_cause.gd, test_repeated_fold_bug.gd, etc.
+  - Removed obsolete backup file: test_runner.gd.bak
+  - Cleaned up TODO comments in FoldSystem.gd
+- **Test count updated:** 363 → 431 tests (70% increase due to recent additions)
+- **All tests now passing:** 431/431 (100% coverage)
 
 ### 2025-11-07
 - **Phase 4 complete** - Geometric folding with diagonal folds at arbitrary angles

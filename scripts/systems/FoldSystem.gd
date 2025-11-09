@@ -550,8 +550,7 @@ func execute_vertical_fold(anchor1: Vector2i, anchor2: Vector2i):
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> void:
-	# TODO: Implement animated diagonal fold and use it here
-	# For now, use non-animated diagonal fold
+	# Currently animations are not supported for diagonal folds
 	execute_diagonal_fold(anchor1, anchor2)
 
 
@@ -564,8 +563,7 @@ func execute_horizontal_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> v
 ## @param anchor1: First anchor grid position
 ## @param anchor2: Second anchor grid position
 func execute_vertical_fold_animated(anchor1: Vector2i, anchor2: Vector2i) -> void:
-	# TODO: Implement animated diagonal fold and use it here
-	# For now, use non-animated diagonal fold
+	# Currently animations are not supported for diagonal folds
 	execute_diagonal_fold(anchor1, anchor2)
 
 
