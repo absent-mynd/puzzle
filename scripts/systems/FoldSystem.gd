@@ -748,6 +748,175 @@ func clear_all_seams() -> void:
 	seam_to_fold_map.clear()
 
 
+## Remove all seams matching fold_id from all cells in the grid
+##
+## This is used during independent unfold to remove the target fold's seams
+## while preserving seams from other folds.
+##
+## @param fold_id: The ID of the fold whose seams should be removed
+func remove_seam_from_all_cells(fold_id: int) -> void:
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[pos]
+		if not cell or not is_instance_valid(cell):
+			continue
+
+		# Remove seam from each piece in the cell
+		for piece in cell.geometry_pieces:
+			var remaining_seams: Array[Seam] = []
+			for seam in piece.seams:
+				if seam.fold_id != fold_id:
+					remaining_seams.append(seam)
+			piece.seams = remaining_seams
+
+
+## Restore a cell to a simple square geometry
+##
+## Used when all seams have been removed from a cell during unfold.
+## Replaces all pieces with a single square piece.
+##
+## @param cell: The cell to restore
+## @param grid_pos: Grid position of the cell
+func restore_cell_to_square(cell: Cell, grid_pos: Vector2i) -> void:
+	var cell_size = grid_manager.cell_size
+	var local_pos = Vector2(grid_pos) * cell_size
+
+	# Create square geometry (LOCAL coordinates)
+	var square_geometry = PackedVector2Array([
+		local_pos,                          # Top-left
+		local_pos + Vector2(cell_size, 0),  # Top-right
+		local_pos + Vector2(cell_size, cell_size),  # Bottom-right
+		local_pos + Vector2(0, cell_size)   # Bottom-left
+	])
+
+	# Get the dominant cell type (before replacing pieces)
+	var dominant_type = cell.get_dominant_type()
+
+	# Replace all pieces with a single square piece
+	cell.geometry_pieces.clear()
+	var square_piece = CellPiece.new(square_geometry, dominant_type, -1)
+	cell.geometry_pieces.append(square_piece)
+
+	# Mark cell as no longer partial
+	cell.is_partial = false
+
+	# Update visual
+	cell.update_visual()
+
+
+## Recalculate cell geometry after removing a seam (COMPLEX RECONSTRUCTION)
+##
+## When a seam is removed from a cell that has multiple seams, we need to
+## reconstruct the geometry to merge pieces that were separated only by
+## the removed seam, while preserving pieces separated by other seams.
+##
+## This uses retessellation: start with square, apply each remaining seam.
+## To preserve cell types, we query the original pieces to determine type
+## at each location.
+##
+## @param cell: The cell whose geometry needs recalculation
+## @param grid_pos: Grid position of the cell
+func merge_pieces_after_seam_removal(cell: Cell, grid_pos: Vector2i) -> void:
+	# Get all remaining unique seams across all pieces
+	var all_seams = cell.get_all_seams()
+
+	# If no seams left, restore to square
+	if all_seams.is_empty():
+		restore_cell_to_square(cell, grid_pos)
+		return
+
+	# Save original pieces for type lookup
+	var original_pieces = cell.geometry_pieces.duplicate()
+
+	var cell_size = grid_manager.cell_size
+	var local_pos = Vector2(grid_pos) * cell_size
+
+	# Start with full square geometry
+	var square_geometry = PackedVector2Array([
+		local_pos,
+		local_pos + Vector2(cell_size, 0),
+		local_pos + Vector2(cell_size, cell_size),
+		local_pos + Vector2(0, cell_size)
+	])
+
+	# Create initial piece collection with just the square
+	# We'll use a helper structure to track pieces and their seams
+	var piece_data = [{
+		"geometry": square_geometry,
+		"seams": [],  # No seams applied yet
+	}]
+
+	# Apply each seam sequentially to split the geometry
+	for seam in all_seams:
+		var new_piece_data = []
+
+		for piece_info in piece_data:
+			var geometry = piece_info["geometry"]
+			var piece_seams = piece_info["seams"]
+
+			# Split this piece by the seam line
+			var split_result = GeometryCore.split_polygon_by_line(
+				geometry,
+				seam.line_point,
+				seam.line_normal
+			)
+
+			# Create piece data for left side (if valid)
+			if split_result.left.size() >= 3:
+				var left_seams = piece_seams.duplicate()
+				left_seams.append(seam)
+				new_piece_data.append({
+					"geometry": split_result.left,
+					"seams": left_seams
+				})
+
+			# Create piece data for right side (if valid)
+			if split_result.right.size() >= 3:
+				var right_seams = piece_seams.duplicate()
+				right_seams.append(seam)
+				new_piece_data.append({
+					"geometry": split_result.right,
+					"seams": right_seams
+				})
+
+		piece_data = new_piece_data
+
+	# Now create CellPiece objects with correct types
+	# Determine type by checking which original piece contains each new piece's centroid
+	var new_pieces: Array[CellPiece] = []
+
+	for piece_info in piece_data:
+		var geometry = piece_info["geometry"]
+		var piece_seams = piece_info["seams"]
+
+		# Determine type by checking original pieces
+		var centroid = GeometryCore.polygon_centroid(geometry)
+		var piece_type = 0  # Default to empty
+
+		# Find which original piece contains this centroid
+		for original_piece in original_pieces:
+			if original_piece.contains_point(centroid):
+				piece_type = original_piece.cell_type
+				break
+
+		# Create the new piece
+		var new_piece = CellPiece.new(geometry, piece_type, -1)
+
+		# Add all seams to this piece
+		for seam in piece_seams:
+			new_piece.add_seam(seam)
+
+		new_pieces.append(new_piece)
+
+	# Replace cell's pieces
+	cell.geometry_pieces = new_pieces
+
+	# Update dominant type
+	cell.cell_type = cell.get_dominant_type()
+
+	# Update visual
+	cell.update_visual()
+
+
 ## ============================================================================
 ## PHASE 6: CLICKABLE ZONE CALCULATION (TASK 2)
 ## ============================================================================
@@ -848,14 +1017,16 @@ func add_seams_to_cells(cut_lines: Dictionary, fold_id: int) -> void:
 ## PHASE 6: SEAM INTERSECTION VALIDATION (TASK 3)
 ## ============================================================================
 
-## Check if a fold can be undone based on seam intersection rules
+## Check if a fold has newer seams that intersect with its seams
 ##
-## A fold can be undone iff no newer seams intersect with its seams.
-## This prevents undoing folds that have been "cut" by subsequent folds.
+## This validation is used for UNFOLD operations and visual feedback.
+## Returns false if newer folds have cut through this fold's seams.
 ##
-## @param fold_id: The ID of the fold to check for undo
+## Note: This validation is NOT used for UNDO (which does full state restore).
+##
+## @param fold_id: The ID of the fold to check
 ## @return: Dictionary with {valid: bool, reason: String, blocking_seams: Array[Seam]}
-func can_undo_fold_seam_based(fold_id: int) -> Dictionary:
+func has_newer_seam_intersections(fold_id: int) -> Dictionary:
 	# Find the fold record
 	var target_fold = null
 	for record in fold_history:
@@ -1008,8 +1179,8 @@ func detect_seam_click(click_pos_local: Vector2):
 				if fold_id > best_fold_id:
 					best_fold_id = fold_id
 
-					# Check if this seam can be undone
-					var validation = can_undo_fold_seam_based(fold_id)
+					# Check if this seam can be unfolded
+					var validation = has_newer_seam_intersections(fold_id)
 
 					best_match = {
 						"fold_id": fold_id,
@@ -1038,8 +1209,8 @@ func update_seam_visual_states() -> void:
 		if fold_id < 0:
 			continue
 
-		# Check if this seam can be undone
-		var validation = can_undo_fold_seam_based(fold_id)
+		# Check if this seam can be unfolded
+		var validation = has_newer_seam_intersections(fold_id)
 
 		if validation["valid"]:
 			# Undoable: Green
@@ -1052,10 +1223,10 @@ func update_seam_visual_states() -> void:
 ## PHASE 6 TASK 5: Undo Execution
 ##
 ## Undoes a fold by restoring grid state from the fold record.
-## Only allows undo if the fold passes seam intersection validation.
+## UNDO performs full state restoration and does not require validation.
 ##
 ## @param fold_id: The ID of the fold to undo
-## @return: true if undo succeeded, false if validation failed or fold not found
+## @return: true if undo succeeded, false if fold not found
 func undo_fold_by_id(fold_id: int) -> bool:
 	if not grid_manager:
 		push_error("FoldSystem: GridManager not initialized")
@@ -1074,11 +1245,7 @@ func undo_fold_by_id(fold_id: int) -> bool:
 		push_warning("FoldSystem: Fold ID %d not found in history" % fold_id)
 		return false
 
-	# Validate that this fold can be undone (check seam intersections)
-	var validation = can_undo_fold_seam_based(fold_id)
-	if not validation["valid"]:
-		push_warning("FoldSystem: Cannot undo fold %d: %s" % [fold_id, validation["reason"]])
-		return false
+	# UNDO does not need validation - it's a full state restore
 
 	# 1. Remove seam visuals for this fold
 	remove_seams_for_fold(fold_id)
@@ -1227,8 +1394,8 @@ func unfold_seam(fold_id: int) -> bool:
 		push_warning("FoldSystem: Fold ID %d not found in history" % fold_id)
 		return false
 
-	# Validate that this fold can be undone (check seam intersections)
-	var validation = can_undo_fold_seam_based(fold_id)
+	# Validate that this fold can be unfolded (check seam intersections)
+	var validation = has_newer_seam_intersections(fold_id)
 	if not validation["valid"]:
 		push_warning("FoldSystem: Cannot unfold fold %d: %s" % [fold_id, validation["reason"]])
 		return false
