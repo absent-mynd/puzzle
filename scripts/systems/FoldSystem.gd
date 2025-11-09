@@ -38,6 +38,10 @@ var shift_duration: float = 0.5  # Shift duration for moved cells
 ## Seam lines for visualization (Issue #9)
 var seam_lines: Array[Line2D] = []
 
+## Seam-to-fold mapping for undo system (Phase 6)
+## Maps Line2D instance IDs to fold IDs
+var seam_to_fold_map: Dictionary = {}
+
 
 ## Initialize the FoldSystem with a reference to GridManager
 ##
@@ -661,6 +665,502 @@ func clear_fold_history():
 
 
 ## ============================================================================
+## PHASE 6: SEAM-TO-FOLD MAPPING (TASK 1)
+## ============================================================================
+
+## Get the fold record for a given seam Line2D
+##
+## @param seam_line: The Line2D seam to look up
+## @return: Dictionary containing fold record, or null if not found
+func get_fold_for_seam(seam_line: Line2D) -> Dictionary:
+	if not seam_line:
+		return {}
+
+	var seam_id = seam_line.get_instance_id()
+	var fold_id = seam_to_fold_map.get(seam_id)
+
+	if fold_id == null:
+		return {}
+
+	# Find fold record with matching ID
+	for record in fold_history:
+		if record["fold_id"] == fold_id:
+			return record
+
+	return {}
+
+
+## Remove a seam from the mapping
+##
+## @param seam_line: The Line2D seam to remove from map
+func remove_seam_from_map(seam_line: Line2D) -> void:
+	if not seam_line:
+		return
+
+	var seam_id = seam_line.get_instance_id()
+	seam_to_fold_map.erase(seam_id)
+
+
+## Remove all seams for a specific fold from the mapping
+## UPDATED FOR PHASE 6 TASK 5: Also removes visual seam Line2D nodes
+##
+## @param fold_id: The fold ID whose seams should be removed
+func remove_seams_for_fold(fold_id: int) -> void:
+	# Find all seam Line2D nodes with this fold_id
+	var seam_lines_to_remove = []
+	for seam_line in seam_lines:
+		if seam_line and is_instance_valid(seam_line):
+			if seam_line.get_meta("fold_id", -1) == fold_id:
+				seam_lines_to_remove.append(seam_line)
+
+	# Remove each seam visual
+	for seam_line in seam_lines_to_remove:
+		# Remove from scene tree
+		if seam_line.get_parent():
+			seam_line.get_parent().remove_child(seam_line)
+
+		# Remove from seam_lines array
+		var index = seam_lines.find(seam_line)
+		if index >= 0:
+			seam_lines.remove_at(index)
+
+		# Remove from seam_to_fold_map
+		var seam_id = seam_line.get_instance_id()
+		seam_to_fold_map.erase(seam_id)
+
+		# Free the node
+		seam_line.queue_free()
+
+
+## Clear all seams (visuals and mapping)
+##
+## Removes all seam Line2D nodes and clears the seam-to-fold map
+func clear_all_seams() -> void:
+	# Remove all seam visuals from scene tree
+	for seam_line in seam_lines:
+		if seam_line and is_instance_valid(seam_line):
+			if seam_line.get_parent():
+				seam_line.get_parent().remove_child(seam_line)
+			seam_line.queue_free()
+
+	# Clear arrays and dictionaries
+	seam_lines.clear()
+	seam_to_fold_map.clear()
+
+
+## ============================================================================
+## PHASE 6: CLICKABLE ZONE CALCULATION (TASK 2)
+## ============================================================================
+
+## Calculate which grid cell centers a seam line passes through
+##
+## A seam is clickable at grid cells whose center is within tolerance distance
+## of the seam line. This creates spatial constraints for player interaction.
+##
+## @param line_point: A point on the seam line (LOCAL coordinates)
+## @param line_normal: Normal vector of the seam line (perpendicular to line)
+## @return: Array[Vector2i] of grid positions whose centers the seam passes through
+func calculate_clickable_zones(line_point: Vector2, line_normal: Vector2) -> Array[Vector2i]:
+	var zones: Array[Vector2i] = []
+
+	if not grid_manager:
+		return zones
+
+	var cell_size = grid_manager.cell_size
+	var tolerance = cell_size * 0.15  # Generous tolerance for debug/testing
+
+	# Iterate through all grid positions
+	for y in range(grid_manager.grid_size.y):
+		for x in range(grid_manager.grid_size.x):
+			# Calculate grid cell center in LOCAL coordinates
+			# Center = grid_pos * cell_size + (cell_size/2, cell_size/2)
+			var cell_center = Vector2(x, y) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+			# Calculate distance from cell center to seam line
+			# Distance from point P to line (point + t*normal) is: |(P - point) · normal|
+			var distance = abs((cell_center - line_point).dot(line_normal))
+
+			# If center is within tolerance of the line, it's a clickable zone
+			if distance <= tolerance:
+				zones.append(Vector2i(x, y))
+
+	return zones
+
+
+## Add Seam objects to cells affected by a diagonal fold
+##
+## Creates Seam objects for the fold lines and adds them to all cells
+## that the seam lines pass through. This enables intersection validation.
+##
+## @param cut_lines: Dictionary from calculate_cut_lines()
+## @param fold_id: ID of the fold creating these seams
+func add_seams_to_cells(cut_lines: Dictionary, fold_id: int) -> void:
+	var timestamp = Time.get_ticks_msec()
+
+	# Calculate seam endpoints spanning the entire grid
+	# This creates line segments that can be checked for intersection
+	var grid_span = grid_manager.grid_size.x * grid_manager.cell_size
+
+	# Line 1 endpoints
+	var line1_start = cut_lines.line1.point - cut_lines.line1.normal * grid_span
+	var line1_end = cut_lines.line1.point + cut_lines.line1.normal * grid_span
+	var line1_points = PackedVector2Array([line1_start, line1_end])
+
+	# Line 2 endpoints
+	var line2_start = cut_lines.line2.point - cut_lines.line2.normal * grid_span
+	var line2_end = cut_lines.line2.point + cut_lines.line2.normal * grid_span
+	var line2_points = PackedVector2Array([line2_start, line2_end])
+
+	# Create Seam objects for both cut lines
+	var seam1 = Seam.new(
+		cut_lines.line1.point,
+		cut_lines.line1.normal,
+		line1_points,
+		fold_id,
+		timestamp,
+		"diagonal"
+	)
+
+	var seam2 = Seam.new(
+		cut_lines.line2.point,
+		cut_lines.line2.normal,
+		line2_points,
+		fold_id,
+		timestamp,
+		"diagonal"
+	)
+
+	# Add seams to all cells (they'll be stored in the cells' pieces)
+	# NOTE: This adds seams to ALL cells for simplicity. Could be optimized
+	# to only add to cells the seam actually passes through.
+	for cell_pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[cell_pos]
+
+		# Add seams to the first non-null piece in each cell
+		for piece in cell.geometry_pieces:
+			if piece.cell_type != CellPiece.CELL_TYPE_NULL:
+				piece.add_seam(seam1.duplicate_seam())
+				piece.add_seam(seam2.duplicate_seam())
+				break  # Only add once per cell
+
+
+## ============================================================================
+## PHASE 6: SEAM INTERSECTION VALIDATION (TASK 3)
+## ============================================================================
+
+## Check if a fold can be undone based on seam intersection rules
+##
+## A fold can be undone iff no newer seams intersect with its seams.
+## This prevents undoing folds that have been "cut" by subsequent folds.
+##
+## @param fold_id: The ID of the fold to check for undo
+## @return: Dictionary with {valid: bool, reason: String, blocking_seams: Array[Seam]}
+func can_undo_fold_seam_based(fold_id: int) -> Dictionary:
+	# Find the fold record
+	var target_fold = null
+	for record in fold_history:
+		if record["fold_id"] == fold_id:
+			target_fold = record
+			break
+
+	if target_fold == null:
+		return {
+			"valid": false,
+			"reason": "Fold ID %d not found in history" % fold_id,
+			"blocking_seams": []
+		}
+
+	# Collect all seams from all current cells
+	var target_seams: Array[Seam] = []
+	var potential_blockers: Array[Seam] = []
+
+	for cell_pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[cell_pos]
+		var cell_seams = cell.get_all_seams()
+
+		for seam in cell_seams:
+			if seam.fold_id == fold_id:
+				# This is a seam from the target fold
+				target_seams.append(seam)
+			elif seam.timestamp > target_fold["timestamp"]:
+				# This is a newer seam that might block
+				potential_blockers.append(seam)
+
+	# If there are no seams from this fold, it can be undone (fold already removed or no seams left)
+	if target_seams.is_empty():
+		return {
+			"valid": true,
+			"reason": "",
+			"blocking_seams": []
+		}
+
+	# Check if any potential blocker intersects with any target seam
+	var blocking_seams: Array[Seam] = []
+	var seen_blockers = {}  # Track unique blockers by fold_id
+
+	for target_seam in target_seams:
+		for blocker in potential_blockers:
+			# Skip if we've already identified this fold as blocking
+			if seen_blockers.has(blocker.fold_id):
+				continue
+
+			# Check if they intersect
+			var intersection = target_seam.intersects_with(blocker)
+			if intersection != Vector2.INF:
+				# They intersect! This blocks the undo
+				blocking_seams.append(blocker)
+				seen_blockers[blocker.fold_id] = true
+
+	# If we found blocking seams, undo is not allowed
+	if not blocking_seams.is_empty():
+		var blocker_ids = []
+		for seam in blocking_seams:
+			if seam.fold_id not in blocker_ids:
+				blocker_ids.append(seam.fold_id)
+
+		return {
+			"valid": false,
+			"reason": "Blocked by newer intersecting fold(s): %s" % str(blocker_ids),
+			"blocking_seams": blocking_seams
+		}
+
+	# No blocking seams found, undo is allowed
+	return {
+		"valid": true,
+		"reason": "",
+		"blocking_seams": []
+	}
+
+
+## PHASE 6 TASK 4: Mouse Input for Seam Clicking
+##
+## Detects if a mouse click (in LOCAL coordinates) is on a seam's clickable zone.
+## Returns information about the clicked seam, or null if no seam was clicked.
+##
+## @param click_pos_local: Mouse click position in LOCAL coordinates (relative to GridManager)
+## @return: Dictionary with {fold_id, seam_line, can_undo} or null if no seam clicked
+func detect_seam_click(click_pos_local: Vector2):
+	if not grid_manager:
+		return null
+
+	var cell_size = grid_manager.cell_size
+	var zone_radius = cell_size * 0.25  # Click tolerance
+
+	# Track best match (highest fold_id if multiple seams overlap)
+	var best_match = null
+	var best_fold_id = -1
+
+	# Check all seam lines
+	for seam_line in seam_lines:
+		if not seam_line or not is_instance_valid(seam_line):
+			continue
+
+		# Get clickable zones for this seam
+		var zones = seam_line.get_meta("clickable_zones", [])
+		if zones.is_empty():
+			continue
+
+		# Check each clickable zone
+		for zone_grid_pos in zones:
+			# Calculate zone center in LOCAL coordinates
+			var zone_center = Vector2(zone_grid_pos) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+
+			# Check if click is within tolerance of zone center
+			var distance = click_pos_local.distance_to(zone_center)
+			if distance <= zone_radius:
+				# Clicked on this seam!
+				var fold_id = seam_line.get_meta("fold_id", -1)
+
+				# If this is the first match, or has higher fold_id, use it
+				if fold_id > best_fold_id:
+					best_fold_id = fold_id
+
+					# Check if this seam can be undone
+					var validation = can_undo_fold_seam_based(fold_id)
+
+					best_match = {
+						"fold_id": fold_id,
+						"seam_line": seam_line,
+						"can_undo": validation["valid"]
+					}
+
+				# No need to check other zones for this seam
+				break
+
+	return best_match
+
+
+## PHASE 6 TASK 6: Seam Visual State Updates
+##
+## Updates the visual appearance of all seam lines based on their undoable state.
+## Undoable seams are shown in green, blocked seams in red.
+## Should be called after executing or undoing a fold.
+func update_seam_visual_states() -> void:
+	# Update color for each seam based on whether it can be undone
+	for seam_line in seam_lines:
+		if not seam_line or not is_instance_valid(seam_line):
+			continue
+
+		var fold_id = seam_line.get_meta("fold_id", -1)
+		if fold_id < 0:
+			continue
+
+		# Check if this seam can be undone
+		var validation = can_undo_fold_seam_based(fold_id)
+
+		if validation["valid"]:
+			# Undoable: Green
+			seam_line.default_color = Color.GREEN
+		else:
+			# Blocked: Red
+			seam_line.default_color = Color.RED
+
+
+## PHASE 6 TASK 5: Undo Execution
+##
+## Undoes a fold by restoring grid state from the fold record.
+## Only allows undo if the fold passes seam intersection validation.
+##
+## @param fold_id: The ID of the fold to undo
+## @return: true if undo succeeded, false if validation failed or fold not found
+func undo_fold_by_id(fold_id: int) -> bool:
+	if not grid_manager:
+		push_error("FoldSystem: GridManager not initialized")
+		return false
+
+	# Find the fold record
+	var target_fold = null
+	var fold_index = -1
+	for i in range(fold_history.size()):
+		if fold_history[i]["fold_id"] == fold_id:
+			target_fold = fold_history[i]
+			fold_index = i
+			break
+
+	if target_fold == null:
+		push_warning("FoldSystem: Fold ID %d not found in history" % fold_id)
+		return false
+
+	# Validate that this fold can be undone (check seam intersections)
+	var validation = can_undo_fold_seam_based(fold_id)
+	if not validation["valid"]:
+		push_warning("FoldSystem: Cannot undo fold %d: %s" % [fold_id, validation["reason"]])
+		return false
+
+	# 1. Remove seam visuals for this fold
+	remove_seams_for_fold(fold_id)
+
+	# 2. Restore grid state from fold record
+	# CRITICAL: Free all existing cells first to prevent memory leaks
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[pos]
+		if cell and is_instance_valid(cell):
+			if cell.get_parent():
+				cell.get_parent().remove_child(cell)
+			cell.queue_free()
+
+	grid_manager.cells.clear()
+
+	# 3. Deserialize and recreate cells from saved state
+	var cells_state = target_fold["cells_state"]
+	var cell_size = grid_manager.cell_size
+
+	for pos_str in cells_state.keys():
+		var cell_data = cells_state[pos_str]
+
+		# Parse grid position from string
+		var pos = str_to_var(pos_str) as Vector2i
+
+		# Calculate local position for this cell
+		var local_pos = Vector2(pos) * cell_size
+
+		# Create new Cell node with required constructor arguments
+		var cell = Cell.new(pos, local_pos, cell_size)
+
+		# PHASE 6 BUG FIX: Restore all geometry pieces if available
+		if cell_data.has("geometry_pieces") and not cell_data["geometry_pieces"].is_empty():
+			# New format: Restore all pieces
+			cell.geometry_pieces.clear()  # Clear the default piece
+
+			for piece_data in cell_data["geometry_pieces"]:
+				# Restore piece geometry
+				var piece_geometry = PackedVector2Array()
+				for point_dict in piece_data["geometry"]:
+					piece_geometry.append(Vector2(point_dict["x"], point_dict["y"]))
+
+				# Create CellPiece
+				var piece = CellPiece.new(piece_geometry, piece_data["cell_type"], piece_data["source_fold_id"])
+
+				# Restore piece seams
+				for seam_data in piece_data.get("seams", []):
+					# Deserialize intersection points
+					var intersection_points = PackedVector2Array()
+					for point_dict in seam_data["intersection_points"]:
+						intersection_points.append(Vector2(point_dict["x"], point_dict["y"]))
+
+					# Create Seam object
+					var seam = Seam.new(
+						Vector2(seam_data["line_point"]["x"], seam_data["line_point"]["y"]),
+						Vector2(seam_data["line_normal"]["x"], seam_data["line_normal"]["y"]),
+						intersection_points,
+						seam_data["fold_id"],
+						seam_data["timestamp"],
+						seam_data["fold_type"]
+					)
+					piece.add_seam(seam)
+
+				cell.geometry_pieces.append(piece)
+
+			# Update dominant type
+			cell.cell_type = cell.get_dominant_type()
+			cell.is_partial = cell_data.get("is_partial", false)
+
+		else:
+			# Legacy format: Single geometry piece
+			var geometry_array = cell_data.get("geometry", [])
+			var geometry_points = PackedVector2Array()
+			for point_dict in geometry_array:
+				geometry_points.append(Vector2(point_dict["x"], point_dict["y"]))
+			cell.geometry = geometry_points
+
+			cell.cell_type = cell_data.get("cell_type", 0)
+			cell.is_partial = cell_data.get("is_partial", false)
+			cell.seams = cell_data.get("seams", [])
+
+		# Add cell to grid
+		grid_manager.add_child(cell)
+		grid_manager.cells[pos] = cell
+
+		# Update cell visual
+		cell.update_visual()
+
+	# 4. Restore player position
+	if player and target_fold.has("player_position"):
+		var saved_player_pos = target_fold["player_position"]
+		if saved_player_pos != Vector2i(-1, -1):
+			player.grid_position = saved_player_pos
+			var cell_at_pos = grid_manager.get_cell(saved_player_pos)
+			if cell_at_pos:
+				player.global_position = grid_manager.to_global(cell_at_pos.get_center())
+
+	# 5. Remove fold from history
+	fold_history.remove_at(fold_index)
+
+	# 6. Update GameManager fold count if it exists
+	if GameManager:
+		GameManager.fold_count -= 1
+
+	# 7. Update seam visual states (PHASE 6)
+	update_seam_visual_states()
+
+	# 8. Play undo sound effect (if available)
+	if AudioManager:
+		AudioManager.play_sfx("undo")
+
+	return true
+
+
+## ============================================================================
 ## PHASE 4: GEOMETRIC FOLDING (DIAGONAL FOLDS)
 ## ============================================================================
 
@@ -771,6 +1271,9 @@ func classify_cell_region(cell: Cell, cut_lines: Dictionary) -> String:
 ##
 ## @param cut_lines: Dictionary from calculate_cut_lines()
 func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
+	# Get current fold_id (will be incremented after fold record is created)
+	var current_fold_id = next_fold_id
+
 	# For diagonal folds, we create two seam lines (at each cut)
 	var seam_line1 = Line2D.new()
 	seam_line1.width = 2.0
@@ -781,8 +1284,22 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 	var line1_end = cut_lines.line1.point + cut_lines.line1.normal * 1000
 	seam_line1.points = PackedVector2Array([line1_start, line1_end])
 
+	# PHASE 6: Add metadata for fold_id tracking
+	seam_line1.set_meta("fold_id", current_fold_id)
+
+	# PHASE 6 TASK 2: Add line geometry metadata
+	seam_line1.set_meta("line_point", cut_lines.line1.point)
+	seam_line1.set_meta("line_normal", cut_lines.line1.normal)
+
 	grid_manager.add_child(seam_line1)
 	seam_lines.append(seam_line1)
+
+	# PHASE 6: Add to seam-to-fold mapping
+	seam_to_fold_map[seam_line1.get_instance_id()] = current_fold_id
+
+	# PHASE 6 TASK 2: Calculate and store clickable zones
+	var zones1 = calculate_clickable_zones(cut_lines.line1.point, cut_lines.line1.normal)
+	seam_line1.set_meta("clickable_zones", zones1)
 
 	# Second seam line
 	var seam_line2 = Line2D.new()
@@ -793,8 +1310,25 @@ func create_diagonal_seam_visual(cut_lines: Dictionary) -> void:
 	var line2_end = cut_lines.line2.point + cut_lines.line2.normal * 1000
 	seam_line2.points = PackedVector2Array([line2_start, line2_end])
 
+	# PHASE 6: Add metadata for fold_id tracking
+	seam_line2.set_meta("fold_id", current_fold_id)
+
+	# PHASE 6 TASK 2: Add line geometry metadata
+	seam_line2.set_meta("line_point", cut_lines.line2.point)
+	seam_line2.set_meta("line_normal", cut_lines.line2.normal)
+
 	grid_manager.add_child(seam_line2)
 	seam_lines.append(seam_line2)
+
+	# PHASE 6: Add to seam-to-fold mapping
+	seam_to_fold_map[seam_line2.get_instance_id()] = current_fold_id
+
+	# PHASE 6 TASK 2: Calculate and store clickable zones
+	var zones2 = calculate_clickable_zones(cut_lines.line2.point, cut_lines.line2.normal)
+	seam_line2.set_meta("clickable_zones", zones2)
+
+	# PHASE 6 TASK 3: Add Seam objects to affected cells for intersection validation
+	add_seams_to_cells(cut_lines, current_fold_id)
 
 
 ## Execute a diagonal fold (Phase 4)
@@ -945,6 +1479,10 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	var target_local = Vector2(target_anchor) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 	var source_local = Vector2(source_anchor) * cell_size + Vector2(cell_size / 2, cell_size / 2)
 
+	# PHASE 6: Save grid state BEFORE fold operations (for undo functionality)
+	var pre_fold_grid_state = serialize_grid_state()
+	var pre_fold_player_pos = player.grid_position if player else Vector2i(-1, -1)
+
 	# 1. Calculate cut lines (perpendicular to fold axis)
 	var cut_lines = calculate_cut_lines(target_local, source_local)
 
@@ -1008,6 +1546,9 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	# 7. Create seam visualization
 	create_diagonal_seam_visual(cut_lines)
 
+	# PHASE 6: Update seam visual states after creating new seams
+	update_seam_visual_states()
+
 	# 8. Update player position if affected
 	if player:
 		# Check if player is on a shifting cell (using positions from BEFORE shift)
@@ -1029,7 +1570,19 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	elif is_vertical:
 		orientation = "vertical"
 
-	var fold_record = create_fold_record(anchor1, anchor2, removed_positions, orientation)
+	# Create fold record using PRE-fold state (saved earlier)
+	var fold_record = {
+		"fold_id": next_fold_id,
+		"anchor1": anchor1,
+		"anchor2": anchor2,
+		"removed_cells": removed_positions.duplicate(),
+		"orientation": orientation,
+		"timestamp": Time.get_ticks_msec(),
+		"cells_state": pre_fold_grid_state,  # Use pre-saved state
+		"player_position": pre_fold_player_pos,  # Use pre-saved player position
+		"fold_count": GameManager.fold_count if GameManager else 0
+	}
+	next_fold_id += 1
 	fold_history.append(fold_record)
 
 	# 10. Clean up any freed cell references from the dictionary

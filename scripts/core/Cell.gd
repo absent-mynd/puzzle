@@ -470,16 +470,49 @@ func apply_split(split_result: Dictionary, line_point: Vector2, line_normal: Vec
 ##
 ## @return: Dictionary containing all cell data
 func to_dict() -> Dictionary:
+	# Serialize legacy geometry for backwards compatibility
 	var geometry_array = []
 	for v in geometry:
 		geometry_array.append({"x": v.x, "y": v.y})
 
+	# PHASE 6 BUG FIX: Serialize all geometry pieces for proper undo
+	var pieces_array = []
+	for piece in geometry_pieces:
+		var piece_geometry = []
+		for v in piece.geometry:
+			piece_geometry.append({"x": v.x, "y": v.y})
+
+		var piece_seams = []
+		for seam in piece.seams:
+			# Serialize seam data
+			var seam_dict = {
+				"line_point": {"x": seam.line_point.x, "y": seam.line_point.y},
+				"line_normal": {"x": seam.line_normal.x, "y": seam.line_normal.y},
+				"fold_id": seam.fold_id,
+				"timestamp": seam.timestamp,
+				"fold_type": seam.fold_type
+			}
+			# Serialize intersection_points
+			var intersection_points = []
+			for point in seam.intersection_points:
+				intersection_points.append({"x": point.x, "y": point.y})
+			seam_dict["intersection_points"] = intersection_points
+			piece_seams.append(seam_dict)
+
+		pieces_array.append({
+			"geometry": piece_geometry,
+			"cell_type": piece.cell_type,
+			"source_fold_id": piece.source_fold_id,
+			"seams": piece_seams
+		})
+
 	return {
 		"grid_position": {"x": grid_position.x, "y": grid_position.y},
-		"geometry": geometry_array,
+		"geometry": geometry_array,  # Legacy, kept for compatibility
 		"cell_type": cell_type,
 		"is_partial": is_partial,
-		"seams": seams.duplicate(true)  # Deep copy
+		"seams": seams.duplicate(true),  # Legacy, kept for compatibility
+		"geometry_pieces": pieces_array  # NEW: Full multi-piece serialization
 	}
 
 
