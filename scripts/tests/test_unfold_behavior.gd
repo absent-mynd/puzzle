@@ -60,27 +60,36 @@ func test_player_not_on_seam():
 func test_player_in_removed_region():
 	# Execute a horizontal fold with anchors at (2, 5) and (7, 5)
 	# This removes cells at x=3,4,5,6 (between the anchors)
+	# Cells at x=8,9 shift to x=3,4
 	fold_system.execute_fold(Vector2i(2, 5), Vector2i(7, 5), false)
 
-	# Place player in a position that was removed during the fold
-	player.grid_position = Vector2i(4, 5)
+	# Place player at a removed position that has NO cell currently
+	# Position (5,5) was removed and won't have a shifted cell (grid is 10x10, no x=10)
+	player.grid_position = Vector2i(5, 5)
 
-	# Player should block unfold (they're in a removed position)
+	# Player should block unfold (they're in a removed position with no cell)
 	assert_true(fold_system.is_player_on_seam(0), "Player in removed region should block unfold")
 
 
-func test_player_on_shifted_cell_does_not_block():
-	# Execute a horizontal fold with anchors at (2, 5) and (7, 5)
-	# Cells at x=3,4,5,6 (y=5) are removed
-	# Cells beyond x=7 shift left by 5 positions
-	fold_system.execute_fold(Vector2i(2, 5), Vector2i(7, 5), false)
+func test_player_on_removed_position_with_cell_does_not_block():
+	# Diagonal fold - reproduces exact user scenario
+	# Fold (1,1) to (2,2) removes positions including (1,2) and (2,1)
+	# But split cells at anchors create cells at those positions
+	fold_system.execute_fold(Vector2i(1, 1), Vector2i(2, 2), false)
 
-	# After the fold, place player at the target anchor position
-	# Position (2,5) is an anchor, NOT in the removed region
-	# Even though a seam line passes through it, player should not block
-	player.grid_position = Vector2i(2, 5)
+	# Verify cells exist at these removed positions (from split pieces)
+	assert_not_null(grid_manager.get_cell(Vector2i(1, 2)), "Cell should exist at (1,2)")
+	assert_not_null(grid_manager.get_cell(Vector2i(2, 1)), "Cell should exist at (2,1)")
 
-	assert_false(fold_system.is_player_on_seam(0), "Player at anchor (not in removed region) should not block unfold")
+	# Player at (1,2) - removed position but cell exists
+	player.grid_position = Vector2i(1, 2)
+	assert_false(fold_system.is_player_on_seam(0),
+		"Player on removed position WITH cell should not block unfold")
+
+	# Player at (2,1) - removed position but cell exists
+	player.grid_position = Vector2i(2, 1)
+	assert_false(fold_system.is_player_on_seam(0),
+		"Player on removed position WITH cell should not block unfold")
 
 
 ## ============================================================================
@@ -94,10 +103,12 @@ func test_unfold_seam_method_exists():
 
 func test_unfold_blocked_when_player_in_removed_region():
 	# Execute a horizontal fold
+	# Removes x=3,4,5,6; shifts x=8,9 to x=3,4
 	fold_system.execute_fold(Vector2i(2, 5), Vector2i(7, 5), false)
 
-	# Place player in a removed position
-	player.grid_position = Vector2i(4, 5)
+	# Place player at removed position with NO cell (will be restored)
+	# Position (6,5) has no shifted cell (would need x=11 which doesn't exist)
+	player.grid_position = Vector2i(6, 5)
 
 	# Unfold should be blocked
 	var result = fold_system.unfold_seam(0)

@@ -957,10 +957,14 @@ func is_player_on_seam(fold_id: int) -> bool:
 		return false
 
 	# Check if player is at a position that was removed during the fold
-	# These positions will be restored during unfold, which would conflict with player
+	# AND that position currently has no cell (will be restored during unfold)
+	# If a cell exists there now (e.g., from split pieces), player doesn't block
 	var removed_positions = target_fold.get("removed_cells", [])
 	if player_pos in removed_positions:
-		return true
+		# Only block if no cell exists at this position currently
+		var current_cell = grid_manager.get_cell(player_pos)
+		if current_cell == null:
+			return true
 
 	return false
 
