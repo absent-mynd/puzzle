@@ -917,6 +917,145 @@ func merge_pieces_after_seam_removal(cell: Cell, grid_pos: Vector2i) -> void:
 	cell.update_visual()
 
 
+## Restore cells that were removed by a fold
+##
+## When unfolding, cells removed by the target fold need to be restored.
+## Per Q4 answer: We don't need to re-apply later seams because if a later
+## fold would have affected these cells, it would have intersected the target
+## fold's cutlines (blocked by validation).
+##
+## @param fold_record: The fold record containing removed cells and grid state
+func restore_removed_cells_for_fold(fold_record: Dictionary) -> void:
+	var removed_cells = fold_record.get("removed_cells", [])
+	var cells_state = fold_record.get("cells_state", {})
+	var cell_size = grid_manager.cell_size
+
+	for removed_pos in removed_cells:
+		# Get cell data from snapshot
+		var pos_str = var_to_str(removed_pos)
+		if not cells_state.has(pos_str):
+			push_warning("FoldSystem: Cannot restore cell at %s - not found in fold record" % str(removed_pos))
+			continue
+
+		var cell_data = cells_state[pos_str]
+
+		# Calculate local position
+		var local_pos = Vector2(removed_pos) * cell_size
+
+		# Create new Cell node
+		var cell = Cell.new(removed_pos, local_pos, cell_size)
+
+		# Restore geometry pieces
+		if cell_data.has("geometry_pieces") and not cell_data["geometry_pieces"].is_empty():
+			cell.geometry_pieces.clear()
+
+			for piece_data in cell_data["geometry_pieces"]:
+				# Restore piece geometry
+				var piece_geometry = PackedVector2Array()
+				for point_dict in piece_data["geometry"]:
+					piece_geometry.append(Vector2(point_dict["x"], point_dict["y"]))
+
+				# Create CellPiece
+				var piece = CellPiece.new(piece_geometry, piece_data["cell_type"], piece_data["source_fold_id"])
+
+				# Restore seams
+				for seam_data in piece_data.get("seams", []):
+					var intersection_points = PackedVector2Array()
+					for point_dict in seam_data["intersection_points"]:
+						intersection_points.append(Vector2(point_dict["x"], point_dict["y"]))
+
+					var seam = Seam.new(
+						Vector2(seam_data["line_point"]["x"], seam_data["line_point"]["y"]),
+						Vector2(seam_data["line_normal"]["x"], seam_data["line_normal"]["y"]),
+						intersection_points,
+						seam_data["fold_id"],
+						seam_data["timestamp"],
+						seam_data["fold_type"]
+					)
+					piece.add_seam(seam)
+
+				cell.geometry_pieces.append(piece)
+
+			cell.cell_type = cell.get_dominant_type()
+			cell.is_partial = cell_data.get("is_partial", false)
+		else:
+			# Legacy format
+			var geometry_array = cell_data.get("geometry", [])
+			var geometry_points = PackedVector2Array()
+			for point_dict in geometry_array:
+				geometry_points.append(Vector2(point_dict["x"], point_dict["y"]))
+			cell.geometry = geometry_points
+			cell.cell_type = cell_data.get("cell_type", 0)
+			cell.is_partial = cell_data.get("is_partial", false)
+
+		# Add to grid
+		grid_manager.add_child(cell)
+		grid_manager.cells[removed_pos] = cell
+		cell.update_visual()
+
+
+## Reverse shifts that were caused by a fold
+##
+## When unfolding, cells that were shifted by the target fold need to
+## shift back to their original positions.
+##
+## @param fold_record: The fold record containing shift information
+func reverse_shifts_for_fold(fold_record: Dictionary) -> void:
+	var anchor1 = fold_record["anchor1"]
+	var anchor2 = fold_record["anchor2"]
+	var shifted_positions = fold_record.get("shifted_positions", [])
+
+	if shifted_positions.is_empty():
+		return
+
+	# Calculate the original shift vector (what was applied during fold)
+	# The shift moved cells from positions in shifted_positions toward anchor1
+	var shift_vector = anchor1 - anchor2
+
+	# The inverse shift is the opposite
+	var inverse_shift = -shift_vector
+
+	# Collect cells to shift back
+	# shifted_positions contains the ORIGINAL positions (before shift)
+	# Current positions are original_pos + shift_vector
+	var cells_to_reverse = []
+
+	for original_pos in shifted_positions:
+		var current_pos = original_pos + shift_vector
+		var cell = grid_manager.cells.get(current_pos)
+
+		if cell and is_instance_valid(cell):
+			cells_to_reverse.append({
+				"cell": cell,
+				"from_pos": current_pos,
+				"to_pos": original_pos
+			})
+
+	# Perform the reverse shift
+	# Process in an order that avoids conflicts
+	for shift_info in cells_to_reverse:
+		var cell = shift_info["cell"]
+		var from_pos = shift_info["from_pos"]
+		var to_pos = shift_info["to_pos"]
+
+		# Remove from current position
+		grid_manager.cells.erase(from_pos)
+
+		# Check if target position is occupied (per Q1, this shouldn't happen)
+		if grid_manager.cells.has(to_pos):
+			push_error("FoldSystem: Shift reversal conflict at %s - target position occupied! This is a bug." % str(to_pos))
+			# Free the blocking cell to recover
+			var blocking_cell = grid_manager.cells[to_pos]
+			grid_manager.cells.erase(to_pos)
+			if blocking_cell.get_parent():
+				blocking_cell.get_parent().remove_child(blocking_cell)
+			blocking_cell.queue_free()
+
+		# Move cell to original position
+		cell.grid_position = to_pos
+		grid_manager.cells[to_pos] = cell
+
+
 ## ============================================================================
 ## PHASE 6: CLICKABLE ZONE CALCULATION (TASK 2)
 ## ============================================================================
@@ -1427,11 +1566,11 @@ func unfold_seam(fold_id: int) -> bool:
 	for cell_info in cells_to_recalculate:
 		merge_pieces_after_seam_removal(cell_info["cell"], cell_info["pos"])
 
-	# 4. Restore cells that were removed by this fold
-	restore_removed_cells_for_fold(target_fold)
-
-	# 5. Reverse shifts caused by this fold
+	# 4. Reverse shifts caused by this fold (MUST be done before restoring removed cells)
 	reverse_shifts_for_fold(target_fold)
+
+	# 5. Restore cells that were removed by this fold (after shifts are reversed)
+	restore_removed_cells_for_fold(target_fold)
 
 	# 6. Update player position (move with cell if on shifted cell)
 	if player and player_start_pos != Vector2i(-1, -1):
