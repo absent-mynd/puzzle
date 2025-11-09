@@ -24,50 +24,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Godot
-        uses: chickensoft-games/setup-godot@v2
+        uses: godotengine/godot-bin-action@v1
         with:
-          version: 4.3.0
-          use-dotnet: false
+          godot-version: 4.3
 
       - name: Verify Godot installation
         run: godot --version
-
-      - name: Download and extract HTML5 export template
-        run: |
-          set -e
-          mkdir -p ~/.local/share/godot/export_templates/4.3.stable
-          cd ~/.local/share/godot/export_templates/4.3.stable
-
-          # Download export templates with error checking
-          echo "Downloading Godot 4.3 export templates..."
-          wget --show-progress https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
-
-          # Verify file exists and is valid
-          if [ ! -f "Godot_v4.3-stable_export_templates.tpz" ]; then
-            echo "Error: Failed to download export templates"
-            exit 1
-          fi
-
-          # Check file type
-          echo "File type:"
-          file Godot_v4.3-stable_export_templates.tpz
-
-          # Try extraction - handle potential gzip issues
-          echo "Extracting export templates..."
-          # First, try to gunzip it (in case it's just gzipped, not tar.gz)
-          if gunzip -t Godot_v4.3-stable_export_templates.tpz 2>/dev/null; then
-            echo "File is gzipped, attempting standard tar extraction..."
-            tar -xzf Godot_v4.3-stable_export_templates.tpz
-          else
-            echo "File may not be standard gzip format, trying alternative extraction..."
-            # Try extracting with no compression flag
-            tar -xf Godot_v4.3-stable_export_templates.tpz || tar -xvf Godot_v4.3-stable_export_templates.tpz || true
-          fi
-
-          rm -f Godot_v4.3-stable_export_templates.tpz
-
-          echo "Contents of export templates directory:"
-          ls -la
 
       - name: Export game to HTML5
         run: |
