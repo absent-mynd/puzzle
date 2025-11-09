@@ -57,26 +57,30 @@ func test_player_not_on_seam():
 	assert_false(fold_system.is_player_on_seam(0), "Player should not be on seam")
 
 
-func test_player_on_seam_vertical_line():
-	# Execute a horizontal fold (creates vertical seam lines)
-	fold_system.execute_fold(Vector2i(3, 5), Vector2i(6, 5), false)
+func test_player_in_removed_region():
+	# Execute a horizontal fold with anchors at (2, 5) and (7, 5)
+	# This removes cells at x=3,4,5,6 (between the anchors)
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(7, 5), false)
 
-	# Place player on one of the seam positions (vertical line at x=3)
-	player.grid_position = Vector2i(3, 5)
+	# Place player in a position that was removed during the fold
+	player.grid_position = Vector2i(4, 5)
 
-	# Player should be on the seam
-	assert_true(fold_system.is_player_on_seam(0), "Player should be on seam")
+	# Player should block unfold (they're in a removed position)
+	assert_true(fold_system.is_player_on_seam(0), "Player in removed region should block unfold")
 
 
-func test_player_on_seam_horizontal_line():
-	# Execute a vertical fold (creates horizontal seam lines)
-	fold_system.execute_fold(Vector2i(5, 3), Vector2i(5, 6), false)
+func test_player_on_shifted_cell_does_not_block():
+	# Execute a horizontal fold with anchors at (2, 5) and (7, 5)
+	# Cells at x=3,4,5,6 (y=5) are removed
+	# Cells beyond x=7 shift left by 5 positions
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(7, 5), false)
 
-	# Place player on one of the seam positions (horizontal line at y=3)
-	player.grid_position = Vector2i(5, 3)
+	# After the fold, place player at the target anchor position
+	# Position (2,5) is an anchor, NOT in the removed region
+	# Even though a seam line passes through it, player should not block
+	player.grid_position = Vector2i(2, 5)
 
-	# Player should be on the seam
-	assert_true(fold_system.is_player_on_seam(0), "Player should be on seam")
+	assert_false(fold_system.is_player_on_seam(0), "Player at anchor (not in removed region) should not block unfold")
 
 
 ## ============================================================================
@@ -88,28 +92,28 @@ func test_unfold_seam_method_exists():
 		"FoldSystem should have unfold_seam method")
 
 
-func test_unfold_blocked_when_player_on_seam():
+func test_unfold_blocked_when_player_in_removed_region():
 	# Execute a horizontal fold
-	fold_system.execute_fold(Vector2i(3, 5), Vector2i(6, 5), false)
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(7, 5), false)
 
-	# Place player on the seam
-	player.grid_position = Vector2i(3, 5)
+	# Place player in a removed position
+	player.grid_position = Vector2i(4, 5)
 
 	# Unfold should be blocked
 	var result = fold_system.unfold_seam(0)
-	assert_false(result, "Unfold should be blocked when player on seam")
+	assert_false(result, "Unfold should be blocked when player in removed region")
 
 
-func test_unfold_succeeds_when_player_not_on_seam():
+func test_unfold_succeeds_when_player_not_in_removed_region():
 	# Execute a horizontal fold
-	fold_system.execute_fold(Vector2i(3, 5), Vector2i(6, 5), false)
+	fold_system.execute_fold(Vector2i(2, 5), Vector2i(7, 5), false)
 
-	# Place player away from seam
+	# Place player away from removed region
 	player.grid_position = Vector2i(0, 0)
 
 	# Unfold should succeed
 	var result = fold_system.unfold_seam(0)
-	assert_true(result, "Unfold should succeed when player not on seam")
+	assert_true(result, "Unfold should succeed when player not in removed region")
 
 
 func test_unfold_reintroduces_removed_cells():

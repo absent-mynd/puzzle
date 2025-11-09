@@ -932,32 +932,35 @@ func can_undo_fold_seam_based(fold_id: int) -> Dictionary:
 	}
 
 
-## Check if player is standing on a seam (for unfold validation)
+## Check if player would block unfold operation
 ##
-## A player is considered to be on a seam if their grid position is in the
-## seam's clickable zones.
+## Player blocks unfold only if they're at a position that will be restored
+## from the removed cells (positions that were deleted during the fold).
+## Player does NOT block if they're on a shifted cell - they'll just move with it.
 ##
-## @param fold_id: The ID of the fold whose seams to check
-## @return: true if player is standing on any seam from this fold
+## @param fold_id: The ID of the fold to check
+## @return: true if player would block the unfold
 func is_player_on_seam(fold_id: int) -> bool:
 	if not player:
 		return false
 
 	var player_pos = player.grid_position
 
-	# Check all seam lines for this fold
-	for seam_line in seam_lines:
-		if not seam_line or not is_instance_valid(seam_line):
-			continue
+	# Find the fold record
+	var target_fold = null
+	for record in fold_history:
+		if record["fold_id"] == fold_id:
+			target_fold = record
+			break
 
-		var seam_fold_id = seam_line.get_meta("fold_id", -1)
-		if seam_fold_id != fold_id:
-			continue
+	if target_fold == null:
+		return false
 
-		# Check if player position is in this seam's clickable zones
-		var zones = seam_line.get_meta("clickable_zones", [])
-		if player_pos in zones:
-			return true
+	# Check if player is at a position that was removed during the fold
+	# These positions will be restored during unfold, which would conflict with player
+	var removed_positions = target_fold.get("removed_cells", [])
+	if player_pos in removed_positions:
+		return true
 
 	return false
 
