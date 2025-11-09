@@ -432,6 +432,136 @@ func deserialize_grid_state(state: Dictionary) -> Dictionary:
 	return restored_cells
 
 
+## Create a complete game state snapshot (Phase 6 Task 9)
+##
+## Captures current grid, player position, and fold history for undo system.
+## This is the unified snapshot-based approach to undo.
+##
+## @param player: Player reference to capture position
+## @param action_type: String describing the action ("fold", "move", "unfold")
+## @param action_summary: Optional human-readable description
+## @return: Dictionary containing complete game state
+func create_game_snapshot(player: Player, action_type: String = "", action_summary: String = "") -> Dictionary:
+	var snapshot = {
+		"grid_state": serialize_grid_state(),
+		"player_position": player.grid_position if player else Vector2i(-1, -1),
+		"fold_count": fold_history.size(),
+		"fold_history": fold_history.duplicate(),
+		"timestamp": Time.get_ticks_msec(),
+		"action_type": action_type,
+		"action_summary": action_summary
+	}
+	return snapshot
+
+
+## Restore game state from a snapshot (Phase 6 Task 9)
+##
+## Restores grid state, player position, and fold history from snapshot.
+## This is called by the undo system to revert to a previous game state.
+##
+## @param snapshot: Dictionary from create_game_snapshot()
+## @param player: Player reference to restore position
+## @return: true if restoration succeeded, false otherwise
+func restore_from_snapshot(snapshot: Dictionary, player: Player) -> bool:
+	if not snapshot.has("grid_state") or not snapshot.has("player_position"):
+		push_error("FoldSystem: Invalid snapshot - missing required keys")
+		return false
+
+	if not grid_manager:
+		push_error("FoldSystem: GridManager not initialized")
+		return false
+
+	# 1. Free all existing cells to prevent memory leaks
+	for pos in grid_manager.cells.keys():
+		var cell = grid_manager.cells[pos]
+		if cell and is_instance_valid(cell):
+			if cell.get_parent():
+				cell.get_parent().remove_child(cell)
+			cell.queue_free()
+
+	grid_manager.cells.clear()
+
+	# 2. Restore cells from snapshot
+	var cells_state = snapshot["grid_state"]
+	var cell_size = grid_manager.cell_size
+
+	for pos_str in cells_state.keys():
+		var cell_data = cells_state[pos_str]
+		var pos = str_to_var(pos_str) as Vector2i
+		var local_pos = Vector2(pos) * cell_size
+
+		# Create new Cell node
+		var cell = Cell.new(pos, local_pos, cell_size)
+
+		# Restore geometry pieces
+		if cell_data.has("geometry_pieces") and not cell_data["geometry_pieces"].is_empty():
+			cell.geometry_pieces.clear()
+
+			for piece_data in cell_data["geometry_pieces"]:
+				var piece_geometry = PackedVector2Array()
+				for point_dict in piece_data["geometry"]:
+					piece_geometry.append(Vector2(point_dict["x"], point_dict["y"]))
+
+				var piece = CellPiece.new(piece_geometry, piece_data["cell_type"], piece_data["source_fold_id"])
+
+				for seam_data in piece_data.get("seams", []):
+					var intersection_points = PackedVector2Array()
+					for point_dict in seam_data["intersection_points"]:
+						intersection_points.append(Vector2(point_dict["x"], point_dict["y"]))
+
+					var seam = Seam.new(
+						Vector2(seam_data["line_point"]["x"], seam_data["line_point"]["y"]),
+						Vector2(seam_data["line_normal"]["x"], seam_data["line_normal"]["y"]),
+						intersection_points,
+						seam_data["fold_id"],
+						seam_data["timestamp"],
+						seam_data["fold_type"]
+					)
+					piece.add_seam(seam)
+
+				cell.geometry_pieces.append(piece)
+
+			cell.cell_type = cell.get_dominant_type()
+			cell.is_partial = cell_data.get("is_partial", false)
+		else:
+			# Legacy format
+			var geometry_array = cell_data.get("geometry", [])
+			var geometry_points = PackedVector2Array()
+			for point_dict in geometry_array:
+				geometry_points.append(Vector2(point_dict["x"], point_dict["y"]))
+			cell.geometry = geometry_points
+			cell.cell_type = cell_data.get("cell_type", 0)
+			cell.is_partial = cell_data.get("is_partial", false)
+
+		grid_manager.add_child(cell)
+		grid_manager.cells[pos] = cell
+		cell.update_visual()
+
+	# 3. Restore player position
+	if player and snapshot.has("player_position"):
+		var saved_pos = snapshot["player_position"]
+		if saved_pos != Vector2i(-1, -1):
+			player.grid_position = saved_pos
+			var cell_at_pos = grid_manager.get_cell(saved_pos)
+			if cell_at_pos:
+				player.global_position = grid_manager.to_global(cell_at_pos.get_center())
+
+	# 4. Restore fold history
+	if snapshot.has("fold_history"):
+		fold_history = snapshot["fold_history"].duplicate()
+		next_fold_id = 0
+		for fold_record in fold_history:
+			if fold_record.has("fold_id"):
+				next_fold_id = max(next_fold_id, fold_record["fold_id"] + 1)
+
+	# 5. Update seam visuals
+	# Clear all seams first
+	clear_all_seams()
+	# Rebuild seams from restored fold history would go here if needed
+
+	return true
+
+
 ## Animation Methods (Issue #9)
 
 ## Fade out cells before removal

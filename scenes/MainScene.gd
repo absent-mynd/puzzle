@@ -11,8 +11,8 @@ extends Node2D
 ## Fold system for grid transformations
 var fold_system: FoldSystem = null
 
-## Action history for sequential undo (Phase 6 Task 7)
-var action_history: ActionHistory = null
+## Snapshot history for unified undo system (Phase 6 Task 9)
+var snapshot_history: SnapshotHistory = null
 
 ## Game state
 var is_level_complete: bool = false
@@ -47,8 +47,8 @@ func _ready() -> void:
 	fold_system.initialize(grid_manager)
 	add_child(fold_system)
 
-	# Initialize ActionHistory (Phase 6 Task 7)
-	action_history = ActionHistory.new()
+	# Initialize SnapshotHistory (Phase 6 Task 9)
+	snapshot_history = SnapshotHistory.new()
 
 	# Initialize player with grid manager
 	if player and grid_manager:
@@ -131,45 +131,34 @@ func _on_player_goal_reached() -> void:
 	show_win_ui()
 
 
-## Handle player position changes (Phase 6 Task 7 - Undo System)
-## Records move actions in ActionHistory for sequential undo
+## Handle player position changes (Phase 6 Task 9 - Snapshot-based Undo)
+## Captures game state snapshot after successful player move
 func _on_player_position_changed(old_pos: Vector2i, new_pos: Vector2i) -> void:
-	if not action_history:
+	if not snapshot_history or not fold_system:
 		return
 
-	# Record the move action in action history
-	var move_action = {
-		"action_type": "move",
-		"old_position": old_pos,
-		"new_position": new_pos
-	}
-	action_history.push_action(move_action)
+	# Capture snapshot AFTER player has moved
+	var snapshot = fold_system.create_game_snapshot(player, "move", "Player moved from %s to %s" % [old_pos, new_pos])
+	snapshot_history.push_snapshot(snapshot)
 
 	# Update undo button state
 	if hud:
-		hud.set_can_undo(action_history.can_undo())
+		hud.set_can_undo(snapshot_history.can_undo())
 
 
-## Handle fold unfolded (seam click) - Phase 6 Task 8
-## Records unfold actions in ActionHistory so they can be undone
+## Handle fold unfolded (seam click) - Phase 6 Task 9
+## Captures game state snapshot after successful unfold
 func _on_fold_unfolded(fold_id: int, anchor1: Vector2i, anchor2: Vector2i, orientation: String) -> void:
-	if not action_history:
+	if not snapshot_history or not fold_system:
 		return
 
-	# Record the unfold action in action history
-	# Store the original fold parameters so we can re-execute the fold if undo is requested
-	var unfold_action = {
-		"action_type": "unfold",
-		"fold_id": fold_id,
-		"anchor1": anchor1,
-		"anchor2": anchor2,
-		"orientation": orientation
-	}
-	action_history.push_action(unfold_action)
+	# Capture snapshot AFTER unfold has completed
+	var snapshot = fold_system.create_game_snapshot(player, "unfold", "Unfolded fold %d at %s-%s" % [fold_id, anchor1, anchor2])
+	snapshot_history.push_snapshot(snapshot)
 
 	# Update undo button state
 	if hud:
-		hud.set_can_undo(action_history.can_undo())
+		hud.set_can_undo(snapshot_history.can_undo())
 
 
 ## Set up GUI components
@@ -248,88 +237,34 @@ func _on_restart_requested() -> void:
 
 ## Handle undo request (from UI button)
 func _on_undo_requested() -> void:
-	# PHASE 6 TASK 7: Use ActionHistory for sequential undo
-	if not action_history or not action_history.can_undo():
-		print("No actions to undo")
+	# Phase 6 Task 9: Unified snapshot-based undo system
+	if not snapshot_history or not snapshot_history.can_undo():
+		print("No game states to undo")
 		return
 
-	# Pop the most recent action
-	var action = action_history.pop_action()
+	# Pop the most recent snapshot
+	var snapshot = snapshot_history.pop_snapshot()
 
-	if action.is_empty():
-		print("No actions to undo")
+	if snapshot.is_empty():
+		print("No game states to undo")
 		return
 
-	# Handle different action types
-	match action["action_type"]:
-		"fold":
-			var fold_id = action["fold_id"]
-			var success = fold_system.undo_fold_by_id(fold_id)
-			if success:
-				# Update HUD
-				if hud:
-					hud.set_fold_count(GameManager.fold_count)
-					hud.set_can_undo(action_history.can_undo())
-				print("Undo successful! Folds: %d" % GameManager.fold_count)
-			else:
-				# Undo failed, push action back
-				action_history.push_action(action)
-				print("Cannot undo fold %d - it's blocked by newer folds" % fold_id)
+	# Restore game state from snapshot (single unified approach)
+	var success = fold_system.restore_from_snapshot(snapshot, player)
 
-		"move":
-			# Phase 6 Task 7: Handle player movement undo
-			if player and action.has("old_position"):
-				var old_pos = action["old_position"]
-				player.grid_position = old_pos
+	if success:
+		# Update HUD with restored state
+		if hud:
+			hud.set_fold_count(GameManager.fold_count)
+			hud.set_can_undo(snapshot_history.can_undo())
 
-				# Update player's visual position
-				var target_cell = grid_manager.get_cell(old_pos)
-				if target_cell:
-					player.target_position = grid_manager.to_global(target_cell.get_center())
-					player.global_position = player.target_position
-
-				# Update undo button state
-				if hud:
-					hud.set_can_undo(action_history.can_undo())
-				print("Move undo successful! Player moved back to %s" % old_pos)
-			else:
-				print("Cannot undo move - missing action data")
-				# Push action back if undo failed
-				action_history.push_action(action)
-				if hud:
-					hud.set_can_undo(action_history.can_undo())
-
-		"unfold":
-			# Phase 6 Task 8: Handle unfold undo (re-fold)
-			if fold_system and action.has("anchor1") and action.has("anchor2"):
-				var anchor1 = action["anchor1"]
-				var anchor2 = action["anchor2"]
-				var success = fold_system.execute_fold_sync(anchor1, anchor2)
-
-				if success:
-					# Update HUD
-					if hud:
-						hud.set_fold_count(GameManager.fold_count)
-						hud.set_can_undo(action_history.can_undo())
-					print("Unfold undo successful! Fold re-executed at %s -> %s" % [anchor1, anchor2])
-				else:
-					# Re-fold failed, push action back
-					action_history.push_action(action)
-					print("Cannot undo unfold - re-fold failed")
-					if hud:
-						hud.set_can_undo(action_history.can_undo())
-			else:
-				print("Cannot undo unfold - missing action data")
-				# Push action back if undo failed
-				action_history.push_action(action)
-				if hud:
-					hud.set_can_undo(action_history.can_undo())
-
-		_:
-			print("Unknown action type: %s" % action["action_type"])
-			# Update undo button state anyway
-			if hud:
-				hud.set_can_undo(action_history.can_undo())
+		# Log action type for debugging
+		var action_type = snapshot.get("action_type", "unknown")
+		var action_summary = snapshot.get("action_summary", "")
+		print("Undo successful! (%s) %s" % [action_type, action_summary])
+	else:
+		# Should not happen with snapshots, but handle gracefully
+		print("Failed to restore from snapshot")
 
 
 ## Handle main menu request
@@ -406,17 +341,13 @@ func handle_mouse_click(mouse_position: Vector2) -> void:
 
 	if can_undo:
 		# UNFOLD this seam (geometric reversal without state restoration)
+		# Phase 6 Task 9: Snapshot is automatically captured by fold_unfolded signal
 		var success = fold_system.unfold_seam(fold_id)
 		if success:
-			# PHASE 6 TASK 7: Remove this fold action from ActionHistory
-			# Seam-based unfold can unfold non-sequential folds, so search and remove
-			if action_history:
-				remove_fold_action_from_history(fold_id)
-
-			# Update HUD
+			# Update HUD (snapshot capture happens automatically via signal)
 			if hud:
 				hud.set_fold_count(GameManager.fold_count)
-				hud.set_can_undo(action_history.can_undo())
+				hud.set_can_undo(snapshot_history.can_undo())
 			print("Seam unfold successful! Fold %d unfolded. Total folds: %d" % [fold_id, GameManager.fold_count])
 		else:
 			print("Cannot unfold fold %d - player may be standing on seam" % fold_id)
@@ -451,41 +382,23 @@ func execute_fold() -> void:
 		if hud:
 			hud.set_fold_count(GameManager.fold_count)
 
-		# PHASE 6 TASK 7: Record fold action in ActionHistory
-		if action_history and fold_system and not fold_system.fold_history.is_empty():
-			# Get the fold_id of the most recent fold
+		# Phase 6 Task 9: Capture game state snapshot after successful fold
+		if snapshot_history and fold_system:
 			var newest_fold_id = -1
 			for record in fold_system.fold_history:
 				if record["fold_id"] > newest_fold_id:
 					newest_fold_id = record["fold_id"]
 
 			if newest_fold_id >= 0:
-				action_history.push_action({
-					"action_type": "fold",
-					"fold_id": newest_fold_id
-				})
+				var snapshot = fold_system.create_game_snapshot(player, "fold", "Fold executed at %s-%s" % [anchors[0], anchors[1]])
+				snapshot_history.push_snapshot(snapshot)
+
 				# Update undo button state
 				if hud:
-					hud.set_can_undo(action_history.can_undo())
+					hud.set_can_undo(snapshot_history.can_undo())
 
 		print("Fold executed successfully! Total folds: %d" % GameManager.fold_count)
 	else:
 		print("Fold failed - check validation messages")
 
 
-## Remove a specific fold action from ActionHistory (Phase 6 Task 7)
-##
-## Used when seam-based undo removes a non-sequential fold.
-## Searches through action history and removes the fold action with matching fold_id.
-##
-## @param fold_id: The fold_id to remove
-func remove_fold_action_from_history(fold_id: int) -> void:
-	if not action_history:
-		return
-
-	# Search for the fold action with this fold_id
-	for i in range(action_history.actions.size() - 1, -1, -1):
-		var action = action_history.actions[i]
-		if action["action_type"] == "fold" and action["fold_id"] == fold_id:
-			action_history.actions.remove_at(i)
-			return  # Found and removed, done
