@@ -60,6 +60,7 @@ func _ready() -> void:
 
 		# Connect to player signals
 		player.goal_reached.connect(_on_player_goal_reached)
+		player.position_changed.connect(_on_player_position_changed)  # Phase 6 Task 7
 
 	# Initialize GUI
 	setup_gui()
@@ -125,6 +126,25 @@ func _on_player_goal_reached() -> void:
 		player.input_enabled = false
 
 	show_win_ui()
+
+
+## Handle player position changes (Phase 6 Task 7 - Undo System)
+## Records move actions in ActionHistory for sequential undo
+func _on_player_position_changed(old_pos: Vector2i, new_pos: Vector2i) -> void:
+	if not action_history:
+		return
+
+	# Record the move action in action history
+	var move_action = {
+		"action_type": "move",
+		"old_position": old_pos,
+		"new_position": new_pos
+	}
+	action_history.push_action(move_action)
+
+	# Update undo button state
+	if hud:
+		hud.set_can_undo(action_history.can_undo())
 
 
 ## Set up GUI components
@@ -232,11 +252,27 @@ func _on_undo_requested() -> void:
 				print("Cannot undo fold %d - it's blocked by newer folds" % fold_id)
 
 		"move":
-			# Future: Handle player movement undo
-			print("Move undo not yet implemented")
-			# Update undo button state
-			if hud:
-				hud.set_can_undo(action_history.can_undo())
+			# Phase 6 Task 7: Handle player movement undo
+			if player and action.has("old_position"):
+				var old_pos = action["old_position"]
+				player.grid_position = old_pos
+
+				# Update player's visual position
+				var target_cell = grid_manager.get_cell(old_pos)
+				if target_cell:
+					player.target_position = grid_manager.to_global(target_cell.get_center())
+					player.global_position = player.target_position
+
+				# Update undo button state
+				if hud:
+					hud.set_can_undo(action_history.can_undo())
+				print("Move undo successful! Player moved back to %s" % old_pos)
+			else:
+				print("Cannot undo move - missing action data")
+				# Push action back if undo failed
+				action_history.push_action(action)
+				if hud:
+					hud.set_can_undo(action_history.can_undo())
 
 		_:
 			print("Unknown action type: %s" % action["action_type"])

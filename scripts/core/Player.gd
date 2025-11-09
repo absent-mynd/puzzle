@@ -15,6 +15,10 @@ class_name Player
 ## Emitted when player reaches a goal cell
 signal goal_reached
 
+## Emitted when player moves to a new grid position (Phase 6 Task 7 - Undo System)
+## Parameters: old_position: Vector2i, new_position: Vector2i
+signal position_changed(old_position: Vector2i, new_position: Vector2i)
+
 ## Properties
 
 ## Current grid position
@@ -146,6 +150,9 @@ func can_move_to(target_grid_pos: Vector2i) -> bool:
 ## Execute the move to new grid position
 ## @param new_grid_pos: New grid position to move to
 func execute_move(new_grid_pos: Vector2i) -> void:
+	# Record old position for undo system
+	var old_position = grid_position
+
 	# Update grid position
 	grid_position = new_grid_pos
 
@@ -156,6 +163,9 @@ func execute_move(new_grid_pos: Vector2i) -> void:
 		return
 
 	target_position = grid_manager.to_global(target_cell.get_center())
+
+	# Emit position changed signal for undo system (Phase 6 Task 7)
+	position_changed.emit(old_position, new_grid_pos)
 
 	# Start movement animation
 	start_move_tween()
