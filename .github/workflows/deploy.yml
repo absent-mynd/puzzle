@@ -26,17 +26,15 @@ jobs:
       - name: Setup Godot
         uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.3
+          version: 4.3.0
           use-dotnet: false
 
       - name: Verify Godot installation
         run: godot --version
 
-      - name: Create export templates directory
-        run: mkdir -p ~/.local/share/godot/export_templates/4.3.stable
-
-      - name: Download HTML5 export template
+      - name: Download and extract HTML5 export template
         run: |
+          mkdir -p ~/.local/share/godot/export_templates/4.3.stable
           cd ~/.local/share/godot/export_templates/4.3.stable
           wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
           tar -xf Godot_v4.3-stable_export_templates.tpz
