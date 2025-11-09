@@ -1,6 +1,19 @@
 extends GutTest
 
 ## Tests for Phase 6: Seam-Based Undo System
+##
+## CRITICAL DISTINCTION:
+## - UNDO (button/keyboard 'U'): Sequential action reversal, NO validation, always succeeds
+##   - Restores full game state including player position
+##   - Can undo any fold regardless of blocking seams or player position
+##   - QoL feature that always works as a safety net
+##
+## - UNFOLD (seam click): Spatial puzzle mechanic, WITH validation (for future implementation)
+##   - Only geometric reversal, does NOT restore player position
+##   - Will be blocked by newer intersecting seams
+##   - Will be blocked if player is standing on the seam
+##   - Validation function can_undo_fold_seam_based() is kept for UNFOLD future use
+##
 ## Task 1: Seam-to-Fold Mapping
 
 var grid_manager: GridManager
@@ -775,17 +788,18 @@ func test_undo_invalid_fold_id_returns_false():
 	assert_false(result, "Undo of non-existent fold should return false")
 
 
-func test_undo_blocked_fold_returns_false():
+func test_undo_fold_with_intersecting_seams_succeeds():
 	# Execute two intersecting folds
 	fold_system.execute_fold(Vector2i(4, 2), Vector2i(4, 3), false)  # fold_id 0
 	fold_system.execute_fold(Vector2i(2, 4), Vector2i(3, 4), false)  # fold_id 1
 
-	# Try to undo the blocked fold (fold 0)
+	# UNDO behavior has NO validation - should succeed even with blocking seams
+	# This is different from UNFOLD (seam click) which WILL have validation
 	var result = fold_system.undo_fold_by_id(0)
 
-	assert_false(result, "Undo of blocked fold should return false")
-	# Fold should still be in history
-	assert_eq(fold_system.fold_history.size(), 2, "Both folds should still be in history")
+	assert_true(result, "Undo should succeed even with intersecting folds (no validation for UNDO)")
+	# Fold should be removed from history
+	assert_eq(fold_system.fold_history.size(), 1, "First fold should be undone")
 
 
 func test_multiple_undos_in_sequence():

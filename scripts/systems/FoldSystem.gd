@@ -1074,11 +1074,9 @@ func undo_fold_by_id(fold_id: int) -> bool:
 		push_warning("FoldSystem: Fold ID %d not found in history" % fold_id)
 		return false
 
-	# Validate that this fold can be undone (check seam intersections)
-	var validation = can_undo_fold_seam_based(fold_id)
-	if not validation["valid"]:
-		push_warning("FoldSystem: Cannot undo fold %d: %s" % [fold_id, validation["reason"]])
-		return false
+	# NOTE: UNDO behavior has NO validation - it's a QoL feature that always works
+	# The can_undo_fold_seam_based() function is kept for future UNFOLD behavior (seam clicking)
+	# which will require validation for player position and blocking seams
 
 	# 1. Remove seam visuals for this fold
 	remove_seams_for_fold(fold_id)
