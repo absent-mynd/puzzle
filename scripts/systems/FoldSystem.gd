@@ -956,10 +956,47 @@ func is_player_on_seam(fold_id: int) -> bool:
 	if target_fold == null:
 		return false
 
-	# Check if player is at a position that was removed during the fold
-	# These positions will be restored during unfold, which would conflict with player
+	# Calculate which removed positions now have shifted cells occupying them
+	# These positions should NOT block unfold since the player is on a shifted cell
+	var anchor1 = target_fold["anchor1"]
+	var anchor2 = target_fold["anchor2"]
+
+	# Determine shift vector using same logic as unfold
+	var target_anchor: Vector2i
+	var source_anchor: Vector2i
+	var is_horizontal = anchor1.y == anchor2.y
+	var is_vertical = anchor1.x == anchor2.x
+
+	if is_horizontal:
+		target_anchor = anchor1 if anchor1.x < anchor2.x else anchor2
+		source_anchor = anchor2 if anchor1.x < anchor2.x else anchor1
+	elif is_vertical:
+		target_anchor = anchor1 if anchor1.y < anchor2.y else anchor2
+		source_anchor = anchor2 if anchor1.y < anchor2.y else anchor1
+	else:
+		# Simplified for diagonal - use anchor1 as target
+		target_anchor = anchor1
+		source_anchor = anchor2
+
+	var shift_vector = target_anchor - source_anchor
+	var shifted_positions = target_fold.get("shifted_positions", [])
+
+	# Calculate positions now occupied by shifted cells
+	var shifted_to_positions: Array[Vector2i] = []
+	for pos in shifted_positions:
+		shifted_to_positions.append(pos + Vector2i(shift_vector))
+
+	# Check if player is at a removed position that will be restored
+	# Exclude positions now occupied by shifted cells
 	var removed_positions = target_fold.get("removed_cells", [])
 	if player_pos in removed_positions:
+		if player_pos not in shifted_to_positions:
+			return true  # Player blocks - position will be restored
+
+	# Also check if player is on a position that was split by the cutlines
+	# These cells will be un-split during unfold, which would affect the player
+	var split_positions = target_fold.get("split_cells", [])
+	if player_pos in split_positions:
 		return true
 
 	return false
@@ -1886,6 +1923,13 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 	for cell in classification.removed:
 		removed_positions.append(cell.grid_position)
 
+	# Track positions that were split by the cutlines (on line1 and line2)
+	var split_positions: Array[Vector2i] = []
+	for cell in classification.on_line1:
+		split_positions.append(cell.grid_position)
+	for cell in classification.on_line2:
+		split_positions.append(cell.grid_position)
+
 	# Determine orientation for fold record (use specific orientation for axis-aligned folds)
 	var orientation = "diagonal"
 	if is_horizontal:
@@ -1899,6 +1943,7 @@ func execute_diagonal_fold(anchor1: Vector2i, anchor2: Vector2i):
 		"anchor1": anchor1,
 		"anchor2": anchor2,
 		"removed_cells": removed_positions.duplicate(),
+		"split_cells": split_positions.duplicate(),  # Positions that were split by cutlines
 		"shifted_positions": shifting_positions.duplicate(),  # Positions that shifted (BEFORE shift)
 		"orientation": orientation,
 		"timestamp": Time.get_ticks_msec(),
