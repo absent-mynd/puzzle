@@ -62,6 +62,9 @@ func _ready() -> void:
 		player.goal_reached.connect(_on_player_goal_reached)
 		player.position_changed.connect(_on_player_position_changed)  # Phase 6 Task 7
 
+		# Connect to fold system signals (Phase 6 Task 8 - UNFOLD as action)
+		fold_system.fold_unfolded.connect(_on_fold_unfolded)
+
 	# Initialize GUI
 	setup_gui()
 
@@ -141,6 +144,28 @@ func _on_player_position_changed(old_pos: Vector2i, new_pos: Vector2i) -> void:
 		"new_position": new_pos
 	}
 	action_history.push_action(move_action)
+
+	# Update undo button state
+	if hud:
+		hud.set_can_undo(action_history.can_undo())
+
+
+## Handle fold unfolded (seam click) - Phase 6 Task 8
+## Records unfold actions in ActionHistory so they can be undone
+func _on_fold_unfolded(fold_id: int, anchor1: Vector2i, anchor2: Vector2i, orientation: String) -> void:
+	if not action_history:
+		return
+
+	# Record the unfold action in action history
+	# Store the original fold parameters so we can re-execute the fold if undo is requested
+	var unfold_action = {
+		"action_type": "unfold",
+		"fold_id": fold_id,
+		"anchor1": anchor1,
+		"anchor2": anchor2,
+		"orientation": orientation
+	}
+	action_history.push_action(unfold_action)
 
 	# Update undo button state
 	if hud:
@@ -269,6 +294,32 @@ func _on_undo_requested() -> void:
 				print("Move undo successful! Player moved back to %s" % old_pos)
 			else:
 				print("Cannot undo move - missing action data")
+				# Push action back if undo failed
+				action_history.push_action(action)
+				if hud:
+					hud.set_can_undo(action_history.can_undo())
+
+		"unfold":
+			# Phase 6 Task 8: Handle unfold undo (re-fold)
+			if fold_system and action.has("anchor1") and action.has("anchor2"):
+				var anchor1 = action["anchor1"]
+				var anchor2 = action["anchor2"]
+				var success = fold_system.execute_fold(anchor1, anchor2, false)
+
+				if success:
+					# Update HUD
+					if hud:
+						hud.set_fold_count(GameManager.fold_count)
+						hud.set_can_undo(action_history.can_undo())
+					print("Unfold undo successful! Fold re-executed at %s -> %s" % [anchor1, anchor2])
+				else:
+					# Re-fold failed, push action back
+					action_history.push_action(action)
+					print("Cannot undo unfold - re-fold failed")
+					if hud:
+						hud.set_can_undo(action_history.can_undo())
+			else:
+				print("Cannot undo unfold - missing action data")
 				# Push action back if undo failed
 				action_history.push_action(action)
 				if hud:

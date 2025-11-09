@@ -10,6 +10,12 @@
 extends Node
 class_name FoldSystem
 
+## Signals
+
+## Emitted when a fold is unfolded via seam click (Phase 6 Task 8 - UNFOLD as action)
+## Parameters: fold_id, anchor1, anchor2, orientation
+signal fold_unfolded(fold_id: int, anchor1: Vector2i, anchor2: Vector2i, orientation: String)
+
 ## Properties
 
 ## Debug flag to control diagnostic output during fold execution
@@ -1464,17 +1470,21 @@ func unfold_seam(fold_id: int) -> bool:
 				if cell:
 					player.global_position = grid_manager.to_global(cell.get_center())
 
-	# 5. Remove fold from history
+	# 5. Emit unfold event for action history (Phase 6 Task 8)
+	# Emit BEFORE removing from history so we can capture the fold details
+	fold_unfolded.emit(fold_id, target_fold["anchor1"], target_fold["anchor2"], target_fold["orientation"])
+
+	# 6. Remove fold from history
 	fold_history.remove_at(fold_index)
 
-	# 6. Update GameManager fold count if it exists
+	# 7. Update GameManager fold count if it exists
 	if GameManager:
 		GameManager.fold_count -= 1
 
-	# 7. Update seam visual states
+	# 8. Update seam visual states
 	update_seam_visual_states()
 
-	# 8. Play unfold sound effect (if available)
+	# 9. Play unfold sound effect (if available)
 	if AudioManager:
 		AudioManager.play_sfx("unfold")
 
