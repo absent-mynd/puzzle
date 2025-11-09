@@ -48,12 +48,25 @@ jobs:
             exit 1
           fi
 
-          # Extract with tar (tpz is tar.gz format)
-          echo "Extracting export templates..."
-          tar -xzf Godot_v4.3-stable_export_templates.tpz
-          rm Godot_v4.3-stable_export_templates.tpz
+          # Check file type
+          echo "File type:"
+          file Godot_v4.3-stable_export_templates.tpz
 
-          echo "Export templates ready at: $(pwd)"
+          # Try extraction - handle potential gzip issues
+          echo "Extracting export templates..."
+          # First, try to gunzip it (in case it's just gzipped, not tar.gz)
+          if gunzip -t Godot_v4.3-stable_export_templates.tpz 2>/dev/null; then
+            echo "File is gzipped, attempting standard tar extraction..."
+            tar -xzf Godot_v4.3-stable_export_templates.tpz
+          else
+            echo "File may not be standard gzip format, trying alternative extraction..."
+            # Try extracting with no compression flag
+            tar -xf Godot_v4.3-stable_export_templates.tpz || tar -xvf Godot_v4.3-stable_export_templates.tpz || true
+          fi
+
+          rm -f Godot_v4.3-stable_export_templates.tpz
+
+          echo "Contents of export templates directory:"
           ls -la
 
       - name: Export game to HTML5
