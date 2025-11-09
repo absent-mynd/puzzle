@@ -1032,7 +1032,22 @@ func reverse_shifts_for_fold(fold_record: Dictionary) -> void:
 			})
 
 	# Perform the reverse shift
-	# Process in an order that avoids conflicts
+	# CRITICAL: Sort cells in the correct order to avoid collisions
+	# If shift is positive (shifting right/down), process from high to low
+	# If shift is negative (shifting left/up), process from low to high
+	if inverse_shift.x > 0:
+		# Shifting right: sort by x descending
+		cells_to_reverse.sort_custom(func(a, b): return a["from_pos"].x > b["from_pos"].x)
+	elif inverse_shift.x < 0:
+		# Shifting left: sort by x ascending
+		cells_to_reverse.sort_custom(func(a, b): return a["from_pos"].x < b["from_pos"].x)
+	elif inverse_shift.y > 0:
+		# Shifting down: sort by y descending
+		cells_to_reverse.sort_custom(func(a, b): return a["from_pos"].y > b["from_pos"].y)
+	elif inverse_shift.y < 0:
+		# Shifting up: sort by y ascending
+		cells_to_reverse.sort_custom(func(a, b): return a["from_pos"].y < b["from_pos"].y)
+
 	for shift_info in cells_to_reverse:
 		var cell = shift_info["cell"]
 		var from_pos = shift_info["from_pos"]
@@ -1041,7 +1056,7 @@ func reverse_shifts_for_fold(fold_record: Dictionary) -> void:
 		# Remove from current position
 		grid_manager.cells.erase(from_pos)
 
-		# Check if target position is occupied (per Q1, this shouldn't happen)
+		# Check if target position is occupied (per Q1, this shouldn't happen after proper sorting)
 		if grid_manager.cells.has(to_pos):
 			push_error("FoldSystem: Shift reversal conflict at %s - target position occupied! This is a bug." % str(to_pos))
 			# Free the blocking cell to recover
