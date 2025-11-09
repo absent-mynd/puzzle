@@ -1077,16 +1077,55 @@ func undo_fold_by_id(fold_id: int) -> bool:
 		# Create new Cell node with required constructor arguments
 		var cell = Cell.new(pos, local_pos, cell_size)
 
-		# Restore cell properties
-		var geometry_array = cell_data.get("geometry", [])
-		var geometry_points = PackedVector2Array()
-		for point_dict in geometry_array:
-			geometry_points.append(Vector2(point_dict["x"], point_dict["y"]))
-		cell.geometry = geometry_points
+		# PHASE 6 BUG FIX: Restore all geometry pieces if available
+		if cell_data.has("geometry_pieces") and not cell_data["geometry_pieces"].is_empty():
+			# New format: Restore all pieces
+			cell.geometry_pieces.clear()  # Clear the default piece
 
-		cell.cell_type = cell_data.get("cell_type", 0)
-		cell.is_partial = cell_data.get("is_partial", false)
-		cell.seams = cell_data.get("seams", [])
+			for piece_data in cell_data["geometry_pieces"]:
+				# Restore piece geometry
+				var piece_geometry = PackedVector2Array()
+				for point_dict in piece_data["geometry"]:
+					piece_geometry.append(Vector2(point_dict["x"], point_dict["y"]))
+
+				# Create CellPiece
+				var piece = CellPiece.new(piece_geometry, piece_data["cell_type"], piece_data["source_fold_id"])
+
+				# Restore piece seams
+				for seam_data in piece_data.get("seams", []):
+					# Deserialize intersection points
+					var intersection_points = PackedVector2Array()
+					for point_dict in seam_data["intersection_points"]:
+						intersection_points.append(Vector2(point_dict["x"], point_dict["y"]))
+
+					# Create Seam object
+					var seam = Seam.new(
+						Vector2(seam_data["line_point"]["x"], seam_data["line_point"]["y"]),
+						Vector2(seam_data["line_normal"]["x"], seam_data["line_normal"]["y"]),
+						intersection_points,
+						seam_data["fold_id"],
+						seam_data["timestamp"],
+						seam_data["fold_type"]
+					)
+					piece.add_seam(seam)
+
+				cell.geometry_pieces.append(piece)
+
+			# Update dominant type
+			cell.cell_type = cell.get_dominant_type()
+			cell.is_partial = cell_data.get("is_partial", false)
+
+		else:
+			# Legacy format: Single geometry piece
+			var geometry_array = cell_data.get("geometry", [])
+			var geometry_points = PackedVector2Array()
+			for point_dict in geometry_array:
+				geometry_points.append(Vector2(point_dict["x"], point_dict["y"]))
+			cell.geometry = geometry_points
+
+			cell.cell_type = cell_data.get("cell_type", 0)
+			cell.is_partial = cell_data.get("is_partial", false)
+			cell.seams = cell_data.get("seams", [])
 
 		# Add cell to grid
 		grid_manager.add_child(cell)
