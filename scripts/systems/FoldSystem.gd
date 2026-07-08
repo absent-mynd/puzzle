@@ -926,11 +926,39 @@ func merge_pieces_after_seam_removal(cell: Cell, grid_pos: Vector2i) -> void:
 ##
 ## @param fold_record: The fold record containing removed cells and grid state
 func restore_removed_cells_for_fold(fold_record: Dictionary) -> void:
-	var removed_cells = fold_record.get("removed_cells", [])
 	var cells_state = fold_record.get("cells_state", {})
 	var cell_size = grid_manager.cell_size
 
-	for removed_pos in removed_cells:
+	# Determine which positions this fold vacated and must be refilled on unfold.
+	# This is a SUPERSET of `removed_cells`: it also covers positions that were
+	# vacated when reverse_shifts_for_fold() moved a merge-target cell back to its
+	# original location. The clearest example is the source-anchor column, which
+	# during the fold held a cell merged from a shifted column; after the shift is
+	# reversed that position is empty but is NOT in `removed_cells`.
+	#
+	# We restrict restoration to THIS fold's footprint (removed cells + the shift
+	# destination positions) rather than the whole snapshot, so that unfolding an
+	# older fold does not resurrect cells that a LATER fold legitimately removed.
+	var positions_to_restore: Array[Vector2i] = []
+
+	for removed_pos in fold_record.get("removed_cells", []):
+		positions_to_restore.append(removed_pos)
+
+	# Shift destinations: where each shifted cell landed during the fold.
+	var anchor1: Vector2i = fold_record["anchor1"]
+	var anchor2: Vector2i = fold_record["anchor2"]
+	var shift_vector: Vector2i = anchor1 - anchor2
+	for original_pos in fold_record.get("shifted_positions", []):
+		var destination: Vector2i = original_pos + shift_vector
+		if destination not in positions_to_restore:
+			positions_to_restore.append(destination)
+
+	for removed_pos in positions_to_restore:
+		# Only fill genuine gaps — skip positions already occupied by a
+		# shifted-back cell or a cell belonging to a later fold.
+		if grid_manager.cells.has(removed_pos):
+			continue
+
 		# Get cell data from snapshot
 		var pos_str = var_to_str(removed_pos)
 		if not cells_state.has(pos_str):

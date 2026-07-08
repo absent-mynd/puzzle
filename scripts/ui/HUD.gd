@@ -112,8 +112,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			undo_requested.emit()
 			get_viewport().set_input_as_handled()
 	elif Input.is_key_pressed(KEY_R):  # R for restart
-		restart_requested.emit()
 		get_viewport().set_input_as_handled()
+		restart_requested.emit()
 
 
 ## Show or hide the HUD

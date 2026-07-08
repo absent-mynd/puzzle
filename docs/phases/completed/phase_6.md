@@ -1,10 +1,14 @@
 # Phase 6: Undo System - Implementation Specification
 
-**Status:** 📋 Ready to Start
+**Status:** ✅ Complete (2025-11-09)
 **Priority:** P1 (Critical Path)
-**Estimated Time:** 6-8 hours
 **Complexity:** ⭐⭐⭐⭐⭐ (Very High)
 **Dependencies:** Phase 4 (Geometric Folding) ✅ Complete, Phase 5 (Multi-Seam Handling) ✅ Complete
+
+> **Note:** This document is the original implementation specification, retained
+> as a historical record. Phase 6 (dual undo/unfold system) is complete: all 7
+> tasks plus the independent-unfold refactor (folds can be unfolded in any order,
+> preserving other folds). See STATUS.md for current test counts.
 
 ---
 

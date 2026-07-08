@@ -414,14 +414,14 @@ func test_multiple_folds_all_have_clickable_zones():
 ## TASK 3: SEAM INTERSECTION VALIDATION TESTS
 ## ============================================================================
 
-func test_can_undo_fold_seam_based_method_exists():
+func test_has_newer_seam_intersections_method_exists():
 	# Execute a fold to have something to test
 	fold_system.execute_fold(Vector2i(3, 2), Vector2i(7, 2), false)
 
 	# Verify method exists and returns correct structure
-	var result = fold_system.can_undo_fold_seam_based(0)
+	var result = fold_system.has_newer_seam_intersections(0)
 
-	assert_not_null(result, "can_undo_fold_seam_based should return a value")
+	assert_not_null(result, "has_newer_seam_intersections should return a value")
 	assert_true(result is Dictionary, "Should return a Dictionary")
 	assert_true(result.has("valid"), "Should have 'valid' key")
 	assert_true(result.has("reason"), "Should have 'reason' key")
@@ -433,7 +433,7 @@ func test_single_fold_is_undoable():
 	fold_system.execute_fold(Vector2i(3, 2), Vector2i(7, 2), false)
 
 	# Should be able to undo it (no newer intersecting seams)
-	var result = fold_system.can_undo_fold_seam_based(0)
+	var result = fold_system.has_newer_seam_intersections(0)
 
 	assert_true(result["valid"], "Single fold should be undoable")
 	assert_eq(result["blocking_seams"].size(), 0, "Should have no blocking seams")
@@ -447,8 +447,8 @@ func test_two_non_intersecting_folds_both_undoable():
 	fold_system.execute_fold(Vector2i(2, 5), Vector2i(3, 5), false)  # fold_id 1 (horizontal at y=5)
 
 	# Both should be undoable (parallel horizontal lines don't intersect)
-	var result_0 = fold_system.can_undo_fold_seam_based(0)
-	var result_1 = fold_system.can_undo_fold_seam_based(1)
+	var result_0 = fold_system.has_newer_seam_intersections(0)
+	var result_1 = fold_system.has_newer_seam_intersections(1)
 
 	assert_true(result_0["valid"], "First fold should be undoable (newer fold doesn't intersect)")
 	assert_true(result_1["valid"], "Second fold should be undoable (no newer folds)")
@@ -463,13 +463,13 @@ func test_intersecting_folds_older_blocked():
 	fold_system.execute_fold(Vector2i(2, 4), Vector2i(3, 4), false)  # fold_id 1
 
 	# Older fold (0) should be blocked by newer fold (1)
-	var result_0 = fold_system.can_undo_fold_seam_based(0)
+	var result_0 = fold_system.has_newer_seam_intersections(0)
 
 	assert_false(result_0["valid"], "Older fold should be blocked by intersecting newer fold")
 	assert_gt(result_0["blocking_seams"].size(), 0, "Should report blocking seams")
 
 	# Newer fold (1) should be undoable
-	var result_1 = fold_system.can_undo_fold_seam_based(1)
+	var result_1 = fold_system.has_newer_seam_intersections(1)
 	assert_true(result_1["valid"], "Newer fold should be undoable")
 
 
@@ -480,7 +480,7 @@ func test_parallel_seams_dont_block():
 	fold_system.execute_fold(Vector2i(2, 5), Vector2i(3, 5), false)  # fold_id 1
 
 	# Both should be undoable (parallel seams don't intersect)
-	var result_0 = fold_system.can_undo_fold_seam_based(0)
+	var result_0 = fold_system.has_newer_seam_intersections(0)
 
 	assert_true(result_0["valid"], "Parallel seams should not block each other")
 
@@ -493,16 +493,16 @@ func test_three_folds_complex_intersection():
 	fold_system.execute_fold(Vector2i(6, 2), Vector2i(6, 3), false)  # fold_id 2 (vertical at x=6)
 
 	# Fold 0 should be blocked by fold 1 (they intersect)
-	var result_0 = fold_system.can_undo_fold_seam_based(0)
+	var result_0 = fold_system.has_newer_seam_intersections(0)
 	assert_false(result_0["valid"], "Fold 0 should be blocked by fold 1")
 
 	# Fold 1 might be blocked by fold 2 if they intersect
-	var result_1 = fold_system.can_undo_fold_seam_based(1)
+	var result_1 = fold_system.has_newer_seam_intersections(1)
 	# Just check it returns valid structure
 	assert_true(result_1.has("valid"), "Result should have valid field")
 
 	# Fold 2 should be undoable (newest)
-	var result_2 = fold_system.can_undo_fold_seam_based(2)
+	var result_2 = fold_system.has_newer_seam_intersections(2)
 	assert_true(result_2["valid"], "Newest fold should always be undoable")
 
 
@@ -511,7 +511,7 @@ func test_invalid_fold_id_returns_invalid():
 	fold_system.execute_fold(Vector2i(3, 2), Vector2i(7, 2), false)
 
 	# Try to check undo for non-existent fold
-	var result = fold_system.can_undo_fold_seam_based(999)
+	var result = fold_system.has_newer_seam_intersections(999)
 
 	assert_false(result["valid"], "Non-existent fold should return invalid")
 	assert_true(result["reason"].length() > 0, "Should have a reason for invalid")
@@ -523,7 +523,7 @@ func test_blocking_seams_array_contains_seam_objects():
 	fold_system.execute_fold(Vector2i(2, 4), Vector2i(7, 4), false)  # fold_id 1 (horizontal, crosses vertical)
 
 	# Check that blocking_seams array contains actual seam objects
-	var result = fold_system.can_undo_fold_seam_based(0)
+	var result = fold_system.has_newer_seam_intersections(0)
 
 	if result["blocking_seams"].size() > 0:
 		var first_blocker = result["blocking_seams"][0]
@@ -537,7 +537,7 @@ func test_undo_validation_reason_messages():
 	fold_system.execute_fold(Vector2i(2, 4), Vector2i(7, 4), false)  # fold_id 1 (horizontal)
 
 	# Check that blocked fold has descriptive reason
-	var result = fold_system.can_undo_fold_seam_based(0)
+	var result = fold_system.has_newer_seam_intersections(0)
 
 	if not result["valid"]:
 		assert_true(result["reason"].length() > 0, "Should have a reason message")
@@ -775,17 +775,25 @@ func test_undo_invalid_fold_id_returns_false():
 	assert_false(result, "Undo of non-existent fold should return false")
 
 
-func test_undo_blocked_fold_returns_false():
-	# Execute two intersecting folds
+func test_undo_succeeds_even_with_intersecting_newer_fold():
+	# UNDO is a full state restore and is NOT subject to seam-intersection
+	# validation (unlike UNFOLD). Even when a newer fold intersects an older
+	# fold's seams, undoing the older fold succeeds and simply restores the
+	# grid to its pre-fold snapshot.
+	#
+	# This is the intentional behavior established by the independent-unfold
+	# refactor: seam validation was removed from undo_fold_by_id() because a
+	# snapshot restore can always be applied. (Seam validation now applies to
+	# UNFOLD only.)
 	fold_system.execute_fold(Vector2i(4, 2), Vector2i(4, 3), false)  # fold_id 0
 	fold_system.execute_fold(Vector2i(2, 4), Vector2i(3, 4), false)  # fold_id 1
 
-	# Try to undo the blocked fold (fold 0)
+	# Undo the older fold (fold 0) despite the newer intersecting fold
 	var result = fold_system.undo_fold_by_id(0)
 
-	assert_false(result, "Undo of blocked fold should return false")
-	# Fold should still be in history
-	assert_eq(fold_system.fold_history.size(), 2, "Both folds should still be in history")
+	assert_true(result, "Undo should succeed even with an intersecting newer fold")
+	# The undone fold is removed from history; the other record remains
+	assert_eq(fold_system.fold_history.size(), 1, "Undone fold should be removed from history")
 
 
 func test_multiple_undos_in_sequence():

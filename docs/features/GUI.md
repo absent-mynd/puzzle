@@ -406,9 +406,9 @@ levels/campaign/
 
 ## Related Documentation
 
-- **IMPLEMENTATION_PLAN.md**: Phase 10 details
-- **CLAUDE.md**: Project context and guidelines
-- **AGENT_TASK_DELEGATION.md**: Task 8 (Implement GUI System)
+- **[CLAUDE.md](../../CLAUDE.md)**: Project context and guidelines
+- **[STATUS.md](../../STATUS.md)**: Current progress
+- **[docs/REFERENCE.md](../REFERENCE.md)**: Code map (UI scripts live in `scripts/ui/`)
 
 ---
 
@@ -510,9 +510,9 @@ Three tutorial levels included:
 
 ### Testing
 
-All 298 tests passing after integration:
-- 225 original tests (Phases 1-3, 7)
-- 73 Phase 9 tests (LevelData, LevelManager, LevelValidator, ProgressManager)
+Level-system coverage lives in `test_level_data.gd`, `test_level_manager.gd`,
+`test_level_validator.gd`, and `test_progress_manager.gd`. See STATUS.md for suite
+totals.
 
 ---
 

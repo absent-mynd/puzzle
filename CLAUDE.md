@@ -2,8 +2,8 @@
 
 **START HERE** - Essential context for AI agents working on this project.
 
-**Last Updated:** 2025-11-08
-**Current Phase:** Phase 4 (Geometric Folding) - IN PROGRESS
+**Last Updated:** 2026-07-07
+**Current Phase:** Core mechanics complete (Phases 1-7). Remaining work is content & polish (Phases 8-11).
 
 ---
 
@@ -37,11 +37,15 @@ See **[STATUS.md](STATUS.md)** for detailed progress tracking.
 - ✅ Phase 1: Project Setup & Foundation (GeometryCore utilities)
 - ✅ Phase 2: Basic Grid System (Cell, GridManager)
 - ✅ Phase 3: Simple Axis-Aligned Folding (horizontal/vertical)
+- ✅ Phase 4: Geometric Folding (diagonal folds at arbitrary angles)
+- ✅ Phase 5: Multi-Seam Handling (multi-piece cells, null pieces)
+- ✅ Phase 6: Undo/Unfold System (independent unfold + snapshot undo)
 - ✅ Phase 7: Player Character (movement, validation, goal detection)
+- ⚙️ Phase 9 & 10: Level system, GUI, audio (substantially complete)
 
-**Tests Passing:** 474 (GeometryCore: 41, Cell: 14, GridManager: 27, FoldSystem: 63, Player: 36, FoldValidation: 42, WinCondition: 12, NullPieces: 7, PlayerBounds: 30+)
+**Tests:** 559 passing / 571 run (12 risky diagnostic tests). See STATUS.md for the authoritative count.
 
-**Next Priority:** Phase 4 - Geometric Folding (diagonal folds at arbitrary angles)
+**Next Priority:** Phase 8 - Cell Types & Visual Elements (content/polish; no spec doc yet)
 
 ---
 
@@ -123,7 +127,7 @@ See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for detailed rationale.
 ├── docs/                        # Reference documentation
 │   ├── ARCHITECTURE.md          # Design decisions (why)
 │   ├── DEVELOPMENT.md           # Development workflow (how)
-│   ├── REFERENCE.md             # API reference (what)
+│   ├── REFERENCE.md             # Code map — pointers to source (where)
 │   ├── phases/                  # Phase-specific documentation
 │   │   ├── README.md            # Phase overview
 │   │   ├── completed/           # Archived completed phases
@@ -260,16 +264,19 @@ See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for complete pitfall list.
 ### Running Tests
 
 ```bash
-# Run all tests (default)
-./run_tests.sh
-
-# Run specific test file
-./run_tests.sh geometry_core     # Partial match
-./run_tests.sh test_fold_system  # Full name
-./run_tests.sh fold              # Runs all tests with "fold"
-
-# Show help
+./run_tests.sh                   # Run all tests
+./run_tests.sh geometry_core     # Partial match on filename
+./run_tests.sh fold              # Runs all tests matching "fold"
 ./run_tests.sh --help
+```
+
+`run_tests.sh` prefers the bundled `tools/godot/godot` but **that binary is Linux
+x86-64** and won't execute elsewhere; the script auto-falls back to a system
+`godot` on PATH. On macOS: `brew install godot` (or add Godot.app's binary to
+PATH). If the sandbox blocks Godot's config dir, redirect HOME:
+
+```bash
+HOME=/tmp/godot-home ./run_tests.sh
 ```
 
 ### Writing Tests (TDD Approach)
@@ -287,9 +294,9 @@ func test_something():
     # Always include descriptive messages!
 ```
 
-**Target:** 100% test coverage for all features
-
-See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for testing best practices.
+**Approach:** New features are expected to ship with tests. See `STATUS.md` for
+the current suite size and **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for
+testing best practices.
 
 ---
 
@@ -298,7 +305,7 @@ See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for testing best practices.
 ### Starting a Task
 
 1. **Check current status:** Read `STATUS.md`
-2. **Read phase documentation:** `docs/phases/pending/phase_X.md`
+2. **Read relevant context:** completed phase specs in `docs/phases/completed/`, plus `docs/REFERENCE.md` for the code map
 3. **Write tests first** (TDD approach)
 4. **Run tests frequently:** `./run_tests.sh`
 5. **Verify all tests pass** before committing
@@ -324,7 +331,7 @@ See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for testing best practices.
 
 ## Git Workflow
 
-**Current Branch:** `claude/condense-context-011CUu8JZwaeZU23X9zmUcTg`
+Work happens on `claude/*` feature branches; PRs merge into `main`.
 
 **Committing Changes:**
 ```bash
@@ -332,143 +339,70 @@ See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for testing best practices.
 git add .
 
 # Commit with descriptive message
-git commit -m "Add geometric folding validation for diagonal cuts"
+git commit -m "Fix removed-cell restoration in independent unfold"
 
-# Push to feature branch
-git push -u origin claude/condense-context-011CUu8JZwaeZU23X9zmUcTg
+# Push to the current feature branch
+git push -u origin HEAD
 ```
 
 **Creating Pull Requests:** See git operations section in main instructions.
 
 ---
 
-## Documentation Maintenance
+## Documentation Map
 
-### When to Update Documentation
+Each fact has **one** authoritative home — link to it, don't copy it:
 
-**Update STATUS.md after:**
-- Completing a phase
-- Significant milestone (e.g., 50+ tests added)
-- Major feature implementation
-- Weekly progress check
+| Doc | Owns |
+|---|---|
+| `STATUS.md` | Current progress, phase status, **test counts** |
+| `CLAUDE.md` (this file) | Agent onboarding, critical decisions, pitfalls |
+| `docs/ARCHITECTURE.md` | Design decisions & rationale (stable) |
+| `docs/DEVELOPMENT.md` | Workflow, testing, contribution guidance |
+| `docs/REFERENCE.md` | Code map — pointers to source files (not signatures) |
+| `docs/phases/completed/` | Historical phase specs (read-only record) |
 
-**Update phase docs when:**
-- Discovering new edge cases
-- Finding critical implementation details
-- Completing phase (move to `completed/`)
-
-**Update CLAUDE.md ONLY when:**
-- New critical pitfall discovered
-- Major architectural change
-- New tool or workflow added
-
-**Don't update:**
-- `docs/ARCHITECTURE.md` (stable design decisions)
-- `docs/REFERENCE.md` (extract from code, not manually edited)
-- Completed phase docs (historical record)
-
-### How to Update STATUS.md
-
-```bash
-# 1. Count current tests
-grep -r "func test_" scripts/tests/ | wc -l
-
-# 2. Edit STATUS.md
-# - Update test counts by category
-# - Update "Last Updated" date
-# - Move completed phases to "Completed" section
-# - Update "Next Priority"
-
-# 3. Commit
-git commit -m "Update STATUS.md - Phase X complete, Y tests passing"
-```
+Keep this file lean: update it only for a new critical pitfall, a major
+architectural change, or a new tool/workflow. Do **not** restate test counts or
+progress here — those live in `STATUS.md`.
 
 ---
 
-## Phase 4 Preview (Next Critical Task)
+## What's Next
 
-**Phase 4: Geometric Folding** is the most complex phase (6-8 hours estimated).
+The core folding engine (Phases 1-7) is complete: axis-aligned and diagonal
+folds, multi-seam cells, and the dual undo/unfold system all work and are tested.
+Remaining work is **content and polish**, not core-mechanic engineering:
 
-**Key Challenge:** Diagonal folds at arbitrary angles with cell polygon splitting.
+- **Phase 8 – Cell Types & Visual Elements:** richer cell types, animations
+- **Phase 9 – Level Management (polish):** campaign content, final integration
+- **Phase 10 – Graphics/Audio (polish):** particles, seam visuals, UI/UX
+- **Phase 11 – Testing & Validation:** edge cases, performance
 
-**Critical Points:**
-- ALL geometry operations MUST use LOCAL coordinates
-- Apply Phase 3 lessons (coordinate system, cell merging, player validation)
-- Extensive edge case testing required
-
-**Before starting Phase 4:**
-1. Read `docs/phases/pending/phase_4.md` thoroughly
-2. Review `GeometryCore.split_polygon_by_line()` implementation
-3. Understand coordinate system (LOCAL vs WORLD)
-4. Review Phase 3 fold algorithm
-
-See **[docs/phases/pending/phase_4.md](docs/phases/pending/phase_4.md)** for complete details.
-
----
-
-## Quick Reference Commands
-
-```bash
-# Run all tests
-./run_tests.sh
-
-# Run specific test file
-./run_tests.sh geometry_core
-
-# Check test count
-grep -r "func test_" scripts/tests/ | wc -l
-
-# List all GDScript files
-find . -name "*.gd" -not -path "./addons/*"
-
-# Check git status
-git status
-
-# Update STATUS.md test count
-vim STATUS.md  # Update test counts manually
-```
+Completed phase specs live in `docs/phases/completed/` as a historical record.
+`docs/phases/pending/` is currently empty; Phases 8 and 11 do not yet have
+standalone spec documents.
 
 ---
 
 ## Getting Help
 
-**Documentation:**
-- Stuck on concepts? → `docs/ARCHITECTURE.md`
-- Need API reference? → `docs/REFERENCE.md`
-- Testing questions? → `docs/DEVELOPMENT.md`
-- Phase-specific? → `docs/phases/`
+| Question | Go to |
+|---|---|
+| Where's the code for X? | `docs/REFERENCE.md` (code map) |
+| Why is it designed this way? | `docs/ARCHITECTURE.md` |
+| How do I run tests / contribute? | `docs/DEVELOPMENT.md` |
+| What's done / next? | `STATUS.md` |
+| How does behavior X work? | its `scripts/tests/test_*.gd` — living documentation |
 
-**Code Examples:**
-- Check existing tests in `scripts/tests/`
-- Review completed phases in `scripts/core/` and `scripts/systems/`
-
-**Resources:**
-- [GUT Documentation](https://gut.readthedocs.io/)
-- [Godot 4 Documentation](https://docs.godotengine.org/)
+External: [GUT docs](https://gut.readthedocs.io/) · [Godot 4 docs](https://docs.godotengine.org/)
 
 ---
 
-## Summary
+## The five things that matter most
 
-**Remember:**
-1. **Read STATUS.md first** - know what's done and what's next
-2. **Write tests before code** - TDD approach prevents bugs
-3. **Use LOCAL coordinates for cells** - most common bug!
-4. **Free overlapped cells** - prevent memory leaks
-5. **Update STATUS.md after milestones** - keep progress tracked
-
-**Most Critical Knowledge:**
-- Coordinate system: LOCAL for cells, WORLD for player
-- Player validation: blocks folds that affect player
-- Cell merging: always free old cells
-- Testing: 100% coverage target
-
-**Next Steps:**
-1. Read [STATUS.md](STATUS.md) for current progress
-2. Read [docs/phases/pending/phase_4.md](docs/phases/pending/phase_4.md) for next task
-3. Run `./run_tests.sh` to verify environment
-4. Start implementing with TDD approach
-
----
-
-**Good luck, and remember: when in doubt, check the tests - they're living documentation!**
+1. **Read `STATUS.md` first** — know what's done and what's next.
+2. **Cells/seams use LOCAL coords, the player uses WORLD** — the most common bug.
+3. **Free cells before overwriting them** — prevents memory leaks.
+4. **Never compare floats with `==`** — use `GeometryCore.EPSILON`.
+5. **Write the test first** — the suite is the behavioral spec.
