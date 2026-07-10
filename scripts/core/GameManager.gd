@@ -18,6 +18,13 @@ var current_level_data: LevelData = null
 var fold_count: int = 0
 var level_start_time: float = 0.0
 
+## Editor test-session state (survives the editor -> play -> editor round-trip because
+## GameManager is an autoload). Set when the editor launches a test; consumed by the editor
+## when it re-loads. `editor_session` keys: level_data (LevelData), cursor (Vector2i),
+## player_start (Vector2i), filename (String).
+var is_testing_from_editor: bool = false
+var editor_session: Dictionary = {}
+
 
 func _ready() -> void:
 	# Initialize managers
@@ -76,17 +83,60 @@ func get_next_level_id() -> String:
 
 
 ## Restarts the current level
+##
+## For a normal campaign/custom level (non-empty id) this reloads by id. For an editor
+## test session the id is empty but `current_level_data` is set in memory, so we reload
+## that directly (fixes restart being a silent no-op while testing an unsaved level).
 func restart_level() -> void:
 	if not current_level_id.is_empty():
 		start_level(current_level_id)
+	elif _prepare_test_restart():
+		get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+
+## State mutation for restarting an in-memory level (empty id). Returns true if a reload
+## should happen. Extracted from restart_level() so it is unit-testable without a scene change.
+func _prepare_test_restart() -> bool:
+	if current_level_data == null:
+		return false
+	current_level_data = current_level_data.clone()
+	fold_count = 0
+	level_start_time = Time.get_ticks_msec() / 1000.0
+	return true
+
+
+## Returns to the level editor, restoring the stashed editing session.
+##
+## Clears gameplay state and the test flag but PRESERVES `editor_session` — the editor
+## consumes it on re-entry (see LevelEditor._ready).
+func return_to_editor() -> void:
+	_prepare_return_to_editor()
+	get_tree().paused = false  # defensive: pause-menu path may leave the tree paused
+	get_tree().change_scene_to_file("res://scenes/ui/LevelEditor.tscn")
+
+
+## State mutation for return_to_editor(). Extracted for unit testing (no scene change).
+func _prepare_return_to_editor() -> void:
+	is_testing_from_editor = false
+	current_level_id = ""
+	current_level_data = null
+	fold_count = 0
 
 
 ## Returns to the main menu
 func return_to_main_menu() -> void:
+	_prepare_return_to_main_menu()
+	get_tree().change_scene_to_file("res://scenes/ui/MainMenu.tscn")
+
+
+## State mutation for return_to_main_menu(). Also clears any editor test session so a
+## stale session never leaks into a later real play or a fresh editor open.
+func _prepare_return_to_main_menu() -> void:
 	current_level_id = ""
 	current_level_data = null
 	fold_count = 0
-	get_tree().change_scene_to_file("res://scenes/ui/MainMenu.tscn")
+	is_testing_from_editor = false
+	editor_session = {}
 
 
 ## Increments the fold counter

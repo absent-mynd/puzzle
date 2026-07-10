@@ -14,6 +14,7 @@ signal undo_requested
 @onready var undo_button: Button = $TopBar/HBoxContainer/ControlButtons/UndoButton
 @onready var restart_button: Button = $TopBar/HBoxContainer/ControlButtons/RestartButton
 @onready var pause_button: Button = $TopBar/HBoxContainer/ControlButtons/PauseButton
+@onready var test_mode_label: Label = $TopBar/HBoxContainer/LevelInfo/TestModeLabel
 
 ## Current level info
 var level_name: String = "Test Level"
@@ -114,6 +115,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif Input.is_key_pressed(KEY_R):  # R for restart
 		get_viewport().set_input_as_handled()
 		restart_requested.emit()
+
+
+## Show or hide the "TEST MODE" indicator (set when the level is launched from the editor)
+func set_test_mode(enabled: bool) -> void:
+	if test_mode_label:
+		test_mode_label.visible = enabled
 
 
 ## Show or hide the HUD

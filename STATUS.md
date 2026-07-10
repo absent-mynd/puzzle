@@ -95,6 +95,27 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 
 ## Recent Changes
 
+### 2026-07-10
+- **Level editor usability pass.** The editor↔play round-trip now works: pressing `T`
+  (Test) stashes the live editing session in `GameManager` (`is_testing_from_editor` +
+  `editor_session`), and a **Back to Editor** button on the pause and level-complete
+  screens (plus a **TEST MODE** banner on the HUD) returns to the editor with all edits,
+  cursor, player start, filename, and grid size intact. `LevelEditor._ready()` restores the
+  stashed session; `GameManager.return_to_editor()` clears gameplay state but preserves the
+  session for the editor to consume.
+- Fixed `GameManager.restart_level()` no-op during an editor test (empty level id): it now
+  reloads the in-memory `current_level_data`. Dropped the temp-JSON write in `test_level()`
+  that silently clobbered `custom_level.json`.
+- New editor conveniences: on-screen **tool palette** (active paint type highlighted),
+  **mouse click/drag painting** (right-click erases), **grid resize** (`G`, e.g. `12x8`)
+  with cell/cursor clamping, and **metadata editing** (`M`: name / par / difficulty).
+  `load_level`/`new_level` now route through `resize_grid` so non-10×10 levels load
+  correctly.
+- Split `GameManager` return/restart methods into pure `_prepare_*` state mutators (for
+  testability) + thin scene-change callers. Added `test_game_manager_editor_roundtrip.gd`,
+  `test_editor_ui_wiring.gd`, `test_level_editor.gd` (round-trip state, UI node wiring,
+  editor boot/palette/resize/paint).
+
 ### 2026-07-08
 - Phase 8 gameplay interaction (in progress): center-dot highlights (hover any piece
   of a merged cell), second-anchor fold-region preview, crease dots at fold merge

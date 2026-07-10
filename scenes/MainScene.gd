@@ -168,6 +168,7 @@ func setup_gui() -> void:
 		hud.set_level_info(level_name, par_folds)
 		hud.set_fold_count(GameManager.fold_count)
 		hud.set_can_undo(false)  # Initialize undo button as disabled
+		hud.set_test_mode(GameManager.is_testing_from_editor)
 		hud.pause_requested.connect(_on_pause_requested)
 		hud.restart_requested.connect(_on_restart_requested)
 		hud.undo_requested.connect(_on_undo_requested)
@@ -184,6 +185,8 @@ func setup_gui() -> void:
 		pause_menu.resume_requested.connect(_on_resume_requested)
 		pause_menu.restart_requested.connect(_on_restart_requested)
 		pause_menu.main_menu_requested.connect(_on_main_menu_requested)
+		pause_menu.editor_requested.connect(_on_editor_requested)
+		pause_menu.set_editor_mode(GameManager.is_testing_from_editor)
 
 	# Load and instantiate Level Complete screen as CanvasLayer
 	var complete_scene = load("res://scenes/ui/LevelComplete.tscn")
@@ -198,6 +201,8 @@ func setup_gui() -> void:
 		level_complete.retry_requested.connect(_on_restart_requested)
 		level_complete.level_select_requested.connect(_on_level_select_requested)
 		level_complete.main_menu_requested.connect(_on_main_menu_requested)
+		level_complete.editor_requested.connect(_on_editor_requested)
+		level_complete.set_editor_mode(GameManager.is_testing_from_editor)
 
 
 ## Display level complete UI
@@ -257,6 +262,12 @@ func _sync_after_change() -> void:
 func _on_main_menu_requested() -> void:
 	get_tree().paused = false  # Ensure game is unpaused
 	GameManager.return_to_main_menu()
+
+
+## Handle "Back to Editor" request (only reachable while testing a level from the editor)
+func _on_editor_requested() -> void:
+	get_tree().paused = false  # Ensure game is unpaused
+	GameManager.return_to_editor()
 
 
 ## Handle next level request
