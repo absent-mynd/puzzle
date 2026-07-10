@@ -24,27 +24,74 @@ var cells: Dictionary = {}
 ## Selected anchor cells for folding (max 2)
 var selected_anchors: Array[Vector2i] = []
 
+## Base-space (unfolded) point each selected anchor is pinned to (parallel to
+## selected_anchors). Vector2.INF = ambiguous (placed on a seam) -> the anchor
+## disappears on the next geometry change. The anchor's current position is DERIVED by
+## transforming this point forward through the fold list (see reresolve_anchors), the
+## same way crease dots are positioned — stable, and hidden if the point gets excised.
+var selected_anchor_points: Array[Vector2] = []
+
 ## Origin point for grid positioning
 var grid_origin: Vector2 = Vector2.ZERO
 
 ## Preview line for showing connection between anchors
 var preview_line: Line2D
 
+## PHASE 8: Region-preview visuals shown when 2 anchors are selected
+var preview_cut_line1: Line2D      # First fold-region border
+var preview_cut_line2: Line2D      # Second fold-region border
+var preview_region_fill: Polygon2D # Shaded region between the borders
+
 ## Currently hovered cell
 var hovered_cell: Cell = null
 
-## Reference to FoldSystem for validation (set externally)
-var fold_system: FoldSystem = null
+## Reference to the fold controller for validation, preview, and undo history.
+var fold_system: FoldController = null
+
+## PHASE 8: Reference to the active InteractionConfig (set externally by MainScene)
+## Governs Axis D (null-anchor eligibility). May be null in tests / debug.
+var interaction_config: InteractionConfig = null
+
+## PHASE 8: Guards against overlapping player-flash restores (see _flash_player_red)
+var _player_flash_active: bool = false
 
 
 ## Initialize grid on ready
 func _ready() -> void:
 	# Set up preview line (Issue #9: increased width for better visibility)
+	# PHASE 8: All preview visuals are created before the cells (added in create_grid),
+	# so a high z_index is required for them to draw ON TOP of the map rather than behind
+	# it. Cell contents top out at z_index 3 (the highlight dot).
+	const PREVIEW_FILL_Z := 10
+	const PREVIEW_LINE_Z := 11
+
 	preview_line = Line2D.new()
 	preview_line.width = 5.0  # Increased from 3.0 for better visibility
 	preview_line.default_color = Color.CYAN
 	preview_line.visible = false
+	preview_line.z_index = PREVIEW_LINE_Z
 	add_child(preview_line)
+
+	# PHASE 8: Region-preview visuals (two border lines + shaded fill between them)
+	preview_region_fill = Polygon2D.new()
+	preview_region_fill.color = Color(1.0, 0.5, 0.0, 0.15)
+	preview_region_fill.visible = false
+	preview_region_fill.z_index = PREVIEW_FILL_Z
+	add_child(preview_region_fill)
+
+	preview_cut_line1 = Line2D.new()
+	preview_cut_line1.width = 3.0
+	preview_cut_line1.default_color = Color.GREEN
+	preview_cut_line1.visible = false
+	preview_cut_line1.z_index = PREVIEW_LINE_Z
+	add_child(preview_cut_line1)
+
+	preview_cut_line2 = Line2D.new()
+	preview_cut_line2.width = 3.0
+	preview_cut_line2.default_color = Color.GREEN
+	preview_cut_line2.visible = false
+	preview_cut_line2.z_index = PREVIEW_LINE_Z
+	add_child(preview_cut_line2)
 
 	# Create the grid
 	create_grid()
@@ -188,7 +235,8 @@ func _input(event: InputEvent) -> void:
 			var world_pos = get_global_mouse_position()
 			var cell = get_cell_at_world_pos(world_pos)
 			if cell:
-				select_cell(cell.grid_position)
+				# Pass the precise click point so the anchor pins to the right seam side.
+				select_cell(cell.grid_position, to_local(world_pos))
 				get_viewport().set_input_as_handled()  # Mark input as handled
 
 	elif event is InputEventMouseMotion:
@@ -197,37 +245,192 @@ func _input(event: InputEvent) -> void:
 
 
 ## Select a cell as an anchor point
+##
+## PHASE 8: Applies anchor-eligibility and fold-validity guards (shared by the mouse
+## debug flow and the player facing-interact flow). Rejected placements are NOT added.
+##
 ## @param grid_pos: Grid position of cell to select
-func select_cell(grid_pos: Vector2i) -> void:
+## @param point: Optional sub-cell LOCAL point that decides which tile/side the anchor
+##               pins to (mouse: click point; facing: a point biased toward the player).
+##               Defaults to the cell center. Determines the anchor's base-tile identity.
+## @return: true if the anchor was placed, false if it was rejected
+func select_cell(grid_pos: Vector2i, point: Vector2 = Vector2.INF) -> bool:
 	# Clear hover effects
 	clear_all_hover_effects()
 
-	# Play selection sound
-	AudioManager.play_sfx("selection")
+	if point == Vector2.INF:
+		point = Vector2(grid_pos) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
 
-	# Handle selection based on count
+	# Third selection resets and starts a new first anchor
+	if selected_anchors.size() >= 2:
+		clear_selection()
+
 	if selected_anchors.size() == 0:
-		# First anchor - red outline
+		# First anchor - eligibility only (a lone anchor defines no fold yet)
+		if not is_anchor_eligible(grid_pos):
+			_reject_anchor(grid_pos)
+			return false
+		AudioManager.play_sfx("selection")
 		selected_anchors.append(grid_pos)
+		selected_anchor_points.append(_anchor_base_point(point))
 		var cell = get_cell(grid_pos)
 		if cell:
 			cell.set_outline_color(Color.RED)
+		# Placing an anchor is an undoable input (Baba-style history).
+		if fold_system:
+			fold_system.commit_input()
+		return true
 
-	elif selected_anchors.size() == 1:
-		# Second anchor - blue outline
+	else:
+		# Second anchor - eligibility AND fold validity (geometry + player)
+		var anchor1 = selected_anchors[0]
+		if not is_anchor_eligible(grid_pos):
+			_show_rejected_fold_preview(anchor1, grid_pos, "null")
+			return false
+		if fold_system:
+			var geo: Dictionary = fold_system.validate_fold(anchor1, grid_pos)
+			if not geo.valid:
+				_show_rejected_fold_preview(anchor1, grid_pos, "geometry")
+				return false
+			# Player-position validation is ALWAYS deferred to commit now: the player may place
+			# anchors and move freely (anchors ride their tiles). The player check + red flash
+			# happen in flash_invalid_fold() on commit.
+
+		AudioManager.play_sfx("selection")
 		selected_anchors.append(grid_pos)
+		selected_anchor_points.append(_anchor_base_point(point))
 		var cell = get_cell(grid_pos)
 		if cell:
 			cell.set_outline_color(Color.BLUE)
 		update_preview_line()
+		# Placing the second anchor is an undoable input.
+		if fold_system:
+			fold_system.commit_input()
+		return true
 
-	else:
-		# Third click - reset and start over
-		clear_selection()
-		selected_anchors.append(grid_pos)
-		var cell = get_cell(grid_pos)
-		if cell:
-			cell.set_outline_color(Color.RED)
+
+## Check whether a cell may be used as a fold anchor, per Axis D (null eligibility)
+##
+## @param grid_pos: Grid position to test
+## @return: true if the cell exists and satisfies the active null-anchor rule
+func is_anchor_eligible(grid_pos: Vector2i) -> bool:
+	var cell = get_cell(grid_pos)
+	if not cell:
+		return false
+
+	var mode := InteractionConfig.NullAnchor.CENTROID_IN_NULL
+	if interaction_config:
+		mode = interaction_config.null_anchor
+
+	match mode:
+		InteractionConfig.NullAnchor.OFF:
+			return true
+		InteractionConfig.NullAnchor.CENTROID_IN_NULL:
+			return not cell.is_centroid_in_null()
+		InteractionConfig.NullAnchor.ANY_NULL_PIECE:
+			return not cell.has_null_piece()
+		_:
+			return true
+
+
+## Show the invalid-region feedback for a fold that failed at COMMIT time.
+##
+## Used when player-position validation was deferred (ALLOW_MOVEMENT) and the fold turns
+## out to be invalid when committed. Determines the reason and flashes the red region +
+## offending feature; the selection is kept so the player can adjust and retry.
+##
+## @param anchor1: First anchor
+## @param anchor2: Second anchor
+func flash_invalid_fold(anchor1: Vector2i, anchor2: Vector2i) -> void:
+	var reason := "geometry"
+	var blocking := Vector2i(-1, -1)
+	if fold_system:
+		var pl: Dictionary = fold_system.validate_fold_with_player(anchor1, anchor2)
+		if fold_system.validate_fold(anchor1, anchor2).valid and not pl.valid:
+			reason = "player"
+			blocking = pl.get("blocking_pos", Vector2i(-1, -1))
+	_show_rejected_fold_preview(anchor1, anchor2, reason, blocking)
+
+
+## Current player grid position (via the fold controller), or a sentinel if unknown.
+func _player_grid_pos() -> Vector2i:
+	if fold_system and fold_system.player:
+		return fold_system.player.grid_position
+	return Vector2i(-9999, -9999)
+
+
+## Reject a first-anchor placement: error feedback + brief red flash on the cell dot
+func _reject_anchor(grid_pos: Vector2i) -> void:
+	AudioManager.play_sfx("error")
+	_flash_cell_dot(grid_pos, Color.RED)
+
+
+## Show a temporary red "this fold was rejected" preview and flash the offending feature
+##
+## @param anchor1: The already-placed first anchor
+## @param bad_pos: The rejected second-anchor position
+## @param reason: "null", "geometry", or "player" (drives which feature is flashed)
+## @param blocking_pos: for "player" rejections, the tile the player would have landed
+##                      on (a wall/void) — flashed alongside the player. Vector2i(-1,-1)
+##                      when the player is simply inside the fold region.
+func _show_rejected_fold_preview(anchor1: Vector2i, bad_pos: Vector2i, reason: String,
+		blocking_pos: Vector2i = Vector2i(-1, -1)) -> void:
+	AudioManager.play_sfx("error")
+	_draw_region_preview(anchor1, bad_pos, Color.RED, Color(1.0, 0.0, 0.0, 0.18))
+
+	# Highlight the offending feature
+	match reason:
+		"null":
+			_flash_cell_dot(bad_pos, Color.RED)
+		"player":
+			_flash_player_red()
+			# Also flash the tile that blocked the player's landing, when applicable.
+			if blocking_pos != Vector2i(-1, -1) and blocking_pos != _player_grid_pos():
+				_flash_cell_dot(blocking_pos, Color.RED)
+		_:
+			_flash_cell_dot(bad_pos, Color.RED)
+
+	# Auto-clear the red preview after a short delay. If both anchors are still selected
+	# (a deferred commit-time rejection), revert to the normal validity-coloured preview;
+	# otherwise hide it.
+	var timer := get_tree().create_timer(0.6)
+	timer.timeout.connect(func():
+		if selected_anchors.size() == 2:
+			update_preview_line()
+		else:
+			_hide_region_preview())
+
+
+## Briefly flash a cell's highlight dot a given color, then restore it
+func _flash_cell_dot(grid_pos: Vector2i, color: Color) -> void:
+	var cell = get_cell(grid_pos)
+	if not cell:
+		return
+	cell.set_outline_color(color)
+	var timer := get_tree().create_timer(0.6)
+	timer.timeout.connect(func():
+		if is_instance_valid(cell) and grid_pos not in selected_anchors:
+			cell.clear_visual_feedback())
+
+
+## Briefly flash the player's sprite red to indicate it blocked the fold
+##
+## Guarded so overlapping rejections don't capture the RED flash as the "original"
+## color (which would leave the sprite stuck red).
+func _flash_player_red() -> void:
+	if not fold_system or _player_flash_active:
+		return
+	var player: Player = fold_system.player
+	if not player or not is_instance_valid(player) or not player.sprite:
+		return
+	_player_flash_active = true
+	var original: Color = player.sprite.color
+	player.sprite.color = Color.RED
+	var timer := get_tree().create_timer(0.6)
+	timer.timeout.connect(func():
+		if is_instance_valid(player) and player.sprite:
+			player.sprite.color = original
+		_player_flash_active = false)
 
 
 ## Clear anchor selection
@@ -239,14 +442,94 @@ func clear_selection() -> void:
 			cell.clear_visual_feedback()
 
 	selected_anchors.clear()
+	selected_anchor_points.clear()
 	if preview_line:
 		preview_line.visible = false
+	_hide_region_preview()
+
+
+## Remove only the most recently placed anchor (keeps earlier anchors)
+func deselect_last_anchor() -> void:
+	if selected_anchors.is_empty():
+		return
+	var last = selected_anchors[selected_anchors.size() - 1]
+	var cell = get_cell(last)
+	if cell:
+		cell.clear_visual_feedback()
+	selected_anchors.remove_at(selected_anchors.size() - 1)
+	if not selected_anchor_points.is_empty():
+		selected_anchor_points.remove_at(selected_anchor_points.size() - 1)
+	if preview_line:
+		preview_line.visible = false
+	_hide_region_preview()
 
 
 ## Get selected anchor positions
 ## @return: Array of selected anchor grid positions
 func get_selected_anchors() -> Array[Vector2i]:
 	return selected_anchors
+
+
+## Restore an exact anchor selection (positions + base-tile identities) without
+## validation or history side-effects. Used by undo to reinstate a snapshot.
+##
+## @param anchors: Array of Vector2i anchor positions (0, 1, or 2 entries)
+## @param bases: parallel Array of base_ids (defaults to empty -> unknown/-1)
+func set_selection(anchors: Array, points: Array = []) -> void:
+	# Clear current highlights first.
+	for anchor_pos in selected_anchors:
+		var c = get_cell(anchor_pos)
+		if c:
+			c.clear_visual_feedback()
+	selected_anchors.clear()
+	selected_anchor_points.clear()
+	if preview_line:
+		preview_line.visible = false
+	_hide_region_preview()
+
+	# Reinstate highlights: first anchor RED, second BLUE.
+	for i in range(anchors.size()):
+		var pos: Vector2i = anchors[i]
+		selected_anchors.append(pos)
+		selected_anchor_points.append(points[i] if i < points.size() else Vector2.INF)
+		var cell = get_cell(pos)
+		if cell:
+			cell.set_outline_color(Color.RED if i == 0 else Color.BLUE)
+	if selected_anchors.size() == 2:
+		update_preview_line()
+
+
+## Base-space (unfolded) point the anchor pins to (delegates to the fold controller).
+## Vector2.INF if ambiguous (on a seam / void).
+func _anchor_base_point(point: Vector2) -> Vector2:
+	if fold_system and fold_system.has_method("base_point_at"):
+		return fold_system.base_point_at(point)
+	return Vector2.INF
+
+
+## Re-resolve placed anchors to their tiles' current positions after a geometry change
+## (e.g. an unfold). Each anchor's base-space point is transformed forward through the
+## current fold list; an anchor whose point is now hidden/excised (INF) disappears.
+func reresolve_anchors() -> void:
+	if selected_anchors.is_empty() or fold_system == null:
+		return
+
+	var new_anchors: Array[Vector2i] = []
+	var new_points: Array[Vector2] = []
+	for i in range(selected_anchors.size()):
+		var bp: Vector2 = selected_anchor_points[i] if i < selected_anchor_points.size() else Vector2.INF
+		var cur: Vector2 = fold_system.forward_point(bp)
+		if cur == Vector2.INF:
+			continue  # ambiguous -> the anchor disappears
+		var cell := Vector2i(int(floor(cur.x / cell_size)), int(floor(cur.y / cell_size)))
+		# Hidden if the derived cell's center rests in a void (not real ground).
+		if not fold_system.cell_center_covered(cell):
+			continue
+		new_anchors.append(cell)
+		new_points.append(bp)
+
+	# Rebuild highlights + preview from the surviving anchors.
+	set_selection(new_anchors, new_points)
 
 
 ## Update hover feedback for mouse position
@@ -299,8 +582,110 @@ func update_preview_line() -> void:
 				preview_line.default_color = Color.CYAN  # Default if no fold_system
 
 			preview_line.visible = true
+
+			# PHASE 8: Also draw the fold-region border lines + shaded fill
+			var region_valid := true
+			if fold_system:
+				region_valid = fold_system.validate_fold(selected_anchors[0], selected_anchors[1]).valid
+			var border_color := Color.GREEN if region_valid else Color.RED
+			var fill_color := Color(0.0, 1.0, 0.0, 0.13) if region_valid else Color(1.0, 0.0, 0.0, 0.15)
+			_draw_region_preview(selected_anchors[0], selected_anchors[1], border_color, fill_color)
 	else:
 		preview_line.visible = false
+
+
+## Draw the fold-region preview: two border lines + shaded fill between them
+##
+## Reused for both the normal (green) selection preview and the red rejection preview.
+## Skips degenerate cases (same anchor). Geometry uses NOMINAL cell centers to match
+## FoldSystem's cut-line math (cell centers can drift after prior folds).
+##
+## @param anchor1: First anchor grid position
+## @param anchor2: Second anchor grid position
+## @param border_color: Color for the two border lines
+## @param fill_color: Color (with alpha) for the shaded region
+func _draw_region_preview(anchor1: Vector2i, anchor2: Vector2i, border_color: Color, fill_color: Color) -> void:
+	if not fold_system or anchor1 == anchor2:
+		_hide_region_preview()
+		return
+
+	var half := Vector2(cell_size / 2.0, cell_size / 2.0)
+	var a1_local := Vector2(anchor1) * cell_size + half
+	var a2_local := Vector2(anchor2) * cell_size + half
+
+	var cut = fold_system.calculate_cut_lines(a1_local, a2_local)
+
+	# Direction along each (parallel) cut line = perpendicular to the shared normal
+	var normal: Vector2 = cut.line1.normal
+	var dir := Vector2(-normal.y, normal.x)
+	var span := Vector2(grid_size).length() * cell_size
+
+	var l1_start: Vector2 = cut.line1.point - dir * span
+	var l1_end: Vector2 = cut.line1.point + dir * span
+	var l2_start: Vector2 = cut.line2.point - dir * span
+	var l2_end: Vector2 = cut.line2.point + dir * span
+
+	preview_cut_line1.points = PackedVector2Array([l1_start, l1_end])
+	preview_cut_line1.default_color = border_color
+	preview_cut_line1.visible = true
+
+	preview_cut_line2.points = PackedVector2Array([l2_start, l2_end])
+	preview_cut_line2.default_color = border_color
+	preview_cut_line2.visible = true
+
+	# Quad spanning the strip between the two parallel borders
+	preview_region_fill.polygon = PackedVector2Array([l1_start, l1_end, l2_end, l2_start])
+	preview_region_fill.color = fill_color
+	preview_region_fill.visible = true
+
+
+## Animate the region preview closing to follow a MEET-IN-THE-MIDDLE fold: both crease
+## border lines and the shaded fill sweep inward onto the meeting line over `duration`.
+## Called by FoldController during an animated fold; the caller hides the preview
+## afterwards (via clear_selection).
+##
+## @param crease1: LOCAL point on anchor_a's crease
+## @param crease2: LOCAL point on anchor_b's crease
+## @param meeting_point: LOCAL point on the line where the two halves meet
+## @param normal: shared crease normal (anchor_a -> anchor_b)
+## @param duration: seconds
+func animate_region_close(crease1: Vector2, crease2: Vector2, meeting_point: Vector2, normal: Vector2, duration: float) -> void:
+	var dir := Vector2(-normal.y, normal.x)
+	var span := Vector2(grid_size).length() * cell_size
+	var c1a := crease1 - dir * span
+	var c1b := crease1 + dir * span
+	var c2a := crease2 - dir * span
+	var c2b := crease2 + dir * span
+	var ma := meeting_point - dir * span
+	var mb := meeting_point + dir * span
+
+	preview_cut_line1.visible = true
+	preview_cut_line2.visible = true
+	preview_region_fill.visible = true
+
+	var setter := func(t: float):
+		var a1 := c1a.lerp(ma, t)
+		var b1 := c1b.lerp(mb, t)
+		var a2 := c2a.lerp(ma, t)
+		var b2 := c2b.lerp(mb, t)
+		if is_instance_valid(preview_cut_line1):
+			preview_cut_line1.points = PackedVector2Array([a1, b1])
+		if is_instance_valid(preview_cut_line2):
+			preview_cut_line2.points = PackedVector2Array([a2, b2])
+		if is_instance_valid(preview_region_fill):
+			preview_region_fill.polygon = PackedVector2Array([a1, b1, b2, a2])
+	var tw := create_tween()
+	tw.tween_method(setter, 0.0, 1.0, duration)
+
+
+## Hide all region-preview visuals
+func _hide_region_preview() -> void:
+	if preview_cut_line1:
+		preview_cut_line1.visible = false
+	if preview_cut_line2:
+		preview_cut_line2.visible = false
+	if preview_region_fill:
+		preview_region_fill.visible = false
 
 
 ## Debug and Visualization Methods
@@ -336,6 +721,43 @@ func set_goal_cell(grid_pos: Vector2i) -> bool:
 		cell.set_cell_type(3)  # Goal type
 		return true
 	return false
+
+
+## DERIVE/REPLAY: Reconcile the view cells to match a derived FoldedState.
+##
+## The `cells` dictionary becomes a VIEW CACHE (not the source of truth): for every
+## occupied plane position, ensure a Cell node exists and render the derived pieces
+## into it; free view cells at positions that are now empty. After this call all the
+## usual consumers (get_cell / Player collision / rendering / hit-testing) see the
+## folded configuration.
+##
+## @param state: FoldedState produced by FoldReplay.derive()
+func refresh_from_state(state: FoldedState) -> void:
+	# 1. Ensure/update a view cell at every occupied position.
+	var occupied := {}
+	for pos in state.stacks.keys():
+		if not state.is_occupied(pos):
+			continue
+		occupied[pos] = true
+		var cell = get_cell(pos)
+		if not cell:
+			cell = Cell.new(pos, Vector2(pos) * cell_size, cell_size)
+			cells[pos] = cell
+			add_child(cell)
+		cell.apply_folded_pieces(state.surface_pieces_at(pos))
+
+	# 2. Free view cells at positions that are no longer occupied.
+	var stale: Array = []
+	for pos in cells.keys():
+		if not occupied.has(pos):
+			stale.append(pos)
+	for pos in stale:
+		var cell = cells[pos]
+		cells.erase(pos)
+		if is_instance_valid(cell):
+			if cell.get_parent():
+				cell.get_parent().remove_child(cell)
+			cell.queue_free()
 
 
 ## Clean up freed cell references from the dictionary

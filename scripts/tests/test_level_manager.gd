@@ -126,11 +126,11 @@ func test_get_level_list_filters_json_files():
 	assert_true(true, "Test completed - checked " + str(levels.size()) + " files")
 
 func test_get_level_list_empty_directory():
-	# Custom directory now contains test campaign levels (16 levels)
+	# Custom directory is empty (custom levels removed for the 10-level campaign)
 	var levels = level_manager.get_level_list("res://levels/custom/")
 
 	assert_not_null(levels, "get_level_list should return an array")
-	assert_eq(levels.size(), 16, "Custom directory should contain 16 test campaign levels")
+	assert_eq(levels.size(), 0, "Custom directory should be empty")
 
 func test_load_level_by_id_finds_correct_level():
 	# This test requires actual campaign levels to exist

@@ -15,32 +15,34 @@ This directory contains detailed documentation for each implementation phase.
 
 Located in `completed/` directory:
 
-| Phase | Name | Status | Tests | Completion Date |
-|-------|------|--------|-------|----------------|
-| 1 | Project Setup & Foundation | ✅ Complete | 41 | 2025-11-05 |
-| 2 | Basic Grid System | ✅ Complete | 41 | 2025-11-05 |
-| 3 | Simple Axis-Aligned Folding | ✅ Complete | 95 | 2025-11-06 |
-| 4 | Geometric Folding | ✅ Complete | 22 | 2025-11-07 |
-| 5 | Multi-Seam Handling | ✅ Complete | ~50 | 2025-11-08 |
-| 7 | Player Character | ✅ Complete | 48 | 2025-11-06 |
-| 9 | Level Management | ⚙️ Substantial | 73 | In Progress |
-| 10 | GUI & Audio | ⚙️ Substantial | 30 | In Progress |
+| Phase | Name | Status | Completion Date |
+|-------|------|--------|----------------|
+| 1 | Project Setup & Foundation | ✅ Complete | 2025-11-05 |
+| 2 | Basic Grid System | ✅ Complete | 2025-11-05 |
+| 3 | Simple Axis-Aligned Folding | ✅ Complete | 2025-11-06 |
+| 4 | Geometric Folding | ✅ Complete | 2025-11-07 |
+| 5 | Multi-Seam Handling | ✅ Complete | 2025-11-08 |
+| 6 | Undo/Unfold System | ✅ Complete | 2025-11-09 |
+| 7 | Player Character | ✅ Complete | 2025-11-06 |
+| 9 | Level Management | ⚙️ Substantial | In Progress |
+| 10 | GUI & Audio | ⚙️ Substantial | In Progress |
 
-**Total Tests:** 474 (and growing - includes NullPieces: 7, PlayerBounds: 30+, improved validation: 42)
+**See [STATUS.md](../../STATUS.md) for the authoritative, current test count.**
 
 ---
 
 ## Pending Phases 📋
 
-Located in `pending/` directory:
-
 | Phase | Name | Priority | Est. Time | Dependencies |
 |-------|------|----------|-----------|--------------|
-| 6 | Undo System | P1 | 4-6h | Phases 4, 5 ✅ |
 | 8 | Cell Types & Visuals | P2 | 3-4h | Phases 4, 5 ✅ |
-| 9 | Level Management | P2 | 3-4h | Phase 3, 7 |
-| 10 | Graphics, GUI & Audio | P3 | 4-6h | Parallel |
+| 9 | Level Management (polish) | P2 | 1-2h | Phase 3, 7 |
+| 10 | Graphics, GUI & Audio (polish) | P3 | 2-3h | Parallel |
 | 11 | Testing & Validation | P4 | 4-5h | All phases |
+
+> The `pending/` directory is currently empty — all phase specs written so far
+> have been implemented and moved to `completed/`. Remaining phases (8, 11) are
+> tracked in STATUS.md and do not yet have standalone spec documents.
 
 ---
 
@@ -79,25 +81,14 @@ Each phase document contains:
 
 ---
 
-## Next Phase: Phase 6 - Undo System
+## Next Phase: Phase 8 - Cell Types & Visual Elements
 
-**Status:** 🚧 Ready to start
-**Priority:** P1
-**Document:** [`pending/phase_6.md`](pending/phase_6.md)
+**Status:** 📋 Not started (no spec doc yet)
+**Priority:** P2
 
-Implements complete undo/redo system for fold operations with strict undo ordering.
-
-**Key Challenges:**
-- Maintaining game state consistency
-- Efficient state snapshots
-- Strict undo ordering validation
-- Memory management for undo stack
-
-**Estimated Time:** 4-6 hours
-
-**Dependencies Met:**
-- ✅ Phase 4: Geometric Folding complete
-- ✅ Phase 5: Multi-Seam Handling complete
+Enhanced cell type system, goal detection polish, and animations. The core
+folding/undo mechanics (Phases 1-7) are complete, so remaining work is content
+and polish rather than core-mechanic engineering.
 
 ---
 
@@ -110,14 +101,15 @@ Phase 4: Geometric Folding (COMPLETE)
     ↓
 Phase 5: Multi-Seam Handling (COMPLETE)
     ↓
-Phase 6: Undo System (NEXT - CRITICAL PATH) 🚧
+Phase 6: Undo/Unfold System (COMPLETE)
+    ↓
+Phase 8: Cell Types & Visuals (NEXT)
     ↓
 Phase 11: Final Testing
 
 Parallel tracks (can be done anytime):
-- Phase 8: Cell Types (depends on Phase 5 ✅)
-- Phase 9: Level Management (partial - GUI done)
-- Phase 10: Graphics & Audio (partial - GUI done)
+- Phase 9: Level Management (substantial - GUI + persistence done)
+- Phase 10: Graphics & Audio (substantial - GUI + audio done)
 ```
 
 ---

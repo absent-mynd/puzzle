@@ -1,8 +1,8 @@
 # Project Status - Space-Folding Puzzle Game
 
-**Last Updated:** 2025-11-07
-**Current Phase:** Phase 5 (Multi-Seam Handling) - NEXT PRIORITY
-**Total Tests Passing:** 361 / 363 (99.4%)
+**Last Updated:** 2026-07-08
+**Current Phase:** Core mechanics complete (Phases 1-7). Phase 8 gameplay interaction work in progress.
+**Total Tests:** **617 passing** / 617 (0 failing, 0 risky)
 
 ---
 
@@ -10,404 +10,174 @@
 
 | Metric | Value |
 |--------|-------|
-| Phases Complete | 5 / 11 (Phases 1, 2, 3, 4, 7) |
-| Tests Passing | 361 / 363 |
-| Test Coverage | 99.4% |
-| Lines of Code | ~5,000 (excluding tests) |
-| Documentation | Consolidated (2025-11-07) |
+| Core mechanic phases | ✅ Complete (1, 2, 3, 4, 5, 6, 7) |
+| Support phases | ⚙️ Substantial (9 Levels, 10 GUI/Audio) |
+| Tests passing | 617 / 617 (0 failing, 0 risky) |
+| Test run time | ~6s |
+
+> **Running tests locally:** the bundled `tools/godot/godot` is a Linux binary.
+> On macOS use a system Godot 4.x. Because the sandbox blocks Godot's default
+> config dir, redirect HOME:
+> ```
+> HOME=/private/tmp/godot-home godot --path . --headless -s addons/gut/gut_cmdln.gd
+> ```
 
 ---
 
 ## Completed Phases ✅
 
-### Phase 1: Project Setup & Foundation
-**Status:** ✅ Complete (2025-11-05)
-**Tests:** 41 passing (GeometryCore)
+### Phase 1: Project Setup & Foundation (2025-11-05)
+GeometryCore utility class — Sutherland-Hodgman polygon splitting, point-line
+relationships, intersections, area/centroid. Files: `scripts/utils/GeometryCore.gd`.
 
-**Key Achievements:**
-- Project structure established
-- GeometryCore utility class fully implemented
-- Sutherland-Hodgman polygon splitting algorithm
-- Point-line relationships, intersections, area/centroid calculations
-- Full test coverage for all geometric operations
+### Phase 2: Basic Grid System (2025-11-05)
+Cell and GridManager classes, 10×10 grid, anchor selection (max 2), hover/select
+feedback, grid↔world↔local coordinate conversion. Files: `scripts/core/Cell.gd`,
+`scripts/core/GridManager.gd`.
 
-**Files:**
-- `scripts/utils/GeometryCore.gd`
-- `scripts/tests/test_geometry_core.gd`
+### Phase 3: Simple Axis-Aligned Folding (2025-11-06)
+FoldSystem with horizontal/vertical folds, cell overlap/merge at anchors, seam
+line creation/shift/removal, player-position validation, memory-safe cell cleanup.
+Files: `scripts/systems/FoldSystem.gd`.
 
----
+### Phase 4: Geometric Folding (2025-11-07)
+Diagonal folds at arbitrary angles. Cut-line calculation with perpendicular
+normals, cell classification into regions, polygon splitting, cross-seam merging,
+anchor normalization, two-pass shift. All fold orientations now route through
+`execute_diagonal_fold()`.
 
-### Phase 2: Basic Grid System
-**Status:** ✅ Complete (2025-11-05)
-**Tests:** 41 passing (Cell: 14, GridManager: 27)
+### Phase 5: Multi-Seam Handling (2025-11-08)
+Multiple intersecting seams per cell via multi-piece cells (CellPiece), Seam class,
+per-piece classification/merging, null-piece system for geometric completeness.
+Files: `scripts/core/CellPiece.gd`, `scripts/core/Seam.gd`.
 
-**Key Achievements:**
-- Cell class with grid position, geometry, type
-- GridManager with 10x10 grid generation
-- Anchor selection system (max 2 anchors)
-- Visual feedback for hover and selection
-- Coordinate conversion (grid ↔ world ↔ local)
+### Phase 6: Undo/Unfold System (2025-11-09)
+Dual system with a deliberate behavioral split (see CLAUDE.md §2a):
+- **UNFOLD** (seam clicks, `unfold_seam()`) — independent geometric reversal. Any
+  fold can be unfolded in any order; other folds are preserved. Blocked only if the
+  player stands on the seam or a newer seam intersects. Does not restore player pos.
+- **UNDO** (button/keyboard, `undo_fold_by_id()`) — full snapshot restore including
+  player position. No seam validation (a snapshot restore always applies).
 
-**Files:**
-- `scripts/core/Cell.gd`
-- `scripts/core/GridManager.gd`
-- `scripts/tests/test_cell.gd`
-- `scripts/tests/test_grid_manager.gd`
+Includes seam-to-fold mapping, clickable-zone calc, action history for sequential
+undo, and the independent-unfold refactor.
 
----
-
-### Phase 3: Simple Axis-Aligned Folding
-**Status:** ✅ Complete (2025-11-06)
-**Tests:** 95 passing (FoldSystem: 63, FoldValidation: 32)
-
-**Key Achievements:**
-- FoldSystem with horizontal and vertical folds
-- Cell overlapping/merging behavior at anchors
-- Seam line creation, shifting, and removal
-- Player position validation (blocks folds)
-- Animated and non-animated fold variants
-- Memory-safe cell cleanup during merges
-
-**Critical Lessons Learned:**
-- **Coordinate System:** LOCAL for cells/seams, WORLD for player
-- **Cell Merging:** Always free overlapped cells to prevent memory leaks
-- **Player Validation:** Must check before any fold execution
-
-**Files:**
-- `scripts/systems/FoldSystem.gd`
-- `scripts/tests/test_fold_system.gd`
-- `scripts/tests/test_fold_validation.gd`
+### Phase 7: Player Character (2025-11-06)
+Grid-based movement (arrows/WASD), wall collision, goal detection / win condition,
+position updates during folds. Files: `scripts/core/Player.gd`.
 
 ---
 
-### Phase 7: Player Character
-**Status:** ✅ Complete (2025-11-06)
-**Tests:** 48 passing (Player: 36, WinCondition: 12)
+## Substantially Complete ⚙️
 
-**Key Achievements:**
-- Player class with grid-based movement
-- Arrow keys / WASD controls
-- Wall collision detection
-- Goal detection and win condition
-- Position updates during folds
-- Movement validation during folds
+### Phase 9: Level Management System
+GUI (MainMenu, HUD, PauseMenu, LevelComplete, Settings), JSON level
+data/serialization, load/save, campaign progression with stars/unlocking, level
+validation, custom-level support. **10-level campaign authored** (fold-forcing puzzles,
+solvability-tested). **Remaining:** final integration polish.
 
-**Files:**
-- `scripts/core/Player.gd`
-- `scripts/tests/test_player.gd`
-- `scripts/tests/test_player_fold_validation.gd`
-- `scripts/tests/test_win_condition.gd`
-
----
-
-### Phase 4: Geometric Folding
-**Status:** ✅ Complete (2025-11-07)
-**Tests:** 22 passing (GeometricFolding)
-
-**Key Achievements:**
-- Diagonal fold implementation at arbitrary angles
-- Cut line calculation with perpendicular normals
-- Cell classification into regions (kept-left, removed, kept-right, split)
-- Polygon cell splitting using Sutherland-Hodgman algorithm
-- Cell merging across fold seams
-- Player validation for diagonal folds
-- Anchor normalization to prevent negative coordinates
-- Two-pass cell shifting algorithm
-
-**Critical Lessons Learned:**
-- **Anchor normalization:** Must choose target anchor to keep all coordinates positive
-- **Two-pass approach:** Classify and remove first, then shift to prevent coordinate issues
-- **Vertex edge cases:** Cells with vertices on cut lines require careful handling
-- **Memory safety:** Same cell cleanup patterns as Phase 3
-
-**Files:**
-- `scripts/systems/FoldSystem.gd` (execute_diagonal_fold, calculate_cut_lines)
-- `scripts/tests/test_geometric_folding.gd`
-- Various debug test files for diagnostics
-
----
-
-## Test Breakdown by Category
-
-| Category | Tests Passing | Coverage |
-|----------|---------------|----------|
-| GeometryCore | 41 | 100% |
-| Cell | 14 | 100% |
-| GridManager | 27 | 100% |
-| FoldSystem | 36 | 100% |
-| FoldValidation | 38 | 100% |
-| Player | 16 | 100% |
-| PlayerFoldValidation | 32 | 100% |
-| WinCondition | 12 | 100% |
-| GeometricFolding | 22 | 100% |
-| AudioManager | 30 | 100% |
-| LevelData | 10 | 100% |
-| LevelManager | 15 | 100% |
-| LevelValidator | 21 | 100% |
-| ProgressManager | 27 | 100% |
-| FoldValidator | 18 | 100% |
-| Debug/Diagnostic | 2/4 | 50% (2 risky) |
-| **TOTAL** | **361/363** | **99.4%** |
-
----
-
-## Active Development 🚧
-
-### Phase 5: Multi-Seam Handling (NEXT PRIORITY)
-**Status:** 🚧 Not Started
-**Priority:** P1
-**Estimated Time:** 4-6 hours
-**Complexity:** ⭐⭐⭐⭐
-
-**Objective:** Handle multiple intersecting seams in the same cell using tessellation.
-
-**Key Challenges:**
-- Recursive polygon subdivision
-- Tracking seam metadata per sub-polygon
-- Visual representation of multiple seams
-- Cell type preservation across splits
-
-**Dependencies:** Phase 4 complete ✅
-
-**See:** `docs/phases/pending/phase_5.md` for detailed specifications (to be created)
+### Phase 10: Graphics, GUI & Audio Polish
+Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
+**Remaining:** particle effects, seam visual polish, UI/UX refinements.
 
 ---
 
 ## Pending Phases 📋
 
-### Phase 5: Multi-Seam Handling
-**Status:** Pending
-**Priority:** P1
-**Est. Time:** 4-6 hours
-**Dependencies:** Phase 4 complete
-
-**Objective:** Handle multiple intersecting seams in the same cell using tessellation.
-
----
-
-### Phase 6: Undo System
-**Status:** Pending
-**Priority:** P1
-**Est. Time:** 4-5 hours
-**Dependencies:** Phases 3, 4 complete
-
-**Objective:** Allow players to undo fold operations with dependency checking.
-
----
-
-### Phase 8: Cell Types & Core Visual Elements
-**Status:** Pending
-**Priority:** P2
-**Est. Time:** 3-4 hours
-**Dependencies:** Phases 4, 5 complete
-
-**Objective:** Implement cell type system, goal detection, and basic animations.
-
----
-
-### Phase 9: Level Management System
-**Status:** ✅ Substantially Complete
-**Priority:** P2
-**Est. Time:** 1-2 hours remaining (polish)
-**Tests:** 73 passing (LevelData: 10, LevelManager: 15, LevelValidator: 21, ProgressManager: 27)
-
-**Completed:**
-- ✅ GUI system (MainMenu, HUD, PauseMenu, LevelComplete, Settings)
-- ✅ Level data structure and serialization (JSON format)
-- ✅ Level loading/saving system
-- ✅ Campaign progression tracking with save/load
-- ✅ Level validation system
-- ✅ Progress manager with stars and unlocking
-- ✅ Custom level support
-
-**Remaining:**
-- Final integration testing
-- Campaign level content creation
-- Polish and edge case handling
-
----
-
-### Phase 10: Graphics, GUI & Audio Polish
-**Status:** ✅ Substantially Complete
-**Priority:** P3
-**Est. Time:** 2-3 hours remaining (visual polish)
-**Tests:** 30 passing (AudioManager)
-
-**Completed:**
-- ✅ Complete GUI system
-- ✅ HUD with fold counter
-- ✅ Main menu and navigation
-- ✅ Pause menu and level complete screen
-- ✅ Audio system implementation (AudioManager)
-- ✅ Sound effect integration
-- ✅ Music playback system
-
-**Remaining:**
-- Enhanced visual effects (particles, animations)
-- Seam visual polish
-- Final UI/UX refinements
-
----
-
-### Phase 11: Testing & Validation
-**Status:** Ongoing
-**Priority:** P4
-**Est. Time:** 4-5 hours (final validation)
-
-**Objective:** Comprehensive testing, edge case validation, performance optimization.
+| Phase | Name | Priority | Est. Time | Notes |
+|-------|------|----------|-----------|-------|
+| 8 | Cell Types & Visual Elements | P2 | 3-4h | No spec doc yet |
+| 9 | Level Management (polish) | P2 | 1-2h | Content + integration |
+| 10 | Graphics/Audio (polish) | P3 | 2-3h | Particles, animations |
+| 11 | Testing & Validation | P4 | 4-5h | Edge cases, perf |
 
 ---
 
 ## Recent Changes
 
-### 2025-11-07
-- **Phase 4 complete** - Geometric folding with diagonal folds at arbitrary angles
-- Added 22+ geometric folding tests
-- Implemented diagonal fold algorithm with anchor normalization
-- Fixed multiple bugs in cell classification and shifting
-- **Phase 9 substantially complete** - Level management system with 73 tests
-- **Phase 10 audio complete** - AudioManager with 30 tests
-- Added FoldValidator with comprehensive validation (18 tests)
-- **Total: 361/363 tests passing** (138 new tests added)
-- **Documentation consolidation** - Reorganized all documentation into streamlined structure
-- Created CLAUDE.md, STATUS.md, and docs/ directory structure
+### 2026-07-08
+- Phase 8 gameplay interaction (in progress): center-dot highlights (hover any piece
+  of a merged cell), second-anchor fold-region preview, crease dots at fold merge
+  points, player facing + SPACE interact, and configurable interaction axes
+  (`InteractionConfig`/`InteractionController`). Anchor placement now rejects
+  ineligible/invalid anchors in both mouse and facing flows.
+- Fixed unfold shift direction: it derived the shift from `anchor1-anchor2`, which is
+  wrong when anchors were selected in reverse order (normalization picks target/source
+  independently). Now uses stored `target_anchor-source_anchor` (`_fold_shift_vector`).
+- Fixed unfold geometry position: `reverse_shifts_for_fold` re-keyed reversed cells but
+  never translated their geometry back, so cells rendered at the folded location while
+  indexed at the original slot (overlap + vacant-slot). Now translates by the inverse
+  shift.
+- Crease markers ride the cells they sit on through folds/unfolds via
+  `remap_grid_markers` (the extension point for future grid-attached entities).
+- Fixed unfold cell IDENTITY: cut-line cells were rebuilt with the merge's dominant type
+  (a goal merged onto empty left the wrong cell green) and, for diagonal folds, the
+  source cut line's cells were left as holes / stale NULL cells. Reverse-shifted cells and
+  all cut-line cells (both lines) are now reconciled from the pre-fold snapshot
+  (`_populate_cell_from_snapshot`, `reconcile_cut_line_cells`) — rebuilding existing cells
+  and recreating vacated ones — when no other fold's seam remains on them.
+- Campaign rebuilt: removed all pre-existing campaign/custom levels and authored a fresh
+  **10-level campaign** (`levels/campaign/01_first_fold` … `10_the_gauntlet`) of
+  fold-forcing wall/water puzzles with a difficulty ramp (single fold → two-axis → diagonal
+  → 12×12 finale). `ProgressManager` sequence + default unlock updated. Added
+  `test_campaign_levels.gd`, which loads each level, applies its intended fold solution, and
+  BFS-verifies the goal is unreachable by walking but reachable after folding (par matches).
+- Editor: interaction axes (A–D) are now direct enum dropdowns on the Main node
+  (`second_anchor`, `confirm_persistence`, `action_priority`, `null_anchor`) instead of an
+  empty sub-resource, so they can be toggled without creating a resource.
+- ALLOW_MOVEMENT now defers player-position fold validation to commit time (the player may
+  place the 2nd anchor while inside the fold region); the invalid region flashes red at
+  commit if still blocked. Preview visuals now draw ON TOP of the map (raised z_index).
+- Test suite: 568 → **617 passing**, 0 failing, 0 risky.
 
-### 2025-11-06
-- **Phase 3 & 7 complete** - Axis-aligned folding and player character fully implemented
-- Added 95 tests for fold system and validation
-- Added 48 tests for player movement and win condition
-- Achieved 225 total tests passing (100% coverage)
+### 2026-07-07
+- Fixed unfold bug: `restore_removed_cells_for_fold()` now refills the full fold
+  footprint (removed cells **and** shift-destination positions), not just
+  `removed_cells`. The source-anchor column — vacated when a merge-target cell
+  shifts back on unfold — is now correctly restored. (10-cell gap → full restore.)
+- Rewrote `test_undo_blocked_fold_returns_false` →
+  `test_undo_succeeds_even_with_intersecting_newer_fold` to match the intentional
+  Phase 6 design (undo no longer performs seam-intersection validation).
+- Fixed a silent coverage regression: `test_seam_undo.gd` still called
+  `can_undo_fold_seam_based()`, which the Phase 6 refactor renamed to
+  `has_newer_seam_intersections()`. The calls errored before asserting, so 9
+  seam-intersection tests were marked "risky" (running nothing). Updated all
+  call sites — those tests now assert.
+- Pruned 3 print-only diagnostic scratch tests (deleted
+  `test_diagonal_45deg_fold.gd`; removed `test_understand_keep_side_for_vertical_fold`).
+- Test suite: 556 → **568 passing**, 0 failing, 0 risky.
+- Documentation cleanup: removed obsolete root analysis/planning docs
+  (CELL_MERGE_ANALYSIS, PHASE_5_6_ANALYSIS, UNFOLD_REFACTOR_PLAN), moved completed
+  phase_6 spec to `completed/`, refreshed phase README and CLAUDE.md. Replaced the
+  hand-written REFERENCE.md with a source pointer/code map; `run_tests.sh` now
+  falls back to a system Godot when the bundled Linux binary can't execute.
 
-### 2025-11-05
-- **Phase 1 & 2 complete** - Foundation and basic grid system
-- Implemented GeometryCore, Cell, GridManager classes
-- Added 82 tests for core functionality
+### 2025-11-09
+- Independent unfold system implemented (folds unfold in any order, preserving
+  other folds). Unfold vs undo behavior distinction finalized.
 
----
+### 2025-11-08
+- Phase 5 (Multi-Seam Handling) complete.
 
-## Next Steps (Priority Order)
-
-1. **Phase 5: Multi-Seam Handling** ← NEXT
-   - Enable cells with multiple intersecting seams
-   - Tessellation algorithm
-   - Estimated 4-6 hours
-
-2. **Phase 6: Undo System**
-   - After Phase 5
-   - Estimated 4-5 hours
-
-3. **Phase 8: Cell Types & Visual Elements**
-   - Enhanced cell visuals
-   - Animation polish
-   - Estimated 2-3 hours
-
-4. **Phase 9: Level System (Final Polish)**
-   - Campaign content creation
-   - Final integration
-   - Estimated 1-2 hours
-
-5. **Phase 10: Visual Polish (Final)**
-   - Particle effects
-   - Enhanced animations
-   - Estimated 2-3 hours
-
-6. **Phase 11: Final Testing**
-   - Comprehensive validation
-   - Performance optimization
-   - Estimated 4-5 hours
+### 2025-11-05 → 11-07
+- Phases 1-4 and 7 complete; level system and audio brought to substantial state.
 
 ---
 
 ## Known Issues
 
-None currently. All tests passing.
+None. All 617 tests pass with no failing or risky tests.
+
+Several `test_*_bug.gd` / `test_*_debug.gd` / `test_*_trace.gd` files remain from
+past bug hunts; they still assert (not risky) but are print-heavy and could be
+consolidated in a future cleanup pass.
 
 ---
 
-## Performance Metrics
+## For Detailed Information
 
-| Metric | Current | Target | Status |
-|--------|---------|--------|--------|
-| Fold Operation Time | ~20ms | < 100ms | ✅ Exceeds |
-| Animation FPS | 60 | 60 | ✅ Met |
-| Memory Usage | ~30MB | < 50MB | ✅ Good |
-| Test Execution Time | ~8s | < 30s | ✅ Excellent |
-
----
-
-## How to Update This Document
-
-**After completing a milestone:**
-
-1. **Update test counts:**
-   ```bash
-   grep -r "func test_" scripts/tests/ | wc -l  # Total count
-   ```
-   Count tests per category manually or with grep filters
-
-2. **Update phase status:**
-   - Move completed phases to "Completed Phases" section
-   - Add completion date
-   - Update "Active Development" with current phase
-
-3. **Update "Last Updated" date:**
-   - Change date at top of document
-
-4. **Commit changes:**
-   ```bash
-   git add STATUS.md
-   git commit -m "Update STATUS.md - Phase X complete, Y tests passing"
-   ```
-
-**Update frequency:**
-- After completing any phase
-- After significant milestones (e.g., 50+ tests added)
-- Weekly progress check
-- Before and after major features
-
-**What NOT to update here:**
-- Implementation details (those go in phase docs)
-- Design decisions (those go in docs/ARCHITECTURE.md)
-- Code examples (those go in docs/REFERENCE.md)
-
----
-
-## Project Health
-
-**Overall Status:** 🟢 EXCELLENT
-- 361/363 tests passing (99.4%)
-- 2 risky/pending tests (diagnostic tests, not critical)
-- 5 of 11 phases complete
-- Major features implemented (geometric folding, level system, audio)
-- Documentation well-organized
-- CI/CD pipeline functional
-
-**Risk Areas:**
-- ⚠️ Phase 5 (Multi-Seam) - Complex tessellation, needs careful testing
-- ⚠️ Phase 6 (Undo System) - Complex state management
-
-**Estimated Time to Completion:** 2-3 weeks with continued development pace
-
----
-
-## Quick Stats
-
-```
-Project Started: 2025-11-05
-Days Active: 3
-Phases Complete: 5 / 11 (45%)
-Tests Written: 363
-Tests Passing: 361
-Test Success Rate: 99.4%
-Lines of Code: ~5,000
-Documentation Pages: 12 (consolidated from 22)
-```
-
----
-
-**For detailed information, see:**
-- [CLAUDE.md](CLAUDE.md) - AI agent quick start
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Design decisions
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Development workflow
-- [docs/REFERENCE.md](docs/REFERENCE.md) - API reference
-- [docs/phases/](docs/phases/) - Phase-specific documentation
+- [CLAUDE.md](CLAUDE.md) — AI agent quick start
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — development workflow
+- [docs/REFERENCE.md](docs/REFERENCE.md) — API reference
+- [docs/phases/](docs/phases/) — phase-specific documentation

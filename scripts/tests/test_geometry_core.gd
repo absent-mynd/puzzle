@@ -331,7 +331,7 @@ func test_split_diagonal_45_degrees():
 	assert_true(result["left"].size() >= 3, "Diagonal split: left polygon has vertices")
 	assert_true(result["right"].size() >= 3, "Diagonal split: right polygon has vertices")
 	# Line passes through 2 vertices (0,0) and (100,100), which are counted as intersections
-	# This is required for apply_split() to work correctly
+	# This is required for polygon splitting to work correctly
 	assert_eq(result["intersections"].size(), 2, "Diagonal through corners: 2 vertex intersections")
 
 

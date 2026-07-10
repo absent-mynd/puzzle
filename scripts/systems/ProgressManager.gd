@@ -9,10 +9,14 @@ extends Node
 ## Path to save file (can be overridden for testing)
 var SAVE_FILE: String = "user://campaign_progress.json"
 
+## The first campaign level, always unlocked. Guarantees the campaign is playable even
+## from a stale save written before a campaign rename (e.g. the old "01_introduction").
+const FIRST_LEVEL_ID: String = "01_first_fold"
+
 ## Campaign progress data
 var campaign_data: Dictionary = {
 	"levels_completed": [],
-	"levels_unlocked": ["01_introduction"],  # First level unlocked by default
+	"levels_unlocked": ["01_first_fold"],  # First level unlocked by default
 	"total_folds": 0,
 	"best_times": {},  # level_id -> best_time
 	"stars_earned": {}  # level_id -> stars (0-3)
@@ -62,6 +66,16 @@ func load_progress() -> void:
 		for key in campaign_data:
 			if loaded_data.has(key):
 				campaign_data[key] = loaded_data[key]
+
+	# Defensive: the first level is always unlocked, even if the save predates the
+	# current campaign (a stale save could unlock only an old, renamed level id).
+	_ensure_first_level_unlocked()
+
+
+## Guarantees the first campaign level is present in the unlocked list.
+func _ensure_first_level_unlocked() -> void:
+	if FIRST_LEVEL_ID not in campaign_data["levels_unlocked"]:
+		campaign_data["levels_unlocked"].append(FIRST_LEVEL_ID)
 
 
 ## Marks a level as complete and updates stats
@@ -124,13 +138,20 @@ func unlock_next_level(completed_level_id: String) -> void:
 
 
 ## Gets the next level ID in sequence
-## Assumes format like "01_introduction", "02_basic_folding", etc.
+## Campaign order: 01_first_fold .. 10_the_gauntlet
 func get_sequential_next_level(level_id: String) -> String:
-	# Main campaign sequence (3 levels)
+	# Main campaign sequence (10 levels)
 	var level_sequence = {
-		"01_introduction": "02_basic_folding",
-		"02_basic_folding": "03_diagonal_challenge",
-		"03_diagonal_challenge": ""  # End of campaign
+		"01_first_fold": "02_fold_down",
+		"02_fold_down": "03_twin_walls",
+		"03_twin_walls": "04_the_cross",
+		"04_the_cross": "05_one_shot",
+		"05_one_shot": "06_grid_lock",
+		"06_grid_lock": "07_chambers",
+		"07_chambers": "08_diagonal_divide",
+		"08_diagonal_divide": "09_bastion",
+		"09_bastion": "10_the_gauntlet",
+		"10_the_gauntlet": ""  # End of campaign
 	}
 
 	return level_sequence.get(level_id, "")
@@ -174,7 +195,7 @@ func get_total_stars() -> int:
 func reset_progress() -> void:
 	campaign_data = {
 		"levels_completed": [],
-		"levels_unlocked": ["01_introduction"],
+		"levels_unlocked": ["01_first_fold"],
 		"total_folds": 0,
 		"best_times": {},
 		"stars_earned": {}

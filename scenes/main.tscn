@@ -1,18 +1,18 @@
-[gd_scene load_steps=4 format=3 uid="uid://b5q7qj8vxwkhs"]
+[gd_scene format=3 uid="uid://b5q7qj8vxwkhs"]
 
-[ext_resource type="Script" path="res://scripts/core/GridManager.gd" id="1_grid"]
-[ext_resource type="Script" path="res://scenes/MainScene.gd" id="2_main"]
+[ext_resource type="Script" uid="uid://i6ntsqtsvx2o" path="res://scripts/core/GridManager.gd" id="1_grid"]
+[ext_resource type="Script" uid="uid://i8dnyu5rykyu" path="res://scenes/MainScene.gd" id="2_main"]
 [ext_resource type="PackedScene" uid="uid://c4k3p7n8r2m1q" path="res://scenes/player/player.tscn" id="3_player"]
 
-[node name="Main" type="Node2D"]
+[node name="Main" type="Node2D" unique_id=2025777533]
 script = ExtResource("2_main")
 
-[node name="ColorRect" type="ColorRect" parent="."]
+[node name="ColorRect" type="ColorRect" parent="." unique_id=1554596969]
 offset_right = 1280.0
 offset_bottom = 720.0
 color = Color(0.15, 0.15, 0.15, 1)
 
-[node name="GridManager" type="Node2D" parent="."]
+[node name="GridManager" type="Node2D" parent="." unique_id=602322338]
 script = ExtResource("1_grid")
 
-[node name="Player" parent="." instance=ExtResource("3_player")]
+[node name="Player" parent="." unique_id=853399209 instance=ExtResource("3_player")]

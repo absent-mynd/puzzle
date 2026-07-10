@@ -2,6 +2,9 @@
 
 A puzzle game with space-folding mechanics built with Godot 4.
 
+> **Contributors & AI agents:** start with **[CLAUDE.md](CLAUDE.md)** (onboarding,
+> architecture, pitfalls) and **[STATUS.md](STATUS.md)** (current progress).
+
 ## Project Overview
 
 This is a geometric puzzle game where players fold space to solve challenges. The game features:

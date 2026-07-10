@@ -35,15 +35,15 @@ func test_initial_campaign_data_structure():
 
 func test_first_level_unlocked_by_default():
 	# First level should be unlocked by default
-	assert_true(progress_manager.is_level_unlocked("01_introduction"), "First level should be unlocked by default")
+	assert_true(progress_manager.is_level_unlocked("01_first_fold"), "First level should be unlocked by default")
 
 func test_is_level_unlocked_for_locked_level():
-	assert_false(progress_manager.is_level_unlocked("02_basic_folding"), "Second level should be locked initially")
+	assert_false(progress_manager.is_level_unlocked("02_fold_down"), "Second level should be locked initially")
 
 func test_unlock_level():
-	progress_manager.unlock_level("02_basic_folding")
+	progress_manager.unlock_level("02_fold_down")
 
-	assert_true(progress_manager.is_level_unlocked("02_basic_folding"), "Level should be unlocked after unlock_level()")
+	assert_true(progress_manager.is_level_unlocked("02_fold_down"), "Level should be unlocked after unlock_level()")
 
 func test_mark_level_complete():
 	var stats = {
@@ -52,16 +52,16 @@ func test_mark_level_complete():
 		"par_folds": 3
 	}
 
-	progress_manager.mark_level_complete("01_introduction", stats)
+	progress_manager.mark_level_complete("01_first_fold", stats)
 
-	assert_true(progress_manager.is_level_completed("01_introduction"), "Level should be marked as completed")
-	assert_true("01_introduction" in progress_manager.campaign_data["levels_completed"], "Level should be in completed list")
+	assert_true(progress_manager.is_level_completed("01_first_fold"), "Level should be marked as completed")
+	assert_true("01_first_fold" in progress_manager.campaign_data["levels_completed"], "Level should be in completed list")
 
 func test_mark_level_complete_updates_total_folds():
 	var initial_folds = progress_manager.campaign_data["total_folds"]
 
 	var stats = {"fold_count": 5}
-	progress_manager.mark_level_complete("01_introduction", stats)
+	progress_manager.mark_level_complete("01_first_fold", stats)
 
 	assert_eq(progress_manager.campaign_data["total_folds"], initial_folds + 5, "Total folds should increase by fold_count")
 
@@ -111,26 +111,26 @@ func test_stars_earned_stored_correctly():
 		"par_folds": 3
 	}
 
-	progress_manager.mark_level_complete("01_introduction", stats)
+	progress_manager.mark_level_complete("01_first_fold", stats)
 
-	assert_eq(progress_manager.campaign_data["stars_earned"]["01_introduction"], 3, "Stars should be stored in campaign_data")
+	assert_eq(progress_manager.campaign_data["stars_earned"]["01_first_fold"], 3, "Stars should be stored in campaign_data")
 
 func test_stars_only_increase_not_decrease():
 	# Complete with 3 stars
 	var stats_good = {"fold_count": 3, "par_folds": 3}
-	progress_manager.mark_level_complete("01_introduction", stats_good)
+	progress_manager.mark_level_complete("01_first_fold", stats_good)
 
-	assert_eq(progress_manager.campaign_data["stars_earned"]["01_introduction"], 3, "Should have 3 stars initially")
+	assert_eq(progress_manager.campaign_data["stars_earned"]["01_first_fold"], 3, "Should have 3 stars initially")
 
 	# Complete again with 1 star
 	var stats_bad = {"fold_count": 10, "par_folds": 3}
-	progress_manager.mark_level_complete("01_introduction", stats_bad)
+	progress_manager.mark_level_complete("01_first_fold", stats_bad)
 
-	assert_eq(progress_manager.campaign_data["stars_earned"]["01_introduction"], 3, "Stars should not decrease")
+	assert_eq(progress_manager.campaign_data["stars_earned"]["01_first_fold"], 3, "Stars should not decrease")
 
 func test_save_progress():
-	progress_manager.mark_level_complete("01_introduction", {"fold_count": 3})
-	progress_manager.unlock_level("02_basic_folding")
+	progress_manager.mark_level_complete("01_first_fold", {"fold_count": 3})
+	progress_manager.unlock_level("02_fold_down")
 
 	progress_manager.save_progress()
 
@@ -138,8 +138,8 @@ func test_save_progress():
 
 func test_load_progress():
 	# Setup and save progress
-	progress_manager.mark_level_complete("01_introduction", {"fold_count": 3})
-	progress_manager.unlock_level("02_basic_folding")
+	progress_manager.mark_level_complete("01_first_fold", {"fold_count": 3})
+	progress_manager.unlock_level("02_fold_down")
 	progress_manager.save_progress()
 
 	# Create new ProgressManager and load
@@ -148,15 +148,34 @@ func test_load_progress():
 	add_child_autofree(new_pm)
 	new_pm.load_progress()
 
-	assert_true(new_pm.is_level_completed("01_introduction"), "Loaded data should have completed level")
-	assert_true(new_pm.is_level_unlocked("02_basic_folding"), "Loaded data should have unlocked level")
+	assert_true(new_pm.is_level_completed("01_first_fold"), "Loaded data should have completed level")
+	assert_true(new_pm.is_level_unlocked("02_fold_down"), "Loaded data should have unlocked level")
 
 func test_load_progress_with_nonexistent_file():
 	# Should not crash, just use defaults
 	progress_manager.load_progress()
 
 	assert_not_null(progress_manager.campaign_data, "Should have default campaign_data")
-	assert_true(progress_manager.is_level_unlocked("01_introduction"), "First level should still be unlocked")
+	assert_true(progress_manager.is_level_unlocked("01_first_fold"), "First level should still be unlocked")
+
+func test_stale_save_still_unlocks_first_level():
+	# A save from before the campaign rename unlocks only the old level id.
+	var stale = {
+		"levels_completed": ["01_introduction"],
+		"levels_unlocked": ["01_introduction"],
+		"total_folds": 5,
+		"best_times": {},
+		"stars_earned": {"01_introduction": 3}
+	}
+	var file = FileAccess.open(test_save_path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(stale))
+	file.close()
+
+	progress_manager.load_progress()
+
+	assert_true(progress_manager.is_level_unlocked("01_first_fold"),
+		"First campaign level must be unlocked even from a stale (renamed) save")
+
 
 func test_load_progress_with_corrupted_file():
 	# Create corrupted save file
@@ -180,8 +199,8 @@ func test_get_total_stars():
 
 func test_get_completion_percentage():
 	# Simulate 3 total campaign levels
-	progress_manager.mark_level_complete("01_introduction", {"fold_count": 3})
-	progress_manager.mark_level_complete("02_basic_folding", {"fold_count": 5})
+	progress_manager.mark_level_complete("01_first_fold", {"fold_count": 3})
+	progress_manager.mark_level_complete("02_fold_down", {"fold_count": 5})
 
 	# If we had a method to set total levels, we'd use it here
 	# For now, assume completion percentage is based on completed levels
@@ -191,8 +210,8 @@ func test_get_completion_percentage():
 
 func test_reset_progress():
 	# Setup some progress
-	progress_manager.mark_level_complete("01_introduction", {"fold_count": 3})
-	progress_manager.unlock_level("02_basic_folding")
+	progress_manager.mark_level_complete("01_first_fold", {"fold_count": 3})
+	progress_manager.unlock_level("02_fold_down")
 	progress_manager.save_progress()
 
 	# Reset
@@ -200,52 +219,52 @@ func test_reset_progress():
 
 	assert_eq(progress_manager.campaign_data["levels_completed"].size(), 0, "Completed levels should be cleared")
 	assert_eq(progress_manager.campaign_data["total_folds"], 0, "Total folds should be reset")
-	assert_true(progress_manager.is_level_unlocked("01_introduction"), "First level should still be unlocked")
+	assert_true(progress_manager.is_level_unlocked("01_first_fold"), "First level should still be unlocked")
 
 func test_unlock_next_level():
-	progress_manager.unlock_next_level("01_introduction")
+	progress_manager.unlock_next_level("01_first_fold")
 
-	assert_true(progress_manager.is_level_unlocked("02_basic_folding"), "Next level should be unlocked")
+	assert_true(progress_manager.is_level_unlocked("02_fold_down"), "Next level should be unlocked")
 
 func test_get_best_time():
 	var stats1 = {"time_elapsed": 45.5}
-	progress_manager.mark_level_complete("01_introduction", stats1)
+	progress_manager.mark_level_complete("01_first_fold", stats1)
 
-	var best_time = progress_manager.get_best_time("01_introduction")
+	var best_time = progress_manager.get_best_time("01_first_fold")
 
 	assert_eq(best_time, 45.5, "Best time should be recorded")
 
 func test_best_time_only_decreases():
 	# Complete with time 45.5
 	var stats1 = {"time_elapsed": 45.5}
-	progress_manager.mark_level_complete("01_introduction", stats1)
+	progress_manager.mark_level_complete("01_first_fold", stats1)
 
 	# Complete again with worse time
 	var stats2 = {"time_elapsed": 60.0}
-	progress_manager.mark_level_complete("01_introduction", stats2)
+	progress_manager.mark_level_complete("01_first_fold", stats2)
 
-	var best_time = progress_manager.get_best_time("01_introduction")
+	var best_time = progress_manager.get_best_time("01_first_fold")
 
 	assert_eq(best_time, 45.5, "Best time should not increase")
 
 func test_best_time_improves():
 	# Complete with time 45.5
 	var stats1 = {"time_elapsed": 45.5}
-	progress_manager.mark_level_complete("01_introduction", stats1)
+	progress_manager.mark_level_complete("01_first_fold", stats1)
 
 	# Complete again with better time
 	var stats2 = {"time_elapsed": 30.0}
-	progress_manager.mark_level_complete("01_introduction", stats2)
+	progress_manager.mark_level_complete("01_first_fold", stats2)
 
-	var best_time = progress_manager.get_best_time("01_introduction")
+	var best_time = progress_manager.get_best_time("01_first_fold")
 
 	assert_eq(best_time, 30.0, "Best time should improve")
 
 func test_get_stars_for_level():
 	var stats = {"fold_count": 3, "par_folds": 3}
-	progress_manager.mark_level_complete("01_introduction", stats)
+	progress_manager.mark_level_complete("01_first_fold", stats)
 
-	var stars = progress_manager.get_stars_for_level("01_introduction")
+	var stars = progress_manager.get_stars_for_level("01_first_fold")
 
 	assert_eq(stars, 3, "Should return stars for completed level")
 

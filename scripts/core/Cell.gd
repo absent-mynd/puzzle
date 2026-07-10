@@ -12,14 +12,13 @@ class_name Cell
 
 ## Properties
 var grid_position: Vector2i        # Position in grid
+var cell_size: float = 0.0         # Size of this cell in pixels (for dot radius, previews)
 var geometry_pieces: Array[CellPiece] = []  # PHASE 5: Array of geometric pieces
 var cell_type: int = 0             # 0=empty, 1=wall, 2=water, 3=goal (dominant type)
-var is_partial: bool = false       # True if cell has been split
-var seams: Array[Dictionary] = []  # Track seam information (legacy)
+var is_partial: bool = false       # True if cell holds >1 piece (merged by a fold)
 var polygon_visual: Polygon2D      # Visual representation (legacy - first piece)
 var border_line: Line2D            # Cell border/outline
 var piece_visuals: Node2D = null   # PHASE 5: Container for multi-piece visuals
-var seam_visuals: Node2D = null    # PHASE 5: Container for seam lines
 
 ## Legacy geometry accessor for backward compatibility
 ## Returns geometry of first piece, or empty array if no pieces
@@ -50,6 +49,7 @@ var highlight_overlay: Polygon2D  # Semi-transparent overlay for selection/hover
 ## @param size: Size of the cell (width and height)
 func _init(pos: Vector2i, local_pos: Vector2, size: float):
 	grid_position = pos
+	cell_size = size
 
 	# Create square geometry using LOCAL coordinates (relative to GridManager)
 	# Cells are children of GridManager, so geometry is in local space
@@ -74,11 +74,11 @@ func _init(pos: Vector2i, local_pos: Vector2, size: float):
 	border_line.closed = true  # Makes it a closed loop
 	add_child(border_line)
 
-	# Set up highlight overlay (for selection/hover feedback)
+	# Set up highlight dot (for selection/hover feedback)
+	# PHASE 8: A dot at the cell's visible center, not a translucent square overlay.
 	highlight_overlay = Polygon2D.new()
-	highlight_overlay.polygon = geometry  # Uses getter which returns first piece
 	highlight_overlay.color = Color.TRANSPARENT
-	highlight_overlay.z_index = 1  # Above the main visual
+	highlight_overlay.z_index = 3  # Above pieces (0), highlight legacy (1), seams (2)
 	add_child(highlight_overlay)
 
 	# PHASE 5: Create containers for multi-piece rendering
@@ -86,11 +86,6 @@ func _init(pos: Vector2i, local_pos: Vector2, size: float):
 	piece_visuals.name = "PieceVisuals"
 	piece_visuals.z_index = 0  # Below highlight
 	add_child(piece_visuals)
-
-	seam_visuals = Node2D.new()
-	seam_visuals.name = "SeamVisuals"
-	seam_visuals.z_index = 2  # Above everything
-	add_child(seam_visuals)
 
 	update_visual()
 
@@ -128,16 +123,53 @@ func get_center() -> Vector2:
 		return avg / geometry_pieces.size()
 
 
-## Add seam information to the cell
+## Get the center point of the cell's VISIBLE (non-null) geometry
 ##
-## Stores seam metadata for tracking how the cell has been affected by folds.
-## This is used for multi-seam handling in later phases.
+## Like get_center(), but excludes null pieces so the value never lands inside an
+## invisible/void region. Used for placing the highlight dot on real geometry.
 ##
-## @param seam_data: Dictionary containing seam information
-##                   Expected keys: angle, intersection_points, fold_id
-func add_seam(seam_data: Dictionary):
-	seams.append(seam_data)
-	is_partial = true
+## @return: Area-weighted centroid of non-null pieces, or get_center() if all null/empty
+func get_visible_center() -> Vector2:
+	var total_area = 0.0
+	var weighted_center = Vector2.ZERO
+
+	for piece in geometry_pieces:
+		if piece.cell_type == CellPiece.CELL_TYPE_NULL:
+			continue
+		var area = piece.get_area()
+		weighted_center += piece.get_center() * area
+		total_area += area
+
+	if total_area > GeometryCore.EPSILON:
+		return weighted_center / total_area
+
+	# No visible area (all null, or degenerate) - fall back to all-pieces center
+	return get_center()
+
+
+## Check if this cell contains any null (void) piece
+##
+## @return: true if any piece has CELL_TYPE_NULL
+func has_null_piece() -> bool:
+	for piece in geometry_pieces:
+		if piece.cell_type == CellPiece.CELL_TYPE_NULL:
+			return true
+	return false
+
+
+## Check if the cell's overall centroid lies within a null piece
+##
+## Uses get_center() (the all-pieces weighted centroid) and tests whether it falls
+## inside any null piece's polygon. Used by the CENTROID_IN_NULL anchor-eligibility rule.
+##
+## @return: true if the centroid is inside a null region
+func is_centroid_in_null() -> bool:
+	var centroid = get_center()
+	for piece in geometry_pieces:
+		if piece.cell_type == CellPiece.CELL_TYPE_NULL:
+			if GeometryCore.point_in_polygon(centroid, piece.geometry):
+				return true
+	return false
 
 
 ## Set the cell type and update visual appearance
@@ -152,6 +184,26 @@ func set_cell_type(type: int):
 	if not geometry_pieces.is_empty():
 		geometry_pieces[0].cell_type = type
 
+	update_visual()
+
+
+## DERIVE/REPLAY: Render this cell as a pure VIEW of derived FoldedPieces.
+##
+## Converts the derived pieces (from FoldReplay/FoldedState) into CellPieces and
+## refreshes the visual. Because the existing accessors (get_dominant_type,
+## has_cell_type, get_center, contains_point) all read geometry_pieces, downstream
+## consumers (Player collision, goal detection, mouse hit-testing) keep working
+## unchanged. The new model has no null pieces, so void = a position with no cell.
+##
+## @param pieces: Array of FoldedPiece (from FoldedState.surface_pieces_at)
+func apply_folded_pieces(pieces: Array) -> void:
+	geometry_pieces.clear()
+	for fp in pieces:
+		var cp := CellPiece.new(fp.polygon, fp.type, fp.source_fold_id)
+		cp.metadata = {"base_id": fp.base_id}
+		geometry_pieces.append(cp)
+	cell_type = get_dominant_type()
+	is_partial = geometry_pieces.size() > 1
 	update_visual()
 
 
@@ -190,10 +242,6 @@ func update_visual():
 			border_line.points = piece.geometry
 			border_line.default_color = darken_color(polygon_visual.color, 0.6)
 			border_line.visible = true
-
-		# Update highlight overlay
-		if highlight_overlay:
-			highlight_overlay.polygon = piece.geometry
 	else:
 		# Multi-piece rendering: hide legacy visuals, use piece_visuals container
 		if polygon_visual:
@@ -225,13 +273,8 @@ func update_visual():
 			piece_border.name = "PieceBorder_%d" % i
 			piece_visuals.add_child(piece_border)
 
-		# Update highlight overlay to cover all pieces (use first piece's geometry)
-		if highlight_overlay:
-			highlight_overlay.polygon = geometry_pieces[0].geometry
-
-	# Visualize seams if multiple pieces exist
-	if geometry_pieces.size() > 1:
-		visualize_seams()
+	# PHASE 8: Re-center the highlight dot after any geometry change
+	update_highlight()
 
 
 ## Get the color for the current cell type (using cell_type property)
@@ -271,8 +314,18 @@ func darken_color(color: Color, factor: float = 0.7) -> Color:
 ##
 ## @param point: Point to test in LOCAL coordinates (relative to GridManager)
 ## @return: true if point is inside cell, false otherwise
+##
+## PHASE 8: Tests ALL non-null pieces, not just the first. Merged cells gain pieces
+## from other grid positions, so hit-testing only the first piece (via the `geometry`
+## getter) missed hovers over merged-in geometry. Null pieces are invisible/unwalkable,
+## so hovering empty folded-away space should not register.
 func contains_point(point: Vector2) -> bool:
-	return GeometryCore.point_in_polygon(point, geometry)
+	for piece in geometry_pieces:
+		if piece.cell_type == CellPiece.CELL_TYPE_NULL:
+			continue
+		if GeometryCore.point_in_polygon(point, piece.geometry):
+			return true
+	return false
 
 
 ## Check if the cell is still a perfect square
@@ -336,195 +389,49 @@ func clear_visual_feedback():
 	update_highlight()
 
 
-## Update the highlight overlay based on selection/hover state
+## Update the highlight dot based on selection/hover state
+##
+## PHASE 8: The highlight is a dot at the cell's visible center rather than a
+## translucent square. Selection color (1st=red, 2nd=blue) takes priority over hover.
 func update_highlight():
 	if not highlight_overlay:
 		return
 
-	# Priority: selection outline > hover
+	# Priority: selection outline > hover > none
+	var dot_color: Color
 	if outline_color.a > 0:
-		# Selected anchor - use semi-transparent version of selection color
-		highlight_overlay.color = Color(outline_color.r, outline_color.g, outline_color.b, 0.4)
-		highlight_overlay.z_index = 2  # Bring to front
+		# Selected anchor - solid selection color (red for 1st, blue for 2nd)
+		dot_color = Color(outline_color.r, outline_color.g, outline_color.b, 0.95)
 	elif is_hovered:
-		# Hovered - use semi-transparent yellow
-		highlight_overlay.color = Color(1, 1, 0, 0.3)
-		highlight_overlay.z_index = 1  # Slightly above normal
+		# Hovered - neutral white dot
+		dot_color = Color(1, 1, 1, 0.85)
 	else:
 		# No highlight
 		highlight_overlay.color = Color.TRANSPARENT
-		highlight_overlay.z_index = 0
-
-
-## Visualize seams between pieces (PHASE 5)
-##
-## Draws seam lines to show where folds have split the cell.
-## Seams are rendered as colored lines based on fold order.
-func visualize_seams():
-	if not seam_visuals:
 		return
 
-	# Clear existing seam visuals
-	for child in seam_visuals.get_children():
-		seam_visuals.remove_child(child)
-		child.queue_free()
-
-	# Collect all unique seams across all pieces
-	var all_seams = get_all_seams()
-
-	# Draw each seam as a line
-	for seam in all_seams:
-		var seam_line = Line2D.new()
-		seam_line.points = seam.intersection_points
-		seam_line.width = 2.0
-		seam_line.default_color = get_seam_color(seam.fold_id)
-		seam_line.name = "Seam_Fold_%d" % seam.fold_id
-		seam_visuals.add_child(seam_line)
+	# Position the dot at the visible center with a radius scaled to the cell
+	var radius := cell_size * 0.18 if cell_size > 0.0 else 8.0
+	highlight_overlay.polygon = _make_circle_points(get_visible_center(), radius)
+	highlight_overlay.color = dot_color
 
 
-## Get a color for a seam based on fold ID
+## Build a regular polygon approximating a circle (LOCAL coords)
 ##
-## @param fold_id: ID of the fold that created this seam
-## @return: Color for the seam line
-func get_seam_color(fold_id: int) -> Color:
-	# Cycle through distinct colors for different folds
-	var colors = [
-		Color(1.0, 0.0, 0.0, 0.8),  # Red
-		Color(0.0, 1.0, 0.0, 0.8),  # Green
-		Color(0.0, 0.0, 1.0, 0.8),  # Blue
-		Color(1.0, 1.0, 0.0, 0.8),  # Yellow
-		Color(1.0, 0.0, 1.0, 0.8),  # Magenta
-		Color(0.0, 1.0, 1.0, 0.8),  # Cyan
-	]
-	return colors[fold_id % colors.size()]
+## @param center: Circle center
+## @param radius: Circle radius
+## @param segments: Number of segments (more = smoother)
+## @return: PackedVector2Array of circle vertices
+func _make_circle_points(center: Vector2, radius: float, segments: int = 16) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in range(segments):
+		var angle := TAU * float(i) / float(segments)
+		points.append(center + Vector2(cos(angle), sin(angle)) * radius)
+	return points
 
 
 ## ============================================================================
-## PHASE 4: POLYGON SPLITTING SUPPORT
-## ============================================================================
-
-## Split this cell into two cells along a line
-##
-## Updates this cell's geometry to one half and creates a new cell for the other half.
-## Both cells are marked as partial and store seam information.
-##
-## @param split_result: Result from GeometryCore.split_polygon_by_line()
-## @param line_point: Point on the splitting line
-## @param line_normal: Normal vector of the splitting line
-## @param keep_side: Which side to keep in this cell ("left" or "right")
-## @return: New Cell containing the other half, or null if split failed
-func apply_split(split_result: Dictionary, line_point: Vector2, line_normal: Vector2, keep_side: String) -> Cell:
-	# Validate split result
-	if split_result.intersections.size() == 0:
-		push_error("apply_split called with no intersections")
-		return null
-
-	# Determine which geometry to keep and which to create new cell with
-	var kept_geometry: PackedVector2Array
-	var new_geometry: PackedVector2Array
-
-	if keep_side == "left":
-		kept_geometry = split_result.left
-		new_geometry = split_result.right
-	else:
-		kept_geometry = split_result.right
-		new_geometry = split_result.left
-
-	# Validate geometries
-	if kept_geometry.size() < 3 or new_geometry.size() < 3:
-		push_error("apply_split resulted in degenerate polygon")
-		return null
-
-	# Update this cell's geometry
-	geometry = kept_geometry
-	is_partial = true
-
-	# Create seam data
-	var seam_data = {
-		"line_point": line_point,
-		"line_normal": line_normal,
-		"intersection_points": split_result.intersections,
-		"timestamp": Time.get_ticks_msec()
-	}
-	add_seam(seam_data)
-
-	# Update visual
-	update_visual()
-
-	# Create new cell for the other half
-	var new_cell = Cell.new(grid_position, Vector2.ZERO, 0)  # Temporary values
-	new_cell.geometry = new_geometry
-	new_cell.cell_type = cell_type
-	new_cell.is_partial = true
-	new_cell.add_seam(seam_data)
-	new_cell.update_visual()
-
-	return new_cell
-
-
-## ============================================================================
-## SERIALIZATION (FOR FOLD HISTORY AND UNDO SYSTEM)
-## ============================================================================
-
-## Serialize cell to dictionary (for fold history/save states)
-##
-## @return: Dictionary containing all cell data
-func to_dict() -> Dictionary:
-	# Serialize legacy geometry for backwards compatibility
-	var geometry_array = []
-	for v in geometry:
-		geometry_array.append({"x": v.x, "y": v.y})
-
-	# PHASE 6 BUG FIX: Serialize all geometry pieces for proper undo
-	var pieces_array = []
-	for piece in geometry_pieces:
-		var piece_geometry = []
-		for v in piece.geometry:
-			piece_geometry.append({"x": v.x, "y": v.y})
-
-		var piece_seams = []
-		for seam in piece.seams:
-			# Serialize seam data
-			var seam_dict = {
-				"line_point": {"x": seam.line_point.x, "y": seam.line_point.y},
-				"line_normal": {"x": seam.line_normal.x, "y": seam.line_normal.y},
-				"fold_id": seam.fold_id,
-				"timestamp": seam.timestamp,
-				"fold_type": seam.fold_type
-			}
-			# Serialize intersection_points
-			var intersection_points = []
-			for point in seam.intersection_points:
-				intersection_points.append({"x": point.x, "y": point.y})
-			seam_dict["intersection_points"] = intersection_points
-			piece_seams.append(seam_dict)
-
-		pieces_array.append({
-			"geometry": piece_geometry,
-			"cell_type": piece.cell_type,
-			"source_fold_id": piece.source_fold_id,
-			"seams": piece_seams
-		})
-
-	return {
-		"grid_position": {"x": grid_position.x, "y": grid_position.y},
-		"geometry": geometry_array,  # Legacy, kept for compatibility
-		"cell_type": cell_type,
-		"is_partial": is_partial,
-		"seams": seams.duplicate(true),  # Legacy, kept for compatibility
-		"geometry_pieces": pieces_array  # NEW: Full multi-piece serialization
-	}
-
-
-## Create a cell state snapshot (excludes visual nodes)
-##
-## @return: Dictionary containing cell state data only
-func create_state_snapshot() -> Dictionary:
-	return to_dict()
-
-
-## ============================================================================
-## PHASE 5: MULTI-POLYGON SUPPORT
+## MULTI-POLYGON SUPPORT
 ## ============================================================================
 
 ## Add a piece to this cell
@@ -611,17 +518,7 @@ func get_total_area() -> float:
 	return total
 
 
-## Get all unique seams across all pieces
-##
-## @return: Array of unique Seam objects
-func get_all_seams() -> Array[Seam]:
-	var all_seams: Array[Seam] = []
-	var seam_ids = []
-
-	for piece in geometry_pieces:
-		for seam in piece.seams:
-			if seam.fold_id not in seam_ids:
-				all_seams.append(seam)
-				seam_ids.append(seam.fold_id)
-
-	return all_seams
+## Whether this cell is a COMPLETE square (fully covered), vs merged with empty space.
+## Incomplete cells (a partial fragment with void alongside) are not walkable.
+func is_complete() -> bool:
+	return get_total_area() >= cell_size * cell_size - 1.0

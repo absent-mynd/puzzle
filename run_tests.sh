@@ -75,21 +75,38 @@ if [ ! -f "$LOCAL_GODOT" ] && [ -f "$LOCAL_GODOT_GZ" ]; then
     echo "Godot decompressed successfully."
 fi
 
-# Check for local Godot first, then system Godot
-if [ -f "$LOCAL_GODOT" ]; then
+# Returns 0 if the given binary can actually execute on this platform.
+# The bundled tools/godot/godot is a Linux x86-64 ELF, so it fails to exec on
+# macOS/other platforms. We probe with --version rather than assuming presence
+# implies runnability, then fall back to a system godot.
+godot_runnable() {
+    "$1" --version >/dev/null 2>&1
+}
+
+# Prefer the bundled binary, but only if it actually runs here; otherwise fall
+# back to a system godot on PATH.
+GODOT_BIN=""
+if [ -f "$LOCAL_GODOT" ] && godot_runnable "$LOCAL_GODOT"; then
     GODOT_BIN="$LOCAL_GODOT"
     echo "Using local Godot binary from tools/godot/"
-elif command -v godot &> /dev/null; then
+elif command -v godot &> /dev/null && godot_runnable godot; then
     GODOT_BIN="godot"
-    echo "Using system Godot"
+    if [ -f "$LOCAL_GODOT" ]; then
+        echo "Bundled Godot binary is not runnable on this platform; using system Godot"
+    else
+        echo "Using system Godot"
+    fi
 else
-    echo "Error: Godot 4 is not found"
-    echo "  - Local binary not found at: $LOCAL_GODOT"
-    echo "  - System godot not found in PATH"
+    echo "Error: no runnable Godot 4 found"
+    echo "  - Bundled binary at $LOCAL_GODOT is missing or not executable on this platform"
+    echo "  - System 'godot' not found on PATH (or not runnable)"
     echo ""
     echo "Please either:"
-    echo "  1. Place Godot 4.3 binary at tools/godot/godot"
-    echo "  2. Install Godot 4.3 or higher from https://godotengine.org/"
+    echo "  1. Place a Godot 4.x binary for THIS platform at tools/godot/godot, or"
+    echo "  2. Install Godot 4.x (https://godotengine.org/) so 'godot' is on your PATH"
+    echo ""
+    echo "Note: the bundled binary is Linux x86-64. On macOS, install via Homebrew"
+    echo "      ('brew install godot') or add Godot.app's binary to your PATH."
     exit 1
 fi
 

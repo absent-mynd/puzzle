@@ -294,16 +294,16 @@ func test_fold_conserves_total_area():
 
 ### Test Organization
 
+Tests live in `scripts/tests/`, one `test_<subsystem>.gd` file per subsystem
+(e.g. `test_geometry_core.gd`, `test_fold_system.gd`, `test_player.gd`). List them
+with:
+
+```bash
+ls scripts/tests/test_*.gd
 ```
-scripts/tests/
-├── test_geometry_core.gd      # GeometryCore utility tests (41 tests)
-├── test_cell.gd                # Cell class tests (14 tests)
-├── test_grid_manager.gd        # GridManager tests (27 tests)
-├── test_fold_system.gd         # FoldSystem tests (63 tests)
-├── test_fold_validation.gd     # Fold validation tests (32 tests)
-├── test_player.gd              # Player movement tests (36 tests)
-└── test_win_condition.gd       # Win condition tests (12 tests)
-```
+
+Counts intentionally aren't enumerated here — they drift. See STATUS.md for suite
+totals.
 
 ---
 
