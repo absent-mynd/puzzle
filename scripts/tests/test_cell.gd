@@ -20,7 +20,6 @@ func test_cell_initialization():
 	assert_eq(cell.grid_position, grid_pos, "Grid position should match")
 	assert_eq(cell.cell_type, 0, "Default cell type should be 0 (empty)")
 	assert_false(cell.is_partial, "Cell should not be partial initially")
-	assert_eq(cell.seams.size(), 0, "Seams array should be empty initially")
 	assert_not_null(cell.polygon_visual, "Polygon visual should be created")
 
 	cell.free()
@@ -97,36 +96,6 @@ func test_cell_type_changes():
 	cell.set_cell_type(3)
 	assert_eq(cell.cell_type, 3, "Cell type should be goal")
 	assert_eq(cell.get_cell_color(), Color(0.2, 1.0, 0.2), "Goal color should be green")
-
-	cell.free()
-
-
-## Test: Seam data storage
-func test_seam_data_storage():
-	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), CELL_SIZE)
-
-	# Add first seam
-	var seam1 = {
-		"angle": 45.0,
-		"intersection_points": [Vector2(10, 10), Vector2(20, 20)],
-		"fold_id": 1
-	}
-	cell.add_seam(seam1)
-
-	assert_eq(cell.seams.size(), 1, "Should have 1 seam")
-	assert_true(cell.is_partial, "Cell should be marked as partial after adding seam")
-	assert_eq(cell.seams[0]["fold_id"], 1, "Seam data should be stored correctly")
-
-	# Add second seam
-	var seam2 = {
-		"angle": 90.0,
-		"intersection_points": [Vector2(30, 30), Vector2(40, 40)],
-		"fold_id": 2
-	}
-	cell.add_seam(seam2)
-
-	assert_eq(cell.seams.size(), 2, "Should have 2 seams")
-	assert_eq(cell.seams[1]["fold_id"], 2, "Second seam data should be stored correctly")
 
 	cell.free()
 
@@ -526,45 +495,6 @@ func test_piece_visuals_have_correct_colors():
 
 	# Second polygon should be water (blue)
 	assert_eq(polygons[1].color, water_color, "Second polygon should have water color")
-
-	cell.free()
-
-
-## Test: Seam visualization creates Line2D nodes
-func test_seam_visualization_creates_line_nodes():
-	var cell = Cell.new(Vector2i(0, 0), Vector2(0, 0), 64.0)
-	add_child_autofree(cell)
-
-	# Add second piece with seam
-	var piece_geometry = PackedVector2Array([
-		Vector2(64, 0), Vector2(128, 0),
-		Vector2(128, 64), Vector2(64, 64)
-	])
-	var piece = CellPiece.new(piece_geometry, 1, 0)
-
-	# Add seam to piece
-	var seam = Seam.new(
-		Vector2(64, 0),
-		Vector2(1, 0),
-		PackedVector2Array([Vector2(64, 0), Vector2(64, 64)]),
-		1,
-		0,
-		"vertical"
-	)
-	piece.add_seam(seam)
-
-	cell.add_piece(piece)
-
-	# Seam visuals should have been created
-	assert_gt(cell.seam_visuals.get_child_count(), 0, "Should have seam visuals")
-
-	# Check that seam line exists
-	var seam_lines = 0
-	for child in cell.seam_visuals.get_children():
-		if child is Line2D:
-			seam_lines += 1
-
-	assert_eq(seam_lines, 1, "Should have 1 seam line")
 
 	cell.free()
 

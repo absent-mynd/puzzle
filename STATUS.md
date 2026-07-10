@@ -1,8 +1,8 @@
 # Project Status - Space-Folding Puzzle Game
 
-**Last Updated:** 2026-07-07
-**Current Phase:** Core mechanics complete (Phases 1-7). Remaining work is content & polish (Phases 8-11).
-**Total Tests:** **568 passing** / 568 (0 failing, 0 risky)
+**Last Updated:** 2026-07-08
+**Current Phase:** Core mechanics complete (Phases 1-7). Phase 8 gameplay interaction work in progress.
+**Total Tests:** **617 passing** / 617 (0 failing, 0 risky)
 
 ---
 
@@ -12,7 +12,7 @@
 |--------|-------|
 | Core mechanic phases | ✅ Complete (1, 2, 3, 4, 5, 6, 7) |
 | Support phases | ⚙️ Substantial (9 Levels, 10 GUI/Audio) |
-| Tests passing | 568 / 568 (0 failing, 0 risky) |
+| Tests passing | 617 / 617 (0 failing, 0 risky) |
 | Test run time | ~6s |
 
 > **Running tests locally:** the bundled `tools/godot/godot` is a Linux binary.
@@ -73,8 +73,8 @@ position updates during folds. Files: `scripts/core/Player.gd`.
 ### Phase 9: Level Management System
 GUI (MainMenu, HUD, PauseMenu, LevelComplete, Settings), JSON level
 data/serialization, load/save, campaign progression with stars/unlocking, level
-validation, custom-level support. **Remaining:** campaign content creation, final
-integration polish.
+validation, custom-level support. **10-level campaign authored** (fold-forcing puzzles,
+solvability-tested). **Remaining:** final integration polish.
 
 ### Phase 10: Graphics, GUI & Audio Polish
 Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
@@ -94,6 +94,41 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 ---
 
 ## Recent Changes
+
+### 2026-07-08
+- Phase 8 gameplay interaction (in progress): center-dot highlights (hover any piece
+  of a merged cell), second-anchor fold-region preview, crease dots at fold merge
+  points, player facing + SPACE interact, and configurable interaction axes
+  (`InteractionConfig`/`InteractionController`). Anchor placement now rejects
+  ineligible/invalid anchors in both mouse and facing flows.
+- Fixed unfold shift direction: it derived the shift from `anchor1-anchor2`, which is
+  wrong when anchors were selected in reverse order (normalization picks target/source
+  independently). Now uses stored `target_anchor-source_anchor` (`_fold_shift_vector`).
+- Fixed unfold geometry position: `reverse_shifts_for_fold` re-keyed reversed cells but
+  never translated their geometry back, so cells rendered at the folded location while
+  indexed at the original slot (overlap + vacant-slot). Now translates by the inverse
+  shift.
+- Crease markers ride the cells they sit on through folds/unfolds via
+  `remap_grid_markers` (the extension point for future grid-attached entities).
+- Fixed unfold cell IDENTITY: cut-line cells were rebuilt with the merge's dominant type
+  (a goal merged onto empty left the wrong cell green) and, for diagonal folds, the
+  source cut line's cells were left as holes / stale NULL cells. Reverse-shifted cells and
+  all cut-line cells (both lines) are now reconciled from the pre-fold snapshot
+  (`_populate_cell_from_snapshot`, `reconcile_cut_line_cells`) — rebuilding existing cells
+  and recreating vacated ones — when no other fold's seam remains on them.
+- Campaign rebuilt: removed all pre-existing campaign/custom levels and authored a fresh
+  **10-level campaign** (`levels/campaign/01_first_fold` … `10_the_gauntlet`) of
+  fold-forcing wall/water puzzles with a difficulty ramp (single fold → two-axis → diagonal
+  → 12×12 finale). `ProgressManager` sequence + default unlock updated. Added
+  `test_campaign_levels.gd`, which loads each level, applies its intended fold solution, and
+  BFS-verifies the goal is unreachable by walking but reachable after folding (par matches).
+- Editor: interaction axes (A–D) are now direct enum dropdowns on the Main node
+  (`second_anchor`, `confirm_persistence`, `action_priority`, `null_anchor`) instead of an
+  empty sub-resource, so they can be toggled without creating a resource.
+- ALLOW_MOVEMENT now defers player-position fold validation to commit time (the player may
+  place the 2nd anchor while inside the fold region); the invalid region flashes red at
+  commit if still blocked. Preview visuals now draw ON TOP of the map (raised z_index).
+- Test suite: 568 → **617 passing**, 0 failing, 0 risky.
 
 ### 2026-07-07
 - Fixed unfold bug: `restore_removed_cells_for_fold()` now refills the full fold
@@ -131,7 +166,7 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 
 ## Known Issues
 
-None. All 568 tests pass with no failing or risky tests.
+None. All 617 tests pass with no failing or risky tests.
 
 Several `test_*_bug.gd` / `test_*_debug.gd` / `test_*_trace.gd` files remain from
 past bug hunts; they still assert (not risky) but are print-heavy and could be

@@ -8,11 +8,21 @@ extends Node2D
 @onready var grid_manager: GridManager = $GridManager
 @onready var player: Player = $Player
 
-## Fold system for grid transformations
-var fold_system: FoldSystem = null
+## Fold controller (derive/replay engine adapter) for grid transformations
+var fold_system: FoldController = null
 
-## Action history for sequential undo (Phase 6 Task 7)
-var action_history: ActionHistory = null
+## PHASE 8: Player-facing interaction debug toggles. These appear as dropdowns directly
+## on the Main node in the inspector so gameplay combinations (Axes A-D) can be explored
+## without creating a sub-resource. They are copied into `interaction_config` at runtime.
+@export_group("Interaction (debug toggles)")
+@export var second_anchor: InteractionConfig.SecondAnchor = InteractionConfig.SecondAnchor.PLACE_THEN_CONFIRM
+@export var action_priority: InteractionConfig.ActionPriority = InteractionConfig.ActionPriority.CREASE_DOT_WINS
+@export var unfold_blocking: InteractionConfig.UnfoldBlocking = InteractionConfig.UnfoldBlocking.ALLOW_ANY
+@export var null_anchor: InteractionConfig.NullAnchor = InteractionConfig.NullAnchor.CENTROID_IN_NULL
+@export_group("")
+
+var interaction_config: InteractionConfig = null
+var interaction_controller: InteractionController = null
 
 ## Game state
 var is_level_complete: bool = false
@@ -42,24 +52,42 @@ func _ready() -> void:
 	else:
 		load_level(GameManager.current_level_data)
 
-	# Initialize FoldSystem
-	fold_system = FoldSystem.new()
-	fold_system.initialize(grid_manager)
+	# Initialize FoldController (derive/replay engine over the current grid)
+	fold_system = FoldController.new()
 	add_child(fold_system)
+	fold_system.initialize(grid_manager)
 
-	# Initialize ActionHistory (Phase 6 Task 7)
-	action_history = ActionHistory.new()
+	# PHASE 8: Build the interaction config from the inspector dropdowns on this node.
+	interaction_config = InteractionConfig.new()
+	interaction_config.second_anchor = second_anchor
+	interaction_config.action_priority = action_priority
+	interaction_config.unfold_blocking = unfold_blocking
+	interaction_config.null_anchor = null_anchor
+
+	# Wire the unfold-blocking mode into the controller (0=ALLOW_ANY, 1=BLOCK_ON_INTERSECTION).
+	fold_system.unfold_blocking_mode = unfold_blocking
 
 	# Initialize player with grid manager
 	if player and grid_manager:
-		# Connect FoldSystem to player for validation
+		# Connect FoldController to player for validation
 		fold_system.set_player(player)
 
-		# Wire GridManager to FoldSystem for preview line validation
+		# Wire GridManager to FoldController for preview line validation + history
 		grid_manager.fold_system = fold_system
+
+		# PHASE 8: Wire the interaction config into GridManager (Axis D eligibility)
+		grid_manager.interaction_config = interaction_config
+
+		# Seed undo history with the initial (post-load) state.
+		fold_system.seed_history()
 
 		# Connect to player signals
 		player.goal_reached.connect(_on_player_goal_reached)
+
+	# PHASE 8: Player-facing interaction controller
+	interaction_controller = InteractionController.new()
+	add_child(interaction_controller)
+	interaction_controller.initialize(grid_manager, fold_system, player, self, interaction_config)
 
 	# Initialize GUI
 	setup_gui()
@@ -201,48 +229,28 @@ func _on_restart_requested() -> void:
 	GameManager.restart_level()
 
 
-## Handle undo request (from UI button)
+## Handle undo request (from UI button or U key)
+##
+## Baba-Is-You-style global undo: steps the whole game state back by one input,
+## reversing the last move, fold, unfold, or anchor placement/cancel uniformly.
 func _on_undo_requested() -> void:
-	# PHASE 6 TASK 7: Use ActionHistory for sequential undo
-	if not action_history or not action_history.can_undo():
+	if not fold_system or not fold_system.can_undo():
 		print("No actions to undo")
 		return
 
-	# Pop the most recent action
-	var action = action_history.pop_action()
+	if fold_system.undo():
+		_sync_after_change()
+		print("Undo successful! Folds: %d" % GameManager.fold_count)
 
-	if action.is_empty():
-		print("No actions to undo")
-		return
 
-	# Handle different action types
-	match action["action_type"]:
-		"fold":
-			var fold_id = action["fold_id"]
-			var success = fold_system.undo_fold_by_id(fold_id)
-			if success:
-				# Update HUD
-				if hud:
-					hud.set_fold_count(GameManager.fold_count)
-					hud.set_can_undo(action_history.can_undo())
-				print("Undo successful! Folds: %d" % GameManager.fold_count)
-			else:
-				# Undo failed, push action back
-				action_history.push_action(action)
-				print("Cannot undo fold %d - it's blocked by newer folds" % fold_id)
-
-		"move":
-			# Future: Handle player movement undo
-			print("Move undo not yet implemented")
-			# Update undo button state
-			if hud:
-				hud.set_can_undo(action_history.can_undo())
-
-		_:
-			print("Unknown action type: %s" % action["action_type"])
-			# Update undo button state anyway
-			if hud:
-				hud.set_can_undo(action_history.can_undo())
+## Sync GameManager fold count + HUD to the engine's current state. Called after
+## any change to the fold list (fold, unfold, undo).
+func _sync_after_change() -> void:
+	if fold_system and fold_system.engine:
+		GameManager.fold_count = fold_system.engine.fold_count()
+	if hud:
+		hud.set_fold_count(GameManager.fold_count)
+		hud.set_can_undo(fold_system.can_undo() if fold_system else false)
 
 
 ## Handle main menu request
@@ -306,36 +314,39 @@ func handle_mouse_click(mouse_position: Vector2) -> void:
 	# Convert mouse position from global (screen) to local (GridManager) coordinates
 	var local_pos = grid_manager.to_local(mouse_position)
 
-	# Check if click is on a seam
-	var click_result = fold_system.detect_seam_click(local_pos)
+	# PHASE 8: Prefer the crease dot (explicit unfold handle), then fall back to seam zones
+	var click_result = fold_system.detect_crease_dot_click(local_pos)
+	if click_result.is_empty():
+		click_result = fold_system.detect_seam_click(local_pos)
 
 	if not click_result:
-		# Not clicking on a seam, ignore
+		# Not clicking on a seam or crease dot, ignore
 		return
 
-	# Clicked on a seam!
-	var fold_id = click_result["fold_id"]
-	var can_undo = click_result["can_undo"]
+	# Clicked on a seam or crease dot!
+	perform_unfold(click_result["fold_id"], click_result["can_undo"])
 
-	if can_undo:
-		# UNFOLD this seam (geometric reversal without state restoration)
-		var success = fold_system.unfold_seam(fold_id)
-		if success:
-			# PHASE 6 TASK 7: Remove this fold action from ActionHistory
-			# Seam-based unfold can unfold non-sequential folds, so search and remove
-			if action_history:
-				remove_fold_action_from_history(fold_id)
 
-			# Update HUD
-			if hud:
-				hud.set_fold_count(GameManager.fold_count)
-				hud.set_can_undo(action_history.can_undo())
-			print("Seam unfold successful! Fold %d unfolded. Total folds: %d" % [fold_id, GameManager.fold_count])
-		else:
-			print("Cannot unfold fold %d - player may be standing on seam" % fold_id)
-	else:
-		# Seam is blocked
+## Unfold a fold and update bookkeeping (shared by mouse click and facing-interact)
+##
+## @param fold_id: The fold to unfold
+## @param can_undo: Whether the fold is currently unfoldable (from click/detection result)
+## @return: true if the unfold succeeded
+func perform_unfold(fold_id: int, can_undo: bool) -> bool:
+	if not can_undo:
 		print("Cannot unfold fold %d - it's blocked by newer intersecting folds" % fold_id)
+		return false
+
+	# UNFOLD this seam (removes the fold from the list and re-derives)
+	var success = fold_system.unfold_seam(fold_id)
+	if success:
+		# Unfold is itself an undoable input (Baba-style).
+		fold_system.commit_input()
+		_sync_after_change()
+		print("Seam unfold successful! Fold %d unfolded. Total folds: %d" % [fold_id, GameManager.fold_count])
+	else:
+		print("Cannot unfold fold %d - player may be standing on seam" % fold_id)
+	return success
 
 
 ## Execute fold with selected anchors
@@ -350,55 +361,29 @@ func execute_fold() -> void:
 		return
 
 	# Execute the fold (with animation)
-	var success = await fold_system.execute_fold(anchors[0], anchors[1], true)
-
-	# Clear selection after fold (whether successful or not)
-	if grid_manager:
-		grid_manager.clear_selection()
+	var a1 = anchors[0]
+	var a2 = anchors[1]
+	var success = await fold_system.execute_fold(a1, a2, true)
 
 	if success:
-		# Update fold count in GameManager
-		GameManager.increment_fold_count()
-
-		# Update HUD
-		if hud:
-			hud.set_fold_count(GameManager.fold_count)
-
-		# PHASE 6 TASK 7: Record fold action in ActionHistory
-		if action_history and fold_system and not fold_system.fold_history.is_empty():
-			# Get the fold_id of the most recent fold
-			var newest_fold_id = -1
-			for record in fold_system.fold_history:
-				if record["fold_id"] > newest_fold_id:
-					newest_fold_id = record["fold_id"]
-
-			if newest_fold_id >= 0:
-				action_history.push_action({
-					"action_type": "fold",
-					"fold_id": newest_fold_id
-				})
-				# Update undo button state
-				if hud:
-					hud.set_can_undo(action_history.can_undo())
-
-		print("Fold executed successfully! Total folds: %d" % GameManager.fold_count)
+		if grid_manager:
+			grid_manager.clear_selection()
+		_finalize_fold_success()
 	else:
+		# Briefly show the invalid region (e.g. deferred player-position rejection).
+		# Clear first so the flash's auto-clear timer hides it (no anchors remain here).
+		if grid_manager:
+			grid_manager.clear_selection()
+			grid_manager.flash_invalid_fold(a1, a2)
 		print("Fold failed - check validation messages")
 
 
-## Remove a specific fold action from ActionHistory (Phase 6 Task 7)
+## Shared post-fold bookkeeping for both the debug flow and the player-interact flow
 ##
-## Used when seam-based undo removes a non-sequential fold.
-## Searches through action history and removes the fold action with matching fold_id.
-##
-## @param fold_id: The fold_id to remove
-func remove_fold_action_from_history(fold_id: int) -> void:
-	if not action_history:
-		return
-
-	# Search for the fold action with this fold_id
-	for i in range(action_history.actions.size() - 1, -1, -1):
-		var action = action_history.actions[i]
-		if action["action_type"] == "fold" and action["fold_id"] == fold_id:
-			action_history.actions.remove_at(i)
-			return  # Found and removed, done
+## Records the fold as an undoable input and syncs fold count + HUD.
+func _finalize_fold_success() -> void:
+	# The fold is an undoable input (Baba-style history).
+	if fold_system:
+		fold_system.commit_input()
+	_sync_after_change()
+	print("Fold executed successfully! Total folds: %d" % GameManager.fold_count)

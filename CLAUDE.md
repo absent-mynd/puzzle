@@ -2,8 +2,55 @@
 
 **START HERE** - Essential context for AI agents working on this project.
 
-**Last Updated:** 2026-07-07
-**Current Phase:** Core mechanics complete (Phases 1-7). Remaining work is content & polish (Phases 8-11).
+**Last Updated:** 2026-07-08
+**Current Phase:** Core mechanics complete. Fold engine re-architected to derive/replay (see below).
+
+---
+
+## ⚠️ ARCHITECTURE UPDATE (2026-07-08): Derive / Replay engine
+
+The fold engine was rewritten. **State = an immutable base grid + an ordered list of
+folds; everything else is DERIVED by replaying the folds from scratch.** The old mutating
+`FoldSystem` (and `ActionHistory`) are DELETED.
+
+**New model (`scripts/model/` + `scripts/systems/`):**
+- `BaseGrid` / `BaseTile` — immutable base level (never mutated). No null type: "void" = a
+  position with no piece.
+- `Fold` — one fold: anchors, target/source, crease geometry, `shift_grid`. No snapshot.
+- `FoldReplay.derive(base, folds) -> FoldedState` — pure function; the heart of the engine.
+- `FoldedState` / `FoldedPiece` — derived per-position stacks; queries `dominant_type_at`,
+  `is_occupied`, `plane_pos_of_base`, `center_at`.
+- `FoldEngine` — stateful core (apply/remove fold; player rides its `base_id`).
+- `HistoryManager` — Baba-style global undo (snapshots of engine + selection + heading).
+- `FoldController` (Node) — adapter the game uses; keeps the old FoldSystem method names,
+  materializes the derived state into `GridManager.cells` as view Cells
+  (`Cell.apply_folded_pieces`, `GridManager.refresh_from_state`), rides + animates the
+  player, and renders crease-dot unfold handles.
+
+**Fold semantics — MEET-IN-THE-MIDDLE:** a fold orders its two anchors (anchor_a =
+lexicographic min by (y,x)), excises the strip strictly between their creases, and slides
+BOTH outer flaps inward by integer half-shifts (`shift_a_grid ≈ (b-a)/2`,
+`shift_b_grid = shift_a_grid - (b-a)`) so the halves meet at a common line (grid-aligned).
+The merge/seam (crease dot) sits at `meeting_pos = anchor_a + shift_a_grid`. Animated folds
+use polygon interpolation (`FoldController._fold_map_polygon`): flaps translate, the between
+strip collapses onto the meeting line.
+
+**Superseded decisions below** (kept for history): the **Null Piece System is GONE**;
+the **Seam class and legacy Cell/CellPiece seam+snapshot methods were removed** (Cell is a
+pure render view; CellPiece is a render/collision piece);
+**UNDO is now Baba-style global input-history** (reverses move/fold/unfold AND anchor
+place/cancel/turn uniformly — not snapshot-per-fold); **UNFOLD = remove the fold + re-derive**;
+the **hybrid grid-polygon** cells are now a derived VIEW, not the source of truth. The
+coordinate system (LOCAL for cells, WORLD for player) is UNCHANGED.
+
+**Tests:** `HOME=/tmp/godot-home ./run_tests.sh [name]` from the repo root (system Godot;
+the bundled `tools/godot` binary is Linux-only). Key new suites: `test_fold_replay`,
+`test_folded_state`, `test_fold_unfold_inverse`, `test_history_undo`, `test_player_ride`,
+`test_fold_controller`, `test_cell_view_bridge`, `test_base_grid`.
+
+**Open items:** wall-folded-onto-goal currently resolves to a walkable goal (tunable in
+`FoldedState.dominant_type_at`); campaign level solutions still pass under the new
+target-anchor rule but should be re-validated if fold direction is retuned.
 
 ---
 

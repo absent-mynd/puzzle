@@ -15,10 +15,25 @@ class_name Player
 ## Emitted when player reaches a goal cell
 signal goal_reached
 
+## PHASE 8: Emitted after a successful move completes (from_pos, to_pos)
+signal moved(from_pos: Vector2i, to_pos: Vector2i)
+
+## PHASE 8: Emitted on every move attempt, including blocked ones (direction, success)
+signal move_attempted(direction: Vector2i, success: bool)
+
 ## Properties
 
 ## Current grid position
 var grid_position: Vector2i
+
+## PHASE 8: Direction the player is facing (updated on every move attempt)
+var facing: Vector2i = Vector2i(1, 0)
+
+## PHASE 8: Visual arrow showing facing direction
+var facing_indicator: Polygon2D = null
+
+## PHASE 8: Origin of the in-progress move (for the `moved` signal)
+var _move_from_pos: Vector2i = Vector2i.ZERO
 
 ## Target world position for movement
 var target_position: Vector2
@@ -28,6 +43,10 @@ var is_moving: bool = false
 
 ## Whether player input is enabled
 var input_enabled: bool = true
+
+## Movement lock: set true while a fold is executing/animating so movement input is
+## deferred until the fold completes (prevents mid-fold move glitches).
+var movement_locked: bool = false
 
 ## Movement speed in pixels per second (only used for backup non-tween movement)
 var movement_speed: float = 300.0
@@ -54,6 +73,18 @@ func _ready() -> void:
 	sprite.color = Color(1.0, 0.5, 0.0)  # Orange color
 	add_child(sprite)
 
+	# PHASE 8: Facing arrow (small triangle pointing +x by default, rotated to face)
+	facing_indicator = Polygon2D.new()
+	facing_indicator.polygon = PackedVector2Array([
+		Vector2(18, 0),    # Tip (points right = +x)
+		Vector2(2, -8),    # Back-top
+		Vector2(2, 8),     # Back-bottom
+	])
+	facing_indicator.color = Color(0.1, 0.1, 0.1, 0.9)
+	facing_indicator.z_index = 1  # Above the body sprite
+	add_child(facing_indicator)
+	_update_facing_visual()
+
 
 ## Initialize player with grid manager and starting position
 ## @param manager: Reference to GridManager
@@ -79,8 +110,8 @@ func _process(delta: float) -> void:
 
 ## Handle keyboard input for movement
 func handle_input() -> void:
-	# Don't accept input if disabled
-	if not input_enabled:
+	# Don't accept input if disabled, or while a fold is executing (deferred until done).
+	if not input_enabled or movement_locked:
 		return
 
 	var input_direction := Vector2i.ZERO
@@ -107,16 +138,37 @@ func attempt_move(direction: Vector2i) -> bool:
 	if is_moving or not grid_manager:
 		return false
 
+	# PHASE 8: Update facing on every attempt, BEFORE validation, so bumping a wall
+	# still turns the player toward the obstacle.
+	facing = direction
+	_update_facing_visual()
+
 	# Calculate target grid position
 	var new_grid_pos = grid_position + direction
 
 	# Validate move
 	if not can_move_to(new_grid_pos):
+		emit_signal("move_attempted", direction, false)
 		return false
 
 	# Execute move
 	execute_move(new_grid_pos)
+	emit_signal("move_attempted", direction, true)
 	return true
+
+
+## PHASE 8: Rotate the facing arrow to point in the current facing direction
+func _update_facing_visual() -> void:
+	if facing_indicator and facing != Vector2i.ZERO:
+		facing_indicator.rotation = Vector2(facing).angle()
+
+
+## Set the facing direction and refresh the visual (used by undo to restore heading).
+func set_facing(direction: Vector2i) -> void:
+	if direction == Vector2i.ZERO:
+		return
+	facing = direction
+	_update_facing_visual()
 
 
 ## Check if player can move to target position
@@ -129,6 +181,10 @@ func can_move_to(target_grid_pos: Vector2i) -> bool:
 	# Get target cell (this is the real validation - does a cell exist there?)
 	var target_cell = grid_manager.get_cell(target_grid_pos)
 	if not target_cell:
+		return false
+
+	# Incomplete tiles (merged with empty space) are not walkable.
+	if not target_cell.is_complete():
 		return false
 
 	# PHASE 5: Check dominant type for collision
@@ -146,6 +202,9 @@ func can_move_to(target_grid_pos: Vector2i) -> bool:
 ## Execute the move to new grid position
 ## @param new_grid_pos: New grid position to move to
 func execute_move(new_grid_pos: Vector2i) -> void:
+	# PHASE 8: Remember origin so we can report it when the move completes
+	_move_from_pos = grid_position
+
 	# Update grid position
 	grid_position = new_grid_pos
 
@@ -187,6 +246,9 @@ func start_move_tween() -> void:
 ## Called when movement tween completes
 func _on_move_finished() -> void:
 	is_moving = false
+
+	# PHASE 8: Notify listeners the move landed
+	emit_signal("moved", _move_from_pos, grid_position)
 
 	# Check if player reached goal
 	check_goal()
