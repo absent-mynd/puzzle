@@ -126,14 +126,15 @@ func handle_input() -> void:
 
 	var input_direction := Vector2i.ZERO
 
-	# Check for WASD or Arrow keys
-	if Input.is_action_pressed("ui_up") or Input.is_key_pressed(KEY_W):
+	# Movement actions bind both arrows and WASD (see project.godot [input]); using the
+	# mapped actions instead of hardcoded keycodes keeps every key in one rebindable place.
+	if Input.is_action_pressed("move_up"):
 		input_direction.y = -1
-	elif Input.is_action_pressed("ui_down") or Input.is_key_pressed(KEY_S):
+	elif Input.is_action_pressed("move_down"):
 		input_direction.y = 1
-	elif Input.is_action_pressed("ui_left") or Input.is_key_pressed(KEY_A):
+	elif Input.is_action_pressed("move_left"):
 		input_direction.x = -1
-	elif Input.is_action_pressed("ui_right") or Input.is_key_pressed(KEY_D):
+	elif Input.is_action_pressed("move_right"):
 		input_direction.x = 1
 
 	# Attempt to move if direction was pressed

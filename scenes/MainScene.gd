@@ -315,9 +315,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			handle_mouse_click(event.position)
 			return
 
-	# PHASE 6: Handle keyboard undo (U key)
+	# PHASE 6: Handle keyboard undo (U key). Mark handled so the HUD's _unhandled_input
+	# doesn't also fire undo for the same press (deterministic single undo).
 	if event.is_action_pressed("ui_undo"):
 		_on_undo_requested()
+		get_viewport().set_input_as_handled()
 		return
 
 	# Execute fold when ENTER/SPACE is pressed

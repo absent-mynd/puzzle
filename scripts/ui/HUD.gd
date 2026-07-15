@@ -15,6 +15,7 @@ signal undo_requested
 @onready var restart_button: Button = $TopBar/HBoxContainer/ControlButtons/RestartButton
 @onready var pause_button: Button = $TopBar/HBoxContainer/ControlButtons/PauseButton
 @onready var test_mode_label: Label = $TopBar/HBoxContainer/LevelInfo/TestModeLabel
+@onready var instructions_label: Label = $Instructions/InstructionsLabel
 
 ## Current level info
 var level_name: String = "Test Level"
@@ -32,6 +33,10 @@ var _toast_timer: Timer = null
 func _ready() -> void:
 	update_display()
 	_setup_toast()
+
+	# Build the controls footer from the live InputMap so it can't go stale.
+	if instructions_label:
+		instructions_label.text = InputHelp.gameplay_summary()
 
 	# Prevent HUD buttons from stealing focus
 	# Allow focus only when explicitly clicked
@@ -130,11 +135,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):  # ESC
 		pause_requested.emit()
 		get_viewport().set_input_as_handled()
-	elif Input.is_key_pressed(KEY_U):  # U for undo
+	elif event.is_action_pressed("ui_undo"):  # U for undo (mapped action)
 		if can_undo:
 			undo_requested.emit()
 			get_viewport().set_input_as_handled()
-	elif Input.is_key_pressed(KEY_R):  # R for restart
+	elif event.is_action_pressed("restart"):  # R for restart (mapped action)
 		get_viewport().set_input_as_handled()
 		restart_requested.emit()
 
