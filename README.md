@@ -2,7 +2,7 @@
 
 A puzzle game with space-folding mechanics built with Godot 4.
 
-> **Contributors & AI agents:** start with **[CLAUDE.md](CLAUDE.md)** (onboarding,
+> **Contributors & AI agents:** start with **[AGENTS.md](AGENTS.md)** (onboarding,
 > architecture, pitfalls) and **[STATUS.md](STATUS.md)** (current progress).
 
 ## Project Overview

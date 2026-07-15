@@ -57,6 +57,11 @@ func _ready() -> void:
 	add_child(fold_system)
 	fold_system.initialize(grid_manager)
 
+	# F7: apply the level's pre-placed folds before the player is placed, so they ship
+	# folded (hidden regions the player can unfold to reveal).
+	if GameManager.current_level_data:
+		fold_system.apply_preplaced_folds(GameManager.current_level_data.fold_pairs())
+
 	# PHASE 8: Build the interaction config from the inspector dropdowns on this node.
 	interaction_config = InteractionConfig.new()
 	interaction_config.second_anchor = second_anchor
@@ -108,11 +113,14 @@ func load_level(level_data: LevelData) -> void:
 	grid_manager.create_grid()
 	grid_manager.center_grid_on_screen()
 
-	# Apply cell data
+	# Apply cell data. Values may be a plain int type or a {type, ...params} dict
+	# (F3 behavioral tiles) — read both uniformly; carry per-instance params on the
+	# view Cell so they reach the engine's BaseTile at base construction.
 	for pos in level_data.cell_data:
 		var cell = grid_manager.get_cell(pos)
 		if cell:
-			cell.set_cell_type(level_data.cell_data[pos])
+			cell.set_cell_type(level_data.type_at(pos))
+			cell.tile_data = level_data.data_at(pos)
 
 	# Initialize player at start position
 	if player:
@@ -168,6 +176,7 @@ func setup_gui() -> void:
 		hud.set_level_info(level_name, par_folds)
 		hud.set_fold_count(GameManager.fold_count)
 		hud.set_can_undo(false)  # Initialize undo button as disabled
+		hud.set_test_mode(GameManager.is_testing_from_editor)
 		hud.pause_requested.connect(_on_pause_requested)
 		hud.restart_requested.connect(_on_restart_requested)
 		hud.undo_requested.connect(_on_undo_requested)
@@ -184,6 +193,8 @@ func setup_gui() -> void:
 		pause_menu.resume_requested.connect(_on_resume_requested)
 		pause_menu.restart_requested.connect(_on_restart_requested)
 		pause_menu.main_menu_requested.connect(_on_main_menu_requested)
+		pause_menu.editor_requested.connect(_on_editor_requested)
+		pause_menu.set_editor_mode(GameManager.is_testing_from_editor)
 
 	# Load and instantiate Level Complete screen as CanvasLayer
 	var complete_scene = load("res://scenes/ui/LevelComplete.tscn")
@@ -198,6 +209,8 @@ func setup_gui() -> void:
 		level_complete.retry_requested.connect(_on_restart_requested)
 		level_complete.level_select_requested.connect(_on_level_select_requested)
 		level_complete.main_menu_requested.connect(_on_main_menu_requested)
+		level_complete.editor_requested.connect(_on_editor_requested)
+		level_complete.set_editor_mode(GameManager.is_testing_from_editor)
 
 
 ## Display level complete UI
@@ -257,6 +270,12 @@ func _sync_after_change() -> void:
 func _on_main_menu_requested() -> void:
 	get_tree().paused = false  # Ensure game is unpaused
 	GameManager.return_to_main_menu()
+
+
+## Handle "Back to Editor" request (only reachable while testing a level from the editor)
+func _on_editor_requested() -> void:
+	get_tree().paused = false  # Ensure game is unpaused
+	GameManager.return_to_editor()
 
 
 ## Handle next level request

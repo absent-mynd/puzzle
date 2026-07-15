@@ -318,6 +318,16 @@ func is_anchor_eligible(grid_pos: Vector2i) -> bool:
 	if not cell:
 		return false
 
+	# Reject tiles whose type explicitly disallows anchor placement.
+	var dominant_type: int
+	var fs_state: FoldedState = fold_system.get_state() if fold_system else null
+	if fs_state:
+		dominant_type = fs_state.dominant_type_at(grid_pos)
+	else:
+		dominant_type = cell.get_dominant_type()
+	if TileTypes.blocks_anchor(dominant_type):
+		return false
+
 	var mode := InteractionConfig.NullAnchor.CENTROID_IN_NULL
 	if interaction_config:
 		mode = interaction_config.null_anchor

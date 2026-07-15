@@ -14,7 +14,8 @@ class_name Cell
 var grid_position: Vector2i        # Position in grid
 var cell_size: float = 0.0         # Size of this cell in pixels (for dot radius, previews)
 var geometry_pieces: Array[CellPiece] = []  # PHASE 5: Array of geometric pieces
-var cell_type: int = 0             # 0=empty, 1=wall, 2=water, 3=goal (dominant type)
+var cell_type: int = 0             # 0=empty, 1=wall, 2=water, 3=goal, 4=trigger (dominant type)
+var tile_data: Dictionary = {}     # F3: per-instance params (trigger channel/anchors), read into BaseTile at base construction
 var is_partial: bool = false       # True if cell holds >1 piece (merged by a fold)
 var polygon_visual: Polygon2D      # Visual representation (legacy - first piece)
 var border_line: Line2D            # Cell border/outline
@@ -295,6 +296,10 @@ func get_cell_color_for_type(type: int) -> Color:
 		1: return Color(0.2, 0.2, 0.2)  # Wall - dark gray
 		2: return Color(0.2, 0.4, 1.0)  # Water - blue
 		3: return Color(0.2, 1.0, 0.2)  # Goal - green
+		TileTypes.TRIGGER_FOLD: return Color(1.0, 0.6, 0.1)  # Trigger plate - amber
+		TileTypes.PIN: return Color(0.55, 0.1, 0.5)  # Pin (fold-proof) - purple
+		TileTypes.UNANCHORABLE_FLOOR: return Color(0.75, 0.7, 0.85)  # Unanchorable floor - light gray + purple tint
+		TileTypes.UNANCHORABLE_WALL: return Color(0.25, 0.15, 0.3)   # Unanchorable wall - dark gray + purple tint
 		_: return Color(1.0, 1.0, 1.0)  # Default - white
 
 
@@ -468,33 +473,11 @@ func get_dominant_type() -> int:
 	if geometry_pieces.is_empty():
 		return 0  # Empty
 
-	var has_null = false
-	var has_goal = false
-	var has_wall = false
-	var has_water = false
-
+	# F1: merge priority (null > goal > wall > water > empty) lives in TileTypes.
+	var types: Array = []
 	for piece in geometry_pieces:
-		if piece.cell_type == CellPiece.CELL_TYPE_NULL:  # Null/void
-			has_null = true
-		elif piece.cell_type == 3:  # Goal
-			has_goal = true
-		elif piece.cell_type == 1:  # Wall
-			has_wall = true
-		elif piece.cell_type == 2:  # Water
-			has_water = true
-
-	# Priority: Null > Goal > Wall > Water > Empty
-	if has_null:
-		return CellPiece.CELL_TYPE_NULL
-	elif has_goal:
-		return 3
-	elif has_wall:
-		return 1
-	elif has_water:
-		return 2
-	else:
-		# Return first piece's type if all are empty/other
-		return geometry_pieces[0].cell_type
+		types.append(piece.cell_type)
+	return TileTypes.dominant_type(types)
 
 
 ## Check if cell contains a specific type

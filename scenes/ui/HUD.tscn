@@ -33,6 +33,13 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Folds: 0 / 5"
 
+[node name="TestModeLabel" type="Label" parent="TopBar/HBoxContainer/LevelInfo"]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.6, 0, 1)
+theme_override_font_sizes/font_size = 18
+text = "● TEST MODE"
+
 [node name="ControlButtons" type="HBoxContainer" parent="TopBar/HBoxContainer"]
 layout_mode = 2
 theme_override_constants/separation = 10

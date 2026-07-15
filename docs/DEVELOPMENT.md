@@ -773,7 +773,7 @@ func _draw():
 - When completing phase (move to completed/)
 - When implementation differs from plan
 
-**Update CLAUDE.md:**
+**Update AGENTS.md:**
 - When discovering critical pitfall
 - When major architectural change made
 - When new tool/workflow added

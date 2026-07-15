@@ -167,7 +167,7 @@ See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for detailed rationale.
 
 ```
 /home/user/puzzle/
-├── CLAUDE.md                    # ← YOU ARE HERE - Start here!
+├── AGENTS.md                    # ← YOU ARE HERE - Start here!
 ├── STATUS.md                    # Current progress (update frequently)
 ├── README.md                    # Public-facing project info
 │
@@ -403,7 +403,7 @@ Each fact has **one** authoritative home — link to it, don't copy it:
 | Doc | Owns |
 |---|---|
 | `STATUS.md` | Current progress, phase status, **test counts** |
-| `CLAUDE.md` (this file) | Agent onboarding, critical decisions, pitfalls |
+| `AGENTS.md` (this file) | Agent onboarding, critical decisions, pitfalls |
 | `docs/ARCHITECTURE.md` | Design decisions & rationale (stable) |
 | `docs/DEVELOPMENT.md` | Workflow, testing, contribution guidance |
 | `docs/REFERENCE.md` | Code map — pointers to source files (not signatures) |

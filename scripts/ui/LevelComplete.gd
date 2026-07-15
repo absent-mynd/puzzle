@@ -9,6 +9,7 @@ signal next_level_requested
 signal retry_requested
 signal level_select_requested
 signal main_menu_requested
+signal editor_requested
 
 ## UI element references
 @onready var title_label: Label = $CenterContainer/Panel/VBoxContainer/Title
@@ -19,6 +20,8 @@ signal main_menu_requested
 @onready var par_folds_label: Label = $CenterContainer/Panel/VBoxContainer/Stats/ParFolds
 @onready var performance_label: Label = $CenterContainer/Panel/VBoxContainer/Stats/Performance
 @onready var next_button: Button = $CenterContainer/Panel/VBoxContainer/NextButton
+@onready var level_select_button: Button = $CenterContainer/Panel/VBoxContainer/LevelSelectButton
+@onready var editor_button: Button = $CenterContainer/Panel/VBoxContainer/EditorButton
 
 ## Level stats
 var folds_used: int = 0
@@ -28,6 +31,8 @@ var stars_earned: int = 0
 
 func _ready() -> void:
 	hide()
+	if editor_button:
+		editor_button.visible = false
 
 
 ## Show the level complete screen with stats
@@ -49,8 +54,11 @@ func show_complete(p_folds_used: int, p_par_folds: int = -1) -> void:
 	update_display()
 	show()
 
-	# Set focus to next button
-	next_button.grab_focus()
+	# Focus the primary visible action (Next for campaign, Back to Editor while testing).
+	if next_button.visible:
+		next_button.grab_focus()
+	elif editor_button and editor_button.visible:
+		editor_button.grab_focus()
 
 
 ## Update all UI elements with current stats
@@ -124,6 +132,25 @@ func _on_main_menu_button_pressed() -> void:
 
 	main_menu_requested.emit()
 	hide()
+
+
+## Handle back-to-editor button (only shown while testing from the editor)
+func _on_editor_button_pressed() -> void:
+	AudioManager.play_sfx("button_click")
+
+	editor_requested.emit()
+	hide()
+
+
+## Toggle editor-test mode: show "Back to Editor" and hide the campaign-only options
+## (Next / Level Select) which don't apply to a one-off test level.
+func set_editor_mode(enabled: bool) -> void:
+	if editor_button:
+		editor_button.visible = enabled
+	if next_button:
+		next_button.visible = not enabled
+	if level_select_button:
+		level_select_button.visible = not enabled
 
 
 ## Hide the level complete screen

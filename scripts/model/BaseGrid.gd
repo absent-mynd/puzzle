@@ -86,11 +86,13 @@ static func from_grid_manager(gm) -> BaseGrid:
 			var pos := Vector2i(x, y)
 			var cell = gm.get_cell(pos)
 			var type := BaseTile.TYPE_EMPTY
+			var data := {}
 			if cell:
 				type = cell.get_dominant_type()
 				if type == CellPiece.CELL_TYPE_NULL:
 					type = BaseTile.TYPE_EMPTY
-			tiles_arr.append(BaseTile.new(next_id, pos, type))
+				data = cell.tile_data
+			tiles_arr.append(BaseTile.new(next_id, pos, type, data))
 			next_id += 1
 	bg.tiles = tiles_arr
 	bg._rebuild_index()
@@ -106,8 +108,7 @@ static func from_level_data(ld: LevelData) -> BaseGrid:
 	for y in range(ld.grid_size.y):
 		for x in range(ld.grid_size.x):
 			var pos := Vector2i(x, y)
-			var type: int = ld.cell_data.get(pos, BaseTile.TYPE_EMPTY)
-			tiles_arr.append(BaseTile.new(next_id, pos, type))
+			tiles_arr.append(BaseTile.new(next_id, pos, ld.type_at(pos), ld.data_at(pos)))
 			next_id += 1
 	bg.tiles = tiles_arr
 	bg._rebuild_index()

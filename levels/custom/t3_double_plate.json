@@ -1,0 +1,38 @@
+{
+	"level_id": "t3_double_plate",
+	"level_name": "Double Plate",
+	"description": "Two walls, two plates. Each plate you step on folds away the wall ahead of it. Keep walking right.",
+	"grid_size": {
+		"x": 10,
+		"y": 3
+	},
+	"cell_size": 64.0,
+	"player_start_position": {
+		"x": 0,
+		"y": 1
+	},
+	"cell_data": {
+		"(1, 1)": {
+			"type": 4,
+			"channel": "A",
+			"anchors": [[2, 1], [4, 1]]
+		},
+		"(3, 1)": 1,
+		"(5, 1)": {
+			"type": 4,
+			"channel": "B",
+			"anchors": [[6, 1], [8, 1]]
+		},
+		"(7, 1)": 1,
+		"(9, 1)": 3
+	},
+	"difficulty": 2,
+	"max_folds": 0,
+	"par_folds": 0,
+	"metadata": {
+		"author": "Foundation Test Suite",
+		"version": "1.0",
+		"tags": ["trigger", "multi-channel"],
+		"order": 3
+	}
+}

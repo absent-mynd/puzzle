@@ -18,15 +18,24 @@ extends Resource
 ## Gameplay elements
 @export var player_start_position: Vector2i = Vector2i(0, 0)
 
-## Cell data: Dictionary mapping Vector2i grid positions to CellType integers
-## 0 = empty, 1 = wall, 2 = water, 3 = goal
-## Only stores non-empty cells for efficiency
+## Cell data: Dictionary mapping Vector2i grid positions to cell contents.
+## A value is EITHER an int type (0=empty, 1=wall, 2=water, 3=goal, 4=trigger-fold)
+## for a plain tile, OR a Dictionary {"type": N, ...params} for a behavioral tile
+## (F3), e.g. {"type": 4, "channel": "A", "anchors": [[1,1],[4,1]]}. Only non-empty
+## cells are stored. Use type_at()/data_at() to read either form uniformly.
 @export var cell_data: Dictionary = {}
 
 ## Level constraints and goals
 @export var difficulty: int = 1  # 1-5 rating
 @export var max_folds: int = -1  # -1 = unlimited
 @export var par_folds: int = -1  # -1 = not set, otherwise target for "perfect" completion
+
+## Pre-placed folds (F7): an ordered list applied at load, BEFORE the player is
+## placed. Each entry is {"anchor1": {x,y}, "anchor2": {x,y}} in base-grid coords.
+## Because a fold hides the region between its creases, pre-placed folds ship a level
+## already folded — the player can unfold them to REVEAL hidden areas ("nested"
+## content is just the excised region of one base grid; no recursive sub-grids).
+@export var folds: Array = []
 
 ## Additional metadata (author, tags, version, etc.)
 @export var metadata: Dictionary = {}
@@ -42,6 +51,7 @@ func to_dict() -> Dictionary:
 		"cell_size": cell_size,
 		"player_start_position": {"x": player_start_position.x, "y": player_start_position.y},
 		"cell_data": {},
+		"folds": folds.duplicate(true),
 		"difficulty": difficulty,
 		"max_folds": max_folds,
 		"par_folds": par_folds,
@@ -77,6 +87,7 @@ func from_dict(dict: Dictionary) -> void:
 	difficulty = dict.get("difficulty", 1)
 	max_folds = dict.get("max_folds", -1)
 	par_folds = dict.get("par_folds", -1)
+	folds = dict.get("folds", [])
 	metadata = dict.get("metadata", {})
 
 	# Parse cell_data - convert string keys back to Vector2i
@@ -87,6 +98,24 @@ func from_dict(dict: Dictionary) -> void:
 			var coords = _parse_vector2i_string(key)
 			if coords != null:
 				cell_data[coords] = dict["cell_data"][key]
+
+
+## Cell type at a position, reading either the int shorthand or a {"type": N} dict.
+func type_at(pos: Vector2i) -> int:
+	var v = cell_data.get(pos, 0)
+	if v is Dictionary:
+		return int(v.get("type", 0))
+	return int(v)
+
+
+## Per-instance parameters at a position ({} for plain int tiles).
+func data_at(pos: Vector2i) -> Dictionary:
+	var v = cell_data.get(pos, null)
+	if v is Dictionary:
+		var d: Dictionary = (v as Dictionary).duplicate(true)
+		d.erase("type")  # `type` is read via type_at(); keep only behavior params
+		return d
+	return {}
 
 
 ## Creates a deep copy of this LevelData
@@ -104,9 +133,23 @@ func clone() -> LevelData:
 
 	# Deep copy dictionaries
 	copy.cell_data = cell_data.duplicate(true)
+	copy.folds = folds.duplicate(true)
 	copy.metadata = metadata.duplicate(true)
 
 	return copy
+
+
+## Pre-placed folds as [anchor1, anchor2] Vector2i pairs, in order.
+func fold_pairs() -> Array:
+	var out: Array = []
+	for f in folds:
+		var a = f.get("anchor1", {})
+		var b = f.get("anchor2", {})
+		out.append([
+			Vector2i(int(a.get("x", 0)), int(a.get("y", 0))),
+			Vector2i(int(b.get("x", 0)), int(b.get("y", 0))),
+		])
+	return out
 
 
 ## Helper function to parse "(x, y)" string format to Vector2i

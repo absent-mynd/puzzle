@@ -20,11 +20,15 @@ class_name FoldReplay extends RefCounted
 ## source fragment translates. Fragments keep their base_id, so identity — and the
 ## player riding it — survives every fold.
 
-const _MIN_AREA := 0.01  # drop sub-pixel slivers from clipping
-
-
 ## Pure derivation: (BaseGrid, ordered folds) -> FoldedState.
 static func derive(base: BaseGrid, folds: Array) -> FoldedState:
+	return state_from_pieces(derive_pieces(base, folds))
+
+
+## The fragment list after replaying `folds` over the base grid. Exposed so the
+## step-log engine (StepReplay) can carry the pieces forward incrementally between
+## checkpoints instead of rebuilding a FoldedState it would only re-flatten.
+static func derive_pieces(base: BaseGrid, folds: Array) -> Array[FoldedPiece]:
 	# 1. Identity state: one piece per base tile.
 	var pieces: Array[FoldedPiece] = []
 	for t in base.tiles:
@@ -35,7 +39,12 @@ static func derive(base: BaseGrid, folds: Array) -> FoldedState:
 	for fold in folds:
 		pieces = _apply_fold(pieces, fold, base.cell_size)
 
-	# 3. Assemble the queryable state.
+	return pieces
+
+
+## Build the queryable state from a fragment list. Kept separate from derive_pieces
+## so a MOVE step (which does not change geometry) can reuse an existing state.
+static func state_from_pieces(pieces: Array) -> FoldedState:
 	var state := FoldedState.new()
 	for p in pieces:
 		state.add_piece(p)
@@ -43,55 +52,42 @@ static func derive(base: BaseGrid, folds: Array) -> FoldedState:
 	return state
 
 
+## Identity fragment list (base tiles, no folds). Convenience for StepReplay.
+static func identity_pieces(base: BaseGrid) -> Array[FoldedPiece]:
+	return derive_pieces(base, [])
+
+
+## Apply exactly one fold to a fragment list (public wrapper over the internal
+## clip-and-shift). Lets StepReplay extend a checkpoint by a single fold.
+static func apply_one_fold(pieces: Array, fold: Fold, cell_size: float) -> Array[FoldedPiece]:
+	return _apply_fold(pieces, fold, cell_size)
+
+
 ## Apply one fold to the current fragment list, returning the new fragment list.
 ## MEET-IN-THE-MIDDLE: A-side and B-side both translate inward; between is excised.
+## The polygon clip+shift math is shared with occupant footprints via
+## CollisionCore.fold_polygons; here we re-wrap each kept fragment as a FoldedPiece,
+## carrying base_id/type/plane_pos/src_offset, and discard the between-strip as before.
 static func _apply_fold(pieces: Array, fold: Fold, cell_size: float) -> Array[FoldedPiece]:
 	var out: Array[FoldedPiece] = []
-	var normal := fold.crease_normal
-	var p1 := fold.crease_point1
-	var p2 := fold.crease_point2
 	var shift_a := fold.shift_a_px(cell_size)
 	var shift_b := fold.shift_b_px(cell_size)
-
 	for piece in pieces:
-		# Clip by crease1: left1 = A-side (d<=0), right1 = d>0 (between + B-side).
-		var s1 := GeometryCore.split_polygon_by_line(piece.polygon, p1, normal)
-		var a_frag: PackedVector2Array = s1["left"]
-		var rest: PackedVector2Array = s1["right"]
-
-		# A-side fragment slides toward B by shift_a.
-		if _valid(a_frag):
+		var res := CollisionCore.fold_polygons([piece.polygon], fold, cell_size)
+		for poly in res["a"]:  # A-side (0 or 1 per convex clip): slid by shift_a
 			var pa := FoldedPiece.new(
-				piece.base_id, piece.type, _translate(a_frag, shift_a),
+				piece.base_id, piece.type, poly,
 				piece.plane_pos + fold.shift_a_grid, fold.fold_id)
 			pa.src_offset = piece.src_offset + shift_a
 			out.append(pa)
-
-		if not _valid(rest):
-			continue
-
-		# Clip the remainder by crease2: left2 = between (drop), right2 = B-side.
-		var s2 := GeometryCore.split_polygon_by_line(rest, p2, normal)
-		# left2 (between) is intentionally discarded (excised / hidden until unfold).
-		var b_frag: PackedVector2Array = s2["right"]
-		if _valid(b_frag):
+		for poly in res["b"]:  # B-side: slid by shift_b
 			var pb := FoldedPiece.new(
-				piece.base_id, piece.type, _translate(b_frag, shift_b),
+				piece.base_id, piece.type, poly,
 				piece.plane_pos + fold.shift_b_grid, fold.fold_id)
 			pb.src_offset = piece.src_offset + shift_b
 			out.append(pb)
-
-	return out
-
-
-static func _valid(poly: PackedVector2Array) -> bool:
-	return poly.size() >= 3 and GeometryCore.polygon_area(poly) > _MIN_AREA
-
-
-static func _translate(poly: PackedVector2Array, offset: Vector2) -> PackedVector2Array:
-	var out := PackedVector2Array()
-	for v in poly:
-		out.append(v + offset)
+		# res["dropped"] (the between-strip) is intentionally discarded here — tiles
+		# excise it. Occupant footprints keep it as a latent instead.
 	return out
 
 
