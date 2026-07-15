@@ -40,16 +40,9 @@ func show_complete(p_folds_used: int, p_par_folds: int = -1) -> void:
 	folds_used = p_folds_used
 	par_folds = p_par_folds
 
-	# Calculate stars (3 = par or better, 2 = under 1.5x par, 1 = completed)
-	if par_folds > 0:
-		if folds_used <= par_folds:
-			stars_earned = 3
-		elif folds_used <= par_folds * 1.5:
-			stars_earned = 2
-		else:
-			stars_earned = 1
-	else:
-		stars_earned = 1  # No par, just completion
+	# Star tiers (3=perfect, 2=good, 1=completed) come from the shared rule so the HUD,
+	# level-select, and this screen never disagree.
+	stars_earned = UIPalette.star_tier(folds_used, par_folds)
 
 	update_display()
 	show()
@@ -72,17 +65,12 @@ func update_display() -> void:
 	else:
 		par_folds_label.hide()
 
-	# Update performance text and color
+	# Performance text per tier; color from the shared palette.
 	match stars_earned:
-		3:
-			performance_label.text = "Perfect!"
-			performance_label.add_theme_color_override("font_color", Color(0.2, 0.8, 0.2))  # Green
-		2:
-			performance_label.text = "Good!"
-			performance_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.2))  # Yellow
-		1:
-			performance_label.text = "Completed"
-			performance_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))  # Gray
+		UIPalette.TIER_PERFECT: performance_label.text = "Perfect!"
+		UIPalette.TIER_GOOD: performance_label.text = "Good!"
+		_: performance_label.text = "Completed"
+	performance_label.add_theme_color_override("font_color", UIPalette.color_for_tier(stars_earned))
 
 	# Update star display
 	update_stars()
@@ -90,12 +78,9 @@ func update_display() -> void:
 
 ## Update star visuals based on stars earned
 func update_stars() -> void:
-	var gold_color = Color(1.0, 0.84, 0.0)  # Gold
-	var gray_color = Color(0.3, 0.3, 0.3)  # Gray (unearned)
-
-	star1.add_theme_color_override("font_color", gold_color if stars_earned >= 1 else gray_color)
-	star2.add_theme_color_override("font_color", gold_color if stars_earned >= 2 else gray_color)
-	star3.add_theme_color_override("font_color", gold_color if stars_earned >= 3 else gray_color)
+	star1.add_theme_color_override("font_color", UIPalette.GOLD_STAR if stars_earned >= 1 else UIPalette.STAR_EMPTY)
+	star2.add_theme_color_override("font_color", UIPalette.GOLD_STAR if stars_earned >= 2 else UIPalette.STAR_EMPTY)
+	star3.add_theme_color_override("font_color", UIPalette.GOLD_STAR if stars_earned >= 3 else UIPalette.STAR_EMPTY)
 
 
 ## Handle next level button

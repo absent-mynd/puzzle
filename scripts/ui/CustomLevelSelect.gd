@@ -40,7 +40,7 @@ func populate_levels() -> void:
 ## Creates a button for a custom level
 func create_level_button(level_data: LevelData, level_path: String) -> void:
 	var button = Button.new()
-	button.custom_minimum_size = Vector2(250, 120)
+	button.custom_minimum_size = UIConstants.LEVEL_BUTTON
 
 	# Build button text
 	var button_text = level_data.level_name + "\n"
@@ -53,8 +53,8 @@ func create_level_button(level_data: LevelData, level_path: String) -> void:
 
 	button.text = button_text
 
-	# Style
-	button.add_theme_color_override("font_color", Color.CYAN)
+	# Style (shared accent so custom tiles are distinct but on-palette).
+	button.add_theme_color_override("font_color", LevelSelectShared.custom_accent_color())
 
 	# Connect button press
 	button.pressed.connect(_on_level_button_pressed.bind(level_data, level_path))

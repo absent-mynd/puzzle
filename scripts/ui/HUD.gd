@@ -66,13 +66,10 @@ func update_display() -> void:
 	if fold_counter_label:
 		if par_folds > 0:
 			fold_counter_label.text = "Folds: %d / %d" % [fold_count, par_folds]
-			# Color code based on performance
-			if fold_count <= par_folds:
-				fold_counter_label.add_theme_color_override("font_color", Color.GREEN)
-			elif fold_count <= par_folds * 1.5:
-				fold_counter_label.add_theme_color_override("font_color", Color.YELLOW)
-			else:
-				fold_counter_label.add_theme_color_override("font_color", Color.ORANGE)
+			# Color code by performance, using the single shared star-tier rule so the
+			# HUD, LevelComplete, and level-select screens all agree.
+			var tier := UIPalette.star_tier(fold_count, par_folds)
+			fold_counter_label.add_theme_color_override("font_color", UIPalette.color_for_tier(tier))
 		else:
 			fold_counter_label.text = "Folds: %d" % fold_count
 			fold_counter_label.remove_theme_color_override("font_color")
@@ -124,5 +121,5 @@ func set_test_mode(enabled: bool) -> void:
 
 
 ## Show or hide the HUD
-func set_visible_hud(visible: bool) -> void:
-	visible = visible
+func set_visible_hud(is_visible: bool) -> void:
+	visible = is_visible

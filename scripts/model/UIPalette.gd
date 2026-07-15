@@ -16,8 +16,9 @@ const SUCCESS := Color(0.2, 0.8, 0.2)    # perfect / good state
 const WARNING := Color(0.85, 0.75, 0.2)  # near the limit
 const DANGER := Color(0.9, 0.3, 0.2)     # failure / blocked action
 const GOLD_STAR := Color(1.0, 0.84, 0.0) # earned star
-const NEUTRAL := Color(0.6, 0.6, 0.6)    # muted / completed-only
+const NEUTRAL := Color(0.6, 0.6, 0.6)    # muted / completed-only / locked
 const STAR_EMPTY := Color(0.3, 0.3, 0.3) # unearned star
+const ACCENT := Color(0.3, 0.7, 0.9)     # secondary accent (e.g. custom-level tiles)
 
 ## Backgrounds — unifies the three divergent values that were scattered across scenes.
 const BG_MENU := Color(0.1, 0.1, 0.15)      # menu screens

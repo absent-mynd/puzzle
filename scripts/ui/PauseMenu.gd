@@ -58,15 +58,24 @@ func _on_restart_button_pressed() -> void:
 	restart_requested.emit()
 
 
-## Open settings (overlay on pause menu)
+## Open settings as an overlay on the pause menu. Settings inherits this menu's
+## "always" process mode, so its controls keep working while the tree is paused.
 func _on_settings_button_pressed() -> void:
 	# Play button click sound
 	AudioManager.play_sfx("button_click")
 
-	# TODO: Show settings overlay
-	print("Settings not yet implemented")
-	# var settings = load("res://scenes/ui/Settings.tscn").instantiate()
-	# add_child(settings)
+	var settings_scene = load("res://scenes/ui/Settings.tscn")
+	if settings_scene:
+		var settings = settings_scene.instantiate()
+		add_child(settings)
+		settings.show_settings()
+		settings.settings_closed.connect(_on_settings_closed.bind(settings))
+
+
+## Clean up the settings overlay and return focus to the pause menu.
+func _on_settings_closed(settings_node: Node) -> void:
+	settings_node.queue_free()
+	$CenterContainer/Panel/VBoxContainer/ResumeButton.grab_focus()
 
 
 ## Return to main menu

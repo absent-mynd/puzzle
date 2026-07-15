@@ -35,7 +35,7 @@ func populate_levels() -> void:
 ## Creates a button for a level
 func create_level_button(level_data: LevelData) -> void:
 	var button = Button.new()
-	button.custom_minimum_size = Vector2(250, 120)
+	button.custom_minimum_size = UIConstants.LEVEL_BUTTON
 
 	# Check level status
 	var is_unlocked = GameManager.is_level_unlocked(level_data.level_id)
@@ -48,7 +48,7 @@ func create_level_button(level_data: LevelData) -> void:
 		button_text += "🔒 LOCKED"
 		button.disabled = true
 	elif is_completed:
-		button_text += create_star_display(stars) + "\n"
+		button_text += LevelSelectShared.star_string(stars) + "\n"
 		button_text += "Par: %d" % level_data.par_folds
 	else:
 		button_text += "✓ UNLOCKED\n"
@@ -56,30 +56,15 @@ func create_level_button(level_data: LevelData) -> void:
 
 	button.text = button_text
 
-	# Style based on status
-	if is_completed:
-		button.add_theme_color_override("font_color", Color.GOLD)
-	elif is_unlocked:
-		button.add_theme_color_override("font_color", Color.GREEN)
-	else:
-		button.add_theme_color_override("font_color", Color.DARK_GRAY)
+	# Style based on status (shared palette so it matches the rest of the UI).
+	button.add_theme_color_override("font_color",
+		LevelSelectShared.campaign_status_color(is_unlocked, is_completed))
 
 	# Connect button press
 	if is_unlocked:
 		button.pressed.connect(_on_level_button_pressed.bind(level_data.level_id))
 
 	level_grid.add_child(button)
-
-
-## Creates a star display string
-func create_star_display(stars: int) -> String:
-	var display = ""
-	for i in range(3):
-		if i < stars:
-			display += "★"
-		else:
-			display += "☆"
-	return display
 
 
 ## Handle level button press
