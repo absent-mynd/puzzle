@@ -16,8 +16,8 @@
 extends Node2D
 class_name FoldController
 
-const _CREASE_DOT_Z := 3
-const _OCCUPANT_Z := 2
+const _CREASE_DOT_Z := GameplayVisuals.Z_HIGHLIGHT
+const _OCCUPANT_Z := GameplayVisuals.Z_OCCUPANT
 const _BOX_COLOR := Color(0.62, 0.42, 0.20)          # crate brown
 const _PLAYER_BODY_COLOR := Color(1.0, 0.5, 0.0, 0.85)  # matches the player sprite
 const _ANCHOR_COLOR := Color(0.9, 0.1, 0.3, 0.9)      # persistent anchor - red
@@ -453,7 +453,7 @@ func _animate_fold(f: Fold, pre_player_plane: Vector2i, pre_player_world: Vector
 			c.visible = false
 
 	var overlay := Node2D.new()
-	overlay.z_index = 1
+	overlay.z_index = GameplayVisuals.Z_FACING
 	grid_manager.add_child(overlay)
 
 	# Each item: {poly: Polygon2D, orig: PackedVector2Array}

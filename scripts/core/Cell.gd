@@ -79,13 +79,13 @@ func _init(pos: Vector2i, local_pos: Vector2, size: float):
 	# PHASE 8: A dot at the cell's visible center, not a translucent square overlay.
 	highlight_overlay = Polygon2D.new()
 	highlight_overlay.color = Color.TRANSPARENT
-	highlight_overlay.z_index = 3  # Above pieces (0), highlight legacy (1), seams (2)
+	highlight_overlay.z_index = GameplayVisuals.Z_HIGHLIGHT  # Above pieces, seams
 	add_child(highlight_overlay)
 
 	# PHASE 5: Create containers for multi-piece rendering
 	piece_visuals = Node2D.new()
 	piece_visuals.name = "PieceVisuals"
-	piece_visuals.z_index = 0  # Below highlight
+	piece_visuals.z_index = GameplayVisuals.Z_PIECE  # Below highlight
 	add_child(piece_visuals)
 
 	update_visual()

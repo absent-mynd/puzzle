@@ -61,9 +61,9 @@ func _ready() -> void:
 	# Set up preview line (Issue #9: increased width for better visibility)
 	# PHASE 8: All preview visuals are created before the cells (added in create_grid),
 	# so a high z_index is required for them to draw ON TOP of the map rather than behind
-	# it. Cell contents top out at z_index 3 (the highlight dot).
-	const PREVIEW_FILL_Z := 10
-	const PREVIEW_LINE_Z := 11
+	# it. Cell contents top out at the highlight dot; see GameplayVisuals for the full order.
+	const PREVIEW_FILL_Z := GameplayVisuals.Z_PREVIEW_FILL
+	const PREVIEW_LINE_Z := GameplayVisuals.Z_PREVIEW_LINE
 
 	preview_line = Line2D.new()
 	preview_line.width = 5.0  # Increased from 3.0 for better visibility
@@ -275,7 +275,7 @@ func select_cell(grid_pos: Vector2i, point: Vector2 = Vector2.INF) -> bool:
 		selected_anchor_points.append(_anchor_base_point(point))
 		var cell = get_cell(grid_pos)
 		if cell:
-			cell.set_outline_color(Color.RED)
+			cell.set_outline_color(GameplayVisuals.ANCHOR_FIRST)
 		# Placing an anchor is an undoable input (Baba-style history).
 		if fold_system:
 			fold_system.commit_input()
@@ -301,7 +301,7 @@ func select_cell(grid_pos: Vector2i, point: Vector2 = Vector2.INF) -> bool:
 		selected_anchor_points.append(_anchor_base_point(point))
 		var cell = get_cell(grid_pos)
 		if cell:
-			cell.set_outline_color(Color.BLUE)
+			cell.set_outline_color(GameplayVisuals.ANCHOR_SECOND)
 		update_preview_line()
 		# Placing the second anchor is an undoable input.
 		if fold_system:
@@ -435,7 +435,7 @@ func _flash_player_red() -> void:
 		return
 	_player_flash_active = true
 	var original: Color = player.sprite.color
-	player.sprite.color = Color.RED
+	player.sprite.color = GameplayVisuals.PLAYER_BLOCKED
 	var timer := get_tree().create_timer(0.6)
 	timer.timeout.connect(func():
 		if is_instance_valid(player) and player.sprite:
@@ -504,7 +504,7 @@ func set_selection(anchors: Array, points: Array = []) -> void:
 		selected_anchor_points.append(points[i] if i < points.size() else Vector2.INF)
 		var cell = get_cell(pos)
 		if cell:
-			cell.set_outline_color(Color.RED if i == 0 else Color.BLUE)
+			cell.set_outline_color(GameplayVisuals.ANCHOR_FIRST if i == 0 else GameplayVisuals.ANCHOR_SECOND)
 	if selected_anchors.size() == 2:
 		update_preview_line()
 
@@ -587,7 +587,7 @@ func update_preview_line() -> void:
 				if validation.valid:
 					preview_line.default_color = Color.GREEN  # Valid fold
 				else:
-					preview_line.default_color = Color.RED  # Invalid fold
+					preview_line.default_color = GameplayVisuals.PREVIEW_INVALID  # Invalid fold
 			else:
 				preview_line.default_color = Color.CYAN  # Default if no fold_system
 
@@ -597,7 +597,7 @@ func update_preview_line() -> void:
 			var region_valid := true
 			if fold_system:
 				region_valid = fold_system.validate_fold(selected_anchors[0], selected_anchors[1]).valid
-			var border_color := Color.GREEN if region_valid else Color.RED
+			var border_color := GameplayVisuals.PREVIEW_VALID if region_valid else GameplayVisuals.PREVIEW_INVALID
 			var fill_color := Color(0.0, 1.0, 0.0, 0.13) if region_valid else Color(1.0, 0.0, 0.0, 0.15)
 			_draw_region_preview(selected_anchors[0], selected_anchors[1], border_color, fill_color)
 	else:

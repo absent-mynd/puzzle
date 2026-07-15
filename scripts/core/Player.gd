@@ -91,7 +91,7 @@ func _ready() -> void:
 		Vector2(2, 8),     # Back-bottom
 	])
 	facing_indicator.color = Color(0.1, 0.1, 0.1, 0.9)
-	facing_indicator.z_index = 1  # Above the body sprite
+	facing_indicator.z_index = GameplayVisuals.Z_FACING  # Above the body sprite
 	add_child(facing_indicator)
 	_update_facing_visual()
 
