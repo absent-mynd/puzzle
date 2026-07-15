@@ -2,55 +2,94 @@
 
 **START HERE** - Essential context for AI agents working on this project.
 
-**Last Updated:** 2026-07-08
-**Current Phase:** Core mechanics complete. Fold engine re-architected to derive/replay (see below).
+**Last Updated:** 2026-07-15
+**Current Phase:** Core mechanics + step-log foundation (F1-F7) complete. Content/editor
+support for the new tile types (PIN, TRIGGER_FOLD) is the current gap — see "What's Next".
 
 ---
 
-## ⚠️ ARCHITECTURE UPDATE (2026-07-08): Derive / Replay engine
+## ⚠️ ARCHITECTURE UPDATE (2026-07-15): Step-log replay (F1-F7)
 
-The fold engine was rewritten. **State = an immutable base grid + an ordered list of
-folds; everything else is DERIVED by replaying the folds from scratch.** The old mutating
-`FoldSystem` (and `ActionHistory`) are DELETED.
+Second rewrite of the fold engine in a week, on top of the 2026-07-08 derive/replay
+model below. **The source of truth is now a full ACTION LOG, not just a fold list:**
+`base_grid` + `initial_player_base_id` + an ordered `Array[FoldStep]` (fold / unfold /
+move / place-anchor). Every mutation is replay-reachable, and therefore undoable, by
+construction. The 2026-07-08 derive/replay model (immutable base grid, `Fold`,
+`FoldReplay.derive`) is still present and still used for pure trial/validation
+derivations (e.g. "would this fold be legal"), but `FoldEngine`'s live state is driven
+by the step log via `StepReplay`, not by replaying `folds` directly.
 
-**New model (`scripts/model/` + `scripts/systems/`):**
-- `BaseGrid` / `BaseTile` — immutable base level (never mutated). No null type: "void" = a
-  position with no piece.
-- `Fold` — one fold: anchors, target/source, crease geometry, `shift_grid`. No snapshot.
-- `FoldReplay.derive(base, folds) -> FoldedState` — pure function; the heart of the engine.
-- `FoldedState` / `FoldedPiece` — derived per-position stacks; queries `dominant_type_at`,
-  `is_occupied`, `plane_pos_of_base`, `center_at`.
-- `FoldEngine` — stateful core (apply/remove fold; player rides its `base_id`).
-- `HistoryManager` — Baba-style global undo (snapshots of engine + selection + heading).
-- `FoldController` (Node) — adapter the game uses; keeps the old FoldSystem method names,
-  materializes the derived state into `GridManager.cells` as view Cells
-  (`Cell.apply_folded_pieces`, `GridManager.refresh_from_state`), rides + animates the
-  player, and renders crease-dot unfold handles.
+**New model (`scripts/model/`):**
+- `FoldStep` — one log entry: `fold`, `unfold`, `move(direction)`, or an anchor-selection
+  action. `TileTypes.gd` — the single registry for what a tile type IS/DOES
+  (`walkable`, `merge_rank`, `blocks_fold`, `blocks_anchor`, `on_enter`); adding a new
+  type means editing ONE file, not every switch statement in the engine.
+- `StepReplay` — pure `apply_step(base_grid, prev_checkpoint, step) -> checkpoint`.
+  `FoldEngine` keeps an **incremental checkpoint stack** (one per step-log prefix), so
+  appending a step extends the last checkpoint by one operation instead of replaying
+  the whole log, and undo is an O(1) pop.
+- `TriggerResolver` — resolves the reaction cascade after a step (F3): landing the
+  player on a `TRIGGER_FOLD` tile fires a fold between anchors named in that tile's
+  per-instance data. Runs INSIDE `StepReplay.apply_step`, so cascades are deterministic
+  and free of bespoke undo logic. Cycle-guarded (`fired` set) + hard iteration cap
+  (`MAX_CASCADE`); on hitting the cap the cascade silently terminates.
+- Multi-body player (F4): a fold can split the player into more than one body
+  (`player_base_ids`); `player_base_id`/`player_plane_pos` remain the primary
+  (largest-fragment) body for single-sprite callers.
+- Fold-block predicate (F5): `TileTypes.PIN` occupants block excision — a fold that
+  would cut/excise a PIN is illegal. Consumed generically, not type-cased.
+- Occupants (F6): boxes, split-off player bodies, and anchors are all generalized as
+  occupants with engine-authoritative movement; `FoldController` renders occupant
+  overlays instead of bespoke box/anchor code paths.
+- Pre-placed folds (F7): `LevelData.folds` are applied before the player spawns
+  (nested-reveal on unfold; crease dots render for every pre-fold, not just
+  player-made ones).
+- `scripts/utils/CollisionCore.gd` — polygon-clip + swept collision + navigable
+  predicates; carried rigid geometry (a cut piece stays cut, tracked relative to its
+  base tile's anchor) so a diagonal-split player stays a triangle across moves.
 
-**Fold semantics — MEET-IN-THE-MIDDLE:** a fold orders its two anchors (anchor_a =
-lexicographic min by (y,x)), excises the strip strictly between their creases, and slides
-BOTH outer flaps inward by integer half-shifts (`shift_a_grid ≈ (b-a)/2`,
-`shift_b_grid = shift_a_grid - (b-a)`) so the halves meet at a common line (grid-aligned).
-The merge/seam (crease dot) sits at `meeting_pos = anchor_a + shift_a_grid`. Animated folds
-use polygon interpolation (`FoldController._fold_map_polygon`): flaps translate, the between
-strip collapses onto the meeting line.
+**Two new tile types**, added directly against the `TileTypes` registry (not
+F-numbered, landed in the same merge): `UNANCHORABLE_FLOOR` (walkable, blocks anchor
+placement) and `UNANCHORABLE_WALL` (not walkable, blocks anchor placement). Neither
+blocks fold excision.
 
-**Superseded decisions below** (kept for history): the **Null Piece System is GONE**;
-the **Seam class and legacy Cell/CellPiece seam+snapshot methods were removed** (Cell is a
-pure render view; CellPiece is a render/collision piece);
-**UNDO is now Baba-style global input-history** (reverses move/fold/unfold AND anchor
-place/cancel/turn uniformly — not snapshot-per-fold); **UNFOLD = remove the fold + re-derive**;
-the **hybrid grid-polygon** cells are now a derived VIEW, not the source of truth. The
-coordinate system (LOCAL for cells, WORLD for player) is UNCHANGED.
+**Fold semantics — MEET-IN-THE-MIDDLE (unchanged):** a fold orders its two anchors
+(anchor_a = lexicographic min by (y,x)), excises the strip strictly between their
+creases, and slides BOTH outer flaps inward by integer half-shifts
+(`shift_a_grid ≈ (b-a)/2`, `shift_b_grid = shift_a_grid - (b-a)`) so the halves meet at
+a common line (grid-aligned). The merge/seam (crease dot) sits at
+`meeting_pos = anchor_a + shift_a_grid`. Animated folds use polygon interpolation
+(`FoldController._fold_map_polygon`): flaps translate, the between strip collapses
+onto the meeting line.
+
+**Superseded decisions** (kept for history): the **Null Piece System is GONE**; the
+**Seam class and legacy Cell/CellPiece seam+snapshot methods were removed** (Cell is a
+pure render view; CellPiece is a render/collision piece); `FoldSystem.gd` and
+`ActionHistory.gd` no longer exist in the tree — `FoldEngine` + `FoldController` +
+`HistoryManager` replace them; **UNDO is Baba-style global input-history** (reverses
+move/fold/unfold AND anchor place/cancel/turn uniformly — not snapshot-per-fold);
+**UNFOLD = remove the fold + re-derive**; the **hybrid grid-polygon** cells are a
+derived VIEW, not the source of truth. The coordinate system (LOCAL for cells, WORLD
+for player) is UNCHANGED. The wall-folded-onto-goal ambiguity noted as an "open item"
+on 2026-07-08 is now settled by design: `TileTypes.merge_rank` (goal=4 beats wall=3),
+not left to chance.
 
 **Tests:** `HOME=/tmp/godot-home ./run_tests.sh [name]` from the repo root (system Godot;
-the bundled `tools/godot` binary is Linux-only). Key new suites: `test_fold_replay`,
-`test_folded_state`, `test_fold_unfold_inverse`, `test_history_undo`, `test_player_ride`,
-`test_fold_controller`, `test_cell_view_bridge`, `test_base_grid`.
+the bundled `tools/godot` binary is Linux-only). Key new suites: `test_step_log_replay`,
+`test_trigger_cascade`, `test_tile_types`, `test_anchor_occupants`, `test_box_push`,
+`test_carried_geometry`, `test_collision_core`, `test_swept_collision`,
+`test_sub_tile_collision`, `test_split_on_unfold`, `test_player_split`,
+`test_preplaced_folds`, `test_unanchorable_tiles`, `test_custom_levels_solvable`
+(plus the 2026-07-08 suites: `test_fold_replay`, `test_folded_state`,
+`test_fold_unfold_inverse`, `test_history_undo`, `test_player_ride`,
+`test_fold_controller`, `test_cell_view_bridge`, `test_base_grid`).
 
-**Open items:** wall-folded-onto-goal currently resolves to a walkable goal (tunable in
-`FoldedState.dominant_type_at`); campaign level solutions still pass under the new
-target-anchor rule but should be re-validated if fold direction is retuned.
+**Open items:** level editor palette has no entry for `PIN` or `TRIGGER_FOLD` (only
+hand-edited level JSON can place them today); the official 10-level campaign hasn't
+been updated to use any F1-F7 mechanic (only the 10 new `t1`-`t10` demo levels in
+`levels/custom/` do); `docs/ARCHITECTURE.md`/`docs/REFERENCE.md` still describe the
+deleted `FoldSystem`/`ActionHistory`/null-piece system as current. See "What's Next"
+below.
 
 ---
 
@@ -89,10 +128,15 @@ See **[STATUS.md](STATUS.md)** for detailed progress tracking.
 - ✅ Phase 6: Undo/Unfold System (independent unfold + snapshot undo)
 - ✅ Phase 7: Player Character (movement, validation, goal detection)
 - ⚙️ Phase 9 & 10: Level system, GUI, audio (substantially complete)
+- ✅ F1-F7 + collision: step-log replay, tile registry, triggers, multi-body player,
+  fold-block predicate, occupant generalization, pre-placed folds, swept collision
+  (see architecture update above)
 
-**Tests:** 559 passing / 571 run (12 risky diagnostic tests). See STATUS.md for the authoritative count.
+**Tests:** 496 passing / 496 (0 failing, 0 risky). See STATUS.md for the authoritative count.
 
-**Next Priority:** Phase 8 - Cell Types & Visual Elements (content/polish; no spec doc yet)
+**Next Priority:** level editor support for `PIN`/`TRIGGER_FOLD` tiles, and weaving
+F1-F7 mechanics into the official campaign (currently only the `t1`-`t10` demo levels
+use them). See "What's Next" below.
 
 ---
 
@@ -228,18 +272,29 @@ Represents a single polygon piece within a cell.
 - **Null pieces:** Created when geometry needs to be completed after splits
 
 ### GridManager (`scripts/core/GridManager.gd`)
-Manages the grid.
+Manages the grid **view** (materialized from `FoldedState` via `refresh_from_state`).
 - `cells: Dictionary` - Vector2i → Cell mapping
 - `selected_anchors: Array[Vector2i]` - Max 2 anchors
 - `grid_origin: Vector2` - Centering offset
 - **Important:** GridManager.position is at grid_origin
 
-### FoldSystem (`scripts/systems/FoldSystem.gd`)
-Executes fold operations.
-- `execute_horizontal_fold()` - Horizontal folds
-- `execute_vertical_fold()` - Vertical folds
-- `validate_fold_with_player()` - Check player blocking
-- MIN_FOLD_DISTANCE = 0
+### FoldEngine (`scripts/systems/FoldEngine.gd`) + FoldController (`scripts/systems/FoldController.gd`)
+Replace the deleted `FoldSystem.gd`/`ActionHistory.gd`. `FoldEngine` is the pure,
+tested, step-log-driven core (base grid + step log + incremental checkpoint stack);
+`FoldController` is the Godot-node adapter that drives `GridManager`'s view, rides +
+animates the Player, and renders crease-dot unfold handles. `FoldController` exposes
+the same public surface the old `FoldSystem` did, so callers only needed a type swap.
+- `FoldEngine.apply_fold()` / `remove_fold()` - mutate the step log, re-derive
+- `FoldEngine.move_player()` - engine-authoritative movement (F6)
+- `FoldController` - node-level entry point used by `GridManager`/`InteractionController`
+
+### TileTypes (`scripts/model/TileTypes.gd`)
+Single registry for per-type facts (F1) — the reason a new tile type is a one-file
+change instead of touching every switch statement in the engine.
+- `TileTypes.walkable(type)` / `.merge_rank(type)` / `.blocks_fold(type)` /
+  `.blocks_anchor(type)` / `.dominant_type(types: Array) -> int`
+- Types: `EMPTY`(0), `WALL`(1), `WATER`(2), `GOAL`(3), `TRIGGER_FOLD`(4), `PIN`(5),
+  `UNANCHORABLE_FLOOR`(6), `UNANCHORABLE_WALL`(7)
 
 ---
 
@@ -417,18 +472,33 @@ progress here — those live in `STATUS.md`.
 
 ## What's Next
 
-The core folding engine (Phases 1-7) is complete: axis-aligned and diagonal
-folds, multi-seam cells, and the dual undo/unfold system all work and are tested.
-Remaining work is **content and polish**, not core-mechanic engineering:
+The core folding engine (Phases 1-7) and the step-log foundation (F1-F7 + collision)
+are both complete and tested (496/496). What's missing now is **surfacing the new
+mechanics to players and level authors**, not more engine architecture:
 
-- **Phase 8 – Cell Types & Visual Elements:** richer cell types, animations
-- **Phase 9 – Level Management (polish):** campaign content, final integration
-- **Phase 10 – Graphics/Audio (polish):** particles, seam visuals, UI/UX
-- **Phase 11 – Testing & Validation:** edge cases, performance
+1. **Level editor support for `PIN` / `TRIGGER_FOLD`** (P1) — the editor palette
+   (`LevelEditor.PAINT_TYPES`) already has swatches for `UNANCHORABLE_FLOOR`/`WALL`
+   but not for `PIN` or `TRIGGER_FOLD`. `TRIGGER_FOLD` additionally needs an editor UI
+   for its per-instance data (channel, target anchors) — right now these two types
+   can only be authored by hand-editing level JSON (see `levels/custom/t1_pressure_gate.json`
+   for the shape of that data).
+2. **Weave F1-F7 mechanics into the official campaign** (P2) — the 10-level campaign
+   in `levels/campaign/` (`01_first_fold` … `10_the_gauntlet`) predates F1-F7 and only
+   uses wall/water/goal. The new demo levels (`levels/custom/t1`-`t10`) show off
+   PIN/TRIGGER_FOLD/boxes/unanchorable tiles but aren't part of the campaign
+   progression (`ProgressManager`).
+3. **Refresh `docs/ARCHITECTURE.md` / `docs/REFERENCE.md`** (P2) — both still describe
+   the deleted `FoldSystem.gd`/`ActionHistory.gd`/null-piece system as current;
+   this file (AGENTS.md) and STATUS.md are the accurate source until that pass happens.
+4. **Cell Types & Visual Elements polish** (P3) — PIN/TRIGGER_FOLD/unanchorable tiles
+   currently render as flat color swatches; richer visuals/animations are unstarted.
+5. **Graphics/Audio polish** (P3) — particle effects, seam visual polish, UI/UX
+   refinements (carried over from the old Phase 10 backlog).
+6. **Testing & Validation** (P4) — edge cases, performance, larger grids.
 
 Completed phase specs live in `docs/phases/completed/` as a historical record.
-`docs/phases/pending/` is currently empty; Phases 8 and 11 do not yet have
-standalone spec documents.
+`docs/phases/pending/` is currently empty; the old Phase 8/11 spec-doc gap is now
+superseded by the F-numbered work above.
 
 ---
 

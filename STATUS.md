@@ -1,8 +1,10 @@
 # Project Status - Space-Folding Puzzle Game
 
-**Last Updated:** 2026-07-08
-**Current Phase:** Core mechanics complete (Phases 1-7). Phase 8 gameplay interaction work in progress.
-**Total Tests:** **617 passing** / 617 (0 failing, 0 risky)
+**Last Updated:** 2026-07-15
+**Current Phase:** Fold engine re-architected twice over: derive/replay (fold-list) →
+step-log replay (F1-F7). Core mechanics + step-log foundation complete. Content/editor
+support for the new tile types is the current gap.
+**Total Tests:** **496 passing** / 496 (0 failing, 0 risky)
 
 ---
 
@@ -11,9 +13,18 @@
 | Metric | Value |
 |--------|-------|
 | Core mechanic phases | ✅ Complete (1, 2, 3, 4, 5, 6, 7) |
+| Step-log foundation (F1-F7 + collision) | ✅ Complete — see below |
 | Support phases | ⚙️ Substantial (9 Levels, 10 GUI/Audio) |
-| Tests passing | 617 / 617 (0 failing, 0 risky) |
-| Test run time | ~6s |
+| Tests passing | 496 / 496 (0 failing, 0 risky) |
+| Test run time | ~9s |
+
+> Test count dropped from 617 → 496 overall: the 2026-07-10 derive/replay rewrite
+> deleted the legacy `FoldSystem`/`ActionHistory`/`Seam`/null-piece test suites
+> (~6,300 lines) along with the code they covered (617 → 357), then both rewrites
+> added back new suites — `test_fold_replay`, `test_folded_state`, `test_step_log_replay`,
+> `test_trigger_cascade`, `test_tile_types`, `test_collision_core`, occupant tests, etc.
+> — bringing the count to 496. Net behavior coverage is not smaller, it's a different
+> (leaner, per-mutation) architecture. See AGENTS.md for the full architectural writeup.
 
 > **Running tests locally:** the bundled `tools/godot/godot` is a Linux binary.
 > On macOS use a system Godot 4.x. Because the sandbox blocks Godot's default
@@ -66,6 +77,39 @@ undo, and the independent-unfold refactor.
 Grid-based movement (arrows/WASD), wall collision, goal detection / win condition,
 position updates during folds. Files: `scripts/core/Player.gd`.
 
+### F1-F7 + Collision: Step-Log Foundation (2026-07-15)
+Second engine rewrite. Promoted the source of truth from a fold-only list to a full
+action log (`FoldStep`) so every mutation (fold, unfold, move, place-anchor) is
+replay-reachable and undoable by construction (`StepReplay`, incremental checkpoint
+stack, O(1) undo). Files: `scripts/model/`, `scripts/systems/FoldEngine.gd`.
+- **F1 TileTypes** (`scripts/model/TileTypes.gd`) — single registry for
+  walkable/merge_rank/blocks_fold/blocks_anchor/on_enter per tile type. Two new
+  tile types added directly on top of it: `UNANCHORABLE_FLOOR` / `UNANCHORABLE_WALL`
+  (block anchor placement, don't block folding).
+- **F2 FoldStep + StepReplay** — step-log model, split-on-unfold, latent bodies,
+  multi-body player.
+- **F3 TriggerResolver** — fold-on-enter cascade (`TRIGGER_FOLD` tiles), cycle-guarded
+  via a per-cascade `fired` set, deterministic, hard iteration cap.
+- **F4** — player can be split into multiple bodies by a fold instead of collapsing
+  to one (`test_player_split.gd`).
+- **F5** — general fold-block predicate: `PIN` tiles are fold-proof obstacles (can't
+  be stood on, can't be excised/cut by a fold).
+- **F6 Occupants** — boxes, split-off player bodies, and anchors generalized as
+  occupants; `FoldController` occupant overlays; engine-authoritative movement.
+- **F7 Pre-placed folds** — `LevelData.folds` applied before the player spawns;
+  nested-reveal on unfold; crease dots rendered for each pre-fold.
+- **Collision engine** (`scripts/utils/CollisionCore.gd`) — polygon clips + swept
+  collision + navigable predicates; carried rigid geometry (cuts stay cut, relative
+  to the base tile's anchor); footprint/occupant blocking.
+- 10 new custom demo levels (`levels/custom/t1_pressure_gate.json` … `t10_squeeze_by.json`)
+  showcasing PIN/TRIGGER_FOLD/box mechanics. **The official 10-level campaign
+  (`levels/campaign/`) still only uses the original wall/water/goal tiles** — none
+  of the new mechanics have been woven into it yet.
+- `CLAUDE.md` renamed to `AGENTS.md` project-wide as part of this merge.
+- Level editor palette gained swatches for `UNANCHORABLE_FLOOR`/`UNANCHORABLE_WALL`
+  but **not** for `PIN` or `TRIGGER_FOLD` — those two types can currently only be
+  authored by hand-editing level JSON.
+
 ---
 
 ## Substantially Complete ⚙️
@@ -82,7 +126,22 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 
 ---
 
-## Pending Phases 📋
+## Pending / Next Steps 📋
+
+The "Phase 8-11" framing below predates the F1-F7 rewrite and is kept for history;
+the concrete next steps identified after F1-F7 are:
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| Level editor support for `PIN` / `TRIGGER_FOLD` | P1 | Paintable today only via hand-edited JSON (`levels/custom/t*.json`). `TRIGGER_FOLD` also needs a UI for its per-instance data (channel, anchors). |
+| Weave new mechanics into the official campaign | P2 | The 10-level campaign (`levels/campaign/`) is still wall/water/goal-only; PIN/TRIGGER_FOLD/boxes/unanchorable tiles only appear in the `t1`-`t10` demo levels. |
+| Refresh `docs/ARCHITECTURE.md` / `docs/REFERENCE.md` | P2 | Still describe the deleted `FoldSystem`/`ActionHistory`/null-piece system as current; AGENTS.md is now the accurate source. |
+| Cell Types & Visual Elements polish | P3 | Distinct rendering/animation for PIN, TRIGGER_FOLD, unanchorable tiles (currently flat-color swatches). |
+| Graphics/Audio polish | P3 | Particle effects, seam visual polish, UI/UX refinements (carried over from old Phase 10 backlog). |
+| Testing & Validation | P4 | Edge cases, performance, larger grids. |
+
+<details>
+<summary>Original Phase 8-11 table (pre-F1-F7, kept for history)</summary>
 
 | Phase | Name | Priority | Est. Time | Notes |
 |-------|------|----------|-----------|-------|
@@ -91,9 +150,24 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 | 10 | Graphics/Audio (polish) | P3 | 2-3h | Particles, animations |
 | 11 | Testing & Validation | P4 | 4-5h | Edge cases, perf |
 
+</details>
+
 ---
 
 ## Recent Changes
+
+### 2026-07-15
+- **F1-F7 + collision engine merged** (see "F1-F7 + Collision" section above for the
+  full breakdown). Second engine rewrite in a week: promotes the source of truth from
+  a fold-only list to a full step log so every mutation is replay-reachable and
+  undoable by construction.
+- `CLAUDE.md` → `AGENTS.md` rename applied repo-wide.
+- Test suite: 617 (pre-derive/replay) → 357 (2026-07-10 rewrite) → **496 passing**,
+  0 failing, 0 risky (2026-07-15).
+- Previously open items from the 2026-07-10 rewrite are now resolved: the
+  wall-folded-onto-goal ambiguity is settled by `TileTypes.merge_rank` (goal=4 beats
+  wall=3, by design, not by accident), and all campaign level solutions pass under
+  the full suite (`test_custom_levels_solvable.gd`, campaign BFS-verification tests).
 
 ### 2026-07-10
 - **Level editor usability pass.** The editor↔play round-trip now works: pressing `T`
@@ -187,11 +261,15 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 
 ## Known Issues
 
-None. All 617 tests pass with no failing or risky tests.
+None functionally. All 496 tests pass with no failing or risky tests.
 
-Several `test_*_bug.gd` / `test_*_debug.gd` / `test_*_trace.gd` files remain from
-past bug hunts; they still assert (not risky) but are print-heavy and could be
-consolidated in a future cleanup pass.
+Documentation gaps (see "Pending / Next Steps" above):
+- `docs/ARCHITECTURE.md` and `docs/REFERENCE.md` were not updated for either the
+  derive/replay or the F1-F7 step-log rewrite and describe deleted code
+  (`FoldSystem.gd`, `ActionHistory.gd`, the null-piece system) as current.
+- The `test_*_bug.gd` / `test_*_debug.gd` / `test_*_trace.gd` files noted in earlier
+  status reports were deleted along with legacy `FoldSystem` in the 2026-07-10
+  rewrite, so that cleanup item is now moot.
 
 ---
 
