@@ -22,7 +22,7 @@ func test_editor_boots_with_palette_and_default_paint() -> void:
 	var ed = await _boot_editor()
 
 	assert_eq(ed.current_paint_type, 1, "default paint type is Wall")
-	assert_eq(ed.palette_swatches.size(), 6, "palette has 6 swatches (4 basic + 2 unanchorable)")
+	assert_eq(ed.palette_swatches.size(), 8, "palette has 8 swatches (empty/wall/water/goal/trigger/pin/unanchorable x2)")
 	assert_not_null(ed.grid_manager, "grid manager created")
 	assert_eq(ed.grid_manager.grid_size, Vector2i(10, 10), "default 10x10 grid")
 
@@ -64,3 +64,35 @@ func test_parse_size_handles_good_and_bad_input() -> void:
 	assert_eq(ed._parse_size("12x8"), Vector2i(12, 8), "parses WxH")
 	assert_eq(ed._parse_size("7X3"), Vector2i(7, 3), "case-insensitive")
 	assert_eq(ed._parse_size("bad"), Vector2i.ZERO, "malformed returns zero")
+
+
+func test_painting_trigger_writes_param_dict() -> void:
+	var ed = await _boot_editor()
+
+	ed.cursor_position = Vector2i(3, 3)
+	ed.select_and_paint(TileTypes.TRIGGER_FOLD)
+
+	var v = ed.current_level.cell_data[Vector2i(3, 3)]
+	assert_true(v is Dictionary, "trigger tile stored as a params dict, not a bare int")
+	assert_eq(int(v["type"]), TileTypes.TRIGGER_FOLD, "dict carries the trigger type")
+
+
+func test_editor_undo_reverts_a_paint() -> void:
+	var ed = await _boot_editor()
+
+	ed.cursor_position = Vector2i(4, 1)
+	ed.select_and_paint(1)  # Wall
+	assert_true(ed.current_level.cell_data.has(Vector2i(4, 1)), "cell painted")
+
+	ed.undo_edit()
+	assert_false(ed.current_level.cell_data.has(Vector2i(4, 1)), "undo removes the painted cell")
+
+
+func test_editor_redo_reapplies_a_paint() -> void:
+	var ed = await _boot_editor()
+
+	ed.cursor_position = Vector2i(5, 1)
+	ed.select_and_paint(3)  # Goal
+	ed.undo_edit()
+	ed.redo_edit()
+	assert_eq(ed.current_level.type_at(Vector2i(5, 1)), 3, "redo reapplies the paint")

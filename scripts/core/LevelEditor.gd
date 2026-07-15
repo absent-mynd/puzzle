@@ -39,6 +39,11 @@ var help_label: Label
 var palette_container: HBoxContainer
 var palette_swatches: Dictionary = {}  # cell_type:int -> Panel
 
+## Undo/redo over LevelData snapshots. `_suppress_history` guards the rebuilds that
+## restoring a snapshot triggers, so undo/redo don't record themselves as new edits.
+var editor_history: EditorHistory = EditorHistory.new()
+var _suppress_history: bool = false
+
 ## Constants for colors
 const CURSOR_COLOR = Color(1.0, 1.0, 0.0, 0.6)  # Yellow with transparency
 const PLAYER_MARKER_COLOR = Color(1.0, 0.0, 1.0, 0.8)  # Magenta
@@ -101,6 +106,9 @@ func _ready() -> void:
 	if restoring:
 		resize_grid(current_level.grid_size)
 
+	# Seed the edit history with the starting level.
+	editor_history.set_baseline(current_level)
+
 	# Update displays
 	update_cursor_visual()
 	update_player_marker()
@@ -156,7 +164,7 @@ B: Browse levels  T: Test level  ESC: Exit editor"""
 ## Paintable tile types, in palette order. Name + swatch color for each come from the
 ## TileTypes registry (the single source of truth), so the palette can never drift from
 ## how cells actually render. (Phase 4 adds TRIGGER_FOLD/PIN to this list.)
-const PAINT_TYPE_ORDER := [0, 1, 2, 3, 6, 7]
+const PAINT_TYPE_ORDER := [0, 1, 2, 3, 4, 5, 6, 7]
 
 
 ## Create the on-screen tool palette: one framed swatch per paint type.
@@ -232,6 +240,14 @@ func _input(event: InputEvent) -> void:
 		handle_browse_input(event)
 		return
 
+	# Undo / redo (Ctrl+Z / Ctrl+Y) over the edit history.
+	if event.ctrl_pressed and event.keycode == KEY_Z:
+		undo_edit()
+		return
+	if event.ctrl_pressed and event.keycode == KEY_Y:
+		redo_edit()
+		return
+
 	# Normal edit mode
 	match event.keycode:
 		KEY_UP:
@@ -250,6 +266,10 @@ func _input(event: InputEvent) -> void:
 			select_and_paint(2)
 		KEY_3:
 			select_and_paint(3)
+		KEY_4:
+			select_and_paint(4)
+		KEY_5:
+			select_and_paint(5)
 		KEY_6:
 			select_and_paint(6)
 		KEY_7:
@@ -338,13 +358,12 @@ func set_cell_type_at_cursor(cell_type: int) -> void:
 	if cell:
 		cell.set_cell_type(cell_type)
 
-		# Update level data
-		if cell_type == 0:
-			# Remove empty cells from level data
-			current_level.cell_data.erase(cursor_position)
-		else:
-			current_level.cell_data[cursor_position] = cell_type
+		# Update level data. EditorCellModel handles the int-vs-dict shape so behavioral
+		# tiles (TRIGGER_FOLD) get a proper params dict and a loaded dict isn't flattened
+		# on repaint.
+		EditorCellModel.set_type(current_level.cell_data, cursor_position, cell_type)
 
+		_record_history()
 		update_status()
 
 
@@ -352,8 +371,41 @@ func set_cell_type_at_cursor(cell_type: int) -> void:
 func set_player_start_at_cursor() -> void:
 	player_start_position = cursor_position
 	current_level.player_start_position = player_start_position
+	_record_history()
 	update_player_marker()
 	update_status()
+
+
+## Record the current level state as an undoable edit (no-op while restoring a snapshot).
+func _record_history() -> void:
+	if not _suppress_history:
+		editor_history.push(current_level)
+
+
+## Undo the last edit, restoring the previous level snapshot.
+func undo_edit() -> void:
+	var restored := editor_history.undo()
+	if restored != null:
+		_restore_level(restored)
+
+
+## Redo a previously-undone edit.
+func redo_edit() -> void:
+	var restored := editor_history.redo()
+	if restored != null:
+		_restore_level(restored)
+
+
+## Swap in a restored LevelData and rebuild the view without recording it as a new edit.
+func _restore_level(level: LevelData) -> void:
+	_suppress_history = true
+	current_level = level
+	player_start_position = level.player_start_position
+	cursor_position = cursor_position.clamp(Vector2i.ZERO, current_level.grid_size - Vector2i.ONE)
+	resize_grid(current_level.grid_size)  # rebuilds + repaints from current_level
+	update_player_marker()
+	update_status()
+	_suppress_history = false
 
 
 ## Update cursor visual position and appearance
@@ -399,13 +451,9 @@ func update_status() -> void:
 		return
 
 	var cell = grid_manager.get_cell(cursor_position)
-	var cell_type_name = "Empty"
-	if cell:
-		match cell.cell_type:
-			0: cell_type_name = "Empty"
-			1: cell_type_name = "Wall"
-			2: cell_type_name = "Water"
-			3: cell_type_name = "Goal"
+	# Name comes from the TileTypes registry so all registered types label correctly
+	# (previously only 0-3 were handled and 4-7 mislabeled as "Empty").
+	var cell_type_name = TileTypes.display_name(cell.cell_type) if cell else "Empty"
 
 	var par_text = "none" if current_level.par_folds < 0 else str(current_level.par_folds)
 	status_label.text = "Level Editor — %s\n" % current_level.level_name
@@ -508,6 +556,9 @@ func load_level() -> void:
 		# Rebuild the grid at the loaded size (resize_grid repaints the cells).
 		resize_grid(current_level.grid_size)
 
+		# A freshly loaded level starts a new undo history.
+		editor_history.set_baseline(current_level)
+
 		status_label.text = "Level loaded: %s" % current_level.level_name
 		await get_tree().create_timer(2.0).timeout
 	else:
@@ -527,11 +578,12 @@ func apply_level_to_grid() -> void:
 			if cell:
 				cell.set_cell_type(0)
 
-	# Apply cell data from level
+	# Apply cell data from level. Use type_at so a behavioral tile stored as a
+	# {"type": N, ...} dict resolves to its int type (set_cell_type expects an int).
 	for grid_pos in current_level.cell_data:
 		var cell = grid_manager.get_cell(grid_pos)
 		if cell:
-			cell.set_cell_type(current_level.cell_data[grid_pos])
+			cell.set_cell_type(current_level.type_at(grid_pos))
 
 	# Update visuals
 	update_player_marker()
@@ -553,6 +605,9 @@ func new_level() -> void:
 
 	# Rebuild the grid at the default size (also clears all cells + repaints).
 	resize_grid(Vector2i(10, 10))
+
+	# A new level starts a fresh undo history.
+	editor_history.set_baseline(current_level)
 
 	update_cursor_visual()
 	update_player_marker()
