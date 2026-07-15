@@ -41,7 +41,7 @@ signatures, because a hand-maintained API list drifts out of sync with the code
 | Geometry helpers | `calculate_cut_lines()`, `calculate_removed_cells()`, `serialize_grid_state()` |
 
 > The UNFOLD vs UNDO distinction is a deliberate design decision — see
-> [CLAUDE.md](../CLAUDE.md) §2a and [ARCHITECTURE.md](ARCHITECTURE.md) before
+> [AGENTS.md](../AGENTS.md) §2a and [ARCHITECTURE.md](ARCHITECTURE.md) before
 > changing either path.
 
 ### Player
@@ -75,7 +75,7 @@ signatures, because a hand-maintained API list drifts out of sync with the code
 
 These are enforced by the code, not optional style. Full rationale in
 [ARCHITECTURE.md](ARCHITECTURE.md) and the pitfalls section of
-[CLAUDE.md](../CLAUDE.md):
+[AGENTS.md](../AGENTS.md):
 
 - **Cells/seams use LOCAL coordinates; the player uses WORLD.** Use
   `Vector2(grid_pos) * cell_size`, never `grid_to_world()`, for cell geometry.

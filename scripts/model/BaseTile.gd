@@ -31,8 +31,14 @@ const TYPE_GOAL := 3
 ## Cell type (see convention above).
 @export var type: int = TYPE_EMPTY
 
+## Per-instance parameters for behavioral tiles (F3). Empty for plain tiles. A
+## trigger tile, for example, carries {"channel": "A", "anchors": [[1,1],[4,1]]}.
+## Kept as a plain Dictionary so new behaviors add keys without schema churn.
+@export var data: Dictionary = {}
 
-func _init(p_base_id: int = -1, p_grid_position: Vector2i = Vector2i.ZERO, p_type: int = TYPE_EMPTY):
+
+func _init(p_base_id: int = -1, p_grid_position: Vector2i = Vector2i.ZERO, p_type: int = TYPE_EMPTY, p_data: Dictionary = {}):
 	base_id = p_base_id
 	grid_position = p_grid_position
 	type = p_type
+	data = p_data

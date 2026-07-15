@@ -650,7 +650,7 @@ Create tests in `scripts/tests/test_geometric_folding.gd`:
 
 ### Before Starting Phase 4
 
-1. Review `CLAUDE.md` for architectural decisions
+1. Review `AGENTS.md` for architectural decisions
 2. Read `IMPLEMENTATION_PLAN.md` Phase 4 section
 3. Study `GeometryCore.gd` to understand utilities
 4. Run existing tests to ensure Phase 1-3 still work: `./run_tests.sh`
@@ -667,7 +667,7 @@ Create tests in `scripts/tests/test_geometric_folding.gd`:
 
 1. Ensure all tests pass (225 existing + 50+ new = 275+ total)
 2. Verify performance targets met
-3. Update `CLAUDE.md` with any new learnings
+3. Update `AGENTS.md` with any new learnings
 4. Commit with clear, descriptive messages
 5. Prepare for Phase 5 (Multi-Seam Handling)
 

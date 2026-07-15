@@ -406,7 +406,7 @@ levels/campaign/
 
 ## Related Documentation
 
-- **[CLAUDE.md](../../CLAUDE.md)**: Project context and guidelines
+- **[AGENTS.md](../../AGENTS.md)**: Project context and guidelines
 - **[STATUS.md](../../STATUS.md)**: Current progress
 - **[docs/REFERENCE.md](../REFERENCE.md)**: Code map (UI scripts live in `scripts/ui/`)
 

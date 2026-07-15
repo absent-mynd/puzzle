@@ -25,6 +25,9 @@ class_name Fold extends Resource
 @export var anchor2: Vector2i = Vector2i.ZERO
 @export var orientation: String = "diagonal"
 
+## Symbolic tag for trigger-created folds (F3); "" for ordinary player folds.
+@export var channel: String = ""
+
 @export var anchor_a: Vector2i = Vector2i.ZERO   # ordered: lexicographic min (y,x)
 @export var anchor_b: Vector2i = Vector2i.ZERO
 
@@ -74,12 +77,15 @@ static func _half(d: Vector2i) -> Vector2i:
 	return Vector2i(roundi(d.x / 2.0), roundi(d.y / 2.0))
 
 
-## Build a Fold from two anchors and the grid cell size.
-static func create(fold_id: int, anchor1: Vector2i, anchor2: Vector2i, cell_size: float) -> Fold:
+## Build a Fold from two anchors and the grid cell size. `channel` tags folds
+## created by a trigger (F3) so other elements can reference them symbolically; it
+## is empty for ordinary player folds.
+static func create(fold_id: int, anchor1: Vector2i, anchor2: Vector2i, cell_size: float, channel: String = "") -> Fold:
 	var f := Fold.new()
 	f.fold_id = fold_id
 	f.anchor1 = anchor1
 	f.anchor2 = anchor2
+	f.channel = channel
 	f.orientation = classify_orientation(anchor1, anchor2)
 
 	var ordered := order_anchors(anchor1, anchor2)

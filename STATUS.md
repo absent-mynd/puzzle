@@ -52,7 +52,7 @@ per-piece classification/merging, null-piece system for geometric completeness.
 Files: `scripts/core/CellPiece.gd`, `scripts/core/Seam.gd`.
 
 ### Phase 6: Undo/Unfold System (2025-11-09)
-Dual system with a deliberate behavioral split (see CLAUDE.md §2a):
+Dual system with a deliberate behavioral split (see AGENTS.md §2a):
 - **UNFOLD** (seam clicks, `unfold_seam()`) — independent geometric reversal. Any
   fold can be unfolded in any order; other folds are preserved. Blocked only if the
   player stands on the seam or a newer seam intersects. Does not restore player pos.
@@ -169,7 +169,7 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 - Test suite: 556 → **568 passing**, 0 failing, 0 risky.
 - Documentation cleanup: removed obsolete root analysis/planning docs
   (CELL_MERGE_ANALYSIS, PHASE_5_6_ANALYSIS, UNFOLD_REFACTOR_PLAN), moved completed
-  phase_6 spec to `completed/`, refreshed phase README and CLAUDE.md. Replaced the
+  phase_6 spec to `completed/`, refreshed phase README and AGENTS.md. Replaced the
   hand-written REFERENCE.md with a source pointer/code map; `run_tests.sh` now
   falls back to a system Godot when the bundled Linux binary can't execute.
 
@@ -197,7 +197,7 @@ consolidated in a future cleanup pass.
 
 ## For Detailed Information
 
-- [CLAUDE.md](CLAUDE.md) — AI agent quick start
+- [AGENTS.md](AGENTS.md) — AI agent quick start
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — development workflow
 - [docs/REFERENCE.md](docs/REFERENCE.md) — API reference

@@ -22,7 +22,7 @@ func test_editor_boots_with_palette_and_default_paint() -> void:
 	var ed = await _boot_editor()
 
 	assert_eq(ed.current_paint_type, 1, "default paint type is Wall")
-	assert_eq(ed.palette_swatches.size(), 4, "palette has 4 swatches")
+	assert_eq(ed.palette_swatches.size(), 6, "palette has 6 swatches (4 basic + 2 unanchorable)")
 	assert_not_null(ed.grid_manager, "grid manager created")
 	assert_eq(ed.grid_manager.grid_size, Vector2i(10, 10), "default 10x10 grid")
 

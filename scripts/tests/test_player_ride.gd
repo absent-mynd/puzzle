@@ -51,16 +51,19 @@ func test_fold_splitting_player_cell_permitted_when_lands_navigable():
 	assert_eq(e.player_plane_pos, Vector2i(4, 5), "player rides to the meeting cell")
 
 
-func test_fold_splitting_player_blocked_when_landing_is_wall():
-	# Player on anchor_a (empty); anchor_b is a wall. Both halves merge at the meeting
-	# cell -> dominant WALL -> the player would land on a wall, so the fold is blocked.
+func test_fold_splitting_player_fits_beside_wall_subtile():
+	# Player on anchor_a (empty); anchor_b is a wall. Both halves merge at (4,5): the
+	# player's floor fragment and the wall's fragment share the cell in different
+	# sub-regions. With SUB-TILE collision the player fits on the floor sub-region
+	# beside the wall, so the fold is allowed (the whole-cell rule used to block it).
 	var e := _engine(Vector2i(2, 5), {Vector2i(5, 5): 1})  # 1 = wall
 	var result := e.player_fold_result(Vector2i(2, 5), Vector2i(5, 5))
-	assert_true(result["blocks"], "fold blocked: player would land on a wall")
-	assert_eq(result["reason"], "lands_blocked", "reason is a blocked landing")
-	assert_eq(result["blocking_pos"], Vector2i(4, 5), "blocking tile is the meeting cell")
-	assert_false(e.apply_fold(Vector2i(2, 5), Vector2i(5, 5)), "apply is rejected")
-	assert_eq(e.fold_count(), 0, "no fold recorded")
+	assert_false(result["blocks"], "fold allowed: player fits on the floor beside the wall")
+	assert_true(e.apply_fold(Vector2i(2, 5), Vector2i(5, 5)), "apply succeeds")
+	assert_eq(e.fold_count(), 1, "fold recorded")
+	assert_eq(e.player_plane_pos, Vector2i(4, 5), "player rode to the meeting cell")
+	assert_true(e.get_state().has_type_at(Vector2i(4, 5), 1), "a wall fragment shares that cell")
+	assert_true(e.get_state().is_walkable(Vector2i(4, 5)), "but the floor sub-region is walkable")
 
 
 func test_player_rides_back_on_unfold():

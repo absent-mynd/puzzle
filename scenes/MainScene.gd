@@ -57,6 +57,11 @@ func _ready() -> void:
 	add_child(fold_system)
 	fold_system.initialize(grid_manager)
 
+	# F7: apply the level's pre-placed folds before the player is placed, so they ship
+	# folded (hidden regions the player can unfold to reveal).
+	if GameManager.current_level_data:
+		fold_system.apply_preplaced_folds(GameManager.current_level_data.fold_pairs())
+
 	# PHASE 8: Build the interaction config from the inspector dropdowns on this node.
 	interaction_config = InteractionConfig.new()
 	interaction_config.second_anchor = second_anchor
@@ -108,11 +113,14 @@ func load_level(level_data: LevelData) -> void:
 	grid_manager.create_grid()
 	grid_manager.center_grid_on_screen()
 
-	# Apply cell data
+	# Apply cell data. Values may be a plain int type or a {type, ...params} dict
+	# (F3 behavioral tiles) — read both uniformly; carry per-instance params on the
+	# view Cell so they reach the engine's BaseTile at base construction.
 	for pos in level_data.cell_data:
 		var cell = grid_manager.get_cell(pos)
 		if cell:
-			cell.set_cell_type(level_data.cell_data[pos])
+			cell.set_cell_type(level_data.type_at(pos))
+			cell.tile_data = level_data.data_at(pos)
 
 	# Initialize player at start position
 	if player:

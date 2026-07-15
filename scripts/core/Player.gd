@@ -57,6 +57,16 @@ var move_duration: float = 0.2
 ## Reference to the GridManager
 var grid_manager: GridManager = null
 
+## F6 live view: when set (to the FoldController), movement is ENGINE-AUTHORITATIVE —
+## input is routed through the engine so boxes block/push and split bodies move as one.
+## The Player node then just animates to the engine's primary body position. When null
+## (headless tests), the player self-drives via can_move_to (fallback).
+var mover = null
+
+## Suppresses the `moved` signal for one tween (engine-authoritative moves handle
+## their own post-move work in the controller, so the signal must not re-fire it).
+var _suppress_moved: bool = false
+
 ## Active tween for movement animation
 var move_tween: Tween = null
 
@@ -143,18 +153,36 @@ func attempt_move(direction: Vector2i) -> bool:
 	facing = direction
 	_update_facing_visual()
 
-	# Calculate target grid position
-	var new_grid_pos = grid_position + direction
+	# Engine-authoritative path (live game): the controller decides + applies the move
+	# (push, split, triggers) and drives this node's animation + undo recording.
+	if mover != null:
+		return mover.request_move(direction)
 
-	# Validate move
+	# Fallback (headless): self-drive against the grid.
+	var new_grid_pos = grid_position + direction
 	if not can_move_to(new_grid_pos):
 		emit_signal("move_attempted", direction, false)
 		return false
-
-	# Execute move
 	execute_move(new_grid_pos)
 	emit_signal("move_attempted", direction, true)
 	return true
+
+
+## Animate to a plane position chosen by the engine, WITHOUT emitting `moved` (the
+## controller already handled the engine step, overlays, undo, and goal check).
+## `local_center` (LOCAL coords) lets the controller place the sprite on its sub-cell
+## fragment centroid; omit it to fall back to the cell center.
+func move_to_plane(plane_pos: Vector2i, local_center: Vector2 = Vector2.INF) -> void:
+	var cell = grid_manager.get_cell(plane_pos) if grid_manager else null
+	if cell == null:
+		grid_position = plane_pos
+		return
+	_move_from_pos = grid_position
+	grid_position = plane_pos
+	var lc := local_center if local_center != Vector2.INF else cell.get_center()
+	target_position = grid_manager.to_global(lc)
+	_suppress_moved = true
+	start_move_tween()
 
 
 ## PHASE 8: Rotate the facing arrow to point in the current facing direction
@@ -187,16 +215,10 @@ func can_move_to(target_grid_pos: Vector2i) -> bool:
 	if not target_cell.is_complete():
 		return false
 
-	# PHASE 5: Check dominant type for collision
-	# Cell types: -1=null, 0=empty, 1=wall, 2=water, 3=goal
+	# PHASE 5 / F1: walkability is resolved by the TileTypes registry, not by
+	# hardcoded type ints, so new unwalkable types block automatically.
 	var dominant_type = target_cell.get_dominant_type()
-
-	# Can't move into walls or null (void) cells
-	if dominant_type == 1 or dominant_type == CellPiece.CELL_TYPE_NULL:
-		return false
-
-	# Can move into empty, water, or goal
-	return true
+	return TileTypes.is_walkable(dominant_type)
 
 
 ## Execute the move to new grid position
@@ -246,6 +268,12 @@ func start_move_tween() -> void:
 ## Called when movement tween completes
 func _on_move_finished() -> void:
 	is_moving = false
+
+	# Engine-authoritative moves suppress the signal (the controller already recorded
+	# the move, refreshed the view, and checked the goal at input time).
+	if _suppress_moved:
+		_suppress_moved = false
+		return
 
 	# PHASE 8: Notify listeners the move landed
 	emit_signal("moved", _move_from_pos, grid_position)

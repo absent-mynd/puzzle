@@ -17,6 +17,10 @@ extends Node2D
 class_name FoldController
 
 const _CREASE_DOT_Z := 3
+const _OCCUPANT_Z := 2
+const _BOX_COLOR := Color(0.62, 0.42, 0.20)          # crate brown
+const _PLAYER_BODY_COLOR := Color(1.0, 0.5, 0.0, 0.85)  # matches the player sprite
+const _ANCHOR_COLOR := Color(0.9, 0.1, 0.3, 0.9)      # persistent anchor - red
 
 var grid_manager: GridManager = null
 var player: Player = null
@@ -41,6 +45,10 @@ var fold_history: Array[Dictionary] = []
 ## than tracked via a captured base tile — so out-of-order unfolds stay correct.
 var crease_dot_by_fold: Dictionary = {}
 
+## Transient markers for non-primary occupants: boxes and split-off player bodies.
+## Rebuilt wholesale on every state change (occupants are few).
+var _occupant_overlays: Array[Node2D] = []
+
 ## Baba-style global input history. A snapshot bundles engine state + anchor
 ## selection + player heading + view bookkeeping. Undo pops the current state and
 ## restores the prior.
@@ -63,29 +71,79 @@ func initialize(gm: GridManager) -> void:
 	_refresh_view()
 
 
+## Apply a level's pre-placed folds (F7). Call AFTER initialize() and BEFORE
+## set_player() so they apply with no player to block them and hide their regions.
+## Each is an ordinary fold in the list — its crease dot renders and the player can
+## unfold it to reveal the hidden ("nested") area. `pairs` is [[a1, a2], ...].
+func apply_preplaced_folds(pairs: Array) -> void:
+	if engine == null:
+		return
+	for pair in pairs:
+		var f := Fold.create(engine.next_fold_id, pair[0], pair[1], engine.base_grid.cell_size)
+		if engine.apply_fold(pair[0], pair[1]):
+			_record_fold(f)
+		else:
+			push_warning("apply_preplaced_folds: fold %s->%s was rejected" % [pair[0], pair[1]])
+	_refresh_view()
+	_render_crease_dots()
+
+
 func set_player(p: Player) -> void:
 	player = p
 	if engine and player:
 		engine.set_player_start(player.grid_position)
 		_ride_player_visual()
+		_render_occupant_overlays()
 	if player:
 		_last_facing = player.facing
-		# A completed move is an undoable input (Baba-style).
+		# Engine-authoritative movement: route the player's input through the engine.
+		player.mover = self
+		# Legacy signals kept for the headless self-drive fallback (no-ops here since
+		# the mover path suppresses them).
 		if not player.moved.is_connected(_on_player_moved):
 			player.moved.connect(_on_player_moved)
-		# A heading change WITHOUT a move (blocked bump / turn) is also an input.
 		if not player.move_attempted.is_connected(_on_player_move_attempted):
 			player.move_attempted.connect(_on_player_move_attempted)
 
 
+## Engine-authoritative move (F6). Applies the step in the engine (which resolves
+## pushes, split-body movement, and triggers), then drives the view: animates the
+## primary body, refreshes cells/overlays/seams, records undo, and checks the goal.
+## Returns whether anything moved. A blocked bump that only turns is still recorded.
+func request_move(direction: Vector2i) -> bool:
+	if engine == null or player == null or is_animating or player.movement_locked:
+		return false
+	if not engine.move_player(direction):
+		# Blocked: a heading change is its own undoable input.
+		if player.facing != _last_facing:
+			_last_facing = player.facing
+			commit_input()
+		return false
+	# Animate the primary body to its sub-cell fragment centroid (no re-sync).
+	player.move_to_plane(engine.player_plane_pos, engine.player_center(engine.base_grid.cell_size))
+	_refresh_view()                                # geometry may have changed (trigger)
+	_render_occupant_overlays()
+	_render_crease_dots()
+	_last_facing = player.facing
+	commit_input()
+	if engine.is_on_goal():
+		player.emit_signal("goal_reached")
+	return true
+
+
 func _on_player_moved(_from: Vector2i, to: Vector2i) -> void:
-	# Player self-drives movement; keep the engine's rider in sync, then record.
-	# A move carries the heading change with it (single input), so record here.
+	# Player self-drives movement; log the move so the engine's rider stays in sync
+	# AND the move is part of the replayable history (so move-triggered mutations
+	# undo correctly). A move carries the heading change with it, so record here.
 	if engine:
-		var top := engine.get_state().surface_pieces_at(to)
-		if not top.is_empty():
-			engine.player_base_id = top[0].base_id
-		engine.player_plane_pos = to
+		var folds_before := engine.fold_count()
+		engine.sync_player_moved(to)
+		# A move can now fire a trigger (F3): if the fold set changed, the move
+		# produced new geometry — materialize it, re-ride the player, redraw seams.
+		if engine.fold_count() != folds_before:
+			_refresh_view()
+			_ride_player_visual()
+			_render_crease_dots()
 	_last_facing = player.facing
 	commit_input()
 
@@ -146,6 +204,7 @@ func undo() -> bool:
 	_refresh_view()
 	_ride_player_visual()
 	_render_crease_dots()
+	_render_occupant_overlays()
 	if grid_manager:
 		grid_manager.set_selection(prev.get("selected_anchors", []), prev.get("selected_anchor_points", []))
 	# Restore player heading (undo must reverse a turn, not just a move).
@@ -171,6 +230,10 @@ func validate_fold(anchor1: Vector2i, anchor2: Vector2i) -> Dictionary:
 	var state := engine.get_state()
 	if not state.is_occupied(anchor1) or not state.is_occupied(anchor2):
 		return {"valid": false, "reason": "anchor cell does not exist"}
+	# F5: reject folds that would excise a fold-proof tile (e.g. a PIN).
+	var probe := Fold.create(-1, anchor1, anchor2, engine.base_grid.cell_size)
+	if engine.fold_blocked_by_tile(probe)["blocks"]:
+		return {"valid": false, "reason": "a pinned tile blocks this fold"}
 	return {"valid": true, "reason": ""}
 
 
@@ -234,6 +297,7 @@ func execute_fold(anchor1: Vector2i, anchor2: Vector2i, animated: bool = true) -
 	_reset_view_transforms()
 	_ride_player_visual()
 	_render_crease_dots()
+	_render_occupant_overlays()
 
 	if player:
 		player.movement_locked = false
@@ -251,6 +315,7 @@ func unfold_seam(fold_id: int) -> bool:
 	_refresh_view()
 	_ride_player_visual()
 	_render_crease_dots()
+	_render_occupant_overlays()
 	# Placed anchors ride their tiles through the unfold (and drop if now ambiguous).
 	if grid_manager and grid_manager.has_method("reresolve_anchors"):
 		grid_manager.reresolve_anchors()
@@ -355,14 +420,16 @@ func _refresh_view() -> void:
 		grid_manager.refresh_from_state(engine.get_state())
 
 
-## Ride the player: set its plane position + world position from the engine.
+## Ride the player: set its plane position + world position from the engine. Uses the
+## SUB-CELL centroid of the player's own fragment so the sprite sits on its sub-region
+## (matters once the player stands on a partial/merged cell — sub-tile collision).
 func _ride_player_visual() -> void:
 	if player == null or engine == null:
 		return
 	player.grid_position = engine.player_plane_pos
-	var cell = grid_manager.get_cell(player.grid_position)
-	if cell:
-		player.global_position = grid_manager.to_global(cell.get_center())
+	if grid_manager.get_cell(player.grid_position):
+		var local := engine.player_center(engine.base_grid.cell_size)
+		player.global_position = grid_manager.to_global(local)
 		player.target_position = player.global_position
 
 
@@ -647,3 +714,50 @@ func _make_crease_dot() -> Polygon2D:
 	dot.color = Color(1.0, 0.9, 0.2, 0.95)
 	dot.z_index = _CREASE_DOT_Z
 	return dot
+
+
+## Draw occupants as their ACTUAL footprint polygons (so cut/partial shapes show
+## truly), rebuilt whole each refresh. Boxes and split-off player bodies render as
+## filled polygons; anchors as small dots at their centroid (they're conceptually
+## points). The primary player body is the Player node, so it's skipped here.
+func _render_occupant_overlays() -> void:
+	for o in _occupant_overlays:
+		if is_instance_valid(o):
+			o.queue_free()
+	_occupant_overlays.clear()
+	if grid_manager == null or engine == null or engine.get_state() == null:
+		return
+	var cs: float = engine.base_grid.cell_size
+	for occ in engine.occupant_footprints(StepReplay.KIND_BOX):
+		for poly in occ["polys"]:
+			_occupant_overlays.append(_spawn_poly(poly, _BOX_COLOR))
+	for occ in engine.occupant_footprints(StepReplay.KIND_ANCHOR):
+		for poly in occ["polys"]:
+			_occupant_overlays.append(_spawn_marker(CollisionCore.footprint_centroid([poly]), _ANCHOR_COLOR, cs * 0.5))
+	# All player bodies draw as their real footprint polygons (so a cut player shows as
+	# a triangle, split bodies show their shapes). The Player node still rides the
+	# primary body for the facing indicator + smooth move animation.
+	for occ in engine.occupant_footprints(StepReplay.KIND_PLAYER):
+		for poly in occ["polys"]:
+			_occupant_overlays.append(_spawn_poly(poly, _PLAYER_BODY_COLOR))
+
+
+## A filled polygon overlay in grid-LOCAL space (same coords as cell polygons).
+func _spawn_poly(poly: PackedVector2Array, color: Color) -> Node2D:
+	var m := Polygon2D.new()
+	m.polygon = poly
+	m.color = color
+	m.z_index = _OCCUPANT_Z
+	grid_manager.add_child(m)
+	return m
+
+
+func _spawn_marker(local_pos: Vector2, color: Color, size: float) -> Node2D:
+	var m := Polygon2D.new()
+	var h := size / 2.0
+	m.polygon = PackedVector2Array([Vector2(-h, -h), Vector2(h, -h), Vector2(h, h), Vector2(-h, h)])
+	m.color = color
+	m.position = local_pos
+	m.z_index = _OCCUPANT_Z
+	grid_manager.add_child(m)
+	return m

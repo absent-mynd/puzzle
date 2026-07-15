@@ -156,10 +156,12 @@ B: Browse levels  T: Test level  ESC: Exit editor"""
 ## Type -> (display name, swatch color). Mirrors Cell.get_cell_color_for_type so the palette
 ## matches how cells actually render in-game.
 const PAINT_TYPES := {
-	0: {"name": "Empty", "color": Color(0.8, 0.8, 0.8)},
-	1: {"name": "Wall", "color": Color(0.2, 0.2, 0.2)},
-	2: {"name": "Water", "color": Color(0.2, 0.4, 1.0)},
-	3: {"name": "Goal", "color": Color(0.2, 1.0, 0.2)},
+	0: {"name": "Empty",              "color": Color(0.8, 0.8, 0.8)},
+	1: {"name": "Wall",               "color": Color(0.2, 0.2, 0.2)},
+	2: {"name": "Water",              "color": Color(0.2, 0.4, 1.0)},
+	3: {"name": "Goal",               "color": Color(0.2, 1.0, 0.2)},
+	6: {"name": "Unanchorable Floor", "color": Color(0.75, 0.7, 0.85)},
+	7: {"name": "Unanchorable Wall",  "color": Color(0.25, 0.15, 0.3)},
 }
 
 
@@ -170,7 +172,7 @@ func create_palette() -> void:
 	palette_container.add_theme_constant_override("separation", 12)
 	add_child(palette_container)
 
-	for cell_type in [0, 1, 2, 3]:
+	for cell_type in [0, 1, 2, 3, 6, 7]:
 		var info = PAINT_TYPES[cell_type]
 
 		# Frame Panel — its border is toggled to show which type is active.
@@ -256,6 +258,10 @@ func _input(event: InputEvent) -> void:
 			select_and_paint(2)
 		KEY_3:
 			select_and_paint(3)
+		KEY_6:
+			select_and_paint(6)
+		KEY_7:
+			select_and_paint(7)
 		KEY_P:
 			set_player_start_at_cursor()
 		KEY_S:
@@ -633,7 +639,7 @@ func exit_browse_mode() -> void:
 
 
 ## Rebuild the grid at a new size (Part E). Frees the old cells (avoiding leaks — see
-## CLAUDE.md), recreates + recenters the grid, clamps cursor/player-start into the new
+## AGENTS.md), recreates + recenters the grid, clamps cursor/player-start into the new
 ## bounds, drops now-out-of-bounds cell data, and repaints from current_level.cell_data.
 func resize_grid(new_size: Vector2i) -> void:
 	new_size = new_size.clamp(Vector2i.ONE, Vector2i(30, 30))
