@@ -24,9 +24,14 @@ var par_folds: int = -1  # -1 means no par
 ## Undo availability
 var can_undo: bool = false
 
+## Transient message ("toast") shown for e.g. why a fold failed.
+var _toast_label: Label = null
+var _toast_timer: Timer = null
+
 
 func _ready() -> void:
 	update_display()
+	_setup_toast()
 
 	# Prevent HUD buttons from stealing focus
 	# Allow focus only when explicitly clicked
@@ -36,6 +41,26 @@ func _ready() -> void:
 		restart_button.focus_mode = Control.FOCUS_CLICK
 	if pause_button:
 		pause_button.focus_mode = Control.FOCUS_CLICK
+
+
+## Build the transient toast label (centered under the top bar) + its auto-hide timer.
+func _setup_toast() -> void:
+	_toast_label = Label.new()
+	_toast_label.name = "Toast"
+	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast_label.theme_type_variation = &"StatusLabel"
+	_toast_label.anchor_left = 0.0
+	_toast_label.anchor_right = 1.0
+	_toast_label.anchor_top = 0.0
+	_toast_label.offset_top = 96.0
+	_toast_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_toast_label.visible = false
+	add_child(_toast_label)
+
+	_toast_timer = Timer.new()
+	_toast_timer.one_shot = true
+	_toast_timer.timeout.connect(func(): if _toast_label: _toast_label.visible = false)
+	add_child(_toast_timer)
 
 
 ## Set the level information
@@ -118,6 +143,17 @@ func _unhandled_input(event: InputEvent) -> void:
 func set_test_mode(enabled: bool) -> void:
 	if test_mode_label:
 		test_mode_label.visible = enabled
+
+
+## Show a transient message (e.g. why a fold was rejected). Auto-hides after `duration`.
+func show_toast(text: String, color: Color = Color.WHITE, duration: float = 2.5) -> void:
+	if not _toast_label:
+		return
+	_toast_label.text = text
+	_toast_label.add_theme_color_override("font_color", color)
+	_toast_label.visible = true
+	if _toast_timer:
+		_toast_timer.start(duration)
 
 
 ## Show or hide the HUD

@@ -353,7 +353,7 @@ func handle_mouse_click(mouse_position: Vector2) -> void:
 ## @return: true if the unfold succeeded
 func perform_unfold(fold_id: int, can_undo: bool) -> bool:
 	if not can_undo:
-		print("Cannot unfold fold %d - it's blocked by newer intersecting folds" % fold_id)
+		_notify(FoldFailReason.message("blocked by a newer crossing fold"), UIPalette.DANGER)
 		return false
 
 	# UNFOLD this seam (removes the fold from the list and re-derives)
@@ -362,10 +362,17 @@ func perform_unfold(fold_id: int, can_undo: bool) -> bool:
 		# Unfold is itself an undoable input (Baba-style).
 		fold_system.commit_input()
 		_sync_after_change()
-		print("Seam unfold successful! Fold %d unfolded. Total folds: %d" % [fold_id, GameManager.fold_count])
 	else:
-		print("Cannot unfold fold %d - player may be standing on seam" % fold_id)
+		_notify(FoldFailReason.message("player would be stranded"), UIPalette.DANGER)
 	return success
+
+
+## Surface a short message to the player via the HUD toast (falls back to print if no HUD).
+func _notify(text: String, color: Color = Color.WHITE) -> void:
+	if hud and hud.has_method("show_toast"):
+		hud.show_toast(text, color)
+	else:
+		print(text)
 
 
 ## Execute fold with selected anchors
@@ -376,12 +383,23 @@ func execute_fold() -> void:
 	# Check if we have exactly 2 anchors selected
 	var anchors = grid_manager.get_selected_anchors()
 	if anchors.size() != 2:
-		print("Select exactly 2 anchor cells to fold")
+		_notify(FoldFailReason.message("needs two anchors"), UIPalette.WARNING)
 		return
 
 	# Execute the fold (with animation)
 	var a1 = anchors[0]
 	var a2 = anchors[1]
+
+	# Pre-validate so we can tell the player WHY on failure (the reason is otherwise
+	# swallowed by execute_fold's bool return). A deferred player-position rejection
+	# still fails at commit with an empty reason -> generic fallback.
+	var reason := ""
+	var v := fold_system.validate_fold(a1, a2)
+	if v.valid:
+		v = fold_system.validate_fold_with_player(a1, a2)
+	if not v.valid:
+		reason = v.reason
+
 	var success = await fold_system.execute_fold(a1, a2, true)
 
 	if success:
@@ -394,7 +412,7 @@ func execute_fold() -> void:
 		if grid_manager:
 			grid_manager.clear_selection()
 			grid_manager.flash_invalid_fold(a1, a2)
-		print("Fold failed - check validation messages")
+		_notify(FoldFailReason.message(reason), UIPalette.DANGER)
 
 
 ## Shared post-fold bookkeeping for both the debug flow and the player-interact flow

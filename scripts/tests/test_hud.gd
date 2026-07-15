@@ -45,3 +45,11 @@ func test_fold_counter_no_color_override_without_par():
 	hud.set_fold_count(3)
 	assert_false(hud.fold_counter_label.has_theme_color_override("font_color"),
 		"no performance color when par is unset")
+
+
+func test_show_toast_makes_message_visible():
+	var hud = await _make_hud()
+	hud.show_toast("You'd be pushed into a wall.", UIPalette.DANGER)
+	assert_true(hud._toast_label.visible, "toast is visible after show_toast")
+	assert_eq(hud._toast_label.text, "You'd be pushed into a wall.", "toast shows the message")
+	assert_eq(hud._toast_label.get_theme_color("font_color"), UIPalette.DANGER, "toast uses the given color")
