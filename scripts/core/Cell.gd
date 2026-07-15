@@ -287,20 +287,12 @@ func get_cell_color() -> Color:
 
 ## Get the color for a specific cell type
 ##
-## @param type: Cell type (-1=null, 0=empty, 1=wall, 2=water, 3=goal)
+## Delegates to TileTypes.color_for — the single source of truth for tile appearance.
+## Kept as an instance method (same signature) so existing callers/tests don't move.
+## @param type: Cell type (-1=null, 0=empty, 1=wall, 2=water, 3=goal, ...)
 ## @return: Color for the given type
 func get_cell_color_for_type(type: int) -> Color:
-	match type:
-		CellPiece.CELL_TYPE_NULL: return Color(0.0, 0.0, 0.0, 0.0)  # Null - completely transparent
-		0: return Color(0.8, 0.8, 0.8)  # Empty - light gray
-		1: return Color(0.2, 0.2, 0.2)  # Wall - dark gray
-		2: return Color(0.2, 0.4, 1.0)  # Water - blue
-		3: return Color(0.2, 1.0, 0.2)  # Goal - green
-		TileTypes.TRIGGER_FOLD: return Color(1.0, 0.6, 0.1)  # Trigger plate - amber
-		TileTypes.PIN: return Color(0.55, 0.1, 0.5)  # Pin (fold-proof) - purple
-		TileTypes.UNANCHORABLE_FLOOR: return Color(0.75, 0.7, 0.85)  # Unanchorable floor - light gray + purple tint
-		TileTypes.UNANCHORABLE_WALL: return Color(0.25, 0.15, 0.3)   # Unanchorable wall - dark gray + purple tint
-		_: return Color(1.0, 1.0, 1.0)  # Default - white
+	return TileTypes.color_for(type)
 
 
 ## Darken a color by a given factor

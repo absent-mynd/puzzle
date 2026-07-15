@@ -528,13 +528,10 @@ func _reset_view_transforms() -> void:
 			cell.visible = true
 
 
-## Fill color for a cell type (mirrors Cell.get_cell_color_for_type for the overlay).
+## Fill color for a cell type in the fold-animation overlay. Delegates to
+## TileTypes.color_for so the overlay matches actual cell rendering exactly.
 func _type_color(type: int) -> Color:
-	match type:
-		1: return Color(0.2, 0.2, 0.2)   # wall
-		2: return Color(0.2, 0.4, 1.0)   # water
-		3: return Color(0.2, 1.0, 0.2)   # goal
-		_: return Color(0.8, 0.8, 0.8)   # empty/default
+	return TileTypes.color_for(type)
 
 
 func _record_fold(f: Fold) -> void:

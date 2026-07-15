@@ -49,21 +49,26 @@ const UNANCHORABLE_WALL := 7
 ## The reaction's parameters come from the tile's per-instance `data`; the resolver
 ## (TriggerResolver) interprets the name. Kept as a string, not a Callable, so the
 ## registry stays a pure const data table.
+## `color` / `display_name` make this registry the single source of truth for tile
+## APPEARANCE too, not just behavior. The colors are the exact values previously
+## hardcoded in Cell.get_cell_color_for_type (and copy-pasted into FoldController and
+## LevelEditor); those consumers now delegate here so a new type is a one-file change.
 const _REGISTRY := {
-	NULL:  {"walkable": false, "merge_rank": 5, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	EMPTY: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	WALL:  {"walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	WATER: {"walkable": true,  "merge_rank": 2, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	GOAL:  {"walkable": true,  "merge_rank": 4, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	TRIGGER_FOLD: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "fold"},
-	PIN:          {"walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": ""},
-	UNANCHORABLE_FLOOR: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
-	UNANCHORABLE_WALL:  {"walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
+	NULL:  {"walkable": false, "merge_rank": 5, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "color": Color(0.0, 0.0, 0.0, 0.0),   "display_name": "Null"},
+	EMPTY: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "color": Color(0.8, 0.8, 0.8),        "display_name": "Empty"},
+	WALL:  {"walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "color": Color(0.2, 0.2, 0.2),        "display_name": "Wall"},
+	WATER: {"walkable": true,  "merge_rank": 2, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "color": Color(0.2, 0.4, 1.0),        "display_name": "Water"},
+	GOAL:  {"walkable": true,  "merge_rank": 4, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "color": Color(0.2, 1.0, 0.2),        "display_name": "Goal"},
+	TRIGGER_FOLD: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "fold", "color": Color(1.0, 0.6, 0.1),   "display_name": "Trigger Fold"},
+	PIN:          {"walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": "",     "color": Color(0.55, 0.1, 0.5),  "display_name": "Pin"},
+	UNANCHORABLE_FLOOR: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "color": Color(0.75, 0.7, 0.85), "display_name": "Unanchorable Floor"},
+	UNANCHORABLE_WALL:  {"walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "color": Color(0.25, 0.15, 0.3), "display_name": "Unanchorable Wall"},
 }
 
 ## Safe defaults for an unregistered type: not walkable, lowest rank, non-blocking.
-## Unknown types should never be silently walkable.
-const _DEFAULT := {"walkable": false, "merge_rank": 0, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""}
+## Unknown types should never be silently walkable. The default color is white, matching
+## the legacy `_: return Color(1,1,1)` fallback in Cell.get_cell_color_for_type.
+const _DEFAULT := {"walkable": false, "merge_rank": 0, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "color": Color(1.0, 1.0, 1.0), "display_name": "Unknown"}
 
 
 ## Full definition for a type (falls back to safe defaults for unknown types).
@@ -99,6 +104,18 @@ static func blocks_anchor(type: int) -> bool:
 ## Name of the reaction fired when the player enters a tile of this type ("" = none).
 static func on_enter_kind(type: int) -> String:
 	return get_def(type).get("on_enter", "")
+
+
+## Render color for a tile of this type (unknown types fall back to white; NULL is
+## transparent). The single source of truth for tile appearance — Cell, FoldController,
+## and the level editor palette all delegate here.
+static func color_for(type: int) -> Color:
+	return get_def(type)["color"]
+
+
+## Human-readable name for a tile type (used by the editor palette + status readout).
+static func display_name(type: int) -> String:
+	return get_def(type)["display_name"]
 
 
 ## Resolve a stack of co-surface piece types to the dominant one. Returns EMPTY for

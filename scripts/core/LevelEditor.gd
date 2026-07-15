@@ -153,16 +153,10 @@ B: Browse levels  T: Test level  ESC: Exit editor"""
 	add_child(browse_label)
 
 
-## Type -> (display name, swatch color). Mirrors Cell.get_cell_color_for_type so the palette
-## matches how cells actually render in-game.
-const PAINT_TYPES := {
-	0: {"name": "Empty",              "color": Color(0.8, 0.8, 0.8)},
-	1: {"name": "Wall",               "color": Color(0.2, 0.2, 0.2)},
-	2: {"name": "Water",              "color": Color(0.2, 0.4, 1.0)},
-	3: {"name": "Goal",               "color": Color(0.2, 1.0, 0.2)},
-	6: {"name": "Unanchorable Floor", "color": Color(0.75, 0.7, 0.85)},
-	7: {"name": "Unanchorable Wall",  "color": Color(0.25, 0.15, 0.3)},
-}
+## Paintable tile types, in palette order. Name + swatch color for each come from the
+## TileTypes registry (the single source of truth), so the palette can never drift from
+## how cells actually render. (Phase 4 adds TRIGGER_FOLD/PIN to this list.)
+const PAINT_TYPE_ORDER := [0, 1, 2, 3, 6, 7]
 
 
 ## Create the on-screen tool palette: one framed swatch per paint type.
@@ -172,9 +166,7 @@ func create_palette() -> void:
 	palette_container.add_theme_constant_override("separation", 12)
 	add_child(palette_container)
 
-	for cell_type in [0, 1, 2, 3, 6, 7]:
-		var info = PAINT_TYPES[cell_type]
-
+	for cell_type in PAINT_TYPE_ORDER:
 		# Frame Panel — its border is toggled to show which type is active.
 		var frame := Panel.new()
 		frame.custom_minimum_size = Vector2(96, 74)
@@ -185,12 +177,12 @@ func create_palette() -> void:
 		frame.add_child(vbox)
 
 		var swatch := ColorRect.new()
-		swatch.color = info["color"]
+		swatch.color = TileTypes.color_for(cell_type)
 		swatch.custom_minimum_size = Vector2(88, 44)
 		vbox.add_child(swatch)
 
 		var label := Label.new()
-		label.text = "%d: %s" % [cell_type, info["name"]]
+		label.text = "%d: %s" % [cell_type, TileTypes.display_name(cell_type)]
 		label.add_theme_font_size_override("font_size", 13)
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vbox.add_child(label)
@@ -424,7 +416,7 @@ func update_status() -> void:
 		cursor_position.x, cursor_position.y, cell_type_name]
 	status_label.text += "Player Start: (%d, %d)  Paint: %s" % [
 		player_start_position.x, player_start_position.y,
-		PAINT_TYPES[current_paint_type]["name"]]
+		TileTypes.display_name(current_paint_type)]
 
 
 ## Start save input mode

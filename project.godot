@@ -29,6 +29,10 @@ window/size/resizable=true
 window/stretch/mode="canvas_items"
 window/stretch/aspect="keep"
 
+[gui]
+
+theme/custom="res://assets/themes/main_theme.tres"
+
 [input]
 
 ui_undo={
