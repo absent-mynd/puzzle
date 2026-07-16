@@ -6,6 +6,12 @@
 extends GutTest
 
 
+## Flush deferred emits / fire-and-forget confirm coroutines before teardown frees the
+## autofreed editor + its dialog (avoids freeing an object mid-signal-emit at shutdown).
+func after_each() -> void:
+	await wait_frames(1)
+
+
 func _boot_editor():
 	GameManager.editor_session = {}  # ensure a fresh (non-restoring) boot
 	var scene: PackedScene = load("res://scenes/ui/LevelEditor.tscn")
@@ -96,3 +102,67 @@ func test_editor_redo_reapplies_a_paint() -> void:
 	ed.undo_edit()
 	ed.redo_edit()
 	assert_eq(ed.current_level.type_at(Vector2i(5, 1)), 3, "redo reapplies the paint")
+
+
+# --- New CanvasLayer UI: toolbar, clickable palette, inspector, dialog ---
+
+func test_ui_built_under_canvas_layer() -> void:
+	var ed = await _boot_editor()
+	assert_not_null(ed.ui_layer, "a CanvasLayer hosts the UI")
+	assert_true(ed.ui_layer is CanvasLayer, "ui_layer is a CanvasLayer")
+	assert_not_null(ed.toolbar, "toolbar exists")
+	assert_true(ed.toolbar.get_child_count() >= 6, "toolbar has action buttons")
+	assert_not_null(ed.editor_dialog, "the reusable dialog is instantiated")
+	assert_not_null(ed.inspector_panel, "the trigger inspector exists")
+
+
+func test_clicking_swatch_selects_paint_type() -> void:
+	var ed = await _boot_editor()
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	ed._on_swatch_input(ev, TileTypes.WATER)
+	assert_eq(ed.current_paint_type, TileTypes.WATER, "clicking a swatch selects that type")
+
+
+func test_inspector_visible_only_on_trigger_cell() -> void:
+	var ed = await _boot_editor()
+
+	ed.cursor_position = Vector2i(2, 2)
+	ed.select_and_paint(TileTypes.TRIGGER_FOLD)
+	assert_true(ed.inspector_panel.visible, "inspector shows on a trigger cell")
+
+	ed.cursor_position = Vector2i(3, 2)
+	ed.select_and_paint(TileTypes.WALL)
+	assert_false(ed.inspector_panel.visible, "inspector hides on a non-trigger cell")
+
+
+func test_inspector_applies_channel_and_anchors() -> void:
+	var ed = await _boot_editor()
+
+	ed.cursor_position = Vector2i(4, 4)
+	ed.select_and_paint(TileTypes.TRIGGER_FOLD)
+
+	ed.inspector_channel.text = "B"
+	ed.inspector_anchors.text = "3,1 5,1"
+	ed._apply_inspector()
+
+	var data = ed.current_level.data_at(Vector2i(4, 4))
+	assert_eq(data["channel"], "B", "channel written from the inspector")
+	assert_eq(data["anchors"], [[3, 1], [5, 1]], "anchors parsed and written")
+
+
+func _confirm_metadata_soon(ed, values: Dictionary) -> void:
+	await wait_frames(2)
+	for key in values:
+		ed.editor_dialog._field_inputs[key].text = str(values[key])
+	ed.editor_dialog._on_ok()
+
+
+func test_metadata_form_updates_level() -> void:
+	var ed = await _boot_editor()
+	_confirm_metadata_soon(ed, {"level_name": "Chamber", "par_folds": "7", "difficulty": "4"})
+	await ed._action_metadata()
+	assert_eq(ed.current_level.level_name, "Chamber", "name updated from the form")
+	assert_eq(ed.current_level.par_folds, 7, "par updated from the form")
+	assert_eq(ed.current_level.difficulty, 4, "difficulty updated from the form")

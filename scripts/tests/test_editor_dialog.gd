@@ -7,6 +7,12 @@
 extends GutTest
 
 
+## Let deferred signal emits / fire-and-forget confirm coroutines settle before GUT
+## frees the autofreed dialog, so nothing is freed mid-emit at teardown.
+func after_each() -> void:
+	await wait_frames(1)
+
+
 func _make() -> EditorDialog:
 	var dlg := EditorDialog.new()
 	add_child_autofree(dlg)

@@ -196,7 +196,7 @@ func _cancel_result() -> Variant:
 
 
 func _on_ok() -> void:
-	var result := _collect_result()
+	var result: Variant = _collect_result()
 	visible = false
 	# Deferred so the awaiting caller resumes OUTSIDE the button/input call stack (avoids
 	# "locked object" if the caller frees or rebuilds nodes on resume).

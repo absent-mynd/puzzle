@@ -31,11 +31,21 @@ var last_painted_pos: Vector2i = Vector2i(-1, -1)
 var player_start_marker: Polygon2D
 var player_start_position: Vector2i = Vector2i(1, 1)
 
-## UI elements
+## UI — all Controls live under a CanvasLayer (screen space, themed), built in create_ui().
+var ui_layer: CanvasLayer
+var toolbar: HBoxContainer
 var status_label: Label
 var help_label: Label
+var toast_label: Label
+var toast_timer: Timer
+var editor_dialog: EditorDialog
 
-## Tool palette (Part C): a row of type swatches; the active one is highlighted.
+## Trigger-tile inspector (visible only when the cursor sits on a TRIGGER_FOLD cell).
+var inspector_panel: PanelContainer
+var inspector_channel: LineEdit
+var inspector_anchors: LineEdit
+
+## Tool palette: a row of clickable type swatches; the active one is highlighted.
 var palette_container: HBoxContainer
 var palette_swatches: Dictionary = {}  # cell_type:int -> Panel
 
@@ -48,19 +58,8 @@ var _suppress_history: bool = false
 const CURSOR_COLOR = Color(1.0, 1.0, 0.0, 0.6)  # Yellow with transparency
 const PLAYER_MARKER_COLOR = Color(1.0, 0.0, 1.0, 0.8)  # Magenta
 
-## File dialog state
+## Persisted filename for save/load (also stashed in the editor session).
 var save_filename: String = "custom_level"
-# input_mode: "edit", "save_input", "load_input", "resize_input", "metadata_input", "browse"
-var input_mode: String = "edit"
-var input_buffer: String = ""
-
-## Metadata editing: which field is currently being typed (0=name, 1=par, 2=difficulty)
-var metadata_field: int = 0
-
-## Browse mode state
-var custom_level_files: Array[String] = []
-var browse_selection_index: int = 0
-var browse_label: Label
 
 
 ## Initialize the level editor
@@ -129,36 +128,138 @@ func create_player_start_marker() -> void:
 	add_child(player_start_marker)
 
 
-## Create UI elements
+## Build the whole editor UI under a CanvasLayer (screen space, themed). Replaces the
+## old absolute-positioned labels-on-a-Node2D layout.
 func create_ui() -> void:
-	# Status label (top-left)
+	ui_layer = CanvasLayer.new()
+	add_child(ui_layer)
+
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE  # let clicks fall through to the grid
+	ui_layer.add_child(root)
+
+	# Left column: toolbar over the status panel over the palette (stacks, never overlaps).
+	var left := VBoxContainer.new()
+	left.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	left.offset_left = 10
+	left.offset_top = 10
+	left.add_theme_constant_override("separation", UIConstants.SPACING_SM)
+	root.add_child(left)
+
+	var toolbar_panel := PanelContainer.new()
+	left.add_child(toolbar_panel)
+	toolbar = HBoxContainer.new()
+	toolbar.add_theme_constant_override("separation", UIConstants.SPACING_SM)
+	toolbar_panel.add_child(toolbar)
+	_add_tool_button("New", new_level)
+	_add_tool_button("Load", _action_load)
+	_add_tool_button("Save", _action_save)
+	_add_tool_button("Resize", _action_resize)
+	_add_tool_button("Metadata", _action_metadata)
+	_add_tool_button("Browse", _action_browse)
+	_add_tool_button("Test", test_level)
+	_add_tool_button("Exit", exit_editor)
+
+	var status_box := PanelContainer.new()
+	left.add_child(status_box)
 	status_label = Label.new()
-	status_label.position = Vector2(10, 10)
-	status_label.add_theme_font_size_override("font_size", 20)
-	add_child(status_label)
+	status_label.theme_type_variation = &"StatusLabel"
+	status_box.add_child(status_label)
 
-	# Help label (bottom-left)
-	help_label = Label.new()
-	help_label.position = Vector2(10, 560)
-	help_label.add_theme_font_size_override("font_size", 16)
-	help_label.text = """Keyboard Controls:
-Arrow Keys: Move cursor | Mouse: Click/drag to paint, right-click erase
-0: Empty  1: Wall  2: Water  3: Goal (also sets paint type)
-P: Set player start  G: Resize grid  M: Edit metadata
-S: Save level  L: Load level  N: New level
-B: Browse levels  T: Test level  ESC: Exit editor"""
-	add_child(help_label)
-
-	# Tool palette (Part C): swatch row showing the active paint type
+	var palette_box := PanelContainer.new()
+	left.add_child(palette_box)
+	palette_container = HBoxContainer.new()
+	palette_container.add_theme_constant_override("separation", UIConstants.SPACING_SM)
+	palette_box.add_child(palette_container)
 	create_palette()
 	update_palette()
 
-	# Browse label (for browse mode, initially hidden)
-	browse_label = Label.new()
-	browse_label.position = Vector2(10, 150)
-	browse_label.add_theme_font_size_override("font_size", 18)
-	browse_label.visible = false
-	add_child(browse_label)
+	# Trigger inspector (top-right, hidden unless the cursor is on a TRIGGER_FOLD cell).
+	_build_inspector(root)
+
+	# Help (bottom).
+	var help_box := PanelContainer.new()
+	help_box.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	help_box.offset_left = 10
+	help_box.offset_bottom = -10
+	help_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	root.add_child(help_box)
+	help_label = Label.new()
+	help_label.theme_type_variation = &"StatusLabel"
+	help_label.text = "Arrows: move  Click/drag: paint  RClick: erase  0-7: tile  P: start  Ctrl+Z/Y: undo/redo  T: test  ESC: exit"
+	help_box.add_child(help_label)
+
+	# Toast (transient messages, centered near the top).
+	toast_label = Label.new()
+	toast_label.theme_type_variation = &"HeadingLabel"
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	toast_label.offset_top = 40
+	toast_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	toast_label.visible = false
+	root.add_child(toast_label)
+	toast_timer = Timer.new()
+	toast_timer.one_shot = true
+	toast_timer.timeout.connect(func(): if toast_label: toast_label.visible = false)
+	add_child(toast_timer)
+
+	# The one reusable modal dialog (on top of everything).
+	editor_dialog = EditorDialog.new()
+	ui_layer.add_child(editor_dialog)
+
+
+## Add a compact toolbar button wired to an action.
+func _add_tool_button(label: String, action: Callable) -> void:
+	var b := Button.new()
+	b.text = label
+	b.theme_type_variation = &"HudButton"
+	b.focus_mode = Control.FOCUS_CLICK
+	b.pressed.connect(action)
+	toolbar.add_child(b)
+
+
+## Build the (initially hidden) TRIGGER_FOLD inspector panel: channel + anchors + Apply.
+func _build_inspector(root: Control) -> void:
+	inspector_panel = PanelContainer.new()
+	inspector_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	inspector_panel.offset_right = -10
+	inspector_panel.offset_top = 90
+	inspector_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	inspector_panel.visible = false
+	root.add_child(inspector_panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", UIConstants.SPACING_SM)
+	inspector_panel.add_child(vbox)
+
+	var title := Label.new()
+	title.theme_type_variation = &"HeadingLabel"
+	title.text = "Trigger Fold"
+	vbox.add_child(title)
+
+	var ch_label := Label.new()
+	ch_label.theme_type_variation = &"StatusLabel"
+	ch_label.text = "Channel"
+	vbox.add_child(ch_label)
+	inspector_channel = LineEdit.new()
+	inspector_channel.custom_minimum_size = Vector2(200, 0)
+	vbox.add_child(inspector_channel)
+
+	var an_label := Label.new()
+	an_label.theme_type_variation = &"StatusLabel"
+	an_label.text = "Anchors (x,y x,y)"
+	vbox.add_child(an_label)
+	inspector_anchors = LineEdit.new()
+	inspector_anchors.custom_minimum_size = Vector2(200, 0)
+	vbox.add_child(inspector_anchors)
+
+	var apply := Button.new()
+	apply.text = "Apply"
+	apply.theme_type_variation = &"PrimaryButton"
+	apply.focus_mode = Control.FOCUS_CLICK
+	apply.pressed.connect(_apply_inspector)
+	vbox.add_child(apply)
 
 
 ## Paintable tile types, in palette order. Name + swatch color for each come from the
@@ -167,36 +268,45 @@ B: Browse levels  T: Test level  ESC: Exit editor"""
 const PAINT_TYPE_ORDER := [0, 1, 2, 3, 4, 5, 6, 7]
 
 
-## Create the on-screen tool palette: one framed swatch per paint type.
+## Fill the palette container (built in create_ui) with one clickable swatch per paint
+## type. Clicking a swatch selects it as the paint type (mouse parity with keys 0-7).
 func create_palette() -> void:
-	palette_container = HBoxContainer.new()
-	palette_container.position = Vector2(10, 110)
-	palette_container.add_theme_constant_override("separation", 12)
-	add_child(palette_container)
-
 	for cell_type in PAINT_TYPE_ORDER:
 		# Frame Panel — its border is toggled to show which type is active.
 		var frame := Panel.new()
-		frame.custom_minimum_size = Vector2(96, 74)
+		frame.custom_minimum_size = Vector2(84, 66)
+		frame.mouse_filter = Control.MOUSE_FILTER_STOP
+		frame.gui_input.connect(_on_swatch_input.bind(cell_type))
 
 		var vbox := VBoxContainer.new()
 		vbox.add_theme_constant_override("separation", 2)
 		vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+		vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE  # clicks reach the frame
 		frame.add_child(vbox)
 
 		var swatch := ColorRect.new()
 		swatch.color = TileTypes.color_for(cell_type)
-		swatch.custom_minimum_size = Vector2(88, 44)
+		swatch.custom_minimum_size = Vector2(76, 38)
+		swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vbox.add_child(swatch)
 
 		var label := Label.new()
 		label.text = "%d: %s" % [cell_type, TileTypes.display_name(cell_type)]
-		label.add_theme_font_size_override("font_size", 13)
+		label.add_theme_font_size_override("font_size", 12)
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vbox.add_child(label)
 
 		palette_container.add_child(frame)
 		palette_swatches[cell_type] = frame
+
+
+## Click a palette swatch -> select that paint type (mouse equivalent of pressing 0-7).
+func _on_swatch_input(event: InputEvent, cell_type: int) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		current_paint_type = cell_type
+		update_palette()
+		update_status()
 
 
 ## Highlight the swatch matching current_paint_type.
@@ -214,30 +324,13 @@ func update_palette() -> void:
 		frame.add_theme_stylebox_override("panel", style)
 
 
-## Handle keyboard + mouse input
+## Handle keyboard + mouse input. While a modal dialog is open it owns all input, so the
+## editor ignores everything (no more `input_mode` string machine — the dialog is the mode).
 func _input(event: InputEvent) -> void:
-	# Mouse painting is only active in normal edit mode (not while typing a filename etc.)
-	if input_mode == "edit" and _handle_mouse_paint(event):
+	if editor_dialog and editor_dialog.is_open():
 		return
 
 	if not event is InputEventKey or not event.pressed:
-		return
-
-	# Handle different input modes
-	if input_mode == "save_input":
-		handle_save_input(event)
-		return
-	elif input_mode == "load_input":
-		handle_load_input(event)
-		return
-	elif input_mode == "resize_input":
-		handle_resize_input(event)
-		return
-	elif input_mode == "metadata_input":
-		handle_metadata_input(event)
-		return
-	elif input_mode == "browse":
-		handle_browse_input(event)
 		return
 
 	# Undo / redo (Ctrl+Z / Ctrl+Y) over the edit history.
@@ -248,7 +341,7 @@ func _input(event: InputEvent) -> void:
 		redo_edit()
 		return
 
-	# Normal edit mode
+	# Edit-mode shortcuts. The letter keys open the corresponding dialog action.
 	match event.keycode:
 		KEY_UP:
 			move_cursor(Vector2i(0, -1))
@@ -277,21 +370,31 @@ func _input(event: InputEvent) -> void:
 		KEY_P:
 			set_player_start_at_cursor()
 		KEY_S:
-			start_save_input()
+			_action_save()
 		KEY_L:
-			start_load_input()
+			_action_load()
 		KEY_N:
 			new_level()
 		KEY_B:
-			start_browse_mode()
+			_action_browse()
 		KEY_G:
-			start_resize_input()
+			_action_resize()
 		KEY_M:
-			start_metadata_input()
+			_action_metadata()
 		KEY_T:
 			test_level()
 		KEY_ESCAPE:
 			exit_editor()
+
+
+## Mouse painting runs in _unhandled_input (not _input) so UI controls consume their own
+## clicks first — clicking a toolbar button or palette swatch no longer paints the grid
+## cell beneath it. Grid cells are Node2D (not Controls), so clicks over the map still
+## fall through to here.
+func _unhandled_input(event: InputEvent) -> void:
+	if editor_dialog and editor_dialog.is_open():
+		return
+	_handle_mouse_paint(event)
 
 
 ## Select a paint type AND paint it at the current cursor (number keys). Keeps the original
@@ -466,57 +569,35 @@ func update_status() -> void:
 		player_start_position.x, player_start_position.y,
 		TileTypes.display_name(current_paint_type)]
 
-
-## Start save input mode
-func start_save_input() -> void:
-	input_mode = "save_input"
-	input_buffer = save_filename
-	status_label.text = "Save as (press ENTER): %s_" % input_buffer
+	_refresh_inspector()
 
 
-## Handle save input
-func handle_save_input(event: InputEventKey) -> void:
-	if event.keycode == KEY_ENTER:
-		save_filename = input_buffer
-		save_level()
-		input_mode = "edit"
-		update_status()
-	elif event.keycode == KEY_ESCAPE:
-		input_mode = "edit"
-		update_status()
-	elif event.keycode == KEY_BACKSPACE:
-		if input_buffer.length() > 0:
-			input_buffer = input_buffer.substr(0, input_buffer.length() - 1)
-			status_label.text = "Save as (press ENTER): %s_" % input_buffer
-	elif event.unicode >= 32 and event.unicode < 127:  # Printable characters
-		input_buffer += char(event.unicode)
-		status_label.text = "Save as (press ENTER): %s_" % input_buffer
+## Show a transient toast message (replaces the old status-label + await-timer toasts).
+func _toast(text: String) -> void:
+	if not toast_label:
+		return
+	toast_label.text = text
+	toast_label.visible = true
+	if toast_timer:
+		toast_timer.start(2.0)
 
 
-## Start load input mode
-func start_load_input() -> void:
-	input_mode = "load_input"
-	input_buffer = save_filename
-	status_label.text = "Load file (press ENTER): %s_" % input_buffer
+## Save: ask for a filename, then write to disk.
+func _action_save() -> void:
+	var name = await editor_dialog.prompt_text("Save level as", save_filename)
+	if name == null or String(name).strip_edges().is_empty():
+		return
+	save_filename = String(name).strip_edges()
+	save_level()
 
 
-## Handle load input
-func handle_load_input(event: InputEventKey) -> void:
-	if event.keycode == KEY_ENTER:
-		save_filename = input_buffer
-		load_level()
-		input_mode = "edit"
-		update_status()
-	elif event.keycode == KEY_ESCAPE:
-		input_mode = "edit"
-		update_status()
-	elif event.keycode == KEY_BACKSPACE:
-		if input_buffer.length() > 0:
-			input_buffer = input_buffer.substr(0, input_buffer.length() - 1)
-			status_label.text = "Load file (press ENTER): %s_" % input_buffer
-	elif event.unicode >= 32 and event.unicode < 127:  # Printable characters
-		input_buffer += char(event.unicode)
-		status_label.text = "Load file (press ENTER): %s_" % input_buffer
+## Load: ask for a filename, then load it.
+func _action_load() -> void:
+	var name = await editor_dialog.prompt_text("Load level (filename)", save_filename)
+	if name == null or String(name).strip_edges().is_empty():
+		return
+	save_filename = String(name).strip_edges()
+	load_level()
 
 
 ## Save the current level
@@ -532,13 +613,7 @@ func save_level() -> void:
 	var file_path = levels_dir + save_filename + ".json"
 	var success = level_manager.save_level(current_level, file_path)
 
-	if success:
-		status_label.text = "Level saved to:\n%s" % file_path
-		await get_tree().create_timer(2.0).timeout
-	else:
-		status_label.text = "Failed to save level!"
-		await get_tree().create_timer(2.0).timeout
-
+	_toast("Level saved: %s" % save_filename if success else "Failed to save level!")
 	update_status()
 
 
@@ -559,11 +634,9 @@ func load_level() -> void:
 		# A freshly loaded level starts a new undo history.
 		editor_history.set_baseline(current_level)
 
-		status_label.text = "Level loaded: %s" % current_level.level_name
-		await get_tree().create_timer(2.0).timeout
+		_toast("Level loaded: %s" % current_level.level_name)
 	else:
-		status_label.text = "Failed to load level!"
-		await get_tree().create_timer(2.0).timeout
+		_toast("Failed to load level!")
 
 	update_status()
 
@@ -614,75 +687,18 @@ func new_level() -> void:
 	update_status()
 
 
-## Start browse mode
-func start_browse_mode() -> void:
-	# Get list of custom level files
+## Browse: pick a saved custom level from a list dialog, then load it for editing.
+func _action_browse() -> void:
 	var levels_dir = GameManager.CUSTOM_LEVELS_DIR
-	custom_level_files = FileUtils.get_custom_level_files(levels_dir)
-
-	if custom_level_files.is_empty():
-		status_label.text = "No custom levels found!\nPress any key to continue..."
-		await get_tree().create_timer(2.0).timeout
-		update_status()
+	var files: Array = FileUtils.get_custom_level_files(levels_dir)
+	if files.is_empty():
+		_toast("No custom levels found.")
 		return
-
-	input_mode = "browse"
-	browse_selection_index = 0
-	browse_label.visible = true
-	cursor_visual.visible = false
-	player_start_marker.visible = false
-	update_browse_display()
-
-
-## Handle browse mode input
-func handle_browse_input(event: InputEventKey) -> void:
-	if event.keycode == KEY_UP:
-		browse_selection_index = max(0, browse_selection_index - 1)
-		update_browse_display()
-	elif event.keycode == KEY_DOWN:
-		browse_selection_index = min(custom_level_files.size() - 1, browse_selection_index + 1)
-		update_browse_display()
-	elif event.keycode == KEY_ENTER:
-		# Load selected level for editing
-		save_filename = custom_level_files[browse_selection_index]
-		exit_browse_mode()
-		load_level()
-	elif event.keycode == KEY_T:
-		# Test/play selected level
-		save_filename = custom_level_files[browse_selection_index]
-		exit_browse_mode()
-		test_level()
-	elif event.keycode == KEY_ESCAPE:
-		exit_browse_mode()
-
-
-## Update browse display
-func update_browse_display() -> void:
-	if not browse_label:
+	var idx = await editor_dialog.prompt_choice("Open custom level", files)
+	if idx == null or int(idx) < 0:
 		return
-
-	var display_text = "=== Browse Custom Levels ===\n\n"
-	display_text += "Use UP/DOWN to select\n"
-	display_text += "ENTER to edit, T to test/play\n"
-	display_text += "ESC to cancel\n\n"
-
-	for i in range(custom_level_files.size()):
-		var prefix = "  "
-		if i == browse_selection_index:
-			prefix = "> "
-		display_text += prefix + custom_level_files[i] + "\n"
-
-	browse_label.text = display_text
-	status_label.text = "Browse Mode"
-
-
-## Exit browse mode
-func exit_browse_mode() -> void:
-	input_mode = "edit"
-	browse_label.visible = false
-	cursor_visual.visible = true
-	player_start_marker.visible = true
-	update_status()
+	save_filename = files[int(idx)]
+	load_level()
 
 
 ## Rebuild the grid at a new size (Part E). Frees the old cells (avoiding leaks — see
@@ -717,31 +733,19 @@ func resize_grid(new_size: Vector2i) -> void:
 	apply_level_to_grid()
 
 
-## Start grid-resize text entry (G key)
-func start_resize_input() -> void:
-	input_mode = "resize_input"
-	input_buffer = "%dx%d" % [current_level.grid_size.x, current_level.grid_size.y]
-	status_label.text = "Resize grid WxH (ENTER, ESC cancel): %s_" % input_buffer
-
-
-## Handle grid-resize input
-func handle_resize_input(event: InputEventKey) -> void:
-	if event.keycode == KEY_ENTER:
-		var new_size := _parse_size(input_buffer)
-		if new_size != Vector2i.ZERO:
-			resize_grid(new_size)
-		input_mode = "edit"
+## Resize: prompt for a "WxH" string, then rebuild the grid. Recorded as an edit.
+func _action_resize() -> void:
+	var current := "%dx%d" % [current_level.grid_size.x, current_level.grid_size.y]
+	var text = await editor_dialog.prompt_text("Resize grid (WxH)", current)
+	if text == null:
+		return
+	var new_size := _parse_size(String(text))
+	if new_size != Vector2i.ZERO:
+		resize_grid(new_size)
+		_record_history()
 		update_status()
-	elif event.keycode == KEY_ESCAPE:
-		input_mode = "edit"
-		update_status()
-	elif event.keycode == KEY_BACKSPACE:
-		if input_buffer.length() > 0:
-			input_buffer = input_buffer.substr(0, input_buffer.length() - 1)
-			status_label.text = "Resize grid WxH (ENTER, ESC cancel): %s_" % input_buffer
-	elif event.unicode >= 32 and event.unicode < 127:
-		input_buffer += char(event.unicode)
-		status_label.text = "Resize grid WxH (ENTER, ESC cancel): %s_" % input_buffer
+	else:
+		_toast("Invalid size — use WxH, e.g. 12x8")
 
 
 ## Parse a "WxH" string to a Vector2i, or Vector2i.ZERO if malformed.
@@ -752,62 +756,80 @@ func _parse_size(s: String) -> Vector2i:
 	return Vector2i.ZERO
 
 
-## Start metadata text entry (M key): cycles through name -> par -> difficulty.
-func start_metadata_input() -> void:
-	input_mode = "metadata_input"
-	metadata_field = 0
-	_load_metadata_field_buffer()
-	_update_metadata_prompt()
+## Metadata: one form dialog editing all level fields at once (broadened from the old
+## name/par/difficulty-only flow to also cover id/description/max_folds/cell_size).
+func _action_metadata() -> void:
+	var fields := [
+		{"key": "level_name", "label": "Name", "value": current_level.level_name, "kind": "text"},
+		{"key": "level_id", "label": "Level ID", "value": current_level.level_id, "kind": "text"},
+		{"key": "description", "label": "Description", "value": current_level.description, "kind": "text"},
+		{"key": "par_folds", "label": "Par folds (-1 = none)", "value": current_level.par_folds, "kind": "int"},
+		{"key": "max_folds", "label": "Max folds (-1 = unlimited)", "value": current_level.max_folds, "kind": "int"},
+		{"key": "difficulty", "label": "Difficulty (1-5)", "value": current_level.difficulty, "kind": "int"},
+		{"key": "cell_size", "label": "Cell size (px)", "value": current_level.cell_size, "kind": "float"},
+	]
+	var r = await editor_dialog.prompt_form("Level metadata", fields)
+	if r == null:
+		return
+	current_level.level_name = str(r["level_name"])
+	current_level.level_id = str(r["level_id"])
+	current_level.description = str(r["description"])
+	if r["par_folds"] is int:
+		current_level.par_folds = r["par_folds"]
+	if r["max_folds"] is int:
+		current_level.max_folds = r["max_folds"]
+	if r["difficulty"] is int:
+		current_level.difficulty = clampi(r["difficulty"], 1, 5)
+	if r["cell_size"] is float:
+		current_level.cell_size = r["cell_size"]
+	_record_history()
+	update_status()
 
 
-## Handle metadata input
-func handle_metadata_input(event: InputEventKey) -> void:
-	if event.keycode == KEY_ENTER:
-		_commit_metadata_field()
-		metadata_field += 1
-		if metadata_field > 2:
-			input_mode = "edit"
-			update_status()
-		else:
-			_load_metadata_field_buffer()
-			_update_metadata_prompt()
-	elif event.keycode == KEY_ESCAPE:
-		input_mode = "edit"
-		update_status()
-	elif event.keycode == KEY_BACKSPACE:
-		if input_buffer.length() > 0:
-			input_buffer = input_buffer.substr(0, input_buffer.length() - 1)
-			_update_metadata_prompt()
-	elif event.unicode >= 32 and event.unicode < 127:
-		input_buffer += char(event.unicode)
-		_update_metadata_prompt()
+## Show/populate the trigger inspector for the cell under the cursor (called from
+## update_status, so it refreshes whenever the cursor moves or a cell is painted).
+func _refresh_inspector() -> void:
+	if not inspector_panel:
+		return
+	var is_trigger := current_level.type_at(cursor_position) == TileTypes.TRIGGER_FOLD
+	inspector_panel.visible = is_trigger
+	if not is_trigger:
+		return
+	var data := current_level.data_at(cursor_position)
+	inspector_channel.text = str(data.get("channel", "A"))
+	inspector_anchors.text = _anchors_to_text(data.get("anchors", []))
 
 
-## Load the current metadata field's value into the input buffer.
-func _load_metadata_field_buffer() -> void:
-	match metadata_field:
-		0: input_buffer = current_level.level_name
-		1: input_buffer = str(current_level.par_folds)
-		2: input_buffer = str(current_level.difficulty)
+## Write the inspector's channel + anchors onto the trigger cell under the cursor.
+func _apply_inspector() -> void:
+	if current_level.type_at(cursor_position) != TileTypes.TRIGGER_FOLD:
+		return
+	var anchors := _parse_anchors(inspector_anchors.text)
+	EditorCellModel.set_trigger_params(
+		current_level.cell_data, cursor_position,
+		inspector_channel.text.strip_edges(), anchors)
+	_record_history()
+	_toast("Trigger updated")
 
 
-## Show the prompt for the current metadata field.
-func _update_metadata_prompt() -> void:
-	var prompts := ["Level name", "Par folds (int, -1=none)", "Difficulty (1-5)"]
-	status_label.text = "%s (ENTER, ESC cancel): %s_" % [prompts[metadata_field], input_buffer]
+## "[[x,y],[x,y]]" -> "x,y x,y" for the inspector field.
+func _anchors_to_text(anchors) -> String:
+	var parts: Array = []
+	if anchors is Array:
+		for a in anchors:
+			if a is Array and a.size() == 2:
+				parts.append("%d,%d" % [int(a[0]), int(a[1])])
+	return " ".join(parts)
 
 
-## Commit the currently-typed metadata field into current_level.
-func _commit_metadata_field() -> void:
-	match metadata_field:
-		0:
-			current_level.level_name = input_buffer
-		1:
-			if input_buffer.is_valid_int():
-				current_level.par_folds = int(input_buffer)
-		2:
-			if input_buffer.is_valid_int():
-				current_level.difficulty = clampi(int(input_buffer), 1, 5)
+## "x,y x,y" -> [[x,y],[x,y]] (ignores malformed tokens).
+func _parse_anchors(text: String) -> Array:
+	var out: Array = []
+	for tok in text.split(" ", false):
+		var xy := tok.split(",")
+		if xy.size() == 2 and xy[0].is_valid_int() and xy[1].is_valid_int():
+			out.append([int(xy[0]), int(xy[1])])
+	return out
 
 
 ## Test/play the current level
