@@ -166,3 +166,82 @@ func test_metadata_form_updates_level() -> void:
 	assert_eq(ed.current_level.level_name, "Chamber", "name updated from the form")
 	assert_eq(ed.current_level.par_folds, 7, "par updated from the form")
 	assert_eq(ed.current_level.difficulty, 4, "difficulty updated from the form")
+
+
+# --- Layout: docked UI + auto-fit grid clear of the reserved insets ---
+
+func test_grid_fits_within_reserved_play_area() -> void:
+	var ed = await _boot_editor()
+	var play: Rect2 = ed._play_rect()
+	var cs: float = ed.grid_manager.cell_size
+	var origin: Vector2 = ed.grid_manager.grid_origin
+	var grid_px = Vector2(ed.grid_manager.grid_size) * cs
+
+	assert_lte(cs, 64.0, "display cell size is capped at 64")
+	assert_gte(origin.x, play.position.x - 0.5, "grid left edge is inside the play area")
+	assert_gte(origin.y, play.position.y - 0.5, "grid top edge is inside the play area")
+	assert_lte(origin.x + grid_px.x, play.position.x + play.size.x + 0.5, "grid right edge inside")
+	assert_lte(origin.y + grid_px.y, play.position.y + play.size.y + 0.5, "grid bottom edge inside")
+
+
+func test_large_grid_shrinks_to_fit() -> void:
+	var ed = await _boot_editor()
+	ed.resize_grid(Vector2i(28, 28))
+	var play: Rect2 = ed._play_rect()
+	var grid_px = Vector2(ed.grid_manager.grid_size) * ed.grid_manager.cell_size
+	assert_lte(grid_px.x, play.size.x + 0.5, "wide grid fits the play width")
+	assert_lte(grid_px.y, play.size.y + 0.5, "tall grid fits the play height")
+
+
+func test_ui_docked_nodes_exist() -> void:
+	var ed = await _boot_editor()
+	assert_not_null(ed.folds_panel, "folds dock exists")
+	assert_not_null(ed.fold_markers, "fold-markers node exists")
+	# 9 toolbar buttons now (added Folds).
+	assert_true(ed.toolbar.get_child_count() >= 9, "toolbar has the Folds action")
+
+
+# --- Folds mode authoring ---
+
+func test_folds_mode_picks_two_anchors_and_adds_a_fold() -> void:
+	var ed = await _boot_editor()
+	ed._toggle_fold_mode()
+	assert_true(ed.fold_mode, "entered folds mode")
+
+	ed.cursor_position = Vector2i(2, 1)
+	ed._fold_pick_at(Vector2i(2, 1))  # anchor A
+	assert_true(ed.has_pending_anchor, "first pick is pending anchor A")
+	assert_eq(ed.current_level.folds.size(), 0, "no fold yet after one pick")
+
+	ed._fold_pick_at(Vector2i(6, 1))  # anchor B -> commit
+	assert_false(ed.has_pending_anchor, "pending cleared after the fold commits")
+	assert_eq(ed.current_level.folds.size(), 1, "a fold was added")
+	assert_eq(EditorFoldModel.anchors_of(ed.current_level.folds[0]), [Vector2i(2, 1), Vector2i(6, 1)],
+		"the fold carries the two picked anchors")
+
+
+func test_folds_mode_undo_removes_the_fold() -> void:
+	var ed = await _boot_editor()
+	ed._toggle_fold_mode()
+	ed._fold_pick_at(Vector2i(1, 1))
+	ed._fold_pick_at(Vector2i(4, 1))
+	assert_eq(ed.current_level.folds.size(), 1, "fold added")
+
+	ed.undo_edit()
+	assert_eq(ed.current_level.folds.size(), 0, "undo removes the authored fold")
+
+
+func test_delete_fold_removes_it() -> void:
+	var ed = await _boot_editor()
+	EditorFoldModel.add(ed.current_level.folds, Vector2i(0, 0), Vector2i(3, 0))
+	ed._delete_fold(0)
+	assert_eq(ed.current_level.folds.size(), 0, "delete removes the fold")
+
+
+func test_authored_folds_survive_test_round_trip_stash() -> void:
+	var ed = await _boot_editor()
+	EditorFoldModel.add(ed.current_level.folds, Vector2i(4, 1), Vector2i(7, 1))
+	# Mirror what test_level() stashes (without changing scenes).
+	var stash = ed.current_level.clone()
+	assert_eq(stash.fold_pairs()[0], [Vector2i(4, 1), Vector2i(7, 1)],
+		"pre-placed folds are carried into the play round-trip")

@@ -45,6 +45,23 @@ var inspector_panel: PanelContainer
 var inspector_channel: LineEdit
 var inspector_anchors: LineEdit
 
+## Pre-placed folds authoring: a right dock listing current_level.folds, a "Folds" mode
+## that picks two anchors, and on-grid markers. World-space markers live under the editor.
+var folds_panel: PanelContainer
+var folds_list: VBoxContainer
+var fold_markers: Node2D
+var fold_mode: bool = false
+var has_pending_anchor: bool = false
+var pending_anchor: Vector2i = Vector2i.ZERO
+
+## Smallest display cell size when auto-fitting a large grid into the play area.
+const MIN_CELL_SIZE := 16.0
+## Reserved screen insets (px) so docked UI never covers the grid (see _play_rect).
+const INSET_TOP := 60.0
+const INSET_BOTTOM := 140.0
+const INSET_SIDE := 20.0
+const INSET_RIGHT_DOCK := 240.0
+
 ## Tool palette: a row of clickable type swatches; the active one is highlighted.
 var palette_container: HBoxContainer
 var palette_swatches: Dictionary = {}  # cell_type:int -> Panel
@@ -101,9 +118,10 @@ func _ready() -> void:
 	# Create UI
 	create_ui()
 
-	# When restoring, rebuild the grid at the stashed size (resize_grid repaints the cells).
-	if restoring:
-		resize_grid(current_level.grid_size)
+	# Lay out the grid at the current size, fitted + centered clear of the docked UI
+	# (also sets grid_manager.grid_size to match the level and repaints).
+	resize_grid(current_level.grid_size)
+	_refresh_folds_panel()
 
 	# Seed the edit history with the starting level.
 	editor_history.set_baseline(current_level)
@@ -139,16 +157,15 @@ func create_ui() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE  # let clicks fall through to the grid
 	ui_layer.add_child(root)
 
-	# Left column: toolbar over the status panel over the palette (stacks, never overlaps).
-	var left := VBoxContainer.new()
-	left.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	left.offset_left = 10
-	left.offset_top = 10
-	left.add_theme_constant_override("separation", UIConstants.SPACING_SM)
-	root.add_child(left)
+	# Markers for authored pre-placed folds live in world space (under the editor Node2D),
+	# like the cursor + player-start markers, so grid_to_world places them on the grid.
+	fold_markers = Node2D.new()
+	add_child(fold_markers)
 
+	# Toolbar: a thin bar pinned to the TOP edge (full width), so it never sits on the grid.
 	var toolbar_panel := PanelContainer.new()
-	left.add_child(toolbar_panel)
+	toolbar_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	root.add_child(toolbar_panel)
 	toolbar = HBoxContainer.new()
 	toolbar.add_theme_constant_override("separation", UIConstants.SPACING_SM)
 	toolbar_panel.add_child(toolbar)
@@ -158,36 +175,47 @@ func create_ui() -> void:
 	_add_tool_button("Resize", _action_resize)
 	_add_tool_button("Metadata", _action_metadata)
 	_add_tool_button("Browse", _action_browse)
+	_add_tool_button("Folds", _toggle_fold_mode)
 	_add_tool_button("Test", test_level)
 	_add_tool_button("Exit", exit_editor)
 
+	# Status: compact panel in the TOP-RIGHT corner (off the grid).
 	var status_box := PanelContainer.new()
-	left.add_child(status_box)
+	status_box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	status_box.offset_right = -INSET_SIDE
+	status_box.offset_top = INSET_TOP
+	status_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	root.add_child(status_box)
 	status_label = Label.new()
 	status_label.theme_type_variation = &"StatusLabel"
 	status_box.add_child(status_label)
 
+	# Palette: a horizontal swatch row pinned to the BOTTOM edge, centered.
 	var palette_box := PanelContainer.new()
-	left.add_child(palette_box)
+	palette_box.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	palette_box.offset_bottom = -44
+	palette_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	palette_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	root.add_child(palette_box)
 	palette_container = HBoxContainer.new()
 	palette_container.add_theme_constant_override("separation", UIConstants.SPACING_SM)
 	palette_box.add_child(palette_container)
 	create_palette()
 	update_palette()
 
-	# Trigger inspector (top-right, hidden unless the cursor is on a TRIGGER_FOLD cell).
+	# Right dock, shown contextually: trigger inspector + pre-placed folds panel.
 	_build_inspector(root)
+	_build_folds_panel(root)
 
-	# Help (bottom).
+	# Help: one thin footer line at the very bottom.
 	var help_box := PanelContainer.new()
-	help_box.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	help_box.offset_left = 10
-	help_box.offset_bottom = -10
+	help_box.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	help_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	root.add_child(help_box)
 	help_label = Label.new()
 	help_label.theme_type_variation = &"StatusLabel"
-	help_label.text = "Arrows: move  Click/drag: paint  RClick: erase  0-7: tile  P: start  Ctrl+Z/Y: undo/redo  T: test  ESC: exit"
+	help_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	help_label.text = "Arrows: move  Click/drag: paint  RClick: erase  0-7: tile  P: start  F: folds  Ctrl+Z/Y: undo/redo  T: test  ESC: exit"
 	help_box.add_child(help_label)
 
 	# Toast (transient messages, centered near the top).
@@ -195,7 +223,7 @@ func create_ui() -> void:
 	toast_label.theme_type_variation = &"HeadingLabel"
 	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	toast_label.offset_top = 40
+	toast_label.offset_top = INSET_TOP
 	toast_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	toast_label.visible = false
 	root.add_child(toast_label)
@@ -223,8 +251,8 @@ func _add_tool_button(label: String, action: Callable) -> void:
 func _build_inspector(root: Control) -> void:
 	inspector_panel = PanelContainer.new()
 	inspector_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	inspector_panel.offset_right = -10
-	inspector_panel.offset_top = 90
+	inspector_panel.offset_right = -INSET_SIDE
+	inspector_panel.offset_top = 200  # below the top-right status panel
 	inspector_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	inspector_panel.visible = false
 	root.add_child(inspector_panel)
@@ -260,6 +288,184 @@ func _build_inspector(root: Control) -> void:
 	apply.focus_mode = Control.FOCUS_CLICK
 	apply.pressed.connect(_apply_inspector)
 	vbox.add_child(apply)
+
+
+## Build the (initially hidden) pre-placed folds dock: a hint + a list of existing folds,
+## each with a Delete button. Shown while in folds mode.
+func _build_folds_panel(root: Control) -> void:
+	folds_panel = PanelContainer.new()
+	folds_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	folds_panel.offset_right = -INSET_SIDE
+	folds_panel.offset_top = 200  # same dock slot as the inspector (mutually exclusive)
+	folds_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	folds_panel.visible = false
+	root.add_child(folds_panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", UIConstants.SPACING_SM)
+	folds_panel.add_child(vbox)
+
+	var title := Label.new()
+	title.theme_type_variation = &"HeadingLabel"
+	title.text = "Pre-placed Folds"
+	vbox.add_child(title)
+
+	var hint := Label.new()
+	hint.theme_type_variation = &"StatusLabel"
+	hint.custom_minimum_size = Vector2(220, 0)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.text = "Pick two cells (Enter or click) to add a fold. Esc / Folds to exit."
+	vbox.add_child(hint)
+
+	folds_list = VBoxContainer.new()
+	folds_list.add_theme_constant_override("separation", 4)
+	vbox.add_child(folds_list)
+
+
+# --- Pre-placed folds mode ---
+
+## Enter/leave folds mode. In folds mode painting is suspended and picking cells defines
+## fold anchors; the folds dock is shown.
+func _toggle_fold_mode() -> void:
+	fold_mode = not fold_mode
+	has_pending_anchor = false
+	if folds_panel:
+		folds_panel.visible = fold_mode
+	if fold_mode and inspector_panel:
+		inspector_panel.visible = false  # the dock is shared
+	_refresh_folds_panel()
+	update_status()
+	if fold_mode:
+		_toast("Folds mode: pick anchor A")
+
+
+## Pick the current cursor cell as a fold anchor (first pick = A, second = commits the fold).
+func _fold_pick_at(pos: Vector2i) -> void:
+	if not fold_mode:
+		return
+	if not has_pending_anchor:
+		pending_anchor = pos
+		has_pending_anchor = true
+		_toast("Anchor A (%d,%d) — pick anchor B" % [pos.x, pos.y])
+	else:
+		if pos == pending_anchor:
+			_toast("Pick a different cell for anchor B")
+			return
+		EditorFoldModel.add(current_level.folds, pending_anchor, pos)
+		has_pending_anchor = false
+		_record_history()
+		_refresh_folds_panel()
+		_refresh_fold_markers()
+		_toast("Fold added")
+
+
+## Rebuild the folds dock list (one row per fold: label + Delete).
+func _refresh_folds_panel() -> void:
+	if not folds_list:
+		return
+	for c in folds_list.get_children():
+		c.queue_free()
+	for i in range(current_level.folds.size()):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", UIConstants.SPACING_SM)
+		var lbl := Label.new()
+		lbl.theme_type_variation = &"StatusLabel"
+		lbl.text = EditorFoldModel.describe(current_level.folds[i])
+		row.add_child(lbl)
+		var del := Button.new()
+		del.text = "X"
+		del.theme_type_variation = &"HudButton"
+		del.focus_mode = Control.FOCUS_CLICK
+		del.pressed.connect(_delete_fold.bind(i))
+		row.add_child(del)
+		folds_list.add_child(row)
+
+
+## Delete the fold at index i (from the dock's Delete buttons).
+func _delete_fold(i: int) -> void:
+	EditorFoldModel.remove_at(current_level.folds, i)
+	_record_history()
+	_refresh_folds_panel()
+	_refresh_fold_markers()
+
+
+## Redraw the on-grid markers (anchor dots + a connecting line) for every pre-placed fold.
+func _refresh_fold_markers() -> void:
+	if not fold_markers:
+		return
+	for c in fold_markers.get_children():
+		c.queue_free()
+	if not grid_manager:
+		return
+	var half := Vector2(grid_manager.cell_size, grid_manager.cell_size) * 0.5
+	var r := maxf(4.0, grid_manager.cell_size * 0.14)
+	for fold in current_level.folds:
+		var pair := EditorFoldModel.anchors_of(fold)
+		var a: Vector2 = grid_manager.grid_to_world(pair[0]) + half
+		var b: Vector2 = grid_manager.grid_to_world(pair[1]) + half
+		var line := Line2D.new()
+		line.width = 3.0
+		line.default_color = Color(1.0, 0.55, 0.1, 0.9)
+		line.points = PackedVector2Array([a, b])
+		fold_markers.add_child(line)
+		fold_markers.add_child(_fold_dot(a, r))
+		fold_markers.add_child(_fold_dot(b, r))
+
+
+## A small filled circle marker at a world position.
+func _fold_dot(center: Vector2, radius: float) -> Polygon2D:
+	var pts := PackedVector2Array()
+	for i in range(12):
+		var ang := TAU * i / 12.0
+		pts.append(center + Vector2(cos(ang), sin(ang)) * radius)
+	var dot := Polygon2D.new()
+	dot.polygon = pts
+	dot.color = Color(1.0, 0.7, 0.2, 0.95)
+	return dot
+
+
+# --- Grid layout: keep the grid inside a play area clear of the docked UI ---
+
+## The screen rectangle the grid may occupy: the viewport minus the reserved UI insets
+## (top toolbar, bottom palette+help, and the right dock). Always reserving the right dock
+## keeps the grid position stable whether or not the inspector/folds panel is showing.
+func _play_rect() -> Rect2:
+	var vp := get_viewport_rect().size
+	var w := maxf(64.0, vp.x - INSET_SIDE - INSET_RIGHT_DOCK)
+	var h := maxf(64.0, vp.y - INSET_TOP - INSET_BOTTOM)
+	return Rect2(INSET_SIDE, INSET_TOP, w, h)
+
+
+## Largest cell size (<= 64) that fits the whole grid inside the play rect.
+func _fit_cell_size() -> float:
+	var play := _play_rect()
+	var cols := maxi(1, grid_manager.grid_size.x)
+	var rows := maxi(1, grid_manager.grid_size.y)
+	return clampf(minf(play.size.x / cols, play.size.y / rows), MIN_CELL_SIZE, 64.0)
+
+
+## Rebuild the grid cells at a fitted display cell size and center them in the play rect,
+## so the docked UI never covers the level. Repaints from current_level and refreshes
+## cursor / player / fold markers. Replaces GridManager.center_grid_on_screen in the editor.
+func _apply_grid_layout() -> void:
+	if not grid_manager:
+		return
+	grid_manager.cell_size = _fit_cell_size()
+
+	# Rebuild cells at the new size (cell local positions bake in cell_size).
+	for cell in grid_manager.cells.values():
+		if is_instance_valid(cell):
+			cell.queue_free()
+	grid_manager.cells.clear()
+	grid_manager.create_grid()
+
+	var play := _play_rect()
+	var grid_px := Vector2(grid_manager.grid_size) * grid_manager.cell_size
+	grid_manager.grid_origin = play.position + (play.size - grid_px) / 2.0
+	grid_manager.position = grid_manager.grid_origin
+
+	apply_level_to_grid()
+	_refresh_fold_markers()
 
 
 ## Paintable tile types, in palette order. Name + swatch color for each come from the
@@ -341,6 +547,17 @@ func _input(event: InputEvent) -> void:
 		redo_edit()
 		return
 
+	# Folds mode: cursor movement + pick two anchors; painting is suspended.
+	if fold_mode:
+		match event.keycode:
+			KEY_UP: move_cursor(Vector2i(0, -1))
+			KEY_DOWN: move_cursor(Vector2i(0, 1))
+			KEY_LEFT: move_cursor(Vector2i(-1, 0))
+			KEY_RIGHT: move_cursor(Vector2i(1, 0))
+			KEY_ENTER, KEY_KP_ENTER, KEY_SPACE: _fold_pick_at(cursor_position)
+			KEY_F, KEY_ESCAPE: _toggle_fold_mode()
+		return
+
 	# Edit-mode shortcuts. The letter keys open the corresponding dialog action.
 	match event.keycode:
 		KEY_UP:
@@ -381,6 +598,8 @@ func _input(event: InputEvent) -> void:
 			_action_resize()
 		KEY_M:
 			_action_metadata()
+		KEY_F:
+			_toggle_fold_mode()
 		KEY_T:
 			test_level()
 		KEY_ESCAPE:
@@ -390,9 +609,17 @@ func _input(event: InputEvent) -> void:
 ## Mouse painting runs in _unhandled_input (not _input) so UI controls consume their own
 ## clicks first — clicking a toolbar button or palette swatch no longer paints the grid
 ## cell beneath it. Grid cells are Node2D (not Controls), so clicks over the map still
-## fall through to here.
+## fall through to here. In folds mode, a click picks a fold anchor instead of painting.
 func _unhandled_input(event: InputEvent) -> void:
 	if editor_dialog and editor_dialog.is_open():
+		return
+	if fold_mode:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			var gp := grid_manager.world_to_grid(get_global_mouse_position())
+			if grid_manager.is_valid_position(gp):
+				cursor_position = gp
+				update_cursor_visual()
+				_fold_pick_at(gp)
 		return
 	_handle_mouse_paint(event)
 
@@ -630,6 +857,7 @@ func load_level() -> void:
 
 		# Rebuild the grid at the loaded size (resize_grid repaints the cells).
 		resize_grid(current_level.grid_size)
+		_refresh_folds_panel()
 
 		# A freshly loaded level starts a new undo history.
 		editor_history.set_baseline(current_level)
@@ -678,6 +906,7 @@ func new_level() -> void:
 
 	# Rebuild the grid at the default size (also clears all cells + repaints).
 	resize_grid(Vector2i(10, 10))
+	_refresh_folds_panel()
 
 	# A new level starts a fresh undo history.
 	editor_history.set_baseline(current_level)
@@ -701,23 +930,14 @@ func _action_browse() -> void:
 	load_level()
 
 
-## Rebuild the grid at a new size (Part E). Frees the old cells (avoiding leaks — see
-## AGENTS.md), recreates + recenters the grid, clamps cursor/player-start into the new
-## bounds, drops now-out-of-bounds cell data, and repaints from current_level.cell_data.
+## Rebuild the grid at a new size. Clamps cursor/player-start into the new bounds, drops
+## now-out-of-bounds cell data, then hands off to _apply_grid_layout (which frees + rebuilds
+## the cells at a fitted display size, centers them clear of the docked UI, and repaints).
 func resize_grid(new_size: Vector2i) -> void:
 	new_size = new_size.clamp(Vector2i.ONE, Vector2i(30, 30))
 
 	current_level.grid_size = new_size
 	grid_manager.grid_size = new_size
-
-	# Free existing cells before recreating them.
-	for cell in grid_manager.cells.values():
-		if is_instance_valid(cell):
-			cell.queue_free()
-	grid_manager.cells.clear()
-
-	grid_manager.create_grid()
-	grid_manager.center_grid_on_screen()
 
 	# Clamp cursor + player start into the new bounds.
 	var max_pos := new_size - Vector2i.ONE
@@ -730,7 +950,7 @@ func resize_grid(new_size: Vector2i) -> void:
 		if not grid_manager.is_valid_position(pos):
 			current_level.cell_data.erase(pos)
 
-	apply_level_to_grid()
+	_apply_grid_layout()
 
 
 ## Resize: prompt for a "WxH" string, then rebuild the grid. Recorded as an edit.
@@ -791,7 +1011,8 @@ func _action_metadata() -> void:
 func _refresh_inspector() -> void:
 	if not inspector_panel:
 		return
-	var is_trigger := current_level.type_at(cursor_position) == TileTypes.TRIGGER_FOLD
+	# The right dock is shared with the folds panel; keep the inspector hidden in folds mode.
+	var is_trigger := not fold_mode and current_level.type_at(cursor_position) == TileTypes.TRIGGER_FOLD
 	inspector_panel.visible = is_trigger
 	if not is_trigger:
 		return
