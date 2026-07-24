@@ -35,28 +35,38 @@ func _draw_seam_markers() -> void:
 
 func _draw_anchor_and_preview() -> void:
 	var cs: float = world.base.cell_size
+	var world_px := Vector2(world.base.grid_size) * cs
+
+	# Where E would pin an anchor right now (follows pointing continuously).
+	var cand: Vector2i = world.candidate_anchor()
+	var cand_ok: bool = world.base.is_in_bounds(cand)
+	var cand_center := (Vector2(cand) + Vector2(0.5, 0.5)) * cs
+	if cand_ok:
+		draw_arc(cand_center, 14.0, 0, TAU, 24, Color("ff9d5c", 0.35), 2.0)
+
 	if world.pending_anchor == null:
 		return
 	var a: Vector2i = world.pending_anchor
 	var a_center := (Vector2(a) + Vector2(0.5, 0.5)) * cs
+	# Alignment guides: the row/column the second anchor must land on.
+	var guide := Color(1, 1, 1, 0.10)
+	draw_line(Vector2(0, a_center.y), Vector2(world_px.x, a_center.y), guide, 1.0)
+	draw_line(Vector2(a_center.x, 0), Vector2(a_center.x, world_px.y), guide, 1.0)
 	draw_arc(a_center, 14.0, 0, TAU, 24, Color("ff9d5c"), 3.0)
 
-	var hover: Vector2i = world.hovered_cell()
-	if not ProtoCore.anchors_valid(a, hover):
+	if not cand_ok or not ProtoCore.anchors_valid(a, cand):
 		return
 	# Translucent band between the two crease lines, spanning the world.
-	var h_center := (Vector2(hover) + Vector2(0.5, 0.5)) * cs
-	var world_px := Vector2(world.base.grid_size) * cs
 	var band := Color(0.95, 0.25, 0.3, 0.22)
-	if a.y == hover.y:
-		var x0 := minf(a_center.x, h_center.x)
-		var x1 := maxf(a_center.x, h_center.x)
+	if a.y == cand.y:
+		var x0 := minf(a_center.x, cand_center.x)
+		var x1 := maxf(a_center.x, cand_center.x)
 		draw_rect(Rect2(x0, 0, x1 - x0, world_px.y), band)
 	else:
-		var y0 := minf(a_center.y, h_center.y)
-		var y1 := maxf(a_center.y, h_center.y)
+		var y0 := minf(a_center.y, cand_center.y)
+		var y1 := maxf(a_center.y, cand_center.y)
 		draw_rect(Rect2(0, y0, world_px.x, y1 - y0), band)
-	draw_arc(h_center, 14.0, 0, TAU, 24, Color("ff9d5c", 0.7), 3.0)
+	draw_arc(cand_center, 14.0, 0, TAU, 24, Color("ff9d5c", 0.8), 3.0)
 
 
 ## Inside the subspace: mark the identified crease lines (the glue) so the

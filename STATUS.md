@@ -106,7 +106,11 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
   player's in-strip position carried into the world (dive-traversal v1). Design
   context: metroidvania pivot discussion — knowledge/configuration-gated
   progression, subspaces, movable seams, fold-extent options. Tests:
-  `test_proto_core.gd` (9), `test_proto_world.gd` (3).
+  `test_proto_core.gd` (9), `test_proto_world.gd` (6).
+- Iteration: mouse anchor clicks replaced by **embodied directional placement** —
+  E pins an anchor 2 tiles from the player in the pointed direction (hold ↑/↓
+  to point vertically, else facing); jump is Space-only. The 2-tile reach
+  pierces 1-tile walls, making wall thickness a traversal gate.
 
 ### 2026-07-10
 - **Level editor usability pass.** The editor↔play round-trip now works: pressing `T`

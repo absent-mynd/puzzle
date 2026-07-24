@@ -25,6 +25,9 @@ extends Node2D
 enum Mode { WORLD, SUBSPACE }
 
 const CS := ProtoCore.CELL
+## How far (in cells) an anchor is pinned from the player. 2 = through 1-tile
+## walls but not 2-tile walls.
+const ANCHOR_REACH := 2
 const TYPE_COLORS := {
 	BaseTile.TYPE_EMPTY: Color(0.13, 0.14, 0.20),   # faint: the "paper" exists
 	BaseTile.TYPE_WALL: Color(0.55, 0.60, 0.70),
@@ -152,6 +155,8 @@ func rebuild_world() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
+			KEY_E:
+				place_anchor(player.point_dir())
 			KEY_U:
 				if mode == Mode.SUBSPACE:
 					exit_subspace("Unfolded — you emerge where you walked to.")
@@ -164,33 +169,40 @@ func _unhandled_input(event: InputEvent) -> void:
 					pending_anchor = null
 			KEY_R:
 				_reset()
-		return
 
+
+## The grid cell the player's center is in.
+func player_cell() -> Vector2i:
+	return Vector2i((player.global_position / CS).floor())
+
+
+## Where E would pin an anchor right now: ANCHOR_REACH cells from the player in
+## the pointed direction. Reach pierces anything — so a 1-tile wall can be
+## anchored *through* (and folded away) while a 2-tile wall cannot: wall
+## thickness becomes a traversal gate with no extra rules.
+func candidate_anchor(dir: Vector2i = Vector2i.ZERO) -> Vector2i:
+	var d := dir if dir != Vector2i.ZERO else Vector2i(player.point_dir())
+	return player_cell() + d * ANCHOR_REACH
+
+
+## Embodied anchor placement: first E pins an anchor, second E (somewhere
+## aligned) commits the fold. Pointing at the pending anchor again cancels it.
+func place_anchor(dir: Vector2i) -> void:
 	if mode != Mode.WORLD:
 		return
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_RIGHT:
-			pending_anchor = null
-		elif event.button_index == MOUSE_BUTTON_LEFT:
-			_handle_anchor_click(hovered_cell())
-
-
-func hovered_cell() -> Vector2i:
-	return Vector2i((get_global_mouse_position() / CS).floor())
-
-
-func _handle_anchor_click(cell: Vector2i) -> void:
-	if not base.is_in_bounds(cell):
+	var cand := candidate_anchor(dir)
+	if not base.is_in_bounds(cand):
+		_show_flash("Nothing there to anchor to.")
 		return
 	if pending_anchor == null:
-		pending_anchor = cell
-		return
-	if ProtoCore.anchors_valid(pending_anchor, cell):
-		do_fold(pending_anchor, cell)
+		pending_anchor = cand
+	elif cand == pending_anchor:
+		pending_anchor = null
+	elif ProtoCore.anchors_valid(pending_anchor, cand):
+		do_fold(pending_anchor, cand)
 		pending_anchor = null
 	else:
-		# Misaligned second click re-picks the first anchor (fast retry UX).
-		pending_anchor = cell
+		_show_flash("Anchors must share a row or column, 2+ apart.")
 
 
 # ---------------------------------------------------------------------------
@@ -373,16 +385,18 @@ func _build_hud() -> void:
 	add_child(hud)
 
 	var help := Label.new()
-	help.text = "Move: A/D or arrows   Jump: Space/W\n" \
-		+ "Fold: click two aligned tiles (same row or column, 2+ apart)\n" \
-		+ "Right-click/Esc: cancel anchor   U: unfold last   R: reset\n" \
-		+ "Stand INSIDE the red band when folding to be folded in."
+	help.text = "Move: A/D or arrows   Jump: Space\n" \
+		+ "Point: hold Up/W or Down/S — otherwise you point where you face\n" \
+		+ "E: pin an anchor 2 tiles away in the pointed direction\n" \
+		+ "   (second aligned anchor commits the fold; E at the same spot cancels)\n" \
+		+ "Esc: cancel anchor   U: unfold / exit fold   R: reset\n" \
+		+ "If the red band covers YOU when the fold commits, you get folded in."
 	help.position = Vector2(12, 8)
 	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
 	hud.add_child(help)
 
 	_status = Label.new()
-	_status.position = Vector2(12, 92)
+	_status.position = Vector2(12, 130)
 	_status.add_theme_color_override("font_color", Color("59e0d0"))
 	hud.add_child(_status)
 

@@ -19,12 +19,20 @@ godot --path . res://scenes/prototype/FoldPrototype.tscn
 
 | Input | Action |
 |---|---|
-| A/D or ←/→ | move |
-| Space / W | jump |
-| Left-click ×2 | place two fold anchors (same row or column, ≥2 apart) |
-| Right-click / Esc | cancel first anchor |
+| A/D or ←/→ | move (also sets your facing) |
+| Space | jump |
+| hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
+| E | pin an anchor **2 tiles away** in the pointed direction; a second aligned anchor (same row/column, ≥2 apart) commits the fold; E at the pending spot cancels |
+| Esc | cancel first anchor |
 | U | unfold newest fold (or exit the subspace) |
 | R | reset |
+
+Anchor placement is **embodied**: both anchors must be pinned from somewhere
+you can stand, so folding is gated by reachability. The 2-tile reach pierces
+1-tile-thick walls (pin an anchor through them) but not 2-tile ones — wall
+thickness is a traversal gate with no extra rules. A faint ring always shows
+where E would pin; after the first anchor, guide lines mark the row/column the
+second must land on.
 
 ## What to try (the three beats)
 
@@ -39,9 +47,15 @@ godot --path . res://scenes/prototype/FoldPrototype.tscn
    you wrap around the cylinder seamlessly.
 3. **Dive-traverse.** While inside, walk somewhere else along the strip, then
    press U. The fold springs open and you emerge **where you walked to** —
-   fold, dive, surface: movement through the inside of a fold. The sealed
-   chamber's goal is reachable this way (fold vertically through its roof,
-   fall through the wrap into the interior column, exit mid-air).
+   fold, dive, surface: movement through the inside of a fold.
+4. **Break the sealed chamber.** With embodied anchors, sealed means sealed —
+   you cannot dive into a room you can't reach anchors around. But its walls
+   are 1 tile thick: stand beside the left wall, pin an anchor *through* it
+   into the interior, back up two tiles, pin the second — the wall itself is
+   excised and you walk in. Or delete the roof from above: stand on it, point
+   down to pin an anchor inside, then jump and pin the second mid-air above
+   you — the roof folds away beneath you and you drop in. (Note the fold
+   stays active: unfold it from inside and you've sealed yourself in.)
 
 ## v1 shortcuts (deliberate)
 

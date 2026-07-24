@@ -51,6 +51,29 @@ func test_fold_around_player_pinches_into_subspace_and_exit_restores() -> void:
 		"Moving inside the fold moved you in the world (dive-traversal v1)")
 
 
+func test_directional_anchor_placement_and_pinch() -> void:
+	# Player spawns in cell (4,12); reach is 2 cells, default facing is right.
+	world.place_anchor(Vector2i(1, 0))
+	assert_eq(world.pending_anchor, Vector2i(6, 12), "First anchor pins 2 tiles right")
+	world.place_anchor(Vector2i(1, 0))
+	assert_eq(world.pending_anchor, null, "Pointing at the pending anchor cancels it")
+
+	world.place_anchor(Vector2i(1, 0))              # pin (6,12) again
+	world.player.teleport(Vector2(9.5 * CS, 12.5 * CS), false)
+	world.place_anchor(Vector2i(1, 0))              # (11,12): aligned, gap 5
+	assert_eq(world.mode, world.Mode.SUBSPACE,
+		"Player stood between the anchors: folded in")
+
+
+func test_misaligned_second_anchor_keeps_pending() -> void:
+	world.place_anchor(Vector2i(1, 0))              # (6,12)
+	world.player.teleport(Vector2(9.5 * CS, 12.5 * CS), false)
+	world.place_anchor(Vector2i(0, -1))             # (9,10): misaligned
+	assert_eq(world.pending_anchor, Vector2i(6, 12),
+		"Misaligned second anchor is rejected, pending kept")
+	assert_eq(world.folds.size(), 0, "No fold committed")
+
+
 func test_no_hud_control_swallows_mouse_input() -> void:
 	# Anchor placement relies on _unhandled_input receiving mouse clicks; any
 	# Control with MOUSE_FILTER_STOP covering the screen consumes them first

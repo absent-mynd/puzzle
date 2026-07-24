@@ -22,6 +22,9 @@ var _buffer := 0.0
 var _visual: Polygon2D
 var _cam: Camera2D
 
+## Last horizontal input: -1 left, +1 right. Default faces right.
+var facing := 1
+
 
 func _ready() -> void:
 	var shape := CollisionShape2D.new()
@@ -52,14 +55,18 @@ func _physics_process(delta: float) -> void:
 		dir -= 1.0
 	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT):
 		dir += 1.0
+	if dir > 0.0:
+		facing = 1
+	elif dir < 0.0:
+		facing = -1
 
 	var accel := RUN_ACCEL if absf(dir) > 0.0 else RUN_DECEL
 	velocity.x = move_toward(velocity.x, dir * RUN_SPEED, accel * delta)
 	velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
 
 	_coyote = COYOTE_TIME if is_on_floor() else maxf(_coyote - delta, 0.0)
-	var jump_pressed := Input.is_physical_key_pressed(KEY_SPACE) \
-		or Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP)
+	# Space only: W/Up are reserved for POINTING (anchor placement direction).
+	var jump_pressed := Input.is_physical_key_pressed(KEY_SPACE)
 	_buffer = JUMP_BUFFER if jump_pressed else maxf(_buffer - delta, 0.0)
 	if _buffer > 0.0 and _coyote > 0.0:
 		velocity.y = JUMP_VELOCITY
@@ -83,6 +90,16 @@ func teleport(to: Vector2, keep_velocity: bool = true) -> void:
 	global_position = to
 	if not keep_velocity:
 		velocity = Vector2.ZERO
+
+
+## 4-way pointing for anchor placement: held vertical keys win, otherwise you
+## point where you face. Sampled at interact time.
+func point_dir() -> Vector2i:
+	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
+		return Vector2i(0, -1)
+	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN):
+		return Vector2i(0, 1)
+	return Vector2i(facing, 0)
 
 
 ## Kill camera smoothing for one frame. The subspace wrap must be invisible —
