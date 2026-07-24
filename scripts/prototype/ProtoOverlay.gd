@@ -48,7 +48,8 @@ func _draw_anchor_and_preview() -> void:
 		return
 	var a: Vector2i = world.pending_anchor
 	var a_center := (Vector2(a) + Vector2(0.5, 0.5)) * cs
-	# Alignment guides: the row/column the second anchor must land on.
+	# Soft axis guides through the pending anchor (folds may also be diagonal;
+	# these just make deliberate axis-aligned folds easy to line up).
 	var guide := Color(1, 1, 1, 0.10)
 	draw_line(Vector2(0, a_center.y), Vector2(world_px.x, a_center.y), guide, 1.0)
 	draw_line(Vector2(a_center.x, 0), Vector2(a_center.x, world_px.y), guide, 1.0)
@@ -56,16 +57,17 @@ func _draw_anchor_and_preview() -> void:
 
 	if not cand_ok or not ProtoCore.anchors_valid(a, cand):
 		return
-	# Translucent band between the two crease lines, spanning the world.
+	# Translucent band between the two crease lines: a parallelogram spanning
+	# well past the view, at whatever angle the anchor pair implies.
 	var band := Color(0.95, 0.25, 0.3, 0.22)
-	if a.y == cand.y:
-		var x0 := minf(a_center.x, cand_center.x)
-		var x1 := maxf(a_center.x, cand_center.x)
-		draw_rect(Rect2(x0, 0, x1 - x0, world_px.y), band)
-	else:
-		var y0 := minf(a_center.y, cand_center.y)
-		var y1 := maxf(a_center.y, cand_center.y)
-		draw_rect(Rect2(0, y0, world_px.x, y1 - y0), band)
+	var n := (cand_center - a_center).normalized()
+	var t := Vector2(-n.y, n.x)
+	var reach := world_px.length()
+	var quad := PackedVector2Array([
+		a_center + t * reach, a_center - t * reach,
+		cand_center - t * reach, cand_center + t * reach,
+	])
+	draw_colored_polygon(quad, band)
 	draw_arc(cand_center, 14.0, 0, TAU, 24, Color("ff9d5c", 0.8), 3.0)
 
 

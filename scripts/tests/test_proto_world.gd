@@ -52,26 +52,33 @@ func test_fold_around_player_pinches_into_subspace_and_exit_restores() -> void:
 
 
 func test_directional_anchor_placement_and_pinch() -> void:
-	# Player spawns in cell (4,12); reach is 2 cells, default facing is right.
+	# Player spawns in cell (4,12); reach is the adjacent cell, facing right.
 	world.place_anchor(Vector2i(1, 0))
-	assert_eq(world.pending_anchor, Vector2i(6, 12), "First anchor pins 2 tiles right")
+	assert_eq(world.pending_anchor, Vector2i(5, 12), "First anchor pins the cell in front")
 	world.place_anchor(Vector2i(1, 0))
 	assert_eq(world.pending_anchor, null, "Pointing at the pending anchor cancels it")
 
-	world.place_anchor(Vector2i(1, 0))              # pin (6,12) again
-	world.player.teleport(Vector2(9.5 * CS, 12.5 * CS), false)
-	world.place_anchor(Vector2i(1, 0))              # (11,12): aligned, gap 5
+	world.place_anchor(Vector2i(1, 0))              # pin (5,12) again
+	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
+	world.place_anchor(Vector2i(1, 0))              # (9,12): gap 4
 	assert_eq(world.mode, world.Mode.SUBSPACE,
 		"Player stood between the anchors: folded in")
 
 
-func test_misaligned_second_anchor_keeps_pending() -> void:
-	world.place_anchor(Vector2i(1, 0))              # (6,12)
-	world.player.teleport(Vector2(9.5 * CS, 12.5 * CS), false)
-	world.place_anchor(Vector2i(0, -1))             # (9,10): misaligned
-	assert_eq(world.pending_anchor, Vector2i(6, 12),
-		"Misaligned second anchor is rejected, pending kept")
+func test_too_close_second_anchor_keeps_pending() -> void:
+	world.place_anchor(Vector2i(1, 0))              # (5,12)
+	world.place_anchor(Vector2i(0, 1))              # (4,13): dist sqrt(2), too close
+	assert_eq(world.pending_anchor, Vector2i(5, 12),
+		"Too-close second anchor is rejected, pending kept")
 	assert_eq(world.folds.size(), 0, "No fold committed")
+
+
+func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
+	world.place_anchor(Vector2i(1, 0))              # (5,12)
+	world.player.teleport(Vector2(7.5 * CS, 10.5 * CS), false)
+	world.place_anchor(Vector2i(1, 0))              # (8,10): off-axis, dist ~3.6
+	assert_eq(world.mode, world.Mode.SUBSPACE, "Off-axis pinch folds the player in")
+	assert_eq(world.sub_fold.orientation, "diagonal", "The committed fold is diagonal")
 
 
 func test_no_hud_control_swallows_mouse_input() -> void:

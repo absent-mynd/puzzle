@@ -108,9 +108,10 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
   progression, subspaces, movable seams, fold-extent options. Tests:
   `test_proto_core.gd` (9), `test_proto_world.gd` (6).
 - Iteration: mouse anchor clicks replaced by **embodied directional placement** —
-  E pins an anchor 2 tiles from the player in the pointed direction (hold ↑/↓
-  to point vertically, else facing); jump is Space-only. The 2-tile reach
-  pierces 1-tile walls, making wall thickness a traversal gate.
+  E pins an anchor on the adjacent cell in the pointed direction (hold ↑/↓ to
+  point vertically, else facing); jump is Space-only. **Off-axis anchor pairs
+  are allowed** (2+ tiles apart, any direction) and commit diagonal folds; the
+  overlay band preview generalizes to arbitrary crease angles.
 
 ### 2026-07-10
 - **Level editor usability pass.** The editor↔play round-trip now works: pressing `T`

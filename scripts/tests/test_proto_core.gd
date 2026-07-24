@@ -107,6 +107,10 @@ func test_circle_overlap_and_depenetrate() -> void:
 func test_anchors_valid_rules() -> void:
 	assert_true(ProtoCore.anchors_valid(Vector2i(2, 3), Vector2i(6, 3)), "Same row, gap>=2")
 	assert_true(ProtoCore.anchors_valid(Vector2i(2, 3), Vector2i(2, 8)), "Same column, gap>=2")
-	assert_false(ProtoCore.anchors_valid(Vector2i(2, 3), Vector2i(3, 4)), "Diagonal rejected")
+	assert_true(ProtoCore.anchors_valid(Vector2i(2, 3), Vector2i(4, 5)),
+		"Off-axis pair 2+ apart is a valid (diagonal) fold")
+	assert_true(ProtoCore.anchors_valid(Vector2i(2, 3), Vector2i(0, 3)), "Direction irrelevant")
+	assert_false(ProtoCore.anchors_valid(Vector2i(2, 3), Vector2i(3, 4)),
+		"Adjacent diagonal (dist sqrt(2)) is too close")
 	assert_false(ProtoCore.anchors_valid(Vector2i(2, 3), Vector2i(3, 3)), "Gap 1 rejected")
 	assert_false(ProtoCore.anchors_valid(Vector2i(2, 3), Vector2i(2, 3)), "Same cell rejected")

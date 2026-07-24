@@ -159,13 +159,13 @@ static func depenetrate(center: Vector2, radius: float, solids: Array) -> Vector
 
 
 # ---------------------------------------------------------------------------
-# Anchor validation (prototype rules: axis-aligned, gap >= 2 cells)
+# Anchor validation (prototype rules: any direction, gap >= 2 cells)
 # ---------------------------------------------------------------------------
+# Off-axis pairs are allowed — the fold engine handles arbitrary crease angles.
+# The only constraint is a minimum Euclidean gap so the strip is substantial.
 
 static func anchors_valid(a: Vector2i, b: Vector2i) -> bool:
 	if a == b:
 		return false
-	if a.x != b.x and a.y != b.y:
-		return false
-	var gap := absi(a.x - b.x) + absi(a.y - b.y)
-	return gap >= 2
+	var d := b - a
+	return d.x * d.x + d.y * d.y >= 4

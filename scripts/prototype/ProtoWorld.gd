@@ -25,9 +25,9 @@ extends Node2D
 enum Mode { WORLD, SUBSPACE }
 
 const CS := ProtoCore.CELL
-## How far (in cells) an anchor is pinned from the player. 2 = through 1-tile
-## walls but not 2-tile walls.
-const ANCHOR_REACH := 2
+## Anchors are pinned at arm's length: the cell immediately in the pointed
+## direction. What you can fold is exactly what you can stand next to.
+const ANCHOR_REACH := 1
 const TYPE_COLORS := {
 	BaseTile.TYPE_EMPTY: Color(0.13, 0.14, 0.20),   # faint: the "paper" exists
 	BaseTile.TYPE_WALL: Color(0.55, 0.60, 0.70),
@@ -176,10 +176,9 @@ func player_cell() -> Vector2i:
 	return Vector2i((player.global_position / CS).floor())
 
 
-## Where E would pin an anchor right now: ANCHOR_REACH cells from the player in
-## the pointed direction. Reach pierces anything — so a 1-tile wall can be
-## anchored *through* (and folded away) while a 2-tile wall cannot: wall
-## thickness becomes a traversal gate with no extra rules.
+## Where E would pin an anchor right now: the adjacent cell in the pointed
+## direction. The two anchors of a fold need not share a row or column — the
+## crease takes whatever angle the pair implies.
 func candidate_anchor(dir: Vector2i = Vector2i.ZERO) -> Vector2i:
 	var d := dir if dir != Vector2i.ZERO else Vector2i(player.point_dir())
 	return player_cell() + d * ANCHOR_REACH
@@ -202,7 +201,7 @@ func place_anchor(dir: Vector2i) -> void:
 		do_fold(pending_anchor, cand)
 		pending_anchor = null
 	else:
-		_show_flash("Anchors must share a row or column, 2+ apart.")
+		_show_flash("Anchors must be at least 2 tiles apart.")
 
 
 # ---------------------------------------------------------------------------
@@ -387,8 +386,9 @@ func _build_hud() -> void:
 	var help := Label.new()
 	help.text = "Move: A/D or arrows   Jump: Space\n" \
 		+ "Point: hold Up/W or Down/S — otherwise you point where you face\n" \
-		+ "E: pin an anchor 2 tiles away in the pointed direction\n" \
-		+ "   (second aligned anchor commits the fold; E at the same spot cancels)\n" \
+		+ "E: pin an anchor on the cell in front of you\n" \
+		+ "   (a second anchor 2+ tiles away, any direction, commits the fold;\n" \
+		+ "    E at the same spot cancels)\n" \
 		+ "Esc: cancel anchor   U: unfold / exit fold   R: reset\n" \
 		+ "If the red band covers YOU when the fold commits, you get folded in."
 	help.position = Vector2(12, 8)
