@@ -51,32 +51,49 @@ func test_fold_around_player_pinches_into_subspace_and_exit_restores() -> void:
 		"Moving inside the fold moved you in the world (dive-traversal v1)")
 
 
-func test_directional_anchor_placement_and_pinch() -> void:
+func test_two_slot_placement_then_commit_pinches() -> void:
 	# Player spawns in cell (4,12); reach is the adjacent cell, facing right.
-	world.place_anchor(Vector2i(1, 0))
-	assert_eq(world.pending_anchor, Vector2i(5, 12), "First anchor pins the cell in front")
-	world.place_anchor(Vector2i(1, 0))
-	assert_eq(world.pending_anchor, null, "Pointing at the pending anchor cancels it")
+	world.place_pending(0, Vector2i(1, 0))
+	assert_eq(world.pending_a, Vector2i(5, 12), "Q pins anchor 1 on the aimed cell")
+	world.place_pending(0, Vector2i(1, 0))
+	assert_eq(world.pending_a, null, "Re-pinning the same spot clears the slot")
 
-	world.place_anchor(Vector2i(1, 0))              # pin (5,12) again
+	world.place_pending(0, Vector2i(1, 0))          # (5,12) again
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.place_anchor(Vector2i(1, 0))              # (9,12): gap 4
+	world.place_pending(1, Vector2i(1, 0))          # (9,12)
+	assert_eq(world.pending_b, Vector2i(9, 12), "E pins anchor 2 independently")
+	assert_eq(world.folds.size(), 0, "Placement alone never commits")
+
+	world.commit_or_unfold(Vector2i(0, -1))         # aim up: no seam there
 	assert_eq(world.mode, world.Mode.SUBSPACE,
-		"Player stood between the anchors: folded in")
+		"F with the player inside the band folds them in")
+	assert_eq(world.pending_a, null, "Pendings clear on commit")
 
 
-func test_too_close_second_anchor_keeps_pending() -> void:
-	world.place_anchor(Vector2i(1, 0))              # (5,12)
-	world.place_anchor(Vector2i(0, 1))              # (4,13): dist sqrt(2), too close
-	assert_eq(world.pending_anchor, Vector2i(5, 12),
-		"Too-close second anchor is rejected, pending kept")
-	assert_eq(world.folds.size(), 0, "No fold committed")
+func test_commit_requires_both_anchors_and_min_gap() -> void:
+	world.commit_or_unfold(Vector2i(1, 0))
+	assert_eq(world.folds.size(), 0, "No anchors pinned: nothing commits")
+
+	world.place_pending(0, Vector2i(1, 0))          # (5,12)
+	world.place_pending(1, Vector2i(0, 1))          # (4,13): dist sqrt(2)
+	world.commit_or_unfold(Vector2i(0, -1))
+	assert_eq(world.folds.size(), 0, "Too-close pair is rejected at commit")
+	assert_eq(world.pending_a, Vector2i(5, 12), "Pendings kept for adjustment")
+
+
+func test_interact_aimed_at_seam_unfolds_that_fold() -> void:
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))  # seam anchor at (24,12)
+	assert_eq(world.folds.size(), 1, "Fold active")
+	world.player.teleport(Vector2(23.5 * CS, 12.5 * CS), false)
+	world.commit_or_unfold(Vector2i(1, 0))          # aiming at the seam diamond
+	assert_eq(world.folds.size(), 0, "F aimed at the seam anchor unfolds it")
 
 
 func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
-	world.place_anchor(Vector2i(1, 0))              # (5,12)
+	world.place_pending(0, Vector2i(1, 0))          # (5,12)
 	world.player.teleport(Vector2(7.5 * CS, 10.5 * CS), false)
-	world.place_anchor(Vector2i(1, 0))              # (8,10): off-axis, dist ~3.6
+	world.place_pending(1, Vector2i(1, 0))          # (8,10): off-axis, dist ~3.6
+	world.commit_or_unfold(Vector2i(0, -1))
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Off-axis pinch folds the player in")
 	assert_eq(world.sub_fold.orientation, "diagonal", "The committed fold is diagonal")
 

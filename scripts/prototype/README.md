@@ -22,16 +22,19 @@ godot --path . res://scenes/prototype/FoldPrototype.tscn
 | A/D or ←/→ | move (also sets your facing) |
 | Space | jump |
 | hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
-| E | pin an anchor on the cell **immediately in front of you**; a second anchor **2+ tiles away in any direction** commits the fold (off-axis pairs make diagonal creases); E at the pending spot cancels |
-| Esc | cancel first anchor |
+| Q | pin **anchor 1** (orange) on the cell you point at — re-pin moves it, same spot clears |
+| E | pin **anchor 2** (blue), same rules; anchors must be 2+ tiles apart, any direction (off-axis pairs make diagonal creases) |
+| F | **interact**: commit the pinned pair as a fold — or, aimed at (or standing on) a seam diamond, unfold that fold |
+| Esc | clear both pending anchors |
 | U | unfold newest fold (or exit the subspace) |
 | R | reset |
 
 Anchor placement is **embodied**: both anchors must be pinned from somewhere
 you can stand (or jump — mid-air placement works), so folding is gated by
-reachability. A faint ring always shows where E would pin; after the first
-anchor, soft axis guides help line up straight folds, and the red band
-previews the excised strip at whatever angle the pair implies.
+reachability. Placement and commitment are separate acts: pin both anchors,
+then choose where to be standing before pressing F — inside the red band to
+be folded in, outside it to ride a flap. Any active fold can be unfolded by
+walking up to its seam diamond (where its two anchors met) and interacting.
 
 ## What to try (the three beats)
 

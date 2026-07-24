@@ -40,7 +40,8 @@ var base: BaseGrid
 var folds: Array[Fold] = []
 var next_fold_id := 0
 var mode: Mode = Mode.WORLD
-var pending_anchor = null  # Vector2i or null
+var pending_a = null  # Vector2i or null — anchor slot 1 (Q)
+var pending_b = null  # Vector2i or null — anchor slot 2 (E)
 
 var current_pieces: Array[FoldedPiece] = []
 var wall_polys: Array = []
@@ -155,8 +156,12 @@ func rebuild_world() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
+			KEY_Q:
+				place_pending(0, player.point_dir())
 			KEY_E:
-				place_anchor(player.point_dir())
+				place_pending(1, player.point_dir())
+			KEY_F:
+				commit_or_unfold(player.point_dir())
 			KEY_U:
 				if mode == Mode.SUBSPACE:
 					exit_subspace("Unfolded — you emerge where you walked to.")
@@ -166,7 +171,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				if mode == Mode.SUBSPACE:
 					exit_subspace("Unfolded — you emerge where you walked to.")
 				else:
-					pending_anchor = null
+					pending_a = null
+					pending_b = null
 			KEY_R:
 				_reset()
 
@@ -184,24 +190,55 @@ func candidate_anchor(dir: Vector2i = Vector2i.ZERO) -> Vector2i:
 	return player_cell() + d * ANCHOR_REACH
 
 
-## Embodied anchor placement: first E pins an anchor, second E (somewhere
-## aligned) commits the fold. Pointing at the pending anchor again cancels it.
-func place_anchor(dir: Vector2i) -> void:
+## Pin (or move) one of the two pending anchors on the aimed cell. Pinning a
+## slot on its own current cell clears it. Placement never commits — commit is
+## a separate, deliberate act (F), so you can reposition anchors AND yourself
+## (inside the band to be folded in, outside to ride) before folding.
+func place_pending(slot: int, dir: Vector2i) -> void:
 	if mode != Mode.WORLD:
 		return
 	var cand := candidate_anchor(dir)
 	if not base.is_in_bounds(cand):
 		_show_flash("Nothing there to anchor to.")
 		return
-	if pending_anchor == null:
-		pending_anchor = cand
-	elif cand == pending_anchor:
-		pending_anchor = null
-	elif ProtoCore.anchors_valid(pending_anchor, cand):
-		do_fold(pending_anchor, cand)
-		pending_anchor = null
+	if slot == 0:
+		pending_a = null if pending_a != null and cand == pending_a else cand
 	else:
+		pending_b = null if pending_b != null and cand == pending_b else cand
+
+
+## The active fold whose seam anchor the player is aiming at (or standing on),
+## if any. Post-fold, both original anchors coincide at the meeting cell, so
+## "the anchor" of a folded fold = its seam diamond.
+func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
+	if mode != Mode.WORLD:
+		return null
+	var cand := candidate_anchor(dir)
+	var here := player_cell()
+	for fold in folds:
+		if fold.meeting_pos == cand or fold.meeting_pos == here:
+			return fold
+	return null
+
+
+## Interact (F): aimed at a seam anchor, unfold that fold; otherwise commit
+## the pending anchor pair as a new fold.
+func commit_or_unfold(dir: Vector2i) -> void:
+	if mode != Mode.WORLD:
+		return
+	var aimed := aimed_fold(dir)
+	if aimed != null:
+		unfold_fold(aimed)
+		return
+	if pending_a == null or pending_b == null:
+		_show_flash("Pin both anchors first (Q and E).")
+		return
+	if not ProtoCore.anchors_valid(pending_a, pending_b):
 		_show_flash("Anchors must be at least 2 tiles apart.")
+		return
+	do_fold(pending_a, pending_b)
+	pending_a = null
+	pending_b = null
 
 
 # ---------------------------------------------------------------------------
@@ -240,12 +277,23 @@ func pop_fold() -> void:
 	if folds.is_empty():
 		_show_flash("Nothing to unfold.")
 		return
-	var fold: Fold = folds.pop_back()
+	unfold_fold(folds.back())
+
+
+## Remove one active fold (any, not just the newest) and re-derive. Geometry
+## is exact — the replay is a pure function — but the PLAYER shift uses this
+## fold's own crease math, which is approximate when later folds have
+## rearranged the region; depenetration absorbs the error or reverts.
+func unfold_fold(fold: Fold) -> void:
+	var idx := folds.find(fold)
+	if idx < 0:
+		return
 	var shift := ProtoCore.unfold_shift(player.global_position, fold, CS)
+	folds.remove_at(idx)
 	rebuild_world()
 	var landed := ProtoCore.depenetrate(player.global_position + shift, ProtoPlayer.RADIUS, wall_polys)
 	if landed == Vector2.INF:
-		folds.append(fold)
+		folds.insert(idx, fold)
 		rebuild_world()
 		_show_flash("Unfold blocked — nowhere for you to land.")
 		return
@@ -265,7 +313,8 @@ func enter_subspace(fold: Fold, strip: Array) -> void:
 
 	world_geo.visible = false
 	world_solid.collision_layer = 0
-	pending_anchor = null
+	pending_a = null
+	pending_b = null
 	_bg.color = Color("191030")
 
 	var gap := fold.gap_distance()
@@ -357,7 +406,8 @@ func _reset() -> void:
 	if mode == Mode.SUBSPACE:
 		exit_subspace("")
 	folds.clear()
-	pending_anchor = null
+	pending_a = null
+	pending_b = null
 	rebuild_world()
 	player.teleport(_spawn, false)
 	_show_flash("Reset.")
@@ -386,11 +436,11 @@ func _build_hud() -> void:
 	var help := Label.new()
 	help.text = "Move: A/D or arrows   Jump: Space\n" \
 		+ "Point: hold Up/W or Down/S — otherwise you point where you face\n" \
-		+ "E: pin an anchor on the cell in front of you\n" \
-		+ "   (a second anchor 2+ tiles away, any direction, commits the fold;\n" \
-		+ "    E at the same spot cancels)\n" \
-		+ "Esc: cancel anchor   U: unfold / exit fold   R: reset\n" \
-		+ "If the red band covers YOU when the fold commits, you get folded in."
+		+ "Q / E: pin anchor 1 / anchor 2 on the cell you point at\n" \
+		+ "   (2+ tiles apart, any direction; re-pin moves it, same spot clears)\n" \
+		+ "F: commit the fold — or, aimed at a seam diamond, unfold that fold\n" \
+		+ "Esc: clear anchors   U: unfold newest / exit fold   R: reset\n" \
+		+ "If the red band covers YOU at commit, you get folded in."
 	help.position = Vector2(12, 8)
 	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
 	hud.add_child(help)
