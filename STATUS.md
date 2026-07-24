@@ -1,8 +1,8 @@
 # Project Status - Space-Folding Puzzle Game
 
-**Last Updated:** 2026-07-08
-**Current Phase:** Core mechanics complete (Phases 1-7). Phase 8 gameplay interaction work in progress.
-**Total Tests:** **617 passing** / 617 (0 failing, 0 risky)
+**Last Updated:** 2026-07-24
+**Current Phase:** Core mechanics complete (Phases 1-7). Metroidvania/gravity pivot exploration in progress (see `scripts/prototype/`).
+**Total Tests:** **508 passing** / 508 (0 failing, 0 risky) — count re-measured after the derive/replay + F1-F7 merges; the previous 617 figure predates them.
 
 ---
 
@@ -94,6 +94,19 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 ---
 
 ## Recent Changes
+
+### 2026-07-24
+- **Gravity/metroidvania prototype** (`scenes/prototype/FoldPrototype.tscn`,
+  `scripts/prototype/`): playable side-view proof-of-concept reusing the
+  derive/replay fold model unchanged. Free-moving blob player (CharacterBody2D)
+  over colliders generated from `FoldedState` pieces; player rides flaps through
+  fold/unfold via piecewise crease transforms; standing in the excised strip at
+  commit pinches the player INTO the fold — the strip renders as a cylinder
+  (content repeating across the glue line) and exiting (U) unfolds with the
+  player's in-strip position carried into the world (dive-traversal v1). Design
+  context: metroidvania pivot discussion — knowledge/configuration-gated
+  progression, subspaces, movable seams, fold-extent options. Tests:
+  `test_proto_core.gd` (9), `test_proto_world.gd` (3).
 
 ### 2026-07-10
 - **Level editor usability pass.** The editor↔play round-trip now works: pressing `T`
