@@ -83,19 +83,22 @@ static func unfold_shift(pos: Vector2, fold: Fold, cell_size: float) -> Vector2:
 # ---------------------------------------------------------------------------
 
 ## Everything a fold would excise, in the PRE-fold frame: the subspace's
-## content. Each entry is {"polygon": PackedVector2Array, "type": int}.
-## Captured from the current fragment list BEFORE the fold is applied, so it
-## composes correctly over earlier folds.
+## content, as real FoldedPieces (keeping base_id / src_offset so identity and
+## base-frame mapping survive INTO the subspace). Captured from the current
+## fragment list BEFORE the fold is applied, so it composes over earlier folds.
 static func capture_strip(pieces: Array, fold: Fold, cell_size: float) -> Array:
 	var out: Array = []
 	for piece in pieces:
 		var res := CollisionCore.fold_polygons([piece.polygon], fold, cell_size)
 		for poly in res["dropped"]:
-			out.append({"polygon": poly, "type": piece.type})
+			var fp := FoldedPiece.new(
+				piece.base_id, piece.type, poly, piece.plane_pos, piece.source_fold_id)
+			fp.src_offset = piece.src_offset
+			out.append(fp)
 	return out
 
 
-## Bounding interval of strip content along a direction (for the subspace's
+## Bounding interval of piece content along a direction (for the subspace's
 ## along-the-crease extent). Returns {"min": float, "max": float}; zeros if empty.
 static func strip_extent(strip: Array, dir: Vector2) -> Dictionary:
 	if strip.is_empty():
@@ -103,11 +106,125 @@ static func strip_extent(strip: Array, dir: Vector2) -> Dictionary:
 	var lo := INF
 	var hi := -INF
 	for entry in strip:
-		for v in entry["polygon"]:
+		for v in entry.polygon:
 			var p := Vector2(v).dot(dir)
 			lo = min(lo, p)
 			hi = max(hi, p)
 	return {"min": lo, "max": hi}
+
+
+# ---------------------------------------------------------------------------
+# Base-frame mapping (exact riding)
+# ---------------------------------------------------------------------------
+# Every fragment satisfies polygon == base_polygon + src_offset, so a current-
+# space point maps to base space by subtracting the offset of the fragment
+# containing it, and back into ANY other derived configuration by finding the
+# fragment (same base_id) that contains the base point. This is what makes
+# player and anchor transport exact through arbitrary fold/unfold sequences.
+
+## Index pieces by their plane cell for point queries.
+static func index_by_pos(pieces: Array) -> Dictionary:
+	var out: Dictionary = {}
+	for piece in pieces:
+		if not out.has(piece.plane_pos):
+			out[piece.plane_pos] = []
+		out[piece.plane_pos].append(piece)
+	return out
+
+
+static func _point_hits(poly: PackedVector2Array, point: Vector2, tolerance: float) -> bool:
+	if poly.size() < 3:
+		return false
+	if Geometry2D.is_point_in_polygon(point, poly):
+		return true
+	if tolerance <= 0.0:
+		return false
+	for i in range(poly.size()):
+		var closest := Geometry2D.get_closest_point_to_segment(
+			point, poly[i], poly[(i + 1) % poly.size()])
+		if point.distance_to(closest) < tolerance:
+			return true
+	return false
+
+
+## The fragment containing a current-space point (strict first, then with a
+## sub-pixel edge tolerance), or null if the point lies in void.
+static func piece_containing(index: Dictionary, point: Vector2, cell_size: float):
+	var cell := Vector2i((point / cell_size).floor())
+	for tolerance in [0.0, 0.75]:
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				for piece in index.get(cell + Vector2i(dx, dy), []):
+					if _point_hits(piece.polygon, point, tolerance):
+						return piece
+	return null
+
+
+## Map a base-frame point back into current space via the fragment of
+## `base_id` that contains it. Returns Vector2, or null if that part of the
+## base tile has no surviving fragment (it is folded away in this frame).
+static func world_point_from_base(pieces: Array, base_id: int, bp: Vector2):
+	for tolerance in [0.0, 0.75]:
+		for piece in pieces:
+			if piece.base_id != base_id:
+				continue
+			var base_poly: PackedVector2Array = CollisionCore.shift(piece.polygon, -piece.src_offset)
+			if _point_hits(base_poly, bp, tolerance):
+				return bp + piece.src_offset
+	return null
+
+
+## Collision polygons of the wall-type pieces in a fragment list.
+static func wall_polys_of(pieces: Array) -> Array:
+	var out: Array = []
+	for piece in pieces:
+		if piece.type == BaseTile.TYPE_WALL:
+			out.append(piece.polygon)
+	return out
+
+
+# ---------------------------------------------------------------------------
+# Seam segments & unfold blocking
+# ---------------------------------------------------------------------------
+# The main game blocks unfolding a fold when a NEWER fold's seam intersects
+# its cells. Prototype equivalent: each fold stores its seam SEGMENT (its
+# meeting line, clipped to the tangent extent of what it actually excised);
+# a fold cannot be unfolded while any newer fold's excision band crosses that
+# segment. The same test against the outer fold's two crease lines (the glue)
+## gates exiting a subspace: interior folds parallel to the glue are fine,
+# folds whose band crosses the glue must be unfolded first.
+
+## The fold's seam segment: its meeting line over the excised content's extent.
+static func seam_segment(fold: Fold, dropped: Array, cell_size: float) -> PackedVector2Array:
+	var n := fold.crease_normal
+	var t := Vector2(-n.y, n.x)
+	var ext := strip_extent(dropped, t)
+	var m := fold.crease_point1 + fold.shift_a_px(cell_size)
+	var mt := m.dot(t)
+	return PackedVector2Array([m + t * (ext["min"] - mt), m + t * (ext["max"] - mt)])
+
+
+## The two glue-line segments of a fold's subspace (its crease lines over the
+## strip content's tangent extent) — the outer fold's "seam" seen from inside.
+static func glue_segments(fold: Fold, dropped: Array) -> Array:
+	var n := fold.crease_normal
+	var t := Vector2(-n.y, n.x)
+	var ext := strip_extent(dropped, t)
+	var out: Array = []
+	for cp in [fold.crease_point1, fold.crease_point2]:
+		var ct := Vector2(cp).dot(t)
+		out.append(PackedVector2Array([
+			Vector2(cp) + t * (ext["min"] - ct), Vector2(cp) + t * (ext["max"] - ct)]))
+	return out
+
+
+## Does a segment cross a fold's excision band (the open region strictly
+## between its creases)? Half-pixel epsilon: grazing a crease doesn't block.
+static func segment_intersects_band(p0: Vector2, p1: Vector2, fold: Fold) -> bool:
+	var d0 := (p0 - fold.crease_point1).dot(fold.crease_normal)
+	var d1 := (p1 - fold.crease_point1).dot(fold.crease_normal)
+	var gap := fold.gap_distance()
+	return maxf(d0, d1) > 0.5 and minf(d0, d1) < gap - 0.5
 
 
 # ---------------------------------------------------------------------------

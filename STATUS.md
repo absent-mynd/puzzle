@@ -115,9 +115,18 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 - Iteration 2: **placement and commitment separated** — Q pins anchor 1, E pins
   anchor 2 (re-pin moves, same-spot clears), F (interact) commits the fold; the
   player's position at COMMIT time decides ride vs folded-in. F aimed at (or
-  standing on) an active fold's seam diamond unfolds that fold — any fold, not
-  just the newest (player displacement approximated for non-newest; geometry
-  exact via re-derivation).
+  standing on) an active fold's seam diamond unfolds that fold.
+- Iteration 3: **subspace made real + exact riding + animation.** Pinch folds
+  are applied to the world; the subspace is the interior of an active fold with
+  the same rules as outside: fold within it (interior folds persist into the
+  world on exit), exit by interacting with the outer fold's anchor point on the
+  glue line (both anchors coincide there). Unfold blocking everywhere: a fold
+  cannot unfold while a newer fold's band crosses its seam segment — interior
+  folds crossing the glue lock the exit. Player and pending anchors transport
+  by exact base-frame mapping (fragment base_id + src_offset), replacing crease
+  arithmetic; anchors pinned inside a subspace survive exit and land with the
+  strip. Polygon fold/unfold animation (flaps slide, strip collapses/springs
+  from the seam) with physics frozen during. Prototype tests: 23.
 
 ### 2026-07-10
 - **Level editor usability pass.** The editor↔play round-trip now works: pressing `T`

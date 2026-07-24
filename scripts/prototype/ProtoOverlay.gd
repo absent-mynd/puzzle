@@ -2,9 +2,10 @@ class_name ProtoOverlay extends Node2D
 
 ## ProtoOverlay
 ##
-## Draw-only layer for the fold prototype: anchor markers, the excised-strip
-## preview band, seam (meeting-line) markers, and the glue lines inside a
-## subspace. Reads everything from its owning ProtoWorld each frame.
+## Draw-only layer for the fold prototype: anchor markers, the excised-band
+## preview, seam-anchor diamonds (with unfoldability tint), the glue lines and
+## outer seam anchor inside a subspace. Reads everything from its owning
+## ProtoWorld each frame.
 
 var world  # ProtoWorld; untyped to avoid a load-order cycle
 
@@ -14,12 +15,13 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
-	if world == null:
+	if world == null or world.animating():
 		return
 	if world.mode == world.Mode.SUBSPACE:
 		_draw_subspace_glue()
-		return
-	_draw_seam_markers()
+		_draw_subspace_markers()
+	else:
+		_draw_seam_markers()
 	_draw_anchor_and_preview()
 
 
@@ -27,20 +29,43 @@ func _draw_seam_markers() -> void:
 	var cs: float = world.base.cell_size
 	for fold in world.folds:
 		var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs
-		_draw_diamond(center, 10.0, Color("59e0d0"))
+		var ok: bool = world.can_unfold_world(fold)
+		_draw_diamond(center, 10.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
+
+
+## Inside the subspace: seam anchors of interior folds (every wrap copy), and
+## the OUTER fold's anchor point on the glue — both original anchors coincide
+## there; F at the white diamond unfolds the subspace.
+func _draw_subspace_markers() -> void:
+	var cs: float = world.base.cell_size
+	var outer: Fold = world.sub_fold
+	if outer == null:
+		return
+	var n := outer.crease_normal
+	var gap := outer.gap_distance()
+	var copies: int = world.sub_copies
+	var exit_ok: bool = world.exit_blocker() == null
+	var aimed_glue: bool = world.aiming_at_glue()
+	for k in range(-copies, copies + 1):
+		var off := n * (k * gap)
+		var glue_col := Color(1, 1, 1, 0.95) if exit_ok else Color("e06a6a", 0.95)
+		_draw_diamond(outer.crease_point1 + off, 12.0, glue_col)
+		if aimed_glue:
+			draw_arc(outer.crease_point1 + off, 18.0, 0, TAU, 24, glue_col, 3.0)
+		for fold in world.sub_folds:
+			var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs + off
+			var ok: bool = world.can_unfold_sub(fold)
+			_draw_diamond(center, 10.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
 
 
 func _draw_anchor_and_preview() -> void:
 	var cs: float = world.base.cell_size
 	var world_px := Vector2(world.base.grid_size) * cs
 
-	# Where E would pin an anchor right now (follows pointing continuously).
 	# Where Q/E/F aim right now (follows pointing continuously).
 	var cand: Vector2i = world.candidate_anchor()
-	var cand_ok: bool = world.base.is_in_bounds(cand)
-	if cand_ok:
-		var cand_center: Vector2 = (Vector2(cand) + Vector2(0.5, 0.5)) * cs
-		draw_arc(cand_center, 14.0, 0, TAU, 24, Color(1, 1, 1, 0.30), 2.0)
+	var cand_center: Vector2 = (Vector2(cand) + Vector2(0.5, 0.5)) * cs
+	draw_arc(cand_center, 14.0, 0, TAU, 24, Color(1, 1, 1, 0.30), 2.0)
 
 	# Aimed seam: F here unfolds this fold.
 	var aimed = world.aimed_fold()
@@ -50,37 +75,34 @@ func _draw_anchor_and_preview() -> void:
 
 	# The two pending anchor slots (Q = orange, E = blue), with soft axis
 	# guides — folds may be diagonal; guides just help line up straight ones.
-	var slots: Array = [
-		{"cell": world.pending_a, "color": Color("ff9d5c")},
-		{"cell": world.pending_b, "color": Color("5cc8ff")},
-	]
-	var centers: Array = []
-	for s in slots:
-		if s["cell"] == null:
-			centers.append(null)
+	var colors: Array = [Color("ff9d5c"), Color("5cc8ff")]
+	var centers: Array = [null, null]
+	for i in range(2):
+		var cell = world.pending_cell(i)
+		if cell == null:
 			continue
-		var c: Vector2 = (Vector2(s["cell"]) + Vector2(0.5, 0.5)) * cs
-		centers.append(c)
+		var c: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
+		centers[i] = c
 		var guide := Color(1, 1, 1, 0.08)
 		draw_line(Vector2(0, c.y), Vector2(world_px.x, c.y), guide, 1.0)
 		draw_line(Vector2(c.x, 0), Vector2(c.x, world_px.y), guide, 1.0)
-		draw_arc(c, 14.0, 0, TAU, 24, s["color"], 3.0)
+		draw_arc(c, 14.0, 0, TAU, 24, colors[i], 3.0)
 
 	if centers[0] == null or centers[1] == null:
 		return
-	if not ProtoCore.anchors_valid(world.pending_a, world.pending_b):
+	if not ProtoCore.anchors_valid(world.pending_cell(0), world.pending_cell(1)):
 		return
 	# Translucent band between the two crease lines: a parallelogram spanning
 	# well past the view, at whatever angle the anchor pair implies. F commits.
 	var a_center: Vector2 = centers[0]
 	var b_center: Vector2 = centers[1]
 	var band := Color(0.95, 0.25, 0.3, 0.22)
-	var n := (b_center - a_center).normalized()
-	var t := Vector2(-n.y, n.x)
+	var bn := (b_center - a_center).normalized()
+	var bt := Vector2(-bn.y, bn.x)
 	var reach := world_px.length()
 	var quad := PackedVector2Array([
-		a_center + t * reach, a_center - t * reach,
-		b_center - t * reach, b_center + t * reach,
+		a_center + bt * reach, a_center - bt * reach,
+		b_center - bt * reach, b_center + bt * reach,
 	])
 	draw_colored_polygon(quad, band)
 

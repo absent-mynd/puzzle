@@ -25,6 +25,10 @@ var _cam: Camera2D
 ## Last horizontal input: -1 left, +1 right. Default faces right.
 var facing := 1
 
+## Set during fold animations: physics and input are suspended while the
+## world rearranges, and the animator drives global_position directly.
+var frozen := false
+
 
 func _ready() -> void:
 	var shape := CollisionShape2D.new()
@@ -50,6 +54,8 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if frozen:
+		return
 	var dir := 0.0
 	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT):
 		dir -= 1.0

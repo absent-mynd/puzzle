@@ -67,9 +67,9 @@ func test_capture_strip_area_matches_excised_band() -> void:
 	var total := 0.0
 	var wall_area := 0.0
 	for entry in strip:
-		var a: float = GeometryCore.polygon_area(entry["polygon"])
+		var a: float = GeometryCore.polygon_area(entry.polygon)
 		total += a
-		if entry["type"] == BaseTile.TYPE_WALL:
+		if entry.type == BaseTile.TYPE_WALL:
 			wall_area += a
 	# Band is gap(192px) x full map height(256px); map is fully tiled.
 	assert_almost_eq(total, 192.0 * 256.0, 1.0, "Captured area equals the band")
@@ -102,6 +102,42 @@ func test_circle_overlap_and_depenetrate() -> void:
 	assert_ne(free, Vector2.INF, "Depenetration finds a free spot")
 	assert_false(ProtoCore.circle_overlaps_solids(free, 20.0, [box]),
 		"Found spot is actually free")
+
+
+func test_base_frame_mapping_round_trips_through_a_fold() -> void:
+	var bg := _mini_grid()
+	var pieces := FoldReplay.identity_pieces(bg)
+	var index := ProtoCore.index_by_pos(pieces)
+	var fold := Fold.create(0, Vector2i(2, 1), Vector2i(5, 1), CS)
+
+	var start := Vector2(100, 100)  # in cell (1,1), A-side
+	var piece = ProtoCore.piece_containing(index, start, CS)
+	assert_not_null(piece, "Point over a tile resolves to its fragment")
+	var bp: Vector2 = start - piece.src_offset
+
+	var folded := FoldReplay.apply_one_fold(pieces, fold, CS)
+	var mapped = ProtoCore.world_point_from_base(folded, piece.base_id, bp)
+	assert_not_null(mapped, "A-side base point survives the fold")
+	assert_almost_eq(Vector2(mapped).x, start.x + 128.0, 0.01,
+		"Mapped point rides shift_a exactly")
+
+	var strip_point := Vector2(200, 50)  # in the excised band
+	var strip_piece = ProtoCore.piece_containing(index, strip_point, CS)
+	var gone = ProtoCore.world_point_from_base(
+		folded, strip_piece.base_id, strip_point - strip_piece.src_offset)
+	assert_null(gone, "Excised base point has no fragment after the fold")
+
+
+func test_segment_intersects_band() -> void:
+	var fold := Fold.create(0, Vector2i(2, 1), Vector2i(5, 1), CS)  # band x in (160,352)
+	assert_true(ProtoCore.segment_intersects_band(
+		Vector2(200, 0), Vector2(200, 100), fold), "Segment inside the band")
+	assert_true(ProtoCore.segment_intersects_band(
+		Vector2(100, 50), Vector2(400, 50), fold), "Segment crossing the band")
+	assert_false(ProtoCore.segment_intersects_band(
+		Vector2(100, 0), Vector2(100, 100), fold), "Segment left of the band")
+	assert_false(ProtoCore.segment_intersects_band(
+		Vector2(160, 0), Vector2(160, 100), fold), "Segment ON a crease grazes, no block")
 
 
 func test_anchors_valid_rules() -> void:

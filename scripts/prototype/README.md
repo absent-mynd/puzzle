@@ -36,6 +36,20 @@ then choose where to be standing before pressing F — inside the red band to
 be folded in, outside it to ride a flap. Any active fold can be unfolded by
 walking up to its seam diamond (where its two anchors met) and interacting.
 
+**Inside a fold, the same rules apply.** The subspace is a real place: the
+pinch fold is applied to the world, and the outer fold's two anchors coincide
+at one point on the glue line — the white diamond. F there unfolds the
+subspace (exit). You can pin anchors and fold *within* the subspace; interior
+folds persist into the world when you exit, and pending anchors ride along
+and land where the strip content lands. **Unfold blocking** applies
+everywhere: a fold cannot be unfolded while a newer fold's band crosses its
+seam — so an interior fold that crosses the glue (its creases are not
+parallel to the outer fold's) locks the exit until you unfold it; the white
+diamond turns red to show it. Player and anchors move by **exact base-tile
+riding** (each fragment knows its base identity and offset), not approximate
+crease math. Folds and unfolds animate: flaps slide, the strip collapses
+onto — or springs from — the seam.
+
 ## What to try (the three beats)
 
 1. **Ride a fold.** Cross the wide pit by folding it away: click one rim, then
@@ -58,17 +72,16 @@ walking up to its seam diamond (where its two anchors met) and interacting.
    anchors has to be pinned mid-jump. (Note the fold stays active: unfold it
    from inside and you've sealed yourself in.)
 
-## v1 shortcuts (deliberate)
+## Current prototype limits (deliberate)
 
-- A pinch fold is never applied to the outside world: you can't see outside
-  and exiting would undo it, so the outcome is identical with fewer states.
-- Only the newest fold can be unfolded (stack discipline); no folding while
-  inside a subspace; axis-aligned anchors only.
+- No nested pinch: you cannot fold yourself deeper while already inside a
+  fold (the fold is blocked with a message).
 - Fold extent is the whole world (infinite-crease semantics) — deliberately
   kept so the "a fold over here guts a structure over there" problem is
   *feelable*; it's the live design argument for barrier-scoped fold regions.
-- Exit-at-tile-center seam points, movable seams, and doors are design-agreed
-  but not in this PoC.
+- Unfold animation plays only when the unfolded fold is the newest (the
+  reverse transform is exact only there); mid-stack unfolds are instant.
+- Movable seams and doors are design-agreed but not in this PoC.
 
 ## Files
 

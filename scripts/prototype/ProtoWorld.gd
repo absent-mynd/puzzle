@@ -6,21 +6,25 @@ extends Node2D
 ## (BaseGrid / Fold / FoldReplay / CollisionCore, unchanged) driving a
 ## side-view world with gravity and a free-moving blob player.
 ##
-## What it demonstrates:
-##   - World geometry derived per fold and turned into physics colliders.
-##   - The player decoupled from the grid: standing on a flap when a fold
-##     commits teleports you with it (you "ride" the fold).
-##   - PINCH ENTRY: standing inside the excised strip when a fold commits
-##     drops you into the SUBSPACE — the strip's interior rendered as a
-##     cylinder (content repeating across the glue line). Gravity stays on.
-##   - Exit hotkey (U / Esc) unfolds the subspace's fold; your position inside
-##     the strip IS your position in the restored world, so moving inside the
-##     fold moves you in the world — the dive-traversal verb, v1.
+## Current mechanics:
+##   - EXACT RIDING: player and pinned anchors map through every fold/unfold
+##     via base-frame points (fragment src_offset), never crease arithmetic.
+##   - Q/E pin two anchors (embodied: the cell you point at); F commits.
+##     Standing inside the band at commit = PINCH: the fold is applied to the
+##     world FOR REAL and you enter its SUBSPACE — the excised strip rendered
+##     as a cylinder (repeating across the glue), gravity on.
+##   - Folding INSIDE a subspace works (same machinery over the strip
+##     fragments). Interior folds persist into the world when you exit.
+##   - The outer fold's anchors coincide at one point on the glue line; F
+##     aimed there unfolds the subspace (exit). Unfold BLOCKING applies
+##     everywhere: a fold cannot be unfolded while a newer fold's band crosses
+##     its seam segment — so interior folds crossing the glue lock the exit.
+##   - Fold/unfold animation: flaps translate, the strip collapses onto (or
+##     expands from) the meeting line; physics freezes for the duration.
 ##
-## v1 shortcuts (deliberate): a pinch fold is never applied to the outside
-## world (you can't see outside and exiting would undo it — same outcome,
-## fewer states); only the newest fold can be unfolded (stack discipline);
-## folding is disabled while inside a subspace.
+## Deliberate prototype limits: no nested pinch (you cannot fold yourself
+## deeper while inside), fold extent is still infinite-crease (barrier
+## scoping deferred), animation plays only for newest-fold unfolds.
 
 enum Mode { WORLD, SUBSPACE }
 
@@ -28,6 +32,7 @@ const CS := ProtoCore.CELL
 ## Anchors are pinned at arm's length: the cell immediately in the pointed
 ## direction. What you can fold is exactly what you can stand next to.
 const ANCHOR_REACH := 1
+const ANIM_TIME := 0.24
 const TYPE_COLORS := {
 	BaseTile.TYPE_EMPTY: Color(0.13, 0.14, 0.20),   # faint: the "paper" exists
 	BaseTile.TYPE_WALL: Color(0.55, 0.60, 0.70),
@@ -40,19 +45,37 @@ var base: BaseGrid
 var folds: Array[Fold] = []
 var next_fold_id := 0
 var mode: Mode = Mode.WORLD
-var pending_a = null  # Vector2i or null — anchor slot 1 (Q)
-var pending_b = null  # Vector2i or null — anchor slot 2 (E)
+
+## Pending anchors: null or {"bid": int, "bp": Vector2} — a base-frame point.
+## Frame-independent: the anchor rides folds/unfolds and survives subspace
+## exit, resolving to a cell wherever its base tile currently lies.
+var pending_a = null
+var pending_b = null
 
 var current_pieces: Array[FoldedPiece] = []
+var pieces_by_pos: Dictionary = {}
 var wall_polys: Array = []
 var goal_polys: Array = []
 var _on_goal := false
 
-# Subspace state
+## fold_id -> PackedVector2Array [from, to]: the fold's seam segment, used for
+## newer-fold unfold blocking.
+var seam_segs: Dictionary = {}
+
+# --- Subspace state (interior view of the newest world fold) ---
 var sub_fold: Fold = null
-var sub_strip: Array = []
+var sub_base_pieces: Array = []       # excised strip content (outer pre-fold frame)
+var sub_folds: Array[Fold] = []       # folds made INSIDE; persist on exit
+var sub_pieces: Array = []            # derived interior (strip + sub_folds)
+var sub_by_pos: Dictionary = {}
+var sub_wall_polys: Array = []
 var sub_extent: Dictionary = {}
+var sub_glue_segs: Array = []
 var sub_copies := 1
+
+# --- Animation ---
+var anim_enabled := true
+var _anim: Dictionary = {}
 
 var _spawn := Vector2((4.0 + 0.5) * CS, (12.0 + 0.5) * CS)
 var player: ProtoPlayer
@@ -123,17 +146,21 @@ func _make_map() -> Array:
 
 
 # ---------------------------------------------------------------------------
-# Derived world -> visuals + colliders
+# Derived state -> visuals + colliders
 # ---------------------------------------------------------------------------
 
 func rebuild_world() -> void:
 	current_pieces = FoldReplay.derive_pieces(base, folds)
+	pieces_by_pos = ProtoCore.index_by_pos(current_pieces)
 	for child in world_geo.get_children():
 		child.queue_free()
 	wall_polys = []
 	goal_polys = []
 
 	world_solid = StaticBody2D.new()
+	# The world's colliders must be inert while the player is inside a
+	# subspace (hidden geometry still collides otherwise).
+	world_solid.collision_layer = 1 if mode == Mode.WORLD else 0
 	world_geo.add_child(world_solid)
 	for piece in current_pieces:
 		var vis := Polygon2D.new()
@@ -149,11 +176,56 @@ func rebuild_world() -> void:
 			goal_polys.append(piece.polygon)
 
 
+func rebuild_sub() -> void:
+	sub_pieces = sub_base_pieces.duplicate()
+	for fold in sub_folds:
+		sub_pieces = FoldReplay.apply_one_fold(sub_pieces, fold, CS)
+	sub_by_pos = ProtoCore.index_by_pos(sub_pieces)
+	sub_wall_polys = ProtoCore.wall_polys_of(sub_pieces)
+
+	for child in sub_geo.get_children():
+		child.queue_free()
+	var gap := sub_fold.gap_distance()
+	sub_copies = clampi(int(ceil(1400.0 / gap)), 1, 24)
+	for k in range(-sub_copies, sub_copies + 1):
+		var copy := Node2D.new()
+		copy.position = sub_fold.crease_normal * (k * gap)
+		sub_geo.add_child(copy)
+		var solid: StaticBody2D = null
+		if absi(k) <= 1:
+			solid = StaticBody2D.new()
+			copy.add_child(solid)
+		for piece in sub_pieces:
+			var vis := Polygon2D.new()
+			vis.polygon = piece.polygon
+			var c: Color = TYPE_COLORS.get(piece.type, Color.MAGENTA)
+			vis.color = c.lerp(SUB_TINT, 0.35) if piece.type != BaseTile.TYPE_EMPTY else c
+			copy.add_child(vis)
+			if piece.type == BaseTile.TYPE_WALL and solid != null:
+				var col := CollisionPolygon2D.new()
+				col.polygon = piece.polygon
+				solid.add_child(col)
+
+
+func _frame_pieces() -> Array:
+	return sub_pieces if mode == Mode.SUBSPACE else current_pieces
+
+
+func _frame_index() -> Dictionary:
+	return sub_by_pos if mode == Mode.SUBSPACE else pieces_by_pos
+
+
+func animating() -> bool:
+	return not _anim.is_empty()
+
+
 # ---------------------------------------------------------------------------
 # Input
 # ---------------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	if animating():
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
 			KEY_Q:
@@ -164,15 +236,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				commit_or_unfold(player.point_dir())
 			KEY_U:
 				if mode == Mode.SUBSPACE:
-					exit_subspace("Unfolded — you emerge where you walked to.")
+					try_exit()
 				else:
 					pop_fold()
 			KEY_ESCAPE:
-				if mode == Mode.SUBSPACE:
-					exit_subspace("Unfolded — you emerge where you walked to.")
-				else:
-					pending_a = null
-					pending_b = null
+				pending_a = null
+				pending_b = null
 			KEY_R:
 				_reset()
 
@@ -182,190 +251,485 @@ func player_cell() -> Vector2i:
 	return Vector2i((player.global_position / CS).floor())
 
 
-## Where E would pin an anchor right now: the adjacent cell in the pointed
-## direction. The two anchors of a fold need not share a row or column — the
-## crease takes whatever angle the pair implies.
+## Where Q/E/F aim right now: the adjacent cell in the pointed direction.
 func candidate_anchor(dir: Vector2i = Vector2i.ZERO) -> Vector2i:
 	var d := dir if dir != Vector2i.ZERO else Vector2i(player.point_dir())
 	return player_cell() + d * ANCHOR_REACH
 
 
+## The current cell of a pending anchor in THIS frame, or null if unset or if
+## its base tile has no fragment here (e.g. pinned outside, viewed inside).
+func pending_cell(slot: int):
+	var p = pending_a if slot == 0 else pending_b
+	if p == null:
+		return null
+	var wp = ProtoCore.world_point_from_base(_frame_pieces(), p["bid"], p["bp"])
+	if wp == null:
+		return null
+	return Vector2i((Vector2(wp) / CS).floor())
+
+
 ## Pin (or move) one of the two pending anchors on the aimed cell. Pinning a
-## slot on its own current cell clears it. Placement never commits — commit is
-## a separate, deliberate act (F), so you can reposition anchors AND yourself
-## (inside the band to be folded in, outside to ride) before folding.
+## slot on its own current cell clears it. Anchors are stored as base-frame
+## points, so they ride folds and survive subspace entry/exit.
 func place_pending(slot: int, dir: Vector2i) -> void:
-	if mode != Mode.WORLD:
+	if animating():
 		return
 	var cand := candidate_anchor(dir)
-	if not base.is_in_bounds(cand):
+	var center := (Vector2(cand) + Vector2(0.5, 0.5)) * CS
+	var piece = ProtoCore.piece_containing(_frame_index(), center, CS)
+	if piece == null:
 		_show_flash("Nothing there to anchor to.")
 		return
+	var entry := {"bid": piece.base_id, "bp": center - piece.src_offset}
 	if slot == 0:
-		pending_a = null if pending_a != null and cand == pending_a else cand
+		pending_a = null if pending_cell(0) != null and pending_cell(0) == cand else entry
 	else:
-		pending_b = null if pending_b != null and cand == pending_b else cand
+		pending_b = null if pending_cell(1) != null and pending_cell(1) == cand else entry
 
 
-## The active fold whose seam anchor the player is aiming at (or standing on),
-## if any. Post-fold, both original anchors coincide at the meeting cell, so
-## "the anchor" of a folded fold = its seam diamond.
+## The fold (of the current frame) whose seam anchor the player is aiming at
+## or standing on. Post-fold, both anchors coincide at the meeting cell.
 func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
-	if mode != Mode.WORLD:
-		return null
 	var cand := candidate_anchor(dir)
 	var here := player_cell()
-	for fold in folds:
+	var list: Array = sub_folds if mode == Mode.SUBSPACE else folds
+	for fold in list:
 		if fold.meeting_pos == cand or fold.meeting_pos == here:
 			return fold
 	return null
 
 
-## Interact (F): aimed at a seam anchor, unfold that fold; otherwise commit
-## the pending anchor pair as a new fold.
+## Inside a subspace, is the player aiming at (or standing on) the outer
+## fold's anchor point? Both outer anchors are the SAME point on the glue
+## line (the fold identifies them), so either anchor cell counts.
+func aiming_at_glue(dir: Vector2i = Vector2i.ZERO) -> bool:
+	if mode != Mode.SUBSPACE:
+		return false
+	var cand := candidate_anchor(dir)
+	var here := player_cell()
+	for c in [sub_fold.anchor_a, sub_fold.anchor_b]:
+		if c == cand or c == here:
+			return true
+	return false
+
+
+## Interact (F): aimed at the glue anchor, exit (unfold the subspace); aimed
+## at a seam anchor, unfold that fold; otherwise commit the pending pair.
 func commit_or_unfold(dir: Vector2i) -> void:
-	if mode != Mode.WORLD:
+	if animating():
+		return
+	if aiming_at_glue(dir):
+		try_exit()
 		return
 	var aimed := aimed_fold(dir)
 	if aimed != null:
-		unfold_fold(aimed)
+		if mode == Mode.SUBSPACE:
+			unfold_sub_fold(aimed)
+		else:
+			unfold_world_fold(aimed)
 		return
 	if pending_a == null or pending_b == null:
 		_show_flash("Pin both anchors first (Q and E).")
 		return
-	if not ProtoCore.anchors_valid(pending_a, pending_b):
+	var ca = pending_cell(0)
+	var cb = pending_cell(1)
+	if ca == null or cb == null:
+		_show_flash("An anchor lies beyond this fold.")
+		return
+	if not ProtoCore.anchors_valid(ca, cb):
 		_show_flash("Anchors must be at least 2 tiles apart.")
 		return
-	do_fold(pending_a, pending_b)
-	pending_a = null
-	pending_b = null
+	var committed := do_sub_fold(ca, cb) if mode == Mode.SUBSPACE else do_fold(ca, cb)
+	if committed:
+		pending_a = null
+		pending_b = null
 
 
 # ---------------------------------------------------------------------------
-# Fold / unfold with a free-moving player
+# World folds
 # ---------------------------------------------------------------------------
 
-func do_fold(a1: Vector2i, a2: Vector2i) -> void:
+func do_fold(a1: Vector2i, a2: Vector2i) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS)
-	var side := ProtoCore.side_of_fold(player.global_position, fold)
+	var dropped := ProtoCore.capture_strip(current_pieces, fold, CS)
+	if dropped.is_empty():
+		_show_flash("Nothing there to fold.")
+		return false
 
-	if side == 0:
-		# Player is in the excised strip: the fold swallows them. Capture the
-		# strip from the CURRENT pieces (pre-fold frame) and dive in.
-		var strip := ProtoCore.capture_strip(current_pieces, fold, CS)
-		if strip.is_empty():
-			_show_flash("Nothing there to fold into.")
-			return
+	var pre := current_pieces
+	var from_piece = ProtoCore.piece_containing(pieces_by_pos, player.global_position, CS)
+	var new_pieces := FoldReplay.apply_one_fold(current_pieces, fold, CS)
+	var dest = null
+	if from_piece != null:
+		dest = ProtoCore.world_point_from_base(
+			new_pieces, from_piece.base_id, player.global_position - from_piece.src_offset)
+	else:
+		# Over void: fall back to crease arithmetic.
+		var side := ProtoCore.side_of_fold(player.global_position, fold)
+		if side != 0:
+			dest = player.global_position + ProtoCore.fold_shift_for_side(side, fold, CS)
+
+	if dest == null:
+		# PINCH — the fold swallows the player. Applied to the world for real.
 		next_fold_id += 1
-		enter_subspace(fold, strip)
+		seam_segs[fold.fold_id] = ProtoCore.seam_segment(fold, dropped, CS)
+		folds.append(fold)
+		var p := player.global_position
+		var finalize_pinch := func() -> void:
+			rebuild_world()
+			_enter_subspace(fold, dropped)
+		_play_transition(pre, fold, true, false, p, p, finalize_pinch)
+		return true
+
+	var landed := ProtoCore.depenetrate(dest, ProtoPlayer.RADIUS, ProtoCore.wall_polys_of(new_pieces))
+	if landed == Vector2.INF:
+		_show_flash("Fold blocked — nowhere for you to land.")
+		return false
+	next_fold_id += 1
+	seam_segs[fold.fold_id] = ProtoCore.seam_segment(fold, dropped, CS)
+	folds.append(fold)
+	var finalize_ride := func() -> void:
+		rebuild_world()
+		player.teleport(landed)
+	_play_transition(pre, fold, true, true, player.global_position, landed, finalize_ride)
+	return true
+
+
+## Can this world fold be unfolded, or does a newer fold's band cross its seam?
+func can_unfold_world(fold: Fold) -> bool:
+	var idx := folds.find(fold)
+	if idx < 0:
+		return false
+	var seg: PackedVector2Array = seam_segs.get(fold.fold_id, PackedVector2Array())
+	if seg.size() < 2:
+		return true
+	for j in range(idx + 1, folds.size()):
+		if ProtoCore.segment_intersects_band(seg[0], seg[1], folds[j]):
+			return false
+	return true
+
+
+func unfold_world_fold(fold: Fold) -> void:
+	var idx := folds.find(fold)
+	if idx < 0:
+		return
+	if not can_unfold_world(fold):
+		_show_flash("Blocked — a newer fold crosses this seam.")
+		return
+	var without: Array[Fold] = folds.duplicate()
+	without.remove_at(idx)
+	var new_pieces := FoldReplay.derive_pieces(base, without)
+
+	var from_piece = ProtoCore.piece_containing(pieces_by_pos, player.global_position, CS)
+	var dest = null
+	if from_piece != null:
+		dest = ProtoCore.world_point_from_base(
+			new_pieces, from_piece.base_id, player.global_position - from_piece.src_offset)
+	if dest == null:
+		dest = player.global_position + ProtoCore.unfold_shift(player.global_position, fold, CS)
+	var landed := ProtoCore.depenetrate(dest, ProtoPlayer.RADIUS, ProtoCore.wall_polys_of(new_pieces))
+	if landed == Vector2.INF:
+		_show_flash("Unfold blocked — nowhere for you to land.")
 		return
 
-	var shift := ProtoCore.fold_shift_for_side(side, fold, CS)
-	folds.append(fold)
-	rebuild_world()
-	var landed := ProtoCore.depenetrate(player.global_position + shift, ProtoPlayer.RADIUS, wall_polys)
-	if landed == Vector2.INF:
-		folds.pop_back()
+	var was_newest := idx == folds.size() - 1
+	folds = without
+	seam_segs.erase(fold.fold_id)
+	var finalize := func():
 		rebuild_world()
-		_show_flash("Fold blocked — nowhere for you to land.")
-		return
-	next_fold_id += 1
-	player.teleport(landed)
+		player.teleport(landed)
+	if was_newest:
+		# Reverse animation is exact only for the newest fold.
+		_play_transition(new_pieces, fold, false, true, player.global_position, landed, finalize)
+	else:
+		finalize.call()
 
 
 func pop_fold() -> void:
 	if folds.is_empty():
 		_show_flash("Nothing to unfold.")
 		return
-	unfold_fold(folds.back())
-
-
-## Remove one active fold (any, not just the newest) and re-derive. Geometry
-## is exact — the replay is a pure function — but the PLAYER shift uses this
-## fold's own crease math, which is approximate when later folds have
-## rearranged the region; depenetration absorbs the error or reverts.
-func unfold_fold(fold: Fold) -> void:
-	var idx := folds.find(fold)
-	if idx < 0:
-		return
-	var shift := ProtoCore.unfold_shift(player.global_position, fold, CS)
-	folds.remove_at(idx)
-	rebuild_world()
-	var landed := ProtoCore.depenetrate(player.global_position + shift, ProtoPlayer.RADIUS, wall_polys)
-	if landed == Vector2.INF:
-		folds.insert(idx, fold)
-		rebuild_world()
-		_show_flash("Unfold blocked — nowhere for you to land.")
-		return
-	player.teleport(landed)
+	unfold_world_fold(folds.back())
 
 
 # ---------------------------------------------------------------------------
-# Subspace: the strip's interior as a cylinder (wrap along the fold normal)
+# Subspace: interior of the newest world fold, same rules as outside
 # ---------------------------------------------------------------------------
 
-func enter_subspace(fold: Fold, strip: Array) -> void:
+func _enter_subspace(fold: Fold, dropped: Array) -> void:
 	mode = Mode.SUBSPACE
 	sub_fold = fold
-	sub_strip = strip
+	sub_base_pieces = dropped
+	sub_folds = []
 	var tangent := Vector2(-fold.crease_normal.y, fold.crease_normal.x)
-	sub_extent = ProtoCore.strip_extent(strip, tangent)
+	sub_extent = ProtoCore.strip_extent(dropped, tangent)
+	sub_glue_segs = ProtoCore.glue_segments(fold, dropped)
 
 	world_geo.visible = false
 	world_solid.collision_layer = 0
-	pending_a = null
-	pending_b = null
+	sub_geo.visible = true
 	_bg.color = Color("191030")
-
-	var gap := fold.gap_distance()
-	sub_copies = clampi(int(ceil(1400.0 / gap)), 1, 24)
-	for k in range(-sub_copies, sub_copies + 1):
-		var copy := Node2D.new()
-		copy.position = fold.crease_normal * (k * gap)
-		sub_geo.add_child(copy)
-		var solid: StaticBody2D = null
-		if absi(k) <= 1:
-			solid = StaticBody2D.new()
-			copy.add_child(solid)
-		for entry in strip:
-			var vis := Polygon2D.new()
-			vis.polygon = entry["polygon"]
-			var c: Color = TYPE_COLORS.get(entry["type"], Color.MAGENTA)
-			vis.color = c.lerp(SUB_TINT, 0.35) if entry["type"] != BaseTile.TYPE_EMPTY else c
-			copy.add_child(vis)
-			if entry["type"] == BaseTile.TYPE_WALL and solid != null:
-				var col := CollisionPolygon2D.new()
-				col.polygon = entry["polygon"]
-				solid.add_child(col)
-	_show_flash("Folded IN. You are inside the fold — it repeats at the glue. U to unfold.")
+	rebuild_sub()
+	_show_flash("Folded IN. F at the seam anchor (white diamond) unfolds it.")
 
 
-func exit_subspace(message: String) -> void:
+func _clear_sub_view() -> void:
 	mode = Mode.WORLD
 	sub_fold = null
-	sub_strip = []
+	sub_base_pieces = []
+	sub_folds = []
+	sub_pieces = []
+	sub_by_pos = {}
 	for child in sub_geo.get_children():
 		child.queue_free()
 	world_geo.visible = true
-	world_solid.collision_layer = 1
+	if world_solid != null:
+		world_solid.collision_layer = 1
 	_bg.color = Color("14151f")
-	# Strip content is captured in the pre-fold frame and the pinch fold was
-	# never applied to the outside world, so the player's subspace position IS
-	# their world position: emerging displaced is the dive-traversal verb.
-	var landed := ProtoCore.depenetrate(player.global_position, ProtoPlayer.RADIUS, wall_polys)
-	if landed != Vector2.INF:
-		player.teleport(landed)
-	_show_flash(message)
 
+
+func do_sub_fold(a1: Vector2i, a2: Vector2i) -> bool:
+	var fold := Fold.create(next_fold_id, a1, a2, CS)
+	var dropped := ProtoCore.capture_strip(sub_pieces, fold, CS)
+	if dropped.is_empty():
+		_show_flash("Nothing there to fold.")
+		return false
+
+	var pre := sub_pieces
+	var from_piece = ProtoCore.piece_containing(sub_by_pos, player.global_position, CS)
+	var new_pieces := FoldReplay.apply_one_fold(sub_pieces, fold, CS)
+	var dest = null
+	if from_piece != null:
+		dest = ProtoCore.world_point_from_base(
+			new_pieces, from_piece.base_id, player.global_position - from_piece.src_offset)
+	if dest == null:
+		_show_flash("You cannot fold yourself deeper — not yet.")
+		return false
+	var landed := ProtoCore.depenetrate(dest, ProtoPlayer.RADIUS, ProtoCore.wall_polys_of(new_pieces))
+	if landed == Vector2.INF:
+		_show_flash("Fold blocked — nowhere for you to land.")
+		return false
+
+	next_fold_id += 1
+	seam_segs[fold.fold_id] = ProtoCore.seam_segment(fold, dropped, CS)
+	sub_folds.append(fold)
+	var finalize := func() -> void:
+		rebuild_sub()
+		player.teleport(landed)
+	_play_transition(pre, fold, true, true, player.global_position, landed, finalize)
+	return true
+
+
+func can_unfold_sub(fold: Fold) -> bool:
+	var idx := sub_folds.find(fold)
+	if idx < 0:
+		return false
+	var seg: PackedVector2Array = seam_segs.get(fold.fold_id, PackedVector2Array())
+	if seg.size() < 2:
+		return true
+	for j in range(idx + 1, sub_folds.size()):
+		if ProtoCore.segment_intersects_band(seg[0], seg[1], sub_folds[j]):
+			return false
+	return true
+
+
+func unfold_sub_fold(fold: Fold) -> void:
+	var idx := sub_folds.find(fold)
+	if idx < 0:
+		return
+	if not can_unfold_sub(fold):
+		_show_flash("Blocked — a newer fold crosses this seam.")
+		return
+	var without: Array[Fold] = sub_folds.duplicate()
+	without.remove_at(idx)
+	var new_pieces: Array = sub_base_pieces.duplicate()
+	for f in without:
+		new_pieces = FoldReplay.apply_one_fold(new_pieces, f, CS)
+
+	var from_piece = ProtoCore.piece_containing(sub_by_pos, player.global_position, CS)
+	var dest = null
+	if from_piece != null:
+		dest = ProtoCore.world_point_from_base(
+			new_pieces, from_piece.base_id, player.global_position - from_piece.src_offset)
+	if dest == null:
+		dest = player.global_position + ProtoCore.unfold_shift(player.global_position, fold, CS)
+	var landed := ProtoCore.depenetrate(dest, ProtoPlayer.RADIUS, ProtoCore.wall_polys_of(new_pieces))
+	if landed == Vector2.INF:
+		_show_flash("Unfold blocked — nowhere for you to land.")
+		return
+
+	var was_newest := idx == sub_folds.size() - 1
+	sub_folds = without
+	seam_segs.erase(fold.fold_id)
+	var finalize := func():
+		rebuild_sub()
+		player.teleport(landed)
+	if was_newest:
+		_play_transition(new_pieces, fold, false, true, player.global_position, landed, finalize)
+	else:
+		finalize.call()
+
+
+## Does an interior fold's band cross the glue (the outer fold's seam as seen
+## from inside)? Folds PARALLEL to the glue never do; crossing folds must be
+## unfolded before the subspace can be exited — the outer fold is not the
+## newest fold affecting its own seam anymore.
+func exit_blocker() -> Fold:
+	for fold in sub_folds:
+		for seg in sub_glue_segs:
+			if ProtoCore.segment_intersects_band(seg[0], seg[1], fold):
+				return fold
+	return null
+
+
+## Exit = unfold the outer fold from inside. Interior folds persist: they
+## become world folds applied after the remaining ones (same frame, so
+## geometry and every anchor land exactly where the interior showed them).
+func try_exit() -> void:
+	if mode != Mode.SUBSPACE or animating():
+		return
+	if exit_blocker() != null:
+		_show_flash("Blocked — an inner fold crosses the outer seam. Unfold it first.")
+		return
+	var outer := sub_fold
+	var idx := folds.find(outer)
+	var new_folds: Array[Fold] = folds.duplicate()
+	if idx >= 0:
+		new_folds.remove_at(idx)
+	for f in sub_folds:
+		new_folds.append(f)
+	var new_pieces := FoldReplay.derive_pieces(base, new_folds)
+
+	var from_piece = ProtoCore.piece_containing(sub_by_pos, player.global_position, CS)
+	var dest = player.global_position
+	if from_piece != null:
+		var mapped = ProtoCore.world_point_from_base(
+			new_pieces, from_piece.base_id, player.global_position - from_piece.src_offset)
+		if mapped != null:
+			dest = mapped
+	var landed := ProtoCore.depenetrate(dest, ProtoPlayer.RADIUS, ProtoCore.wall_polys_of(new_pieces))
+	if landed == Vector2.INF:
+		landed = Vector2(dest)
+
+	folds = new_folds
+	seam_segs.erase(outer.fold_id)
+	var kept_subs: Array[Fold] = sub_folds.duplicate()
+	_clear_sub_view()
+	var p := player.global_position
+	var finalize := func() -> void:
+		rebuild_world()
+		player.teleport(landed)
+		if kept_subs.is_empty():
+			_show_flash("Unfolded — you emerge where you walked to.")
+		else:
+			_show_flash("Unfolded — your inner folds came out with you.")
+	_play_transition(new_pieces, outer, false, true, p, landed, finalize)
+
+
+# ---------------------------------------------------------------------------
+# Fold / unfold animation (task 8)
+# ---------------------------------------------------------------------------
+# Fragments of the PRE-state are split by the fold's creases: flaps translate
+# toward the meeting line, the strip collapses onto it (or expands from it,
+# reversed). The player rides linearly between its known start/end positions.
+# State math happens BEFORE the animation; visuals rebuild in `finalize`.
+
+func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_strip: bool,
+		p_from: Vector2, p_to: Vector2, finalize: Callable) -> void:
+	if not anim_enabled:
+		finalize.call()
+		return
+	var layer := Node2D.new()
+	layer.z_index = 30
+	add_child(layer)
+	var frags: Array = []
+	var shift_a := fold.shift_a_px(CS)
+	var shift_b := fold.shift_b_px(CS)
+	for piece in pre_pieces:
+		var res := CollisionCore.fold_polygons([piece.polygon], fold, CS)
+		var color: Color = TYPE_COLORS.get(piece.type, Color.MAGENTA)
+		if mode == Mode.SUBSPACE and piece.type != BaseTile.TYPE_EMPTY:
+			color = color.lerp(SUB_TINT, 0.35)
+		for poly in res["a"]:
+			frags.append(_make_frag(layer, CollisionCore.shift(poly, -shift_a), color, "a"))
+		for poly in res["b"]:
+			frags.append(_make_frag(layer, CollisionCore.shift(poly, -shift_b), color, "b"))
+		for poly in res["dropped"]:
+			frags.append(_make_frag(layer, poly, color, "strip"))
+	world_geo.visible = false
+	sub_geo.visible = false
+	player.frozen = true
+	_anim = {
+		"layer": layer, "frags": frags, "fold": fold, "forward": forward,
+		"collapse": collapse_strip, "progress": 0.0,
+		"p_from": p_from, "p_to": p_to, "finalize": finalize,
+	}
+	_apply_anim_frame()
+
+
+func _make_frag(layer: Node2D, poly: PackedVector2Array, color: Color, kind: String) -> Dictionary:
+	var node := Polygon2D.new()
+	node.polygon = poly
+	node.color = color
+	layer.add_child(node)
+	return {"node": node, "base": poly, "kind": kind}
+
+
+func _process(delta: float) -> void:
+	if _anim.is_empty():
+		return
+	_anim["progress"] = minf(_anim["progress"] + delta / ANIM_TIME, 1.0)
+	_apply_anim_frame()
+	if _anim["progress"] >= 1.0:
+		var layer: Node2D = _anim["layer"]
+		var finalize: Callable = _anim["finalize"]
+		_anim = {}
+		layer.queue_free()
+		player.frozen = false
+		world_geo.visible = mode == Mode.WORLD
+		sub_geo.visible = mode == Mode.SUBSPACE
+		finalize.call()
+
+
+func _apply_anim_frame() -> void:
+	var p: float = _anim["progress"]
+	var eased := p * p * (3.0 - 2.0 * p)
+	var t := eased if _anim["forward"] else 1.0 - eased
+	var fold: Fold = _anim["fold"]
+	var n := fold.crease_normal
+	var meet_d := fold.shift_a_px(CS).dot(n)
+	for frag in _anim["frags"]:
+		match frag["kind"]:
+			"a":
+				frag["node"].position = fold.shift_a_px(CS) * t
+			"b":
+				frag["node"].position = fold.shift_b_px(CS) * t
+			"strip":
+				if _anim["collapse"]:
+					var basep: PackedVector2Array = frag["base"]
+					var out := PackedVector2Array()
+					for v in basep:
+						var d := (Vector2(v) - fold.crease_point1).dot(n)
+						out.append(Vector2(v) + n * ((meet_d - d) * t))
+					frag["node"].polygon = out
+	player.global_position = Vector2(_anim["p_from"]).lerp(Vector2(_anim["p_to"]), eased)
+
+
+# ---------------------------------------------------------------------------
+# Per-frame world logic
+# ---------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
 	_flash_left = maxf(_flash_left - delta, 0.0)
 	if _flash_left == 0.0 and _flash != null:
 		_flash.visible = false
 	_update_status()
+	if animating():
+		return
 
 	if mode == Mode.SUBSPACE:
-		_subspace_wrap_and_eject()
+		_subspace_wrap_and_turnback()
 	else:
 		_check_goal()
 		if player.global_position.y > (base.grid_size.y + 6) * CS:
@@ -373,7 +737,7 @@ func _physics_process(delta: float) -> void:
 			_show_flash("You fell out of the world — respawned.")
 
 
-func _subspace_wrap_and_eject() -> void:
+func _subspace_wrap_and_turnback() -> void:
 	var n := sub_fold.crease_normal
 	var gap := sub_fold.gap_distance()
 	var c1 := sub_fold.crease_point1.dot(n)
@@ -385,10 +749,16 @@ func _subspace_wrap_and_eject() -> void:
 		player.global_position -= n * gap
 		player.snap_camera()
 
+	# Falling out of the strip's tangential extent no longer force-exits (exit
+	# can be blocked by crossing folds): the fold turns you back to its anchor.
 	var tangent := Vector2(-n.y, n.x)
 	var tproj := player.global_position.dot(tangent)
 	if tproj < sub_extent["min"] - 4.0 * CS or tproj > sub_extent["max"] + 4.0 * CS:
-		exit_subspace("You fell out of the fold — it sprang open.")
+		var back := sub_fold.crease_point1 + n * (gap * 0.5)
+		var landed := ProtoCore.depenetrate(back, ProtoPlayer.RADIUS, sub_wall_polys)
+		player.teleport(back if landed == Vector2.INF else landed, false)
+		player.snap_camera()
+		_show_flash("The fold turns back on itself here.")
 
 
 func _check_goal() -> void:
@@ -403,9 +773,14 @@ func _check_goal() -> void:
 
 
 func _reset() -> void:
-	if mode == Mode.SUBSPACE:
-		exit_subspace("")
+	if not _anim.is_empty():
+		var layer: Node2D = _anim["layer"]
+		layer.queue_free()
+		_anim = {}
+		player.frozen = false
+	_clear_sub_view()
 	folds.clear()
+	seam_segs.clear()
 	pending_a = null
 	pending_b = null
 	rebuild_world()
@@ -437,16 +812,17 @@ func _build_hud() -> void:
 	help.text = "Move: A/D or arrows   Jump: Space\n" \
 		+ "Point: hold Up/W or Down/S — otherwise you point where you face\n" \
 		+ "Q / E: pin anchor 1 / anchor 2 on the cell you point at\n" \
-		+ "   (2+ tiles apart, any direction; re-pin moves it, same spot clears)\n" \
-		+ "F: commit the fold — or, aimed at a seam diamond, unfold that fold\n" \
+		+ "F: commit the fold — or, aimed at a seam anchor, unfold that fold\n" \
+		+ "   (inside a fold, the white diamond on the glue is its seam anchor)\n" \
 		+ "Esc: clear anchors   U: unfold newest / exit fold   R: reset\n" \
-		+ "If the red band covers YOU at commit, you get folded in."
+		+ "If the red band covers YOU at commit, you get folded in.\n" \
+		+ "Folding inside a fold works — crossing folds lock the exit."
 	help.position = Vector2(12, 8)
 	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
 	hud.add_child(help)
 
 	_status = Label.new()
-	_status.position = Vector2(12, 130)
+	_status.position = Vector2(12, 168)
 	_status.add_theme_color_override("font_color", Color("59e0d0"))
 	hud.add_child(_status)
 
@@ -462,8 +838,10 @@ func _build_hud() -> void:
 func _update_status() -> void:
 	if _status == null:
 		return
-	var mode_name := "WORLD" if mode == Mode.WORLD else "INSIDE FOLD"
-	_status.text = "Folds: %d   Mode: %s" % [folds.size(), mode_name]
+	if mode == Mode.WORLD:
+		_status.text = "Folds: %d   Mode: WORLD" % folds.size()
+	else:
+		_status.text = "Folds: %d (+%d inside)   Mode: INSIDE FOLD" % [folds.size(), sub_folds.size()]
 
 
 func _show_flash(text: String) -> void:
