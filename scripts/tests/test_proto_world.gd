@@ -51,6 +51,19 @@ func test_fold_around_player_pinches_into_subspace_and_exit_restores() -> void:
 		"Moving inside the fold moved you in the world (dive-traversal v1)")
 
 
+func test_no_hud_control_swallows_mouse_input() -> void:
+	# Anchor placement relies on _unhandled_input receiving mouse clicks; any
+	# Control with MOUSE_FILTER_STOP covering the screen consumes them first
+	# (this bit us: the background ColorRect blocked all anchor clicks).
+	var stack: Array = [world]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		if node is Control:
+			assert_ne(node.mouse_filter, Control.MOUSE_FILTER_STOP,
+				"%s must not stop mouse events" % node.get_path())
+		stack.append_array(node.get_children())
+
+
 func test_subspace_wrap_teleports_across_the_glue() -> void:
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
 	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))

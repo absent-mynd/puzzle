@@ -363,6 +363,9 @@ func _build_hud() -> void:
 	_bg = ColorRect.new()
 	_bg.color = Color("14151f")
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Controls default to MOUSE_FILTER_STOP; a full-screen rect would eat every
+	# click before _unhandled_input sees it. HUD must never take the mouse.
+	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg_layer.add_child(_bg)
 
 	var hud := CanvasLayer.new()
