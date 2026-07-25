@@ -22,6 +22,7 @@ func _draw() -> void:
 		_draw_subspace_markers()
 	else:
 		_draw_seam_markers()
+	_draw_doors()
 	_draw_anchor_and_preview()
 
 
@@ -29,8 +30,30 @@ func _draw_seam_markers() -> void:
 	var cs: float = world.base.cell_size
 	for fold in world.folds:
 		var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs
-		var ok: bool = world.can_unfold_world(fold)
+		var ok: bool = world.can_unfold_fold(fold)
 		_draw_diamond(center, 10.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
+
+
+## Doors are warp POINTS riding tile centers: drawn only where the point
+## strictly resolves in the current view (a split door draws nowhere — it is
+## dormant). Inside a subspace the glyph repeats across the wrap copies.
+func _draw_doors() -> void:
+	var offsets: Array = [Vector2.ZERO]
+	if world.mode == world.Mode.SUBSPACE:
+		offsets = []
+		var n: Vector2 = world.sub_fold.crease_normal
+		var gap: float = world.sub_fold.gap_distance()
+		var copies: int = world.sub_copies
+		for k in range(-copies, copies + 1):
+			offsets.append(n * (k * gap))
+	for id in world.doors:
+		var wp = world.door_point_here(id)
+		if wp == null:
+			continue
+		for off in offsets:
+			var p: Vector2 = Vector2(wp) + off
+			draw_arc(p, 11.0, 0, TAU, 20, Color("7ce07c"), 3.0)
+			draw_circle(p, 4.0, Color("7ce07c", 0.9))
 
 
 ## Inside the subspace: seam anchors of interior folds (every wrap copy), and
@@ -52,9 +75,9 @@ func _draw_subspace_markers() -> void:
 		_draw_diamond(outer.crease_point1 + off, 12.0, glue_col)
 		if aimed_glue:
 			draw_arc(outer.crease_point1 + off, 18.0, 0, TAU, 24, glue_col, 3.0)
-		for fold in world.sub_folds:
+		for fold in world.level_folds():
 			var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs + off
-			var ok: bool = world.can_unfold_sub(fold)
+			var ok: bool = world.can_unfold_fold(fold)
 			_draw_diamond(center, 10.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
 
 

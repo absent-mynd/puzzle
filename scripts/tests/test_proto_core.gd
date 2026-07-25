@@ -128,6 +128,25 @@ func test_base_frame_mapping_round_trips_through_a_fold() -> void:
 	assert_null(gone, "Excised base point has no fragment after the fold")
 
 
+func test_resolve_base_point_strict_disables_split_centers() -> void:
+	var bg := _mini_grid()
+	var pieces := FoldReplay.identity_pieces(bg)
+	var bp := Vector2(96, 96)  # center of cell (1,1)
+	var bid: int = bg.tile_at(Vector2i(1, 1)).base_id
+	assert_not_null(ProtoCore.resolve_base_point(pieces, bid, bp),
+		"Whole tile: center resolves")
+
+	# A fold anchored ON the tile cuts it exactly through its center: the
+	# point sits on the cut in every fragment -> dormant (null) everywhere.
+	var fold := Fold.create(0, Vector2i(1, 1), Vector2i(4, 1), CS)
+	var folded := FoldReplay.apply_one_fold(pieces, fold, CS)
+	assert_null(ProtoCore.resolve_base_point(folded, bid, bp),
+		"Center exactly on a crease resolves nowhere in the world")
+	var strip := ProtoCore.capture_strip(pieces, fold, CS)
+	assert_null(ProtoCore.resolve_base_point(strip, bid, bp),
+		"Nor in the strip: the split point is dormant until halves rejoin")
+
+
 func test_segment_intersects_band() -> void:
 	var fold := Fold.create(0, Vector2i(2, 1), Vector2i(5, 1), CS)  # band x in (160,352)
 	assert_true(ProtoCore.segment_intersects_band(

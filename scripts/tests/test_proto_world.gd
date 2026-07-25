@@ -96,14 +96,14 @@ func test_unfold_blocked_by_newer_crossing_fold() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))  # X: vertical seam at x=22.5c
 	world.do_fold(Vector2i(30, 8), Vector2i(30, 11))   # Y: horizontal band, crosses X's seam
 	assert_eq(world.folds.size(), 2, "Both folds applied")
-	assert_false(world.can_unfold_world(world.folds[0]), "Newer crossing fold blocks X")
+	assert_false(world.can_unfold_fold(world.folds[0]), "Newer crossing fold blocks X")
 
-	world.unfold_world_fold(world.folds[0])
+	world.unfold_level_fold(world.folds[0])
 	assert_eq(world.folds.size(), 2, "Blocked unfold changes nothing")
 
-	world.unfold_world_fold(world.folds[1])            # newest first
+	world.unfold_level_fold(world.folds[1])            # newest first
 	assert_eq(world.folds.size(), 1, "Y unfolds fine")
-	world.unfold_world_fold(world.folds[0])
+	world.unfold_level_fold(world.folds[0])
 	assert_eq(world.folds.size(), 0, "X unfolds once nothing newer crosses it")
 
 
@@ -122,7 +122,7 @@ func test_interior_fold_rides_player_and_persists_on_exit() -> void:
 	# Interior fold PARALLEL to the glue (vertical creases, like the outer's).
 	var ok: bool = world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8))
 	assert_true(ok, "Interior fold commits")
-	assert_eq(world.sub_folds.size(), 1, "Interior fold recorded")
+	assert_eq(world.level_folds().size(), 1, "Interior fold recorded")
 	assert_almost_eq(world.player.global_position.x, 13.2 * CS, 130.0,
 		"Player rides the interior A-flap inward")
 
@@ -145,8 +145,8 @@ func test_exit_blocked_by_glue_crossing_interior_fold() -> void:
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Exit is blocked by the crossing fold")
 	assert_eq(world.folds.size(), 1, "Outer fold still applied")
 
-	world.unfold_sub_fold(world.sub_folds[0])
-	assert_eq(world.sub_folds.size(), 0, "Inner fold unfolded from inside")
+	world.unfold_level_fold(world.level_folds()[0])
+	assert_eq(world.level_folds().size(), 0, "Inner fold unfolded from inside")
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Exit works once nothing crosses the glue")
 	assert_eq(world.folds.size(), 0, "Outer fold gone, no interior folds remained")
@@ -171,6 +171,77 @@ func test_subspace_wrap_teleports_across_the_glue() -> void:
 	assert_almost_eq(world.player.global_position.x, (18.9 - 8.0) * CS, 0.01,
 		"Crossing the glue wraps one band width back")
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Wrap does not eject")
+
+
+func test_outside_unfold_splices_interiors() -> void:
+	# Rule 4: unfolding a fold from the outside carries its interior folds
+	# into the level at its index.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	var x: Fold = world.folds[0]
+	var inner := Fold.create(500, Vector2i(22, 3), Vector2i(25, 3), CS)
+	var arr: Array[Fold] = [inner]
+	world.interiors[x.fold_id] = arr
+	world.unfold_level_fold(x)
+	assert_eq(world.folds.size(), 1, "Interior spliced into the world on outside unfold")
+	assert_eq(world.folds[0].fold_id, 500, "The spliced fold is the interior one")
+
+
+func test_door_traversal_between_regions() -> void:
+	# W2 (west, cell 42,13) pairs with E2 (east). East's shipped pre-fold has
+	# ridden E2's tile 3 cells right, so the door point sits at (5.5c, 9.5c).
+	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
+	world._check_doors()
+	assert_eq(world.region_id, "east", "Traversed to the east region")
+	assert_eq(world.mode, world.Mode.WORLD, "E2 is in normal space")
+	assert_almost_eq(world.player.global_position.x, 5.5 * CS, 130.0,
+		"Arrived at E2's point, which rode the shipped fold")
+
+
+func test_door_into_prefolded_subspace_and_back() -> void:
+	# W1's partner E1 was excised by east's shipped fold: the doorway leads
+	# INSIDE that fold's subspace.
+	world.player.teleport(Vector2(1.5 * CS, 13.5 * CS), false)
+	world._check_doors()
+	assert_eq(world.region_id, "east", "In the east region")
+	assert_eq(world.mode, world.Mode.SUBSPACE, "...inside the shipped fold")
+	assert_eq(world.sub_fold.anchor1, Vector2i(10, 6), "It is the authored pre-fold")
+	assert_almost_eq(world.player.global_position.x, 13.5 * CS, 130.0,
+		"Standing at E1's point inside the strip")
+
+	# Step off the door (unlatch), then walk back through it: out to W1,
+	# leaving the fold folded (door exit does not unfold).
+	world.player.teleport(Vector2(11.5 * CS, 9.5 * CS), false)
+	world._check_doors()
+	world.player.teleport(Vector2(13.5 * CS, 9.5 * CS), false)
+	world._check_doors()
+	assert_eq(world.region_id, "west", "Back in the west region")
+	assert_eq(world.mode, world.Mode.WORLD, "In normal space")
+	assert_eq(world.regions["east"]["folds"].size(), 1,
+		"Door exit left the east fold folded")
+	assert_almost_eq(world.player.global_position.x, 1.5 * CS, 130.0,
+		"Arrived at W1")
+
+
+func test_split_door_point_is_dormant() -> void:
+	# Cut E2's tile exactly through its center: the door point resolves
+	# nowhere, so its partner refuses traversal.
+	var east: Dictionary = world.regions["east"]
+	var cut := Fold.create(999, Vector2i(2, 9), Vector2i(2, 12), CS)
+	east["folds"].append(cut)
+	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
+	world._check_doors()
+	assert_eq(world.region_id, "west", "Dormant far side refuses traversal")
+	assert_eq(world.mode, world.Mode.WORLD, "Player stayed put")
+
+
+func test_pending_anchor_inert_across_regions() -> void:
+	world.place_pending(0, Vector2i(1, 0))
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor pinned in west")
+	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
+	world._check_doors()
+	assert_eq(world.region_id, "east", "Traversed")
+	assert_eq(world.pending_cell(0), null, "West anchor is inert in east")
+	assert_true(world.pending_a != null, "...but still pinned, waiting")
 
 
 func test_no_hud_control_swallows_mouse_input() -> void:

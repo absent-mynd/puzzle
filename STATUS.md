@@ -127,6 +127,16 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
   arithmetic; anchors pinned inside a subspace survive exit and land with the
   strip. Polygon fold/unfold animation (flaps slide, strip collapses/springs
   from the seam) with physics frozen during. Prototype tests: 23.
+- Iteration 4: **regions + doors**. Two regions (own BaseGrid + persistent
+  folds + per-fold interiors); the player's location is a region + context
+  stack of entered folds. Doors are warp POINTS at base-tile centers (ride
+  folds with the tile; dormant when split exactly through the center);
+  traversal resolves the partner point recursively — world, fold strips,
+  interiors — so a folded-away door delivers you INSIDE that fold's subspace
+  and vice versa. Door exit leaves folds folded (non-destructive); glue-anchor
+  exit unfolds. East ships pre-folded with a door + goal inside the authored
+  fold. Blocked landings refuse traversal (doors jammable by folding).
+  Prototype tests: 29.
 
 ### 2026-07-10
 - **Level editor usability pass.** The editor↔play round-trip now works: pressing `T`

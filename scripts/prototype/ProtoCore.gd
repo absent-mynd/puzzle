@@ -174,6 +174,31 @@ static func world_point_from_base(pieces: Array, base_id: int, bp: Vector2):
 	return null
 
 
+## STRICT point resolution for door points: the base-frame point must lie
+## strictly inside a fragment (margin from every edge). A point exactly on a
+## cut — a door split down the middle — resolves nowhere: the door is dormant
+## until its halves rejoin. Returns Vector2 (current-space) or null.
+static func resolve_base_point(pieces: Array, base_id: int, bp: Vector2, margin := 0.5):
+	for piece in pieces:
+		if piece.base_id != base_id:
+			continue
+		var base_poly: PackedVector2Array = CollisionCore.shift(piece.polygon, -piece.src_offset)
+		if not Geometry2D.is_point_in_polygon(bp, base_poly):
+			continue
+		if _min_edge_distance(base_poly, bp) > margin:
+			return bp + piece.src_offset
+	return null
+
+
+static func _min_edge_distance(poly: PackedVector2Array, p: Vector2) -> float:
+	var best := INF
+	for i in range(poly.size()):
+		var closest := Geometry2D.get_closest_point_to_segment(
+			p, poly[i], poly[(i + 1) % poly.size()])
+		best = minf(best, p.distance_to(closest))
+	return best
+
+
 ## Collision polygons of the wall-type pieces in a fragment list.
 static func wall_polys_of(pieces: Array) -> Array:
 	var out: Array = []

@@ -50,6 +50,29 @@ riding** (each fragment knows its base identity and offset), not approximate
 crease math. Folds and unfolds animate: flaps slide, the strip collapses
 onto — or springs from — the seam.
 
+## Regions & doors
+
+The world is now **two regions** (west and east), each its own sheet with its
+own persistent fold state. **Doors are warp points** (green rings) at
+base-tile centers — they ride folds with their tile, and walking into one
+warps you to its partner, wherever that partner currently *is*:
+
+- Partner in normal space → you arrive there (camera snaps, region loads).
+- Partner **folded away** → you arrive INSIDE that fold's subspace. The east
+  region ships pre-folded: the door near the west spawn leads straight into
+  a fold you've never seen open (there's a goal in there too). The far-right
+  west door leads to east's normal space, where the shipped fold's seam
+  diamond is visible — unfolding it from outside is the other way in.
+- Partner's tile **split exactly through its center** → the door is dormant
+  (no glyph, traversal refused) until the halves rejoin.
+- Landing blocked (something folded over the door) → traversal refused: you
+  can *jam doors shut by folding* and clear them by unfolding.
+
+Doors exit subspaces **without unfolding them** — interior folds and all
+persist for the next visit. The glue anchor (white diamond) remains the
+unfolding exit. Pending anchors are inert outside their region but stay
+pinned and resolve again when you return.
+
 ## What to try (the three beats)
 
 1. **Ride a fold.** Cross the wide pit by folding it away: click one rim, then
