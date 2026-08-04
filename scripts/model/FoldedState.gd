@@ -3,7 +3,7 @@ class_name FoldedState extends RefCounted
 ## FoldedState
 ##
 ## The derived, queryable folded configuration produced by FoldReplay.derive().
-## Replaces GridManager.cells as the source of truth for what's where. Holds
+## The source of truth for what is where after a fold replay. Holds
 ## per-plane-position stacks of FoldedPieces and answers gameplay queries.
 ##
 ## "Void" = a position with no pieces (is_occupied == false). There is no null type.

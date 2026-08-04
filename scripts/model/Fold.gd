@@ -10,7 +10,7 @@ class_name Fold extends Resource
 ## between their creases is excised, and each outer flap slides inward by an integer
 ## share of the gap so the halves meet at a common line (grid-aligned).
 ##
-## Geometry (LOCAL coords relative to GridManager):
+## Geometry (world-space px):
 ##   - crease_point1 = anchor_a center, crease_point2 = anchor_b center.
 ##   - crease_normal points anchor_a -> anchor_b (unit).
 ##   - d(p) = (p - crease_point1)·crease_normal; d(A)=0, d(B)=gap.
