@@ -1,132 +1,84 @@
-# GeometryCore Test Suite
+# Test Suite
 
-## Overview
+The suite is the project's behavioral spec. When you want to know how a subsystem is
+*meant* to work, read its test before reading its implementation.
 
-This directory contains comprehensive unit tests for the `GeometryCore` utility class, which provides all geometric calculations needed for the space-folding puzzle mechanics.
-
-## Test Files
-
-- **test_geometry_core.gd** - Main test suite with all test cases
-- **test_runner.gd** - Test execution script
-- **test_scene.tscn** - Scene file for running tests (located in `/scenes/`)
-
-## Running Tests
-
-### Option 1: Using Godot Editor (Recommended)
-
-1. Open the project in Godot 4
-2. Open the scene: `scenes/test_scene.tscn`
-3. Press F6 (or Run Current Scene)
-4. Check the Output console for test results
-
-### Option 2: Command Line (Headless)
+## Running
 
 ```bash
-# From project root directory
-godot --headless --path . scenes/test_scene.tscn
+./run_tests.sh                 # everything
+./run_tests.sh world           # partial filename match
+./run_tests.sh fold            # every file matching "fold"
 ```
 
-### Option 3: Using GUT Framework (Once Issue #3 is complete)
-
-Once the GUT (Godot Unit Test) framework is installed (Issue #3):
+If Godot's config directory is sandboxed, redirect `HOME`:
 
 ```bash
-# Run tests using GUT
-godot --headless --path . addons/gut/gut_cmdln.gd -gtest=scripts/tests/test_geometry_core.gd
+HOME=/tmp/godot-home ./run_tests.sh
 ```
 
-## Test Coverage
-
-The test suite covers all functions in `GeometryCore`:
-
-### Core Functions
-- ✅ `point_side_of_line()` - Point-line relationship tests
-- ✅ `segment_line_intersection()` - Line-segment intersection tests
-- ✅ `polygon_area()` - Area calculation tests
-- ✅ `polygon_centroid()` - Centroid calculation tests
-- ✅ `validate_polygon()` - Polygon validation tests
-- ✅ `split_polygon_by_line()` - Polygon splitting tests (Sutherland-Hodgman)
-
-### Helper Functions
-- ✅ `segments_intersect()` - Segment intersection tests
-- ✅ `create_rect_vertices()` - Rectangle creation tests
-- ✅ `point_in_polygon()` - Point containment tests
-
-### Special Test Scenarios
-- ✅ **Area Conservation** - Verifies that splitting polygons doesn't lose/gain area
-- ✅ **Edge Cases** - Tests epsilon comparisons, parallel lines, degenerate polygons
-- ✅ **Multiple Split Angles** - Tests horizontal, vertical, and diagonal cuts
-- ✅ **Vertex Cuts** - Tests cuts that go through polygon vertices
-
-## Test Results
-
-The test suite includes:
-- **60+ individual test cases**
-- **8 test suites** covering different function groups
-- **Comprehensive edge case testing**
-- **Area conservation validation**
-
-## Expected Output
-
-When all tests pass, you should see:
-
-```
-=== GeometryCore Test Suite ===
-
---- Testing point_side_of_line ---
-  ✓ Point on positive side
-  ✓ Point on negative side
-  ✓ Point exactly on line
-  [...]
-
-=== Test Summary ===
-Passed: 60
-Failed: 0
-Total: 60
-
-✓ All tests passed!
-```
-
-## Troubleshooting
-
-### Tests won't run
-- Ensure you're using Godot 4 (not Godot 3)
-- Check that `GeometryCore.gd` is properly loaded as a class
-- Verify project.godot is in the root directory
-
-### Assertion failures
-- Check the specific test that failed in the output
-- Verify EPSILON value is appropriate (0.0001)
-- Ensure floating-point comparisons use tolerance
-
-## Integration with CI/CD
-
-These tests can be integrated into automated testing:
+Directly, without the wrapper:
 
 ```bash
-#!/bin/bash
-# Run tests in headless mode and capture exit code
-godot --headless --path . scenes/test_scene.tscn
-exit $?
+godot --path . --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/ -gexit
 ```
 
-## Next Steps
+**After adding or renaming a `class_name`**, run `godot --headless --import` once so
+the global class registry updates — otherwise you will see spurious
+"Identifier not declared in the current scope" parse errors that have nothing to do
+with your change.
 
-After completing Issue #3 (Test Framework Setup):
-- Migrate to GUT framework for better test reporting
-- Add performance benchmarks
-- Add visual debugging tools for polygon splitting
-- Create stress tests with complex polygons
+## Layout
 
-## Related Issues
+One `test_<subject>.gd` per subject, matching the source file it covers.
 
-- **Issue #1**: Project Structure Setup (Prerequisite) ✅
-- **Issue #2**: GeometryCore Implementation (Current) 🔄
-- **Issue #3**: Test Framework Setup (Next)
+| File | Covers |
+|---|---|
+| `test_geometry_core.gd` | Sutherland-Hodgman, epsilon, area/centroid |
+| `test_collision_core.gd` | Polygon clipping under folds |
+| `test_base_grid.gd` | The immutable base model |
+| `test_fold_replay.gd` | The derivation engine |
+| `test_folded_state.gd` | Per-position stacks, dominant type |
+| `test_fold_unfold_inverse.gd` | Unfold as drop-and-re-derive |
+| `test_base_frame.gd` | Base ↔ derived point transport |
+| `test_tile_types.gd` | The tile registry |
+| `test_occupants.gd` | Entities riding tiles; split-on-unfold |
+| `test_trigger_cascade.gd` | Fold-on-enter cascade |
+| `test_world_data.gd` | World format + the shipped world |
+| `test_world_core.gd` | Map parsing, seams, anchor/fold eligibility |
+| `test_audio_manager.gd` | Buses, playback, volume |
+| **`test_fold_world.gd`** | **Scene-driven integration** |
 
-## Documentation
+`test_fold_world.gd` is the important one. It instantiates the real world scene and
+drives the actual beats — riding a flap, being pinched into a fold, folding inside a
+subspace, exiting through the glue anchor, door traversal between regions, doors into
+a pre-folded subspace. Everything else is pure and headless; this is what catches
+integration regressions.
 
-For detailed function documentation, see:
-- `scripts/utils/GeometryCore.gd` - Inline documentation
-- `spec_files/math_utilities_reference.md` - Mathematical reference
-- `IMPLEMENTATION_PLAN.md` - Overall project architecture
+## Conventions
+
+- Extend `GutTest`; test methods start with `test_`.
+- **Always** pass a descriptive message to assertions — the message is what a failure
+  report is made of.
+- Prefer `assert_almost_eq` for anything float-valued; never `==`.
+- Kernel tests need no scene tree and no `after_each` teardown. If a test you are
+  writing needs nodes, ask whether the thing you are testing belongs in the kernel.
+
+```gdscript
+extends GutTest
+
+const CELL := 64.0
+var base: BaseGrid
+
+func before_each():
+    base = BaseGrid.from_types(Vector2i(10, 10), CELL)
+
+func test_fold_excises_the_strip_between_the_creases():
+    var f := Fold.create(0, Vector2i(2, 5), Vector2i(6, 5), CELL)
+    var state := FoldReplay.derive(base, [f])
+    assert_lt(state.occupied_count(), 100,
+        "the excised strip should reduce the occupied position count")
+```
+
+See [docs/DEVELOPMENT.md](../../docs/DEVELOPMENT.md) for the fuller testing guide and
+the invariants worth asserting.

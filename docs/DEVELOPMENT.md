@@ -110,28 +110,25 @@
 ```gdscript
 extends GutTest
 
-# Setup run before each test
-func before_each():
-    grid_manager = GridManager.new()
-    grid_manager.initialize(Vector2i(10, 10), 64.0)
+const CELL := 64.0
+var base: BaseGrid
 
-# Teardown run after each test
-func after_each():
-    if grid_manager:
-        grid_manager.queue_free()
+# Setup run before each test. The kernel is pure — no nodes to free afterwards,
+# which is why most suites need no after_each() at all.
+func before_each():
+    base = BaseGrid.from_types(Vector2i(10, 10), CELL)
 
 # Test function - must start with "test_"
-func test_horizontal_fold_removes_correct_cells():
+func test_fold_excises_the_strip_between_the_creases():
     # Arrange - Set up test conditions
-    var anchor1 = Vector2i(2, 5)
-    var anchor2 = Vector2i(6, 5)
+    var f := Fold.create(0, Vector2i(2, 5), Vector2i(6, 5), CELL)
 
-    # Act - Execute the operation
-    fold_system.execute_horizontal_fold(anchor1, anchor2)
+    # Act - Derive the folded state
+    var state := FoldReplay.derive(base, [f])
 
     # Assert - Verify results
-    assert_eq(grid_manager.cells.size(), 96,
-        "Expected 96 cells after removing 4 cells")
+    assert_lt(state.occupied_count(), 100,
+        "The excised strip should reduce the occupied position count")
 
     # Always include descriptive assertion messages!
 ```
@@ -152,26 +149,28 @@ func test_point_side_of_line_returns_negative_for_left():
 
 **2. Integration Tests** - Test multiple components together
 ```gdscript
-func test_fold_updates_player_position():
-    # Tests FoldSystem + GridManager + Player interaction
-    player.set_grid_position(Vector2i(8, 5))
-    fold_system.execute_horizontal_fold(Vector2i(2, 5), Vector2i(6, 5))
+func test_fold_carries_a_point_on_the_ridden_flap():
+    # Tests FoldReplay + BaseFrame interaction
+    var before := FoldReplay.derive_pieces(base, [])
+    var f := Fold.create(0, Vector2i(2, 5), Vector2i(5, 5), CELL)
+    var after := FoldReplay.derive_pieces(base, [f])
 
-    assert_eq(player.grid_position, Vector2i(4, 5),
+    var moved = BaseFrame.transport(before, after, Vector2(8.5, 5.5) * CELL, CELL)
+    assert_not_null(moved,
         "Player should shift with grid")
 ```
 
 **3. Edge Case Tests** - Test boundaries and special cases
 ```gdscript
-func test_fold_handles_vertex_intersection():
-    # Fold line passes exactly through cell corner
-    var anchor1 = Vector2i(3, 2)
-    var anchor2 = Vector2i(5, 4)  # Diagonal
+func test_diagonal_fold_handles_vertex_intersection():
+    # Crease passes exactly through tile corners
+    var f := Fold.create(0, Vector2i(3, 2), Vector2i(5, 4), CELL)
 
-    var result = fold_system.execute_diagonal_fold(anchor1, anchor2)
+    var pieces := FoldReplay.derive_pieces(base, [f])
 
-    # Verify no crashes, valid geometry
-    assert_true(result.success)
+    # Verify no crashes and valid geometry
+    for p in pieces:
+        assert_gt(p.polygon.size(), 2, "every fragment is a real polygon")
 ```
 
 ### Common Test Assertions
@@ -206,86 +205,86 @@ assert_does_not_have(collection, item, "message")
 
 ### Robust Test Validation
 
-Based on lessons learned from the "disappearing cells" bug, always validate:
+Geometry bugs are quiet — a fold that loses area or scrambles identity still renders
+plausibly. Assert the invariants, not just the happy path:
 
-#### 1. Cell Count Conservation
+#### 1. Occupancy Conservation
 ```gdscript
-func test_fold_preserves_cell_count():
-    var cells_before = grid_manager.cells.size()
-    var expected_removed = 12
+func test_fold_removes_only_the_excised_strip():
+    var before := FoldReplay.derive(base, []).occupied_count()
 
-    fold_system.execute_fold(anchor1, anchor2)
+    var f := Fold.create(0, Vector2i(2, 5), Vector2i(6, 5), CELL)
+    var after := FoldReplay.derive(base, [f]).occupied_count()
 
-    var cells_after = grid_manager.cells.size()
-    assert_eq(cells_after, cells_before - expected_removed,
-        "Expected %d cells after fold, got %d (lost %d cells)" %
-        [cells_before - expected_removed, cells_after, cells_before - cells_after])
+    assert_lt(after, before, "the fold excised something")
+    assert_eq(FoldReplay.derive(base, []).occupied_count(), before,
+        "re-deriving without the fold restores the original occupancy exactly")
 ```
 
-#### 2. Cell Identity Tracking
+#### 2. Identity Tracking
 ```gdscript
-func test_specific_cell_shifts_to_correct_position():
-    # Mark cell with unique identifier
-    var cell_9_0 = grid_manager.get_cell(Vector2i(9, 0))
-    cell_9_0.cell_type = 900  # Unique ID
+func test_a_specific_tile_lands_where_expected():
+    # base_id is stable across every fold — that is what makes riding exact.
+    var bid: int = base.tile_at(Vector2i(9, 0)).base_id
 
-    fold_system.execute_fold(anchor1, anchor2)
+    var f := Fold.create(0, Vector2i(2, 5), Vector2i(6, 5), CELL)
+    var state := FoldReplay.derive(base, [f])
 
-    # Verify CORRECT cell at destination
-    var cell_7_2 = grid_manager.get_cell(Vector2i(7, 2))
-    assert_not_null(cell_7_2, "Cell should exist at (7,2)")
-    assert_eq(cell_7_2.cell_type, 900,
-        "Cell at (7,2) should be the one from (9,0)")
+    assert_true(state.has_base(bid), "the tile survived the fold")
+    assert_eq(state.plane_pos_of_base(bid), Vector2i(7, 0),
+        "and landed at the position its flap's shift implies")
 ```
 
-#### 3. No Freed Instances
+#### 3. Fragment Integrity
 ```gdscript
-func verify_no_freed_cells(grid_manager: GridManager):
-    for pos in grid_manager.cells.keys():
-        var cell = grid_manager.cells[pos]
-        assert_true(is_instance_valid(cell),
-            "Cell at %s is freed but still in dictionary!" % pos)
+# Every fragment must keep the invariant polygon == base_polygon + src_offset,
+# which is what BaseFrame relies on. A fragment that fails it will transport
+# points to the wrong place rather than erroring.
+func verify_fragments_intact(base: BaseGrid, pieces: Array):
+    for p in pieces:
+        var rebuilt := CollisionCore.shift(p.polygon, -p.src_offset)
+        assert_gt(rebuilt.size(), 2, "fragment %d kept real geometry" % p.base_id)
+        assert_not_null(base.tile_by_id(p.base_id),
+            "fragment %d still maps to a real base tile" % p.base_id)
 ```
 
 #### 4. Geometry Validation
 ```gdscript
-func verify_cell_geometry(cell: Cell, min_area: float = 100.0):
-    assert_not_null(cell.geometry, "Cell should have geometry")
-    assert_gt(cell.geometry.size(), 2,
-        "Cell geometry should have at least 3 vertices")
+func verify_fragment_geometry(piece: FoldedPiece, min_area: float = 1.0):
+    assert_gt(piece.polygon.size(), 2,
+        "fragment geometry should have at least 3 vertices")
 
-    var area = GeometryCore.polygon_area(cell.geometry)
+    var area := GeometryCore.polygon_area(piece.polygon)
     assert_gt(area, min_area,
-        "Cell area %.1f is too small (min: %.1f)" % [area, min_area])
+        "fragment area %.1f is degenerate (min: %.1f)" % [area, min_area])
 ```
 
-#### 5. Total Area Conservation
+#### 5. Area Accounting
 ```gdscript
-func test_fold_conserves_total_area():
-    var area_before = calculate_total_area(grid_manager)
+func test_fold_removes_exactly_the_strip_area():
+    var area_before := _total_area(FoldReplay.derive_pieces(base, []))
 
-    fold_system.execute_fold(anchor1, anchor2)
+    # A 4-cell-wide strip across a 10-wide grid.
+    var f := Fold.create(0, Vector2i(2, 5), Vector2i(6, 5), CELL)
+    var area_after := _total_area(FoldReplay.derive_pieces(base, [f]))
 
-    var area_after = calculate_total_area(grid_manager)
-    var expected_removed_area = 12 * 64 * 64  # 12 cells removed
-
-    assert_almost_eq(area_after, area_before - expected_removed_area, 100.0,
-        "Total area mismatch: before=%.1f, after=%.1f" % [area_before, area_after])
+    assert_almost_eq(area_after, area_before - (4 * 10 * CELL * CELL), 100.0,
+        "area lost should equal the excised band, no more and no less")
 ```
 
 ### Running Tests
 
 ```bash
-# Run all tests (takes ~8 seconds)
+# Run all tests (takes ~2 seconds)
 ./run_tests.sh
 
 # Run specific test file (much faster for development!)
 ./run_tests.sh geometry_core
-./run_tests.sh test_fold_system
-./run_tests.sh fold  # Runs all tests matching "fold"
+./run_tests.sh world          # test_world_core, test_world_data, test_fold_world
+./run_tests.sh fold           # Runs all tests matching "fold"
 
 # Run specific test within a file (advanced)
-./run_tests.sh -gtest=res://scripts/tests/test_fold_system.gd \
+./run_tests.sh -gtest=res://scripts/tests/test_fold_replay.gd \
     -gunit_test=test_horizontal_fold_removes_correct_cells
 
 # Show help
@@ -295,8 +294,9 @@ func test_fold_conserves_total_area():
 ### Test Organization
 
 Tests live in `scripts/tests/`, one `test_<subsystem>.gd` file per subsystem
-(e.g. `test_geometry_core.gd`, `test_fold_system.gd`, `test_player.gd`). List them
-with:
+(e.g. `test_geometry_core.gd`, `test_base_frame.gd`, `test_world_core.gd`). The
+exception is `test_fold_world.gd`, which is scene-driven and covers integration.
+List them with:
 
 ```bash
 ls scripts/tests/test_*.gd
@@ -309,33 +309,33 @@ totals.
 
 ## Common Pitfalls
 
-### 1. Coordinate System Confusion ⚠️ MOST COMMON
+### 1. Mutating Derived State ⚠️ MOST COMMON
 
-**The Problem:** Mixing LOCAL and WORLD coordinates
+**The Problem:** editing a `FoldedPiece` (or the fragment list) and expecting it to
+stick.
 
-**Symptom:** Cells appear at wrong positions, double offsets, player in wrong location
+**Symptom:** your change works for one frame and vanishes on the next fold, unfold,
+region load, or subspace transition.
 
-**Solution:**
+**Why:** derived state is rebuilt from scratch by
+`FoldReplay.derive_pieces(base, folds)` on every change. Fragments are outputs, not
+storage.
+
 ```gdscript
-# ❌ WRONG - Using world coordinates for cell geometry
-var world_pos = grid_manager.grid_to_world(grid_pos)
-cell.geometry = create_square(world_pos, size)
-# Result: Cell at grid_origin + grid_origin!
+# ❌ WRONG - the next rebuild throws this away
+piece.type = TileTypes.WALL
 
-# ✅ CORRECT - Use local coordinates for cells
-var local_pos = Vector2(grid_pos) * grid_manager.cell_size
-cell.geometry = create_square(local_pos, size)
-# Result: Cell at correct position relative to GridManager
+# ✅ CORRECT - change the inputs, then re-derive
+folds.append(fold)
+rebuild_world()
 
-# ✅ CORRECT - Use world coordinates for player
-player.position = grid_manager.to_global(local_center)
-# Result: Player at correct world position
+# ✅ CORRECT - persistent facts belong on the BASE grid
+base.tile_at(pos).type = TileTypes.WALL
+rebuild_world()
 ```
 
-**Rule of Thumb:**
-- Cells are children of GridManager → LOCAL coordinates
-- Player is NOT a child → WORLD coordinates
-- Line2D seams are children of GridManager → LOCAL coordinates
+**Rule of thumb:** if you want it to survive, it belongs in `BaseGrid`, the fold
+list, or `WorldData` — never in a derived fragment.
 
 ---
 
@@ -361,32 +361,27 @@ if point.distance_to(target) < EPSILON:
 
 ---
 
-### 3. Memory Leaks (Cell Merging)
+### 3. Transporting Points With Crease Math
 
-**The Problem:** Overwriting dictionary entries without freeing old nodes
+**The Problem:** moving something through a fold by classifying which side it is on
+and applying that side's shift.
 
-**Symptom:** Memory usage grows, nodes accumulate in scene tree, performance degrades
+**Symptom:** correct for a single fold; drifts or lands in the wrong place once two
+or more folds compose, and silently wrong inside subspaces.
 
-**Solution:**
 ```gdscript
-# ❌ WRONG - Old cell still in scene tree
-cells[new_pos] = shifted_cell
+# ❌ WRONG - does not compose across folds
+var side := WorldCore.side_of_fold(pos, fold)
+pos += WorldCore.fold_shift_for_side(side, fold, CS)
 
-# ✅ CORRECT - Free old cell first
-var existing_cell = cells.get(new_pos)
-if existing_cell:
-    cells.erase(new_pos)
-    if existing_cell.get_parent():
-        existing_cell.get_parent().remove_child(existing_cell)
-    existing_cell.queue_free()
-
-cells[new_pos] = shifted_cell
+# ✅ CORRECT - exact, composes through any fold/unfold sequence
+var dest = BaseFrame.transport(old_pieces, new_pieces, pos, CS)
+if dest == null:
+    return  # the point was folded away — decide what that means
 ```
 
-**Always:**
-- Use `queue_free()` not `free()` (defers until safe)
-- Remove from parent before freeing
-- Erase from dictionaries
+`fold_shift_for_side` is a deliberate fallback for points over **void**, where there
+is no fragment to ask. That is its only legitimate use.
 
 ---
 
@@ -415,27 +410,39 @@ for cell in cells_to_remove:
 
 ---
 
-### 5. Forgetting to Validate
+### 5. Switching on Tile Types
 
-**The Problem:** Skipping validation before fold
+**The Problem:** hardcoding behavior per type instead of asking the registry.
 
-**Symptom:** Player on split cell, folds create invalid states
+**Symptom:** a new tile type is invisible to collision, or anchorable when it should
+not be — because one of the ~6 sites that used to switch on the int was missed.
 
-**Solution:**
 ```gdscript
-# ❌ WRONG - No validation
-fold_system.execute_fold(anchor1, anchor2)
+# ❌ WRONG - PIN and UNANCHORABLE_WALL fall through as walkable
+if piece.type == TileTypes.WALL:
+    add_collider(piece.polygon)
 
-# ✅ CORRECT - Always validate first
-if not fold_system.validate_fold(anchor1, anchor2):
-    return
-
-if player and not fold_system.validate_fold_with_player(anchor1, anchor2, player):
-    show_error_message("Cannot fold - player in the way")
-    return
-
-fold_system.execute_fold(anchor1, anchor2)
+# ✅ CORRECT - the registry decides
+if not TileTypes.is_walkable(piece.type):
+    add_collider(piece.polygon)
 ```
+
+Same for `TileTypes.blocks_fold()` (pins refuse to be excised),
+`TileTypes.blocks_anchor()` (unanchorable tiles refuse a grip) and
+`TileTypes.merge_rank()`. Adding a tile type should mean editing **one** table.
+
+---
+
+### 5b. Forgetting to Validate a Fold
+
+```gdscript
+# ✅ Gate the fold before applying it
+if WorldCore.fold_blocked_by_tile(current_pieces, fold, CS):
+    _show_flash("Something in that span refuses to fold.")
+    return false
+```
+
+Anchor placement is gated separately by `WorldCore.can_anchor_at`.
 
 ---
 
@@ -488,11 +495,13 @@ Before committing, verify:
 
 - [ ] All tests pass (`./run_tests.sh`)
 - [ ] No floating-point equality comparisons (`==` with floats)
+- [ ] Nothing persistent stored in derived state (see Pitfall 1)
+- [ ] Point transport goes through `BaseFrame`, not crease math (Pitfall 3)
+- [ ] Per-type behavior asks `TileTypes`, not an int comparison (Pitfall 5)
+- [ ] The kernel (`scripts/model/`, `scripts/utils/`) does not import `scripts/world/`
 - [ ] Proper memory management (`queue_free()` for nodes)
-- [ ] Clear, descriptive variable names
 - [ ] Comments explain "why", not "what"
 - [ ] No debug print statements (or wrapped in `if DEBUG_FLAG:`)
-- [ ] Coordinate system used correctly (LOCAL vs WORLD)
 - [ ] All new features have tests
 
 ### Variable Naming Conventions
@@ -500,7 +509,7 @@ Before committing, verify:
 ```gdscript
 # Constants - UPPER_SNAKE_CASE
 const EPSILON = 0.0001
-const MIN_FOLD_DISTANCE = 0
+const ANCHOR_REACH = 1
 
 # Class variables - snake_case
 var grid_position: Vector2i
@@ -510,24 +519,24 @@ var cell_size: float
 var _internal_state: int
 
 # Functions - snake_case
-func calculate_fold_line():
-func execute_horizontal_fold():
+func seam_segment():
+func capture_strip():
 
 # Classes - PascalCase
-class_name GridManager
-class_name FoldSystem
+class_name BaseFrame
+class_name WorldCore
 ```
 
 ### Comment Style
 
 ```gdscript
 # ✅ GOOD - Explains WHY
-# Use local coordinates because cells are children of GridManager
-var local_pos = Vector2(grid_pos) * cell_size
+# Ask the registry, not the int: PIN and UNANCHORABLE_WALL must collide too.
+if not TileTypes.is_walkable(piece.type):
 
 # ❌ BAD - Explains WHAT (code already shows this)
-# Calculate local position
-var local_pos = Vector2(grid_pos) * cell_size
+# Check if the piece is walkable
+if not TileTypes.is_walkable(piece.type):
 
 # ✅ GOOD - Documents complex algorithm
 # Sutherland-Hodgman polygon clipping algorithm:
@@ -595,12 +604,12 @@ git add scripts/tests/test_diagonal_fold.gd
 git commit -m "Add tests for diagonal fold edge cases"
 
 # Then commit implementation
-git add scripts/systems/FoldSystem.gd
+git add scripts/model/FoldReplay.gd
 git commit -m "Implement diagonal fold with Sutherland-Hodgman splitting"
 
 # Update documentation
 git add STATUS.md
-git commit -m "Update STATUS.md - Phase 4 tests complete"
+git commit -m "Update STATUS.md - diagonal fold coverage"
 ```
 
 ### Pushing Changes
@@ -672,10 +681,10 @@ signal cell_selected(grid_pos)
 fold_executed.emit(anchor1, anchor2)
 
 # Connect signal (Godot 4 syntax)
-fold_system.fold_executed.connect(_on_fold_executed)
+player.goal_reached.connect(_on_goal_reached)
 
 # Disconnect signal
-fold_system.fold_executed.disconnect(_on_fold_executed)
+player.goal_reached.disconnect(_on_goal_reached)
 ```
 
 ### Resource Loading

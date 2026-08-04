@@ -1,169 +1,115 @@
-# Space Folding Puzzle Game
+# Space Folding
 
-A puzzle game with space-folding mechanics built with Godot 4.
+A side-view gravity **metroidvania** where the traversal verb is folding space,
+built with Godot 4.3.
 
-> **Contributors & AI agents:** start with **[AGENTS.md](AGENTS.md)** (onboarding,
-> architecture, pitfalls) and **[STATUS.md](STATUS.md)** (current progress).
+> **Contributors & AI agents:** start with **[AGENTS.md](AGENTS.md)** (architecture,
+> layering, critical decisions) and **[STATUS.md](STATUS.md)** (current progress).
 
-## Project Overview
+## What it is
 
-This is a geometric puzzle game where players fold space to solve challenges. The game features:
-- Grid-based puzzle solving
-- Space-folding mechanics
-- Test-driven development approach
+Pin two anchors within arm's reach and the space between them is excised — the two
+halves slide together and meet. A pit closes. A wall you could not climb becomes
+ground under your feet. A sealed chamber loses a corner to a diagonal crease.
+
+What makes it a metroidvania rather than a puzzle game:
+
+- **Folds persist.** They are world state, not a move you undo. Regions keep their
+  fold state when you leave them.
+- **Folds are places.** The strip a fold excises is a real interior you can be
+  pinched into, walk around in, fold *within*, and surface from somewhere else.
+- **Doors are warp points that ride folds.** Fold a door away and its partner
+  delivers you *inside* that fold. Fold something over a door and you have jammed it
+  shut until you unfold.
+
+Run it: open the project in Godot and press play (`scenes/world/World.tscn`), or
+
+```bash
+godot --path . scenes/world/World.tscn
+```
+
+Controls and the design beats are in
+[scripts/world/README.md](scripts/world/README.md).
 
 ## Development Setup
 
-### Prerequisites
-- Godot 4.3 or higher
-- Git
+**Prerequisites:** Godot 4.3+ and Git.
 
-### Testing Framework
+```
+scripts/
+├── model/     # kernel: base grid, folds, derivation, transport, tile registry
+├── utils/     # kernel: geometry and collision math
+├── world/     # the game: FoldWorld, WorldCore, PlayerBody, WorldOverlay
+├── systems/   # AudioManager
+├── ui/        # PauseMenu, Settings
+└── tests/     # GUT suite — the behavioral spec
+worlds/        # authored worlds (regions, doors, pre-placed folds)
+scenes/world/  # World.tscn — the main scene
+```
 
-This project uses **GUT (Godot Unit Test)** v9.4.0 for automated testing.
+The kernel is pure and headless; it must never reference `scripts/world/`.
 
-### Continuous Integration (CI/CD)
+## Testing
+
+This project uses **GUT (Godot Unit Test)** v9.4.0. The suite is the behavioral
+spec — to learn how a subsystem behaves, read its `test_*.gd`.
+
+```bash
+./run_tests.sh                 # all tests
+./run_tests.sh world           # partial filename match
+
+# or directly
+godot --path . --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/ -gexit
+```
+
+If Godot's config dir is sandboxed, redirect `HOME`:
+
+```bash
+HOME=/tmp/godot-home ./run_tests.sh
+```
+
+After adding or renaming a `class_name`, run `godot --headless --import` once so the
+global class registry updates — otherwise you get spurious "Identifier not declared"
+parse errors.
+
+`run_tests.sh` prefers the bundled `tools/godot/godot.gz` (Linux x86-64, gzipped)
+and falls back to a system `godot` on PATH.
+
+### Continuous Integration
 
 [![GUT Tests](https://github.com/absent-mynd/puzzle/actions/workflows/gut-tests.yml/badge.svg)](https://github.com/absent-mynd/puzzle/actions/workflows/gut-tests.yml)
 
-All pull requests automatically run the full GUT test suite via GitHub Actions. Tests must pass before merging.
-
-**Workflow details:**
-- Runs on: Ubuntu 22.04
-- Godot version: 4.3.0
-- Test directory: `res://scripts/tests/`
-- Trigger: All PRs and pushes to `main`
-
-You can also manually trigger the workflow from the Actions tab in GitHub.
-
-### Pre-Push Hook (Optional but Recommended)
-
-A pre-push hook is available to run GUT tests locally before pushing to remote. This provides early feedback and catches issues before CI runs.
-
-**Benefits:**
-- ✅ Catches test failures before pushing to remote
-- ✅ Runs 3-5 times per day (vs. CI-only approach)
-- ✅ Gracefully handles missing Godot installation
-- ✅ Takes 1-3 minutes per push (acceptable for most workflows)
-- ✅ Can be bypassed with `--no-verify` if needed
-
-**Installation:**
+All pull requests run the full suite via GitHub Actions (Ubuntu 22.04, Godot 4.3.0).
+Tests must pass before merging. To reproduce the CI environment locally:
 
 ```bash
-# Run the setup script
-./setup-hooks.sh
-
-# Or manually install
-cp .githooks/pre-push .git/hooks/pre-push
-chmod +x .git/hooks/pre-push
-```
-
-**Requirements:**
-- Godot 4.3+ installed and available in your PATH
-- Download from: https://godotengine.org/download
-
-**Usage:**
-The hook runs automatically on `git push`. If tests fail:
-- Fix the failing tests and push again (recommended)
-- Use `git push --no-verify` to bypass (not recommended)
-
-**Note:** If Godot is not installed, the hook will skip gracefully with a warning, and tests will still run in CI.
-
-#### Running Tests in Godot Editor
-1. Open the project in Godot 4
-2. Go to Project → Project Settings → Plugins
-3. Enable the "Gut" plugin
-4. Access the GUT panel from the bottom panel tabs
-5. Click "Run All" to execute all tests
-
-#### Running Tests from Command Line
-
-To run tests from the command line (useful for local CI/CD):
-
-```bash
-# Run all tests
-godot --path . --headless -s addons/gut/gut_cmdln.gd
-
-# Run tests in a specific directory
-godot --path . --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/
-
-# Run a specific test file
-godot --path . --headless -s addons/gut/gut_cmdln.gd -gtest=res://scripts/tests/test_example.gd
-
-# Generate JUnit XML report for CI integration
-godot --path . --headless -s addons/gut/gut_cmdln.gd -gxml=test_results.xml
-```
-
-#### Running Tests Locally with Docker
-
-To run tests in the same environment as CI:
-
-```bash
-# Run tests using the same Docker image as GitHub Actions
 docker run --rm -v $(pwd):/workspace -w /workspace \
   barichello/godot-ci:4.3 \
   bash -c "godot --headless --import --quit && \
            godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/ -gexit"
 ```
 
-#### Writing Tests
+### Pre-Push Hook (optional)
 
-Test files should:
-- Be placed in `scripts/tests/` directory
-- Extend `GutTest` class
-- Have test methods starting with `test_`
-- Use descriptive assertion messages
+Runs the suite locally before pushing, so failures surface before CI:
 
-Example test structure:
-```gdscript
-extends GutTest
-
-func test_something():
-    assert_eq(5, 5, "Five should equal five")
+```bash
+./setup-hooks.sh
 ```
 
-See `scripts/tests/test_example.gd` for more assertion examples.
-
-#### Available Assertions
-
-Common assertions include:
-- `assert_eq(a, b, msg)` - Assert equal
-- `assert_ne(a, b, msg)` - Assert not equal
-- `assert_gt(a, b, msg)` - Assert greater than
-- `assert_lt(a, b, msg)` - Assert less than
-- `assert_true(val, msg)` - Assert true
-- `assert_false(val, msg)` - Assert false
-- `assert_null(val, msg)` - Assert null
-- `assert_not_null(val, msg)` - Assert not null
-- `assert_almost_eq(a, b, epsilon, msg)` - Assert almost equal (for floats)
-
-## Project Structure
-
-```
-SpaceFoldingPuzzle/
-├── addons/
-│   └── gut/              # GUT testing framework
-├── scenes/
-│   ├── main.tscn
-│   ├── grid/
-│   ├── player/
-│   └── ui/
-├── scripts/
-│   ├── core/             # Cell, Grid, Fold classes
-│   ├── systems/          # FoldSystem, UndoManager
-│   ├── utils/            # GeometryCore, math utilities
-│   └── tests/            # Unit and integration tests
-└── assets/
-    ├── sprites/
-    └── shaders/
-```
+Skips gracefully if Godot is not on PATH. Bypass with `git push --no-verify`.
 
 ## Contributing
 
-When contributing:
-1. Write tests for new features
-2. Ensure all tests pass before committing
-3. Follow the existing code structure
+1. Write the test first — the suite is the spec.
+2. Ensure all tests pass before committing.
+3. Respect the layering: the kernel never depends on the world.
+
+## History
+
+The project previously carried a second, top-down grid-based build alongside this
+one. It was removed on 2026-08-04; see `AGENTS.md` for what that means in practice.
+The pre-consolidation tree is commit `8bf8193` (tagged `topdown-archive` locally).
 
 ## Resources
 

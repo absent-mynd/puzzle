@@ -1,93 +1,129 @@
 # Code Map (Source Pointer Reference)
 
-**Purpose:** Point you to the *right source file* for any subsystem. The source is
+**Purpose:** point you to the *right source file* for any subsystem. The source is
 the authoritative API — this doc deliberately does **not** restate function
 signatures, because a hand-maintained API list drifts out of sync with the code
-(this file used to do that, and it went stale). Read the file; every class carries
-`##` doc-comments on its public methods.
+(this file used to do that, and it went badly stale).
 
 > **Finding things fast**
-> - Every public type has a `class_name`, so grep for it: `grep -rn "class_name Cell" scripts/`
-> - Jump to a symbol's definition or callers with your editor's LSP, or:
->   `grep -rn "func <name>" scripts/`
+> - Every public type has a `class_name`, so grep for it: `grep -rn "class_name BaseFrame" scripts/`
 > - List a file's public API: `grep -nE "^(func|var|const|signal|class_name) " scripts/<file>.gd`
+> - To learn *behavior*, read the test: `scripts/tests/test_<subject>.gd`
 
 ---
 
-## Subsystem → File
+## Layering
 
-### Geometry (pure math, no scene tree)
+```
+scripts/model/  +  scripts/utils/     ← kernel: pure, headless, no scene tree
+        ▲
+scripts/world/                        ← the game: view, physics, input
+scripts/ui/  scripts/systems/         ← menus, audio
+```
+
+The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
+
+---
+
+## Kernel — `scripts/model/`
+
 | Concern | File |
 |---|---|
-| Polygon splitting (Sutherland-Hodgman), point/line tests, intersections, area/centroid, complement geometry for null pieces. `const EPSILON = 0.0001` lives here. | `scripts/utils/GeometryCore.gd` |
-| File I/O helpers (JSON read/write) | `scripts/utils/FileUtils.gd` |
+| Immutable base level: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
+| One base tile: stable `base_id`, `grid_position`, `type`, per-instance `data` | `BaseTile.gd` |
+| One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel` | `Fold.gd` |
+| **The derivation engine.** `derive()`, `derive_pieces()`, `apply_one_fold()` — replays a fold list over the base grid | `FoldReplay.gd` |
+| A derived fragment: `base_id`, `type`, `polygon`, `plane_pos`, **`src_offset`** | `FoldedPiece.gd` |
+| Queryable derived state: per-position stacks, `dominant_type_at`, `pieces_of_base` | `FoldedState.gd` |
+| **Base ↔ derived point transport.** `transport()`, `world_point_from_base()`, `resolve_base_point()`, `piece_at()` | `BaseFrame.gd` |
+| **The tile registry.** walkable / merge_rank / blocks_fold / blocks_anchor / on_enter | `TileTypes.gd` |
+| Entities that ride base tiles: split-on-unfold latents, carried geometry, footprints | `Occupants.gd` |
+| Fold-on-enter cascade: channels, fire-once guard, bounded fixpoint | `TriggerResolver.gd` |
+| Authored world: regions (ASCII rows), doors, pre-placed folds; JSON round trip | `WorldData.gd` |
 
-### Grid & cells
+## Kernel — `scripts/utils/`
+
 | Concern | File |
 |---|---|
-| A single grid cell: `grid_position`, `geometry_pieces: Array[CellPiece]`, dominant `cell_type`, `is_partial`. Cell coords are **LOCAL**. | `scripts/core/Cell.gd` |
-| One polygon piece within a cell (geometry, type, `source_fold_id`, seams). Created when cells are split/merged. | `scripts/core/CellPiece.gd` |
-| A fold line stored on a piece (`line_point`, `line_normal`, intersection points, `fold_id`, `fold_type`). | `scripts/core/Seam.gd` |
-| The grid itself: `cells: Dictionary` (Vector2i→Cell), anchor selection, `grid_origin`, coordinate conversion. `GridManager.position` sits at `grid_origin`. | `scripts/core/GridManager.gd` |
+| Polygon clipping under a fold (`fold_polygons`), shifts, unions, footprint tests | `CollisionCore.gd` |
+| Sutherland-Hodgman split, point/line side, intersections, area/centroid. **`const EPSILON = 0.0001` lives here.** | `GeometryCore.gd` |
+| JSON/dir helpers | `FileUtils.gd` |
 
-### Folding (the core mechanic — largest file, ~2.5k loc)
-| Concern | Entry points in `scripts/systems/FoldSystem.gd` |
-|---|---|
-| Execute a fold (all orientations route through the diagonal path) | `execute_fold()` → `execute_diagonal_fold()` |
-| Validation before folding | `validate_fold()`, `validate_fold_with_player()` |
-| **UNFOLD** (seam-click mechanic; independent, order-free) | `unfold_seam()`, `restore_removed_cells_for_fold()`, `reverse_shifts_for_fold()`, `merge_pieces_after_seam_removal()` |
-| **UNDO** (full snapshot restore) | `undo_fold_by_id()` |
-| Seam intersection check (blocks unfold / drives visuals; **not** used by undo) | `has_newer_seam_intersections()` |
-| Geometry helpers | `calculate_cut_lines()`, `calculate_removed_cells()`, `serialize_grid_state()` |
+---
 
-> The UNFOLD vs UNDO distinction is a deliberate design decision — see
-> [AGENTS.md](../AGENTS.md) §2a and [ARCHITECTURE.md](ARCHITECTURE.md) before
-> changing either path.
+## The game — `scripts/world/`
 
-### Player
 | Concern | File |
 |---|---|
-| Grid-based movement, wall collision, goal/win detection, position updates during folds. Player uses **WORLD** coords. | `scripts/core/Player.gd` |
+| **Everything that makes it a game**: regions, the context stack (subspaces), doors, input, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
+| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility | `WorldCore.gd` |
+| Player physics body: coyote time, jump buffer, squash | `PlayerBody.gd` |
+| Anchors, fold preview band, seam diamonds, glue lines | `WorldOverlay.gd` |
+| Controls and the design beats | `README.md` |
 
-### Game state, history, audio
+`FoldWorld.gd` is the largest file and the one to read first if you want to
+understand how the pieces meet. Its header comment is the map.
+
+### Where to look for a specific behavior
+
+| "How does…" | Start at |
+|---|---|
+| …a fold get committed? | `FoldWorld.do_fold()` / `do_sub_fold()` |
+| …the player ride a flap? | `do_fold()` → `BaseFrame.world_point_from_base` → `WorldCore.depenetrate` |
+| …getting pinched into a fold work? | `do_fold()`, the `dest == null` branch |
+| …a subspace get derived? | `FoldWorld._compute_level()` / `_apply_context()` |
+| …unfold blocking work? | `FoldWorld.can_unfold_fold()`, `WorldCore.segment_intersects_band` |
+| …exiting a subspace work? | `FoldWorld.try_exit()`, `exit_blocker()` |
+| …a door find its partner? | `FoldWorld._check_doors()`, `BaseFrame.resolve_base_point` |
+| …a trigger fire? | `FoldWorld._check_triggers()` → `TriggerResolver.resolve` |
+
+---
+
+## Systems & UI
+
 | Concern | File |
 |---|---|
-| Global game state / fold count (autoload singleton) | `scripts/core/GameManager.gd` |
-| Sequential undo action stack | `scripts/systems/ActionHistory.gd` |
-| SFX/music playback (autoload singleton) | `scripts/systems/AudioManager.gd` |
+| Audio buses, SFX/music playback, volume persistence | `scripts/systems/AudioManager.gd` (autoload) |
+| In-world pause: resume / respawn / settings / quit | `scripts/ui/PauseMenu.gd` |
+| Audio & display settings | `scripts/ui/Settings.gd` |
 
-### Levels
-| Concern | File |
+---
+
+## Data
+
+| Concern | Path |
 |---|---|
-| Level data resource + (de)serialization | `scripts/core/LevelData.gd` |
-| Load/save levels, campaign flow | `scripts/systems/LevelManager.gd` |
-| Level validation | `scripts/systems/LevelValidator.gd` |
-| Campaign progression, stars, unlocking (save/load) | `scripts/systems/ProgressManager.gd` |
-| In-game level editor | `scripts/core/LevelEditor.gd` |
-
-### UI (`scripts/ui/`)
-`MainMenu`, `HUD`, `PauseMenu`, `LevelComplete`, `LevelSelect`, `CustomLevelSelect`,
-`Settings` — one script per screen; scenes live in `scenes/ui/`.
+| The authored world | `worlds/overworld.json` |
+| Main scene | `scenes/world/World.tscn` |
 
 ---
 
 ## Conventions that bite (read before editing)
 
 These are enforced by the code, not optional style. Full rationale in
-[ARCHITECTURE.md](ARCHITECTURE.md) and the pitfalls section of
-[AGENTS.md](../AGENTS.md):
+[ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](../AGENTS.md):
 
-- **Cells/seams use LOCAL coordinates; the player uses WORLD.** Use
-  `Vector2(grid_pos) * cell_size`, never `grid_to_world()`, for cell geometry.
+- **Derive, never mutate.** Change the fold list and re-derive; editing a
+  `FoldedPiece` in place does not persist.
+- **Transport through `BaseFrame`**, not crease arithmetic. Crease math is a
+  fallback for points over void and does not compose across folds.
+- **Ask `TileTypes`**, don't switch on type ints (`is_walkable`, `blocks_fold`,
+  `blocks_anchor`).
 - **Never compare floats with `==`** — use `GeometryCore.EPSILON`.
-- **Free cells before overwriting them** in the `cells` dictionary (memory leak).
 - **Don't mutate a collection while iterating it** — collect, then apply.
+- After adding or renaming a `class_name`, run `godot --headless --import` once so
+  the global class registry updates.
 
 ---
 
 ## Tests as living documentation
 
-The test suite (`scripts/tests/`) is the most reliable behavioral spec. To see
-how any subsystem is *meant* to behave, read its `test_*.gd`. See
-[DEVELOPMENT.md](DEVELOPMENT.md) for how to run tests (including the macOS /
-sandbox invocation).
+The suite is the behavioral spec. Naming maps one-to-one onto subjects:
+`test_base_frame.gd` covers `BaseFrame`, `test_world_core.gd` covers `WorldCore`,
+and so on. The exception is `test_fold_world.gd`, which is **scene-driven** — it
+instantiates the real world scene and drives the actual beats (riding, pinching,
+subspace folds, door traversal). If you change `FoldWorld`, that is the file that
+will catch you.
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for how to run tests (including the sandbox
+`HOME` invocation).

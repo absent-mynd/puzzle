@@ -1,19 +1,21 @@
-# Gravity / Metroidvania Fold Prototype
+# The World — controls & design beats
 
-A playable proof-of-concept for pivoting the game from discrete sokoban
-puzzles to a physics-enabled explorable world. It reuses the real fold model
-(`BaseGrid` / `Fold` / `FoldReplay` / `CollisionCore`) **unchanged** — only the
-view/entity layer is new, which is the architectural claim being tested.
+The side-view gravity world: `FoldWorld` drives the fold kernel (`BaseGrid` /
+`Fold` / `FoldReplay` / `CollisionCore` / `BaseFrame`) with a physics player over
+colliders generated from derived fragments.
 
 ## Run it
 
-Open the project in the Godot editor, open
-`scenes/prototype/FoldPrototype.tscn`, and press **Play Scene** (F6). Or from
+`scenes/world/World.tscn` is the project's main scene, so just press play. Or from
 a terminal:
 
 ```bash
-godot --path . res://scenes/prototype/FoldPrototype.tscn
+godot --path . res://scenes/world/World.tscn
 ```
+
+The world is authored in `worlds/overworld.json` — regions of ASCII terrain, doors
+between them, and pre-placed folds. See `scripts/model/WorldData.gd` for the format
+and `WorldCore.CHARS` for the terrain characters.
 
 ## Controls
 
@@ -95,7 +97,7 @@ pinned and resolve again when you return.
    anchors has to be pinned mid-jump. (Note the fold stays active: unfold it
    from inside and you've sealed yourself in.)
 
-## Current prototype limits (deliberate)
+## Current limits (deliberate)
 
 - No nested pinch: you cannot fold yourself deeper while already inside a
   fold (the fold is blocked with a message).
@@ -104,14 +106,18 @@ pinned and resolve again when you return.
   *feelable*; it's the live design argument for barrier-scoped fold regions.
 - Unfold animation plays only when the unfolded fold is the newest (the
   reverse transform is exact only there); mid-stack unfolds are instant.
-- Movable seams and doors are design-agreed but not in this PoC.
+- Movable seams are design-agreed but not implemented.
+- Triggers (`T`), pins (`P`) and unanchorable tiles (`_`, `X`) are supported by the
+  format and covered by tests, but the shipped world does not place any yet.
 
 ## Files
 
-- `ProtoCore.gd` — pure logic (map parse, side classification, strip capture,
-  depenetration). Covered by `scripts/tests/test_proto_core.gd`.
-- `ProtoWorld.gd` — scene driver: derived geometry → Polygon2D + colliders,
-  fold/unfold with player riding, subspace enter/wrap/exit.
-- `ProtoPlayer.gd` — CharacterBody2D blob (coyote time, jump buffer, squash).
-- `ProtoOverlay.gd` — anchors, strip preview band, seam markers, glue lines.
-- Scene flows in `scripts/tests/test_proto_world.gd`.
+- `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
+  and glue segments, depenetration, anchor/fold eligibility). Covered by
+  `scripts/tests/test_world_core.gd`.
+- `FoldWorld.gd` — scene driver: derived geometry → Polygon2D + colliders,
+  fold/unfold with player riding, subspace enter/wrap/exit, regions, doors,
+  triggers.
+- `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, squash).
+- `WorldOverlay.gd` — anchors, strip preview band, seam markers, glue lines.
+- Scene flows in `scripts/tests/test_fold_world.gd`.
