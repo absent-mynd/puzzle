@@ -102,6 +102,12 @@ static func _apply_fold_reaction(base: BaseGrid, ctx: Dictionary, reaction: Dict
 
 	var fid: int = ctx["next_trigger_id"]
 	var f := Fold.create(fid, a, b, base.cell_size, reaction["channel"])
+
+	# A pin refuses every fold, including one a plate fires. Otherwise a trigger would
+	# be a back door around the one tile type that promises it cannot be folded away.
+	if FoldReplay.blocked_by_tile(pieces, f, base.cell_size):
+		return ctx
+
 	# Build the typed list explicitly: callers may hand us a plain Array.
 	var folds: Array[Fold] = []
 	for existing in ctx["folds"]:

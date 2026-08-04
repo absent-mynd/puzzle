@@ -75,11 +75,11 @@ persist for the next visit. The glue anchor (white diamond) remains the
 unfolding exit. Pending anchors are inert outside their region but stay
 pinned and resolve again when you return.
 
-## What to try (the three beats)
+## What to try (the beats)
 
-1. **Ride a fold.** Cross the wide pit by folding it away: click one rim, then
-   the other. You ride your flap; the seam diamond marks the meeting line.
-   Press U while standing near it and you ride the unfold back. Also try a
+1. **Ride a fold.** Cross the wide pit by folding it away: pin one rim (Q), then
+   the other (E), then commit (F). You ride your flap; the seam diamond marks
+   the meeting line. Press U near it and you ride the unfold back. Also try a
    *vertical* fold (same column): fold the sky down / the floor up to climb —
    this is the gravity-specific verb.
 2. **Get folded in.** Stand *inside* the red preview band and commit the fold:
@@ -96,6 +96,42 @@ pinned and resolve again when you return.
    slanted band across the chamber's corner and bite it off. One of the two
    anchors has to be pinned mid-jump. (Note the fold stays active: unfold it
    from inside and you've sealed yourself in.)
+5. **Meet a fold you cannot make, and one you don't have to.** Through door W2,
+   in the east region — see the next section.
+
+## The pin & plate wing (east)
+
+Past door **W2** you arrive in the east region near door E2. Walking right from
+there is a short teaching run for the two behavioural tile types:
+
+- **The pinned pillar** (red, base x21). A `PIN` cannot be stood on **and no fold may
+  excise or cut it** — try to fold across it and the commit is refused
+  ("Something in that span refuses to fold."). It is two tiles tall, so the way past
+  is to *jump it*: the thing that blocks your fold is also your stepping stone. This
+  is the tile that says **route around, do not erase**.
+- **The pressure plate** (pink, base x25) and the wall it opens (base x27). The wall
+  is three tiles tall — above jump height — so folding is the only way through, and
+  you do not do the folding: stepping on the plate fires a `TRIGGER_FOLD` that
+  excises the wall's band. The reward sits behind it.
+
+Two details worth noticing, because both fall out of the model rather than being
+special-cased:
+
+- The plate's fold **rides you and door E2 with it** — the whole A-side flap moves,
+  so when you walk back the door is one cell right of where you left it.
+- The plate's fold **refuses to cut the pillar**. A trigger is not a back door around
+  a pin; `TriggerResolver` runs the same fold-block predicate a player commit does.
+
+The triggered fold is persistent world state like any other: leave the region and
+come back and the wall is still open.
+
+## Why the west region has no pins
+
+Fold extent is infinite-crease (see below), which makes a pin a **global veto on a
+band of folds** — a pin anywhere in a column forbids every horizontal fold spanning
+it, at any height. West carries the four authored beats and its geometry is load
+bearing for all of them, so pins went in east, where there is room to be wrong.
+Placing them in west is a playtesting job, not an editing one.
 
 ## Current limits (deliberate)
 
@@ -107,8 +143,10 @@ pinned and resolve again when you return.
 - Unfold animation plays only when the unfolded fold is the newest (the
   reverse transform is exact only there); mid-stack unfolds are instant.
 - Movable seams are design-agreed but not implemented.
-- Triggers (`T`), pins (`P`) and unanchorable tiles (`_`, `X`) are supported by the
-  format and covered by tests, but the shipped world does not place any yet.
+- Triggers only fire at world level — a trigger inside a subspace would have to
+  splice folds into an interior list mid-cascade, which the resolver does not model.
+- Unanchorable tiles (`_`, `X`) and occupants are supported by the format and covered
+  by tests, but the shipped world does not place any yet.
 
 ## Files
 

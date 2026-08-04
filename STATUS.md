@@ -3,7 +3,7 @@
 **Last Updated:** 2026-08-04
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation.
-**Tests:** **213 passing** / 213 (0 failing, 0 risky), 14 scripts, ~2.3s.
+**Tests:** **226 passing** / 226 (0 failing, 0 risky), 14 scripts, ~2.7s.
 
 ---
 
@@ -22,10 +22,11 @@ What exists and works today:
 | Side-view world: gravity, riding flaps, depenetration | ✅ Playable |
 | Subspaces (fold interiors as real places) | ✅ Playable |
 | Regions + doors (recursive partner resolution) | ✅ Playable |
-| Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested |
-| Fold-on-enter triggers | ✅ Wired at world level, tested |
+| Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
+| Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
+| Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
 | Audio | ⚙️ `AudioManager` + `Settings` carried over; no assets |
 | Save / progression | ❌ Not started |
 | Entities (items, enemies, save points) | ❌ Not started |
@@ -34,21 +35,21 @@ What exists and works today:
 
 ## Test suite
 
-213 passing across 14 scripts. Composition:
+226 passing across 14 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
+| `test_fold_world` | 21 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates |
+| `test_world_data` | 19 | World format + the shipped world's content |
 | `test_world_core` | 19 | Map parsing, seams, anchor/fold eligibility |
-| `test_fold_world` | 17 | **Scene-driven**: riding, pinch, subspaces, doors |
 | `test_tile_types` | 16 | The registry |
 | `test_collision_core` | 13 | Polygon clipping under folds |
-| `test_world_data` | 12 | World format + the shipped world |
+| `test_trigger_cascade` | 12 | Firing, idempotence, pin veto, cascade cap |
 | `test_occupants` | 11 | Split-on-unfold, footprints, carried geometry |
 | `test_folded_state` | 11 | Per-position stacks, dominant type |
 | `test_fold_replay` | 11 | The derivation engine |
-| `test_trigger_cascade` | 10 | Firing, idempotence, cascade cap |
 | `test_base_grid` | 9 | Immutable base model |
 | `test_base_frame` | 9 | Base ↔ derived transport |
 | `test_fold_unfold_inverse` | 4 | Unfold-as-drop-and-re-derive |
@@ -101,9 +102,9 @@ gravity prototype it drives were built between 2025-11 and 2026-07. See
 
 Roughly in priority order — nothing here is committed to yet:
 
-1. **Put the ported systems in the world.** `Occupants`, `PIN`, `UNANCHORABLE_*` and
-   `TRIGGER_FOLD` are all tested but unused by `worlds/overworld.json`. The demo
-   world should exercise them, which is also how their design gets pressure-tested.
+1. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
+   now placed (east's right wing); `Occupants` and `UNANCHORABLE_*` still are not.
+   Placing them is also how their design gets pressure-tested.
 2. **Settle fold extent.** Infinite-crease is the biggest open question in the
    direction (see `AGENTS.md` §"Open design questions"). Barrier-scoped folds are
    the leading candidate.
@@ -120,8 +121,12 @@ Roughly in priority order — nothing here is committed to yet:
 - The `topdown-archive` tag is **local only** — the remote refused the tag push
   (session credentials are scoped to the working branch). Use `git checkout 8bf8193`.
 - No audio assets ship; `AudioManager` is wired but silent.
-- `worlds/overworld.json` does not use pins, triggers, unanchorable tiles or
-  occupants, so those paths are covered by tests but not by play.
+- Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
+  the world yet. Pins and triggers now are — see east's right wing.
+- The pin/trigger wing lives in **east**, not west, and is reached through a door.
+  West's four authored beats depend on its exact geometry and infinite creases make
+  a pin a global veto on a band of folds, so nothing was placed there without
+  playtesting. See the note in `scripts/world/README.md`.
 
 ---
 

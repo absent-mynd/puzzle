@@ -244,6 +244,93 @@ func test_pending_anchor_inert_across_regions() -> void:
 	assert_true(world.pending_a != null, "...but still pinned, waiting")
 
 
+## Stand in east's normal space, on the surface near door E2.
+func _enter_east() -> void:
+	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
+	world._check_doors()
+	assert_eq(world.region_id, "east", "Crossed into the east region")
+	assert_eq(world.mode, world.Mode.WORLD, "...in normal space")
+
+
+## Where an east base cell currently sits, or null if it is folded away.
+func _east_point(cell: Vector2i):
+	var tile: BaseTile = world.base.tile_at(cell)
+	return BaseFrame.world_point_from_base(
+		world.current_pieces, tile.base_id, (Vector2(cell) + Vector2(0.5, 0.5)) * CS)
+
+
+func test_pinned_pillar_refuses_a_fold_that_spans_it() -> void:
+	_enter_east()
+	var pin = _east_point(Vector2i(21, 9))
+	assert_not_null(pin, "The pinned pillar stands in normal space")
+	var cell := Vector2i((Vector2(pin) / CS).floor())
+
+	var before: int = world.folds.size()
+	world.do_fold(cell - Vector2i(2, 0), cell + Vector2i(2, 0))
+	assert_eq(world.folds.size(), before,
+		"A fold spanning the pinned pillar is refused — you route around, not through")
+
+	world.do_fold(cell + Vector2i(3, 0), cell + Vector2i(6, 0))
+	assert_eq(world.folds.size(), before + 1, "A fold clear of the pillar still commits")
+
+
+func test_pressure_plate_folds_the_wall_away() -> void:
+	_enter_east()
+	assert_not_null(_east_point(Vector2i(27, 9)), "The wall stands before the plate is pressed")
+	var plate = _east_point(Vector2i(25, 9))
+	assert_not_null(plate, "The plate is reachable in normal space")
+
+	var before: int = world.folds.size()
+	world.player.teleport(Vector2(plate), false)
+	world._check_triggers()
+	assert_eq(world.folds.size(), before + 1, "Standing on the plate fires one fold")
+	assert_null(_east_point(Vector2i(27, 9)), "...which folds the wall away")
+	assert_not_null(_east_point(Vector2i(29, 9)), "The reward behind it survives")
+	assert_not_null(_east_point(Vector2i(21, 9)), "And so does the pinned pillar")
+
+
+func test_pressure_plate_does_not_re_fire() -> void:
+	_enter_east()
+	world.player.teleport(Vector2(_east_point(Vector2i(25, 9))), false)
+	world._check_triggers()
+	var after_first: int = world.folds.size()
+
+	# Still standing on it: the latch holds.
+	world._check_triggers()
+	assert_eq(world.folds.size(), after_first, "Standing still does not re-fire the plate")
+
+	# Step off and back on: the channel is already taken, so still nothing.
+	world.player.teleport(Vector2(5.5 * CS, 9.5 * CS), false)
+	world._check_triggers()
+	world.player.teleport(Vector2(_east_point(Vector2i(25, 9))), false)
+	world._check_triggers()
+	assert_eq(world.folds.size(), after_first,
+		"Re-entering the plate spawns no duplicate for a channel that already folded")
+
+
+func test_triggered_fold_persists_across_leaving_the_region() -> void:
+	_enter_east()
+	world.player.teleport(Vector2(_east_point(Vector2i(25, 9))), false)
+	world._check_triggers()
+	var east_folds: int = world.regions["east"]["folds"].size()
+	assert_gt(east_folds, 1, "The plate's fold joined east's persistent fold list")
+
+	# Door E2 RODE the triggered fold with its flap, so it is no longer where it was —
+	# resolve its current point rather than assuming.
+	var e2 = _east_point(Vector2i(2, 9))
+	assert_not_null(e2, "E2 survived the triggered fold")
+	assert_ne(e2, Vector2(2.5 * CS, 9.5 * CS), "...and moved with the flap that carried it")
+
+	# Arriving through a door latches it; stepping off is what clears the latch (in play
+	# that is just the next _physics_process tick away from the doorway).
+	world._check_doors()
+	world.player.teleport(Vector2(e2), false)
+	world._check_doors()
+	assert_eq(world.region_id, "west", "Back in west")
+	assert_eq(world.regions["east"]["folds"].size(), east_folds,
+		"East keeps the triggered fold while you are away")
+
+
 func test_no_hud_control_swallows_mouse_input() -> void:
 	# Anchor placement relies on _unhandled_input receiving input; any Control
 	# with MOUSE_FILTER_STOP covering the screen consumes mouse events first

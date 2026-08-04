@@ -131,6 +131,26 @@ func test_anchors_resolve_through_an_existing_fold():
 	assert_eq(triggered.channel, "A", "the new fold is the triggered one")
 
 
+func test_trigger_refuses_to_cut_a_pin():
+	# A plate must not become a back door around the one tile type that promises it
+	# cannot be folded away. The trigger still "fires" (and is spent), but no fold lands.
+	var base := BaseGrid.from_types(Vector2i(10, 10), CELL, {
+		Vector2i(5, 5): {"type": TRIGGER, "channel": "E", "anchors": [[1, 1], [4, 1]]},
+		Vector2i(2, 7): TileTypes.PIN,   # inside the band the trigger would excise
+	})
+	var out := TriggerResolver.resolve(base, _ctx(base, Vector2i(5, 5)))
+	assert_eq((out["folds"] as Array).size(), 0, "the pin refuses the triggered fold")
+
+
+func test_trigger_still_fires_when_the_pin_is_clear_of_the_band():
+	var base := BaseGrid.from_types(Vector2i(10, 10), CELL, {
+		Vector2i(5, 5): {"type": TRIGGER, "channel": "E", "anchors": [[1, 1], [4, 1]]},
+		Vector2i(8, 7): TileTypes.PIN,   # well outside the band
+	})
+	var out := TriggerResolver.resolve(base, _ctx(base, Vector2i(5, 5)))
+	assert_eq((out["folds"] as Array).size(), 1, "a pin elsewhere does not veto the fold")
+
+
 func test_run_to_fixpoint_respects_the_cap():
 	# A step function that never reports done must still terminate, silently.
 	var calls := [0]

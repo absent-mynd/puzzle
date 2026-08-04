@@ -263,13 +263,8 @@ static func can_anchor_at(pieces_by_pos: Dictionary, cell: Vector2i) -> bool:
 	return not TileTypes.blocks_anchor(TileTypes.dominant_type(types))
 
 
-## Would a fold excise or cut a fold-proof tile (a PIN)? Such a fold must be refused:
-## the space a pin holds can never be folded away, so you must route around it.
+## Would a fold excise or cut a fold-proof tile (a PIN)? Delegates to the kernel: the
+## rule has to hold for every fold, not just the ones the player commits, so it lives
+## next to the derivation (see `FoldReplay.blocked_by_tile`).
 static func fold_blocked_by_tile(pieces: Array, fold: Fold, cell_size: float) -> bool:
-	for piece in pieces:
-		if not TileTypes.blocks_fold(piece.type):
-			continue
-		var res := CollisionCore.fold_polygons([piece.polygon], fold, cell_size)
-		if not res["dropped"].is_empty():
-			return true
-	return false
+	return FoldReplay.blocked_by_tile(pieces, fold, cell_size)
