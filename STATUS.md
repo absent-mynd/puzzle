@@ -1,8 +1,8 @@
 # Project Status - Space-Folding Puzzle Game
 
-**Last Updated:** 2026-07-08
-**Current Phase:** Core mechanics complete (Phases 1-7). Phase 8 gameplay interaction work in progress.
-**Total Tests:** **617 passing** / 617 (0 failing, 0 risky)
+**Last Updated:** 2026-07-24
+**Current Phase:** Core mechanics complete (Phases 1-7). Metroidvania/gravity pivot exploration in progress (see `scripts/prototype/`).
+**Total Tests:** **508 passing** / 508 (0 failing, 0 risky) — count re-measured after the derive/replay + F1-F7 merges; the previous 617 figure predates them.
 
 ---
 
@@ -94,6 +94,49 @@ Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
 ---
 
 ## Recent Changes
+
+### 2026-07-24
+- **Gravity/metroidvania prototype** (`scenes/prototype/FoldPrototype.tscn`,
+  `scripts/prototype/`): playable side-view proof-of-concept reusing the
+  derive/replay fold model unchanged. Free-moving blob player (CharacterBody2D)
+  over colliders generated from `FoldedState` pieces; player rides flaps through
+  fold/unfold via piecewise crease transforms; standing in the excised strip at
+  commit pinches the player INTO the fold — the strip renders as a cylinder
+  (content repeating across the glue line) and exiting (U) unfolds with the
+  player's in-strip position carried into the world (dive-traversal v1). Design
+  context: metroidvania pivot discussion — knowledge/configuration-gated
+  progression, subspaces, movable seams, fold-extent options. Tests:
+  `test_proto_core.gd` (9), `test_proto_world.gd` (6).
+- Iteration: mouse anchor clicks replaced by **embodied directional placement** —
+  anchors pin on the adjacent cell in the pointed direction (hold ↑/↓ to
+  point vertically, else facing); jump is Space-only. **Off-axis anchor pairs
+  are allowed** (2+ tiles apart, any direction) and commit diagonal folds; the
+  overlay band preview generalizes to arbitrary crease angles.
+- Iteration 2: **placement and commitment separated** — Q pins anchor 1, E pins
+  anchor 2 (re-pin moves, same-spot clears), F (interact) commits the fold; the
+  player's position at COMMIT time decides ride vs folded-in. F aimed at (or
+  standing on) an active fold's seam diamond unfolds that fold.
+- Iteration 3: **subspace made real + exact riding + animation.** Pinch folds
+  are applied to the world; the subspace is the interior of an active fold with
+  the same rules as outside: fold within it (interior folds persist into the
+  world on exit), exit by interacting with the outer fold's anchor point on the
+  glue line (both anchors coincide there). Unfold blocking everywhere: a fold
+  cannot unfold while a newer fold's band crosses its seam segment — interior
+  folds crossing the glue lock the exit. Player and pending anchors transport
+  by exact base-frame mapping (fragment base_id + src_offset), replacing crease
+  arithmetic; anchors pinned inside a subspace survive exit and land with the
+  strip. Polygon fold/unfold animation (flaps slide, strip collapses/springs
+  from the seam) with physics frozen during. Prototype tests: 23.
+- Iteration 4: **regions + doors**. Two regions (own BaseGrid + persistent
+  folds + per-fold interiors); the player's location is a region + context
+  stack of entered folds. Doors are warp POINTS at base-tile centers (ride
+  folds with the tile; dormant when split exactly through the center);
+  traversal resolves the partner point recursively — world, fold strips,
+  interiors — so a folded-away door delivers you INSIDE that fold's subspace
+  and vice versa. Door exit leaves folds folded (non-destructive); glue-anchor
+  exit unfolds. East ships pre-folded with a door + goal inside the authored
+  fold. Blocked landings refuse traversal (doors jammable by folding).
+  Prototype tests: 29.
 
 ### 2026-07-10
 - **Level editor usability pass.** The editor↔play round-trip now works: pressing `T`
