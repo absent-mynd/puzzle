@@ -13,11 +13,7 @@ const T_GOAL := 3
 
 
 func _grid(size: Vector2i = Vector2i(10, 10), cell := 64.0, types: Dictionary = {}) -> BaseGrid:
-	var ld := LevelData.new()
-	ld.grid_size = size
-	ld.cell_size = cell
-	ld.cell_data = types
-	return BaseGrid.from_level_data(ld)
+	return BaseGrid.from_types(size, cell, types)
 
 
 func _fold(base: BaseGrid, a1: Vector2i, a2: Vector2i, id := 0) -> Fold:

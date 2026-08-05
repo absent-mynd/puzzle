@@ -58,19 +58,23 @@ assets/audio/
 
 ### 3. Audio Integration Points
 
-#### FoldSystem (`scripts/systems/FoldSystem.gd`)
-- ✅ Plays "fold" sound on successful fold execution (line 805)
-- ✅ Plays "error" sound on validation failures (lines 786, 795)
+> ⚠️ **Status after the 2026-08-04 consolidation.** Every call site listed here
+> previously lived in the deleted top-down build. `AudioManager` itself carried over
+> intact and is still an autoload, but **the world does not call it yet** — apart
+> from `PauseMenu`, which plays `button_click`. Wiring the gravity world's events
+> (fold commit, fold refused, pinch, unfold, door traversal, landing, respawn) is
+> open work.
 
-#### Player (`scripts/core/Player.gd`)
-- ✅ Plays "footstep" sound with pitch variation on movement (line 166)
-- ✅ Plays "victory" sound when reaching goal (line 197)
+#### PauseMenu (`scripts/ui/PauseMenu.gd`)
+- ✅ Plays "button_click" on every menu action
 
-#### GridManager (`scripts/core/GridManager.gd`)
-- ✅ Plays "selection" sound when selecting anchor points (line 195)
+#### FoldWorld (`scripts/world/FoldWorld.gd`)
+- ❌ Not wired. Natural trigger points: `do_fold()` / `do_sub_fold()` success and
+  refusal, the pinch branch, `unfold_level_fold()`, `try_exit()`, `_check_doors()`,
+  `_check_triggers()`, and the fall-out-of-world respawn.
 
-#### MainScene (`scenes/MainScene.gd`)
-- ✅ Starts "gameplay" background music on scene load (line 28)
+#### PlayerBody (`scripts/world/PlayerBody.gd`)
+- ❌ Not wired. Natural trigger points: jump, landing, footsteps.
 
 ### 4. Test Suite (`scripts/tests/test_audio_manager.gd`)
 
@@ -179,11 +183,13 @@ All buses are automatically created by AudioManager if they don't exist.
 | Component | Status | Audio Triggers |
 |-----------|--------|----------------|
 | AudioManager | ✅ Complete | Singleton, buses, volume controls |
-| FoldSystem | ✅ Integrated | fold, error sounds |
-| Player | ✅ Integrated | footstep, victory sounds |
-| GridManager | ✅ Integrated | selection sound |
-| MainScene | ✅ Integrated | gameplay music |
-| Tests | ✅ Complete | 30 tests, 29 passing |
+| PauseMenu | ✅ Integrated | button_click |
+| Settings | ✅ Integrated | volume controls |
+| FoldWorld | ❌ Not wired | fold / refuse / pinch / unfold / door / respawn |
+| PlayerBody | ❌ Not wired | jump, land, footstep |
+| Tests | ✅ Complete | 30 tests passing |
+
+**No audio assets ship yet** — the buses and API are in place and silent.
 
 ## Performance Considerations
 
@@ -197,32 +203,27 @@ All buses are automatically created by AudioManager if they don't exist.
 
 ### Optional Features (Not Currently Implemented)
 - Settings persistence (save volume preferences)
-- UI buttons with audio feedback (button_hover, button_click)
-- Undo sound effect integration (when undo system implemented)
-- Menu music (when main menu created)
+- UI buttons with audio feedback (button_hover)
+- Menu music
 - Additional ambient sounds (water, wind, etc.)
 - Music crossfading between different gameplay states
 - Sound occlusion/distance attenuation
 - Audio visualization (volume meters)
 
 ### Integration Opportunities
-- **GUI System (Phase 10):** Add button hover/click sounds
-- **Undo System (Phase 6):** Add undo sound effect
-- **Main Menu:** Add menu background music
-- **Settings Menu:** Add audio settings panel
-- **Level Complete:** Add celebration music/fanfare
+- **FoldWorld:** the whole fold vocabulary — commit, refuse, pinch, unfold, exit
+- **Subspaces:** a distinct ambience inside a fold would sell it as a *place*
+- **Doors:** traversal and the refused-because-jammed case
+- **PlayerBody:** jump, land, footstep
+- **Save points:** once checkpoints exist
 
 ## Acceptance Criteria Status
 
-✅ **Music plays on menu and during gameplay**
-- Gameplay music integrated in MainScene
-- System ready for menu music when UI implemented
+⚙️ **Music plays during gameplay**
+- The API is ready; the world does not start music yet.
 
-✅ **SFX trigger on all appropriate events**
-- Fold execution: fold sound
-- Validation errors: error sound
-- Player movement: footstep sound
-- Goal reached: victory sound
+⚙️ **SFX trigger on all appropriate events**
+- Menu clicks are wired. World events are not — see Integration Points above.
 - Anchor selection: selection sound
 
 ✅ **Volume controls work correctly**
@@ -301,7 +302,7 @@ The audio system implementation is **complete and production-ready**. The system
 2. Add audio files to `assets/audio/` directories
 3. Test in-game audio experience
 4. Adjust volume mixing if needed
-5. Add UI audio feedback when GUI system implemented
+5. Wire the world's fold vocabulary to the existing API
 
 **Tests:** `scripts/tests/test_audio_manager.gd`
 
@@ -309,6 +310,5 @@ The audio system implementation is **complete and production-ready**. The system
 
 ---
 
-**Implementation completed by:** Claude (AI Agent)
-**Date:** 2025-11-06
-**Task:** Phase 10 - Audio System
+**AudioManager implemented:** 2025-11-06
+**Last reviewed:** 2026-08-04 (call sites re-audited after the consolidation)

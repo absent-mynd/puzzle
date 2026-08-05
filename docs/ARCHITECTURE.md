@@ -1,595 +1,228 @@
 # Architecture & Design Decisions
 
-**Purpose:** This document explains **WHY** things are designed the way they are.
+**Purpose:** *why* the code is shaped the way it is. For *where* things live, see
+[REFERENCE.md](REFERENCE.md). For onboarding, see [AGENTS.md](../AGENTS.md).
 
-**Last Updated:** 2025-11-08
+**Last Updated:** 2026-08-04
 
----
-
-## Core Design Philosophy
-
-**1. Test-Driven Development (TDD)**
-- Write tests before implementation
-- Tests define expected behavior
-- Target: 100% test coverage
-- Tests serve as living documentation
-
-**2. Simplicity First**
-- Start with simplest solution that works
-- Add complexity only when needed
-- Clear, readable code over clever code
-- Explicit over implicit
-
-**3. Performance Through Design**
-- Memory efficient data structures
-- Avoid premature optimization
-- Profile before optimizing
-- Target: < 100ms fold operations, 60 FPS
+> **History note.** This document was rewritten during the 2026-08-04 consolidation.
+> The decisions it used to record — the hybrid grid-polygon cell system, the
+> null-piece system, LOCAL-vs-WORLD cell coordinates, strict undo ordering,
+> tessellation for multi-seam cells — described the top-down grid build, which no
+> longer exists. They are preserved in git history at `8bf8193`
+> (`topdown-archive`).
 
 ---
 
-## Critical Architectural Decisions
+## Core philosophy
 
-These decisions shape the entire implementation. **Do not deviate** without careful consideration and team discussion.
+**The world is a sheet of paper with rules, not a grid of tiles with special cases.**
 
----
-
-### Decision 1: Hybrid Grid-Polygon System
-
-**The Decision:**
-- Start with simple grid cells (position + type only)
-- Convert to polygon geometry ONLY when cell is split by a fold
-- Track split state with `is_partial` flag
-
-**Rationale:**
-- **Memory efficiency:** 100 grid cells = 100 Vector2i positions vs 100 × 4+ vertices
-- **Easier level creation:** Just specify grid position and type
-- **Cleaner code:** Most operations work on grid coordinates
-- **Performance:** No polygon operations until absolutely needed
-
-**Implementation:**
-```gdscript
-class_name Cell
-extends Node2D
-
-var grid_position: Vector2i          # Always present
-var geometry: PackedVector2Array     # Initially square, becomes polygon when split
-var is_partial: bool = false         # True if split by fold
-```
-
-**Alternatives Considered:**
-- ❌ **All polygons from start:** Wasteful memory, complex level creation
-- ❌ **Always grid-based:** Can't support diagonal folds
-- ✅ **Hybrid approach:** Best of both worlds
-
-**Impact on Future Development:**
-- Phase 4: Cells become polygons when split
-- Phase 5: Polygon cells can be subdivided further
-- Level creation: Simple grid-based level files
+Every decision below follows from taking that literally. A fold is a physical
+operation on a sheet; if the model can express "this part of the paper is now
+somewhere else, and it is still the same part of the paper," then almost everything
+else — riding flaps, being pinched inside a fold, doors that travel with the terrain,
+entities cut in half — falls out without special-casing.
 
 ---
 
-### Decision 2: Player Fold Validation Rule
+## Decision 1: Derive, never mutate
 
-**The Decision:**
-Folds are blocked if:
-1. Player is in the removed region (between fold lines), OR
-2. Player cell would be split by the fold, OR
-3. Player is on a cell that contains an anchor point (fold line passes through it)
+**State is `(BaseGrid, Array[Fold])`. Everything else is a pure function of it.**
 
-**Rationale:**
-- **Simplifies player logic:** No need to relocate player during fold
-- **Prevents edge cases:** What if player on split cell? What if split creates unreachable region?
-- **Intuitive gameplay:** Players understand "can't fold through myself"
-- **Cleaner code:** Validation is simple check before fold
-- **Anchor consistency:** Fold lines cut through anchor positions, so player would be split
+`FoldReplay.derive_pieces(base, folds)` replays the fold list over the immutable base
+grid and returns a fresh fragment list. There is no in-place mutation in the kernel.
 
-**Implementation:**
-```gdscript
-func validate_fold_with_player(anchor1, anchor2, player) -> bool:
-    # Check if player in removed region
-    var removed_cells = calculate_removed_cells(anchor1, anchor2)
-    if player.grid_position in removed_cells:
-        return false
-
-    # Check if player cell would be split
-    var player_cell = grid.get_cell(player.grid_position)
-    if would_cell_be_split(player_cell, anchor1, anchor2):
-        return false
-
-    return true
-```
-
-**Key Points:**
-- ✅ Players CAN stand on non-anchor cells along the fold line (edge of fold)
-- ❌ Players CANNOT stand on anchor cells (cut line passes through anchor)
-- ❌ Players CANNOT stand in removed region (between fold lines)
-- ❌ Players CANNOT stand on cells that would be split
-
-**Alternatives Considered:**
-- ❌ **Move player automatically:** Complex, unpredictable, can trap player
-- ❌ **Allow splits, track player in half-cell:** Very complex geometry
-- ❌ **Kill player if in removed region:** Frustrating gameplay
-- ❌ **Allow player on anchors (removed Nov 8):** Cut line would split player cell
-- ✅ **Block folds that affect player:** Simple, intuitive, reliable
-
-**Impact on Future Development:**
-- Phase 4: Same validation applies to diagonal folds
-- Phase 5: Player validation still applies to tessellated cells
-- Phase 6: Undo system doesn't need to restore player state
-- Level design: Levels can be designed knowing this constraint
-
----
-
-### Decision 3: Coordinate System Architecture
-
-**The Decision:**
-- **Cells store geometry in LOCAL coordinates** (relative to GridManager.position)
-- **Player uses WORLD coordinates** (absolute pixel positions)
-- **Seam lines (Line2D) use LOCAL coordinates** (children of GridManager)
-- **GridManager is positioned at `grid_origin`** (centered on screen)
-
-**Rationale:**
-- **Godot's scene tree:** Children inherit parent's transform
-- **Cells are children of GridManager:** Inherit GridManager.position transform
-- **Player is NOT a child:** Needs absolute positioning for camera follow
-- **Consistency:** All cell geometry calculations in same coordinate space
-- **Performance:** No repeated conversions during rendering
-
-**Formula:**
-```gdscript
-# Creating cell geometry (LOCAL coordinates)
-var local_pos = Vector2(grid_pos) * cell_size
-cell.geometry = create_square(local_pos, cell_size)
-
-# Converting for player (WORLD coordinates)
-player.position = grid_manager.to_global(local_pos + offset)
-```
-
-**Common Bug:**
-```gdscript
-# ❌ WRONG - Double offset!
-var world_pos = grid_manager.grid_to_world(grid_pos)
-cell.geometry = create_square(world_pos, size)
-# Cell appears at grid_origin + grid_origin position!
-
-# ✅ CORRECT
-var local_pos = Vector2(grid_pos) * cell_size
-cell.geometry = create_square(local_pos, size)
-```
-
-**Alternatives Considered:**
-- ❌ **All world coordinates:** Requires offset adjustments everywhere
-- ❌ **All local coordinates:** Player positioning becomes complex
-- ❌ **Player as child of GridManager:** Camera follow breaks
-- ✅ **Hybrid (local for cells, world for player):** Clear separation of concerns
-
-**Impact on Future Development:**
-- Phase 4: Diagonal fold geometry still in LOCAL coordinates
-- Phase 5: Tessellation operates in LOCAL coordinate space
-- Visual effects: Particle positions need conversion
-
----
-
-### Decision 4: Folding Behavior - Overlapping at Anchors
-
-**The Decision:**
-- Cells at right/bottom anchor **shift to** left/top anchor position
-- Cells **overlap/merge** at anchor (not adjacent)
-- Shift distance = full distance between anchors
-- MIN_FOLD_DISTANCE = 0 (adjacent anchors allowed)
-
-**Rationale:**
-- **Intuitive metaphor:** Folding paper brings anchors together
-- **Simpler algorithm:** No gap calculations, direct position assignment
-- **Cleaner visuals:** Seam at anchor point, not between anchors
-- **Flexible gameplay:** Allows maximum grid compression
-
-**Implementation:**
-```gdscript
-# Horizontal fold example
-var shift_distance = right_anchor.x - left_anchor.x
-
-for cell in cells_to_shift:
-    var new_pos = Vector2i(cell.grid_position.x - shift_distance, cell.grid_position.y)
-
-    # Free any existing cell at target position (merge)
-    var existing_cell = grid.cells.get(new_pos)
-    if existing_cell:
-        grid.cells.erase(new_pos)
-        existing_cell.queue_free()
-
-    # Move cell to new position
-    cell.grid_position = new_pos
-    grid.cells[new_pos] = cell
-```
-
-**Alternatives Considered:**
-- ❌ **Adjacent positioning:** More complex, less intuitive
-- ❌ **Minimum distance > 0:** Arbitrary restriction
-- ❌ **Keep both cells at merge:** Ambiguous, complex visuals
-- ✅ **Overlap and merge:** Simple, clear, intuitive
-
-**Impact on Future Development:**
-- Phase 4: Same merge behavior for diagonal folds
-- Phase 5: Merged cells can have multiple seams
-- Memory management: Critical to free overlapped cells
-
----
-
-### Decision 5: Sutherland-Hodgman Polygon Splitting
-
-**The Decision:**
-Use the Sutherland-Hodgman clipping algorithm for polygon splitting by a line.
-
-**Rationale:**
-- **Industry standard:** Well-tested, reliable algorithm
-- **Handles all cases:** Convex and concave polygons
-- **Efficient:** O(n) where n = number of vertices
-- **Robust:** Handles edge cases (vertex on line, all vertices on one side)
-- **Simple implementation:** Straightforward to code and test
-
-**Implementation:**
-```gdscript
-# GeometryCore.split_polygon_by_line()
-static func split_polygon_by_line(
-    vertices: PackedVector2Array,
-    line_point: Vector2,
-    line_normal: Vector2
-) -> Dictionary:
-    # Returns: {
-    #   "left": PackedVector2Array,    # Vertices on left/negative side
-    #   "right": PackedVector2Array,   # Vertices on right/positive side
-    #   "intersections": Array[Vector2] # Intersection points
-    # }
-```
-
-**Alternatives Considered:**
-- ❌ **Custom polygon splitting:** Reinventing the wheel, bug-prone
-- ❌ **Godot's Geometry2D (limited):** Doesn't provide split functionality
-- ❌ **SAT-based approaches:** Overkill for this use case
-- ✅ **Sutherland-Hodgman:** Proven, simple, efficient
-
-**Impact on Future Development:**
-- Phase 4: Core algorithm for diagonal folds
-- Phase 5: Used recursively for tessellation
-- Testing: Well-known algorithm makes test cases clear
-
----
-
-### Decision 6: Bounded Grid Model
-
-**The Decision:**
-- Folds clip at grid boundaries
-- Don't create cells outside the grid
-- Grid size is fixed for each level
-
-**Rationale:**
-- **Most intuitive for players:** Understand grid boundaries
-- **Simpler implementation:** No infinite grid management
-- **Better performance:** Fixed maximum cell count
-- **Easier level design:** Clear playfield boundaries
-
-**Implementation:**
-```gdscript
-# After fold, ensure all cells are within bounds
-func clip_to_bounds(grid_pos: Vector2i, grid_size: Vector2i) -> bool:
-    return (grid_pos.x >= 0 and grid_pos.x < grid_size.x and
-            grid_pos.y >= 0 and grid_pos.y < grid_size.y)
-```
-
-**Alternatives Considered:**
-- ❌ **Unbounded grid:** Complex scrolling, memory management
-- ❌ **Wrap-around (toroidal):** Confusing for players
-- ❌ **Dynamic expansion:** When to shrink? Complex edge cases
-- ✅ **Bounded with clipping:** Clear, simple, predictable
-
-**Impact on Future Development:**
-- Level design: Fixed grid sizes (can vary per level)
-- Camera system: Can auto-zoom to fit grid
-- Performance: Maximum cells = grid_size.x × grid_size.y
-
----
-
-### Decision 7: Tessellation for Multi-Seam Handling
-
-**The Decision:**
-When seams intersect in a cell, subdivide the cell into convex regions using tessellation.
-
-**Rationale:**
-- **Most robust approach:** Handles arbitrary seam intersections
-- **Maintains polygon structure:** Each region is still a valid polygon
-- **Visual clarity:** Each region can be rendered distinctly
-- **Tracks origins:** Know which side of each seam each region came from
-
-**Implementation (Phase 5):**
-```gdscript
-# When adding new seam to cell with existing seams:
-# 1. Split cell polygon by new seam
-# 2. For each resulting sub-polygon, check against existing seams
-# 3. Recursively subdivide until all seams processed
-# 4. Store seam metadata for each sub-polygon
-```
-
-**Alternatives Considered:**
-- ❌ **Overlapping polygons:** Visual rendering nightmare
-- ❌ **Single polygon with holes:** Complex, doesn't track seam relationships
-- ❌ **Ignore intersecting seams:** Limits gameplay possibilities
-- ✅ **Tessellation:** Complex but handles all cases correctly
-
-**Impact on Future Development:**
-- Phase 5: Core algorithm for multi-seam cells
-- Rendering: Each sub-polygon can have different shader
-- Undo system: Must restore entire tessellation state
-
----
-
-### Decision 8: Strict Undo Ordering
-
-**The Decision:**
-A fold can only be undone if it's the newest fold affecting ALL its cells.
-
-**Rationale:**
-- **Simpler implementation:** No partial undo resolution
-- **Predictable behavior:** Players understand "undo most recent affecting this area"
-- **Avoid complex dependencies:** Don't need to track dependency graphs
-- **Sufficient for gameplay:** Most puzzles designed with sequential undo
-
-**Implementation (Phase 6):**
-```gdscript
-func can_undo_fold(fold_id: int) -> bool:
-    var fold = get_fold(fold_id)
-    # Check all cells affected by this fold
-    for cell_id in fold.affected_cells:
-        var cell = get_cell(cell_id)
-        # Check all seams in this cell
-        for seam in cell.seams:
-            var seam_fold = seam_to_fold_map[seam.id]
-            # If any seam is from a newer fold, block undo
-            if seam_fold.timestamp > fold.timestamp:
-                return false
-    return true
-```
-
-**Alternatives Considered:**
-- ❌ **Allow partial undo:** Very complex, unpredictable
-- ❌ **Always allow undo (revert newer folds):** Confusing cascade
-- ❌ **Unlimited undo history:** Memory concerns
-- ✅ **Strict ordering:** Simple, predictable, sufficient
-
-**Impact on Future Development:**
-- Gameplay: Encourages thoughtful planning
-- Level design: Can design around undo limitations
-- UI: Clear visual feedback for undo availability
-
----
-
-### Decision 9: Null Piece System for Geometric Consistency ✨ NEW
-
-**The Decision:**
-When a polygon piece shifts to an empty grid location (no merge partner), create a "null piece" to fill the missing geometry. Null pieces have type -1, are invisible, unwalkable, and represent the "void" left by the fold.
-
-**Rationale:**
-- **Maintains geometric invariants:** Cells remain geometrically complete through multiple folds
-- **Simplifies future operations:** Future folds can split null pieces like any other piece - no special cases
-- **Proper visibility:** Null pieces are invisible but have real geometry for calculations
-- **Player blocking:** Cells with null pieces block player movement (null is highest priority type)
-- **Clean undo:** Null pieces are restored with other pieces in undo operations
-
-**Implementation:**
-```gdscript
-# When a piece shifts to empty location:
-# 1. Calculate complement geometry (what's missing)
-var complement = GeometryCore.calculate_complement_geometry(original_geometry, shifted_piece_geometry)
-
-# 2. Create null piece to fill the gap
-var null_piece = CellPiece.new(complement, CellPiece.CELL_TYPE_NULL, fold_id)
-shifted_cell.geometry_pieces.append(null_piece)
-
-# 3. Update dominant type (null is highest priority)
-shifted_cell.update_dominant_type()
-```
-
-**Rendering:**
-- Null pieces are completely invisible (no polygon rendered)
-- Only real piece types (0-3) are rendered
-- Multi-piece cells skip null pieces in rendering loop
-
-**Alternatives Considered:**
-- ❌ **Leave gap (incomplete geometry):** Breaks invariants, complex split logic
-- ❌ **Mark cell as special (unwalkable):** Limited - what if partial null?
-- ❌ **Reconstruct on demand:** Expensive, complex caching
-- ✅ **Null pieces with real geometry:** Simple, handles all cases, natural extension
-
-**Impact on Future Development:**
-- Phase 4: No special handling needed for split null pieces
-- Phase 5: Tessellation naturally includes null pieces
-- Phase 6: Undo system doesn't need null-specific logic
-- Tests: null_pieces test suite (7+ tests) ensures consistency
-
----
-
-## Implementation Patterns
-
-### Pattern 1: Always Validate Before Fold
+**Why:** the predecessor was ~2000 lines of in-place mutation that had to implement
+*unfold* as a hand-written inverse of every forward operation — reversing shifts,
+restoring removed cells, re-merging split pieces, reconciling cut lines. Each fix
+broke a neighbouring case. Under derive/replay, unfold is:
 
 ```gdscript
-func attempt_fold(anchor1, anchor2):
-    # ALWAYS validate first
-    if not validate_fold(anchor1, anchor2):
-        return false
-
-    if player and not validate_fold_with_player(anchor1, anchor2, player):
-        show_error_message("Cannot fold - player in the way")
-        return false
-
-    # THEN execute
-    execute_fold(anchor1, anchor2)
-    return true
+folds.erase(f)      # drop it
+rebuild_world()     # re-derive
 ```
 
-**Why:** Prevents invalid states, provides user feedback
+There is no inverse to get wrong, no snapshot to go stale, and no ordering constraint
+— any fold can be removed at any time.
+
+**Cost:** re-deriving is O(pieces × folds) on every change. At current world sizes
+this is microseconds and not worth optimizing. If it ever matters, the fix is
+incremental extension (`FoldReplay.apply_one_fold` already exists for exactly that),
+not a return to mutation.
 
 ---
 
-### Pattern 2: Test-Driven Development Flow
+## Decision 2: `src_offset` — the invariant that makes transport exact
 
-```gdscript
-# 1. Write test FIRST
-func test_diagonal_fold_45_degrees():
-    var result = fold_system.execute_diagonal_fold(...)
-    assert_eq(result.cells_removed, 12)
-    assert_not_null(grid.get_cell(Vector2i(7, 2)))
+**Every derived fragment satisfies `polygon == base_polygon + src_offset`.**
 
-# 2. Run test (fails)
-# 3. Implement feature
-# 4. Run test (passes)
-# 5. Refactor if needed
-# 6. Run test again (still passes)
+That one invariant is the load-bearing element of the whole design:
+
+```
+current point ──(subtract its fragment's src_offset)──► base point
+base point ──(find the fragment with the same base_id containing it)──► any other configuration
 ```
 
-**Why:** Defines expected behavior, catches regressions, builds confidence
+`BaseFrame` is that round trip. It is how the player rides a flap through a fold, how
+a pinned anchor survives being carried into a subspace and back out, how a door
+resolves its partner's *current* location, and how a trigger's authored anchors
+follow whatever earlier folds did.
+
+**The alternative we rejected:** crease arithmetic — classify a point by which side of
+the fold it is on, then apply that side's shift. Simpler, and it works for one fold.
+It does *not* compose: after two folds a point's displacement depends on which
+fragments it passed through, not on its position relative to either crease. Crease
+math survives in `WorldCore.fold_shift_for_side` as a fallback for points over
+**void**, where there is no fragment to ask.
 
 ---
 
-### Pattern 3: Cell Merging with Memory Safety
+## Decision 3: Meet-in-the-middle folds
 
-```gdscript
-func merge_cells(source_cell, target_pos):
-    # 1. Check if target position already has a cell
-    var existing_cell = grid.cells.get(target_pos)
+A fold orders its anchors (`anchor_a` = lexicographic min by `(y, x)`), excises the
+strip strictly between their creases, and slides **both** flaps inward by integer
+half-shifts so they meet at a common line. The seam sits at
+`anchor_a + shift_a_grid`.
 
-    # 2. If exists, FREE it first
-    if existing_cell:
-        grid.cells.erase(target_pos)
-        if existing_cell.get_parent():
-            existing_cell.get_parent().remove_child(existing_cell)
-        existing_cell.queue_free()
+**Why both flaps rather than one:** it makes the fold symmetric, so the operation does
+not privilege whichever anchor you happened to place first, and the seam lands
+predictably between them. Integer half-shifts keep everything grid-aligned, which
+keeps `plane_pos` meaningful and lets the door and anchor machinery work in cell
+coordinates.
 
-    # 3. THEN assign new cell
-    source_cell.grid_position = target_pos
-    grid.cells[target_pos] = source_cell
+**Consequence — infinite creases.** A crease is a full line, not a segment, so a fold
+excises a band across the entire world. Close a pit here and a structure on the far
+side of the map loses the same band. **This is deliberately unresolved.** It is the
+strongest argument for barrier-scoped fold regions, and the design position is that it
+should be *felt* in play before it is engineered away. Do not quietly fix it.
+
+---
+
+## Decision 4: Subspaces are real places, derived the same way
+
+A fold's excised strip is not deleted — it is captured (`WorldCore.capture_strip`) as
+a real fragment list retaining `base_id` and `src_offset`. Being pinched into a fold
+enters that list as a *level* with the same rules as the outside: you can fold within
+it, and interior folds persist into the world when you exit.
+
+**Why this needed no new machinery:** a subspace's base pieces are just the parent's
+strip content, and its fold list is just another `Array[Fold]`. So
+`FoldWorld._compute_level(path)` derives any level — world, strip, or interior of an
+interior — by the same replay. Recursion came free because the strip kept its base
+identity.
+
+---
+
+## Decision 5: The tile registry owns per-type behavior
+
+`TileTypes` is the single authority for what a tile type *is* and *does*: walkable,
+merge rank, `blocks_fold`, `blocks_anchor`, `on_enter`.
+
+**Why:** before it existed, the type int was switched on in ~6 places (merge priority,
+walkability, collision, colour, anchor validation), so adding a tile type meant
+editing every site — and forgetting one meant a subtle bug. Now a new tile is one row
+in one table.
+
+The discipline this asks for: **do not write `if piece.type == TileTypes.WALL`.**
+Write `TileTypes.is_walkable(piece.type)`. The collider-building loop in
+`FoldWorld.rebuild_world` follows this, which is why `PIN` and `UNANCHORABLE_WALL`
+collide correctly without that loop ever having heard of them.
+
+---
+
+## Decision 6: Uniform unfold blocking
+
+A fold cannot be unfolded while a **newer** fold's excision band crosses its seam
+segment. The same test against a fold's two glue lines gates exiting a subspace.
+
+**Why one rule:** the naive alternative is a stack discipline (only unfold the newest
+fold). Simpler, but far less interesting — it forbids legal, comprehensible
+configurations, and it cannot express the situation that makes subspaces tense: an
+interior fold whose creases are not parallel to the glue *locks you inside* until you
+undo it. One geometric predicate, applied at every level, produces that for free.
+
+---
+
+## Decision 7: No undo — respawn instead
+
+The predecessor had Baba-style global undo: a step log replayed from a prefix. It was
+good, and it does not survive the pivot.
+
+**Why it cannot be kept:** an undo log needs discrete, enumerable steps to reverse. A
+continuous physics world has no such step — the player's position changes every frame,
+mid-jump, mid-collision. Recording a transform per frame is not an undo model, it is a
+replay buffer.
+
+**What replaces it:** unfold is already the in-world inverse of fold, and it is a
+*mechanic* rather than a correction — walking to a seam and undoing your own fold is
+part of the traversal vocabulary. For actual mistakes, respawn. Save points are the
+open work item.
+
+**What this cost:** triggered folds used to be undoable for free (dropping the
+authored step re-derived the prefix without the cascade). They are now applied
+directly and stay applied. `TriggerResolver` keeps the properties that made the
+cascade safe — fire-once guard, per-channel idempotence, bounded fixpoint — because
+those were never about undo.
+
+---
+
+## Decision 8: Sutherland-Hodgman for polygon splitting
+
+Industry-standard convex clipping, used by `CollisionCore.fold_polygons` to split each
+fragment by the two crease lines into up to three parts (A-side, between, B-side).
+
+**Why:** simple, robust for convex clip regions (a crease half-plane always is), and
+predictable in the degenerate cases (vertex exactly on the line, edge collinear with
+it) given an epsilon. Fragments stay convex under repeated folding, so it composes.
+
+**The epsilon discipline:** `GeometryCore.EPSILON = 0.0001`. Never compare floats with
+`==`. Grazing a crease must not count as crossing it — which is why
+`WorldCore.segment_intersects_band` uses a half-pixel margin. Without it, a fold whose
+seam merely *touches* another's band would spuriously block unfolding.
+
+---
+
+## Decision 9: Layering — the kernel never sees the world
+
+```
+scripts/model/ + scripts/utils/   ← pure, headless
+        ▲
+scripts/world/                    ← view, physics, input
 ```
 
-**Why:** Prevents memory leaks, ensures clean scene tree
+**Why it is worth enforcing:** the kernel holds the real invariants and the real test
+coverage, and it is testable precisely because it has no scene tree. The moment a
+model file imports `WorldCore`, that property is gone.
+
+This is why `BaseFrame` lives in `scripts/model/` rather than inside `WorldCore` where
+it started: `TriggerResolver` needs exact point transport during a pure derivation.
+Extracting the pure part was the fix; importing upward would have been a cycle.
 
 ---
 
-### Pattern 4: Floating Point Comparisons
+## Implementation patterns
 
-```gdscript
-const EPSILON = 0.0001
+**Validate before folding.** `WorldCore.fold_blocked_by_tile` (pins) and
+`can_anchor_at` (unanchorable tiles) gate a fold before it is applied. Both consult
+the registry rather than checking types.
 
-# NEVER use ==
-if point.x == 5.0:  # ❌ WRONG
+**Depenetrate after riding.** The physics server only sees rebuilt colliders on the
+next frame, so ride placement must be pure geometry. `WorldCore.depenetrate` searches
+upward first (a flap that lands a floor under you should read as "standing on the new
+ground"), then sideways, then slightly down. If nothing fits, the fold is refused
+rather than leaving the player inside a wall.
 
-# ALWAYS use epsilon
-if abs(point.x - 5.0) < EPSILON:  # ✅ CORRECT
-
-# For Vector2
-func vectors_equal(a: Vector2, b: Vector2) -> bool:
-    return a.distance_to(b) < EPSILON
-```
-
-**Why:** Floating point arithmetic is imprecise, epsilon handles rounding errors
+**Test-driven.** Write the test first; the suite is the behavioral spec. The
+scene-driven `test_fold_world.gd` is what catches integration regressions.
 
 ---
 
-## Performance Considerations
+## What is deliberately still open
 
-### Target Metrics
-
-| Operation | Target | Current | Status |
-|-----------|--------|---------|--------|
-| Fold (10x10 grid) | < 100ms | ~20ms | ✅ Exceeds |
-| Animation FPS | 60 | 60 | ✅ Met |
-| Memory usage | < 50MB | ~30MB | ✅ Good |
-| Test execution | < 30s | ~8s | ✅ Excellent |
-
-### Optimization Strategy
-
-1. **Measure first:** Use Godot profiler, don't guess
-2. **Optimize hot paths:** Focus on operations that happen frequently
-3. **Trade memory for speed judiciously:** Pre-compute if access is frequent
-4. **Avoid premature optimization:** Simple code first, optimize if needed
-
-### Future Optimizations (if needed)
-
-- **Spatial partitioning (quadtree):** For large grids (20x20+)
-- **Object pooling:** Reuse split cell objects instead of creating new ones
-- **Pre-calculated centroids:** Store in cell, update on geometry change
-- **Batch visual updates:** Update all cell visuals in single pass
-- **MultiMesh rendering:** For many cells with same visual
-
----
-
-## Design Questions Resolved
-
-### ✅ Should fold animations be interruptible?
-**Decision:** No, animations play to completion
-**Rationale:** Simpler state management, short animations (0.5s)
-
-### ✅ What happens if player tries to move during fold?
-**Decision:** Block player input during fold animation
-**Rationale:** Prevents invalid states, animations are short
-
-### ✅ Should cells remember original position for undo?
-**Decision:** Yes, store in FoldOperation
-**Rationale:** Required for accurate undo
-
-### ✅ How should diagonal movement work for player?
-**Decision:** Grid-based only (4 directions: up, down, left, right)
-**Rationale:** Simpler, matches puzzle grid structure
-
-### ✅ Should we show fold count/undo count in UI?
-**Decision:** Yes, in HUD with par comparison
-**Rationale:** Gives players feedback on performance
-
-### ✅ Level win condition?
-**Decision:** Just reach goal cell
-**Rationale:** Simple, can add collectibles later if desired
-
-### ✅ Should folds that remove goal cell be prevented?
-**Decision:** Not enforced (level design should avoid this)
-**Rationale:** Allows creative level designs, designer responsibility
-
-### ✅ Should level files be JSON or .tres format?
-**Decision:** JSON for portability
-**Rationale:** Human-readable, version control friendly, web-compatible
-
----
-
-## Future Architecture Considerations
-
-### Phase 9: Level System
-- JSON level format for portability
-- Level validation before loading
-- Campaign progression in user:// directory
-
-### Phase 10: Audio System
-- Separate audio buses (Music, SFX)
-- Pooled audio players for SFX
-- Fade in/out for music transitions
-
-### Mobile/Web Port (Future)
-- Touch input layer
-- Responsive UI scaling
-- Platform-specific optimizations
-
----
-
-## References
-
-**Algorithms:**
-- Sutherland-Hodgman: [Wikipedia](https://en.wikipedia.org/wiki/Sutherland%E2%80%93Hodgman_algorithm)
-
-**Godot Documentation:**
-- [Scene Tree](https://docs.godotengine.org/en/stable/getting_started/step_by_step/scene_tree.html)
-- [Coordinate Systems](https://docs.godotengine.org/en/stable/tutorials/2d/2d_transforms.html)
-
-**Testing:**
-- [GUT Documentation](https://gut.readthedocs.io/)
-
----
-
-**This document is stable** - only update when major architectural decisions are made or revised.
+- **Fold extent** (infinite creases) — see Decision 3.
+- **No nested pinch:** you cannot fold yourself deeper while already inside a fold.
+- **Triggers are world-level only:** firing inside a subspace would require splicing
+  folds into an interior list mid-cascade.
+- **Unfold animation** plays only for newest-fold unfolds at world level; the reverse
+  transform is exact only there.

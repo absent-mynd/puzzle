@@ -9,7 +9,7 @@ class_name BaseTile extends Resource
 ## There is NO "null" type here: void = the ABSENCE of any layer at a plane
 ## position. This eliminates the null-piece workaround of the old mutating engine.
 ##
-## Type convention (matches the legacy CellPiece ints so downstream color/collision
+## Type convention (see TileTypes, the registry that owns per-type behavior; downstream color/collision
 ## code is unchanged):
 ##   0 = empty (walkable, default floor)
 ##   1 = wall  (unwalkable)

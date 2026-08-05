@@ -15,7 +15,7 @@ var base_id: int = -1
 ## Type inherited from the base tile (0 empty, 1 wall, 2 water, 3 goal). No null.
 var type: int = 0
 
-## Polygon vertices in CURRENT-space LOCAL coords (relative to GridManager).
+## Polygon vertices in CURRENT-space coords (world px).
 var polygon: PackedVector2Array = PackedVector2Array()
 
 ## The integer grid cell this fragment currently occupies.

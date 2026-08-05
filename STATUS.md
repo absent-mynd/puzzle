@@ -1,247 +1,139 @@
-# Project Status - Space-Folding Puzzle Game
+# Project Status — Space Folding
 
-**Last Updated:** 2026-07-24
-**Current Phase:** Core mechanics complete (Phases 1-7). Metroidvania/gravity pivot exploration in progress (see `scripts/prototype/`).
-**Total Tests:** **508 passing** / 508 (0 failing, 0 risky) — count re-measured after the derive/replay + F1-F7 merges; the previous 617 figure predates them.
-
----
-
-## Quick Summary
-
-| Metric | Value |
-|--------|-------|
-| Core mechanic phases | ✅ Complete (1, 2, 3, 4, 5, 6, 7) |
-| Support phases | ⚙️ Substantial (9 Levels, 10 GUI/Audio) |
-| Tests passing | 617 / 617 (0 failing, 0 risky) |
-| Test run time | ~6s |
-
-> **Running tests locally:** the bundled `tools/godot/godot` is a Linux binary.
-> On macOS use a system Godot 4.x. Because the sandbox blocks Godot's default
-> config dir, redirect HOME:
-> ```
-> HOME=/private/tmp/godot-home godot --path . --headless -s addons/gut/gut_cmdln.gd
-> ```
+**Last Updated:** 2026-08-04
+**Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
+vertical slice: two regions, doors, real subspaces, fold/unfold with animation.
+**Tests:** **226 passing** / 226 (0 failing, 0 risky), 14 scripts, ~2.7s.
 
 ---
 
-## Completed Phases ✅
+## Where the project is
 
-### Phase 1: Project Setup & Foundation (2025-11-05)
-GeometryCore utility class — Sutherland-Hodgman polygon splitting, point-line
-relationships, intersections, area/centroid. Files: `scripts/utils/GeometryCore.gd`.
+The long-running split between a top-down grid puzzler and a side-view gravity
+metroidvania is **resolved in favour of gravity**. See `AGENTS.md` §"the
+2026-08-04 consolidation" for what that removed and what it kept.
 
-### Phase 2: Basic Grid System (2025-11-05)
-Cell and GridManager classes, 10×10 grid, anchor selection (max 2), hover/select
-feedback, grid↔world↔local coordinate conversion. Files: `scripts/core/Cell.gd`,
-`scripts/core/GridManager.gd`.
+What exists and works today:
 
-### Phase 3: Simple Axis-Aligned Folding (2025-11-06)
-FoldSystem with horizontal/vertical folds, cell overlap/merge at anchors, seam
-line creation/shift/removal, player-position validation, memory-safe cell cleanup.
-Files: `scripts/systems/FoldSystem.gd`.
-
-### Phase 4: Geometric Folding (2025-11-07)
-Diagonal folds at arbitrary angles. Cut-line calculation with perpendicular
-normals, cell classification into regions, polygon splitting, cross-seam merging,
-anchor normalization, two-pass shift. All fold orientations now route through
-`execute_diagonal_fold()`.
-
-### Phase 5: Multi-Seam Handling (2025-11-08)
-Multiple intersecting seams per cell via multi-piece cells (CellPiece), Seam class,
-per-piece classification/merging, null-piece system for geometric completeness.
-Files: `scripts/core/CellPiece.gd`, `scripts/core/Seam.gd`.
-
-### Phase 6: Undo/Unfold System (2025-11-09)
-Dual system with a deliberate behavioral split (see AGENTS.md §2a):
-- **UNFOLD** (seam clicks, `unfold_seam()`) — independent geometric reversal. Any
-  fold can be unfolded in any order; other folds are preserved. Blocked only if the
-  player stands on the seam or a newer seam intersects. Does not restore player pos.
-- **UNDO** (button/keyboard, `undo_fold_by_id()`) — full snapshot restore including
-  player position. No seam validation (a snapshot restore always applies).
-
-Includes seam-to-fold mapping, clickable-zone calc, action history for sequential
-undo, and the independent-unfold refactor.
-
-### Phase 7: Player Character (2025-11-06)
-Grid-based movement (arrows/WASD), wall collision, goal detection / win condition,
-position updates during folds. Files: `scripts/core/Player.gd`.
+| Area | State |
+|---|---|
+| Fold kernel (derive/replay, arbitrary crease angles) | ✅ Solid, well covered |
+| Base-frame transport (`BaseFrame`) | ✅ Solid, well covered |
+| Side-view world: gravity, riding flaps, depenetration | ✅ Playable |
+| Subspaces (fold interiors as real places) | ✅ Playable |
+| Regions + doors (recursive partner resolution) | ✅ Playable |
+| Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
+| Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
+| Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
+| World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
+| Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
+| Audio | ⚙️ `AudioManager` + `Settings` carried over; no assets |
+| Save / progression | ❌ Not started |
+| Entities (items, enemies, save points) | ❌ Not started |
 
 ---
 
-## Substantially Complete ⚙️
+## Test suite
 
-### Phase 9: Level Management System
-GUI (MainMenu, HUD, PauseMenu, LevelComplete, Settings), JSON level
-data/serialization, load/save, campaign progression with stars/unlocking, level
-validation, custom-level support. **10-level campaign authored** (fold-forcing puzzles,
-solvability-tested). **Remaining:** final integration polish.
+226 passing across 14 scripts. Composition:
 
-### Phase 10: Graphics, GUI & Audio Polish
-Complete GUI, HUD fold counter, AudioManager with SFX/music integration.
-**Remaining:** particle effects, seam visual polish, UI/UX refinements.
+| Script | Tests | Covers |
+|---|---:|---|
+| `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
+| `test_audio_manager` | 30 | Bus routing, volume, playback |
+| `test_fold_world` | 21 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates |
+| `test_world_data` | 19 | World format + the shipped world's content |
+| `test_world_core` | 19 | Map parsing, seams, anchor/fold eligibility |
+| `test_tile_types` | 16 | The registry |
+| `test_collision_core` | 13 | Polygon clipping under folds |
+| `test_trigger_cascade` | 12 | Firing, idempotence, pin veto, cascade cap |
+| `test_occupants` | 11 | Split-on-unfold, footprints, carried geometry |
+| `test_folded_state` | 11 | Per-position stacks, dominant type |
+| `test_fold_replay` | 11 | The derivation engine |
+| `test_base_grid` | 9 | Immutable base model |
+| `test_base_frame` | 9 | Base ↔ derived transport |
+| `test_fold_unfold_inverse` | 4 | Unfold-as-drop-and-re-derive |
 
----
+> The count fell from 525 because ~340 tests covered code the consolidation
+> deleted. Kernel coverage is intact; every ported subsystem shipped with tests.
 
-## Pending Phases 📋
-
-| Phase | Name | Priority | Est. Time | Notes |
-|-------|------|----------|-----------|-------|
-| 8 | Cell Types & Visual Elements | P2 | 3-4h | No spec doc yet |
-| 9 | Level Management (polish) | P2 | 1-2h | Content + integration |
-| 10 | Graphics/Audio (polish) | P3 | 2-3h | Particles, animations |
-| 11 | Testing & Validation | P4 | 4-5h | Edge cases, perf |
+`test_fold_world` is the one that matters most for confidence: it drives the real
+scene and exercises the beats end to end.
 
 ---
 
 ## Recent Changes
 
-### 2026-07-24
-- **Gravity/metroidvania prototype** (`scenes/prototype/FoldPrototype.tscn`,
-  `scripts/prototype/`): playable side-view proof-of-concept reusing the
-  derive/replay fold model unchanged. Free-moving blob player (CharacterBody2D)
-  over colliders generated from `FoldedState` pieces; player rides flaps through
-  fold/unfold via piecewise crease transforms; standing in the excised strip at
-  commit pinches the player INTO the fold — the strip renders as a cylinder
-  (content repeating across the glue line) and exiting (U) unfolds with the
-  player's in-strip position carried into the world (dive-traversal v1). Design
-  context: metroidvania pivot discussion — knowledge/configuration-gated
-  progression, subspaces, movable seams, fold-extent options. Tests:
-  `test_proto_core.gd` (9), `test_proto_world.gd` (6).
-- Iteration: mouse anchor clicks replaced by **embodied directional placement** —
-  anchors pin on the adjacent cell in the pointed direction (hold ↑/↓ to
-  point vertically, else facing); jump is Space-only. **Off-axis anchor pairs
-  are allowed** (2+ tiles apart, any direction) and commit diagonal folds; the
-  overlay band preview generalizes to arbitrary crease angles.
-- Iteration 2: **placement and commitment separated** — Q pins anchor 1, E pins
-  anchor 2 (re-pin moves, same-spot clears), F (interact) commits the fold; the
-  player's position at COMMIT time decides ride vs folded-in. F aimed at (or
-  standing on) an active fold's seam diamond unfolds that fold.
-- Iteration 3: **subspace made real + exact riding + animation.** Pinch folds
-  are applied to the world; the subspace is the interior of an active fold with
-  the same rules as outside: fold within it (interior folds persist into the
-  world on exit), exit by interacting with the outer fold's anchor point on the
-  glue line (both anchors coincide there). Unfold blocking everywhere: a fold
-  cannot unfold while a newer fold's band crosses its seam segment — interior
-  folds crossing the glue lock the exit. Player and pending anchors transport
-  by exact base-frame mapping (fragment base_id + src_offset), replacing crease
-  arithmetic; anchors pinned inside a subspace survive exit and land with the
-  strip. Polygon fold/unfold animation (flaps slide, strip collapses/springs
-  from the seam) with physics frozen during. Prototype tests: 23.
-- Iteration 4: **regions + doors**. Two regions (own BaseGrid + persistent
-  folds + per-fold interiors); the player's location is a region + context
-  stack of entered folds. Doors are warp POINTS at base-tile centers (ride
-  folds with the tile; dormant when split exactly through the center);
-  traversal resolves the partner point recursively — world, fold strips,
-  interiors — so a folded-away door delivers you INSIDE that fold's subspace
-  and vice versa. Door exit leaves folds folded (non-destructive); glue-anchor
-  exit unfolds. East ships pre-folded with a door + goal inside the authored
-  fold. Blocked landings refuse traversal (doors jammable by folding).
-  Prototype tests: 29.
+### 2026-08-04 — Consolidation onto the gravity direction
 
-### 2026-07-10
-- **Level editor usability pass.** The editor↔play round-trip now works: pressing `T`
-  (Test) stashes the live editing session in `GameManager` (`is_testing_from_editor` +
-  `editor_session`), and a **Back to Editor** button on the pause and level-complete
-  screens (plus a **TEST MODE** banner on the HUD) returns to the editor with all edits,
-  cursor, player start, filename, and grid size intact. `LevelEditor._ready()` restores the
-  stashed session; `GameManager.return_to_editor()` clears gameplay state but preserves the
-  session for the editor to consume.
-- Fixed `GameManager.restart_level()` no-op during an editor test (empty level id): it now
-  reloads the in-memory `current_level_data`. Dropped the temp-JSON write in `test_level()`
-  that silently clobbered `custom_level.json`.
-- New editor conveniences: on-screen **tool palette** (active paint type highlighted),
-  **mouse click/drag painting** (right-click erases), **grid resize** (`G`, e.g. `12x8`)
-  with cell/cursor clamping, and **metadata editing** (`M`: name / par / difficulty).
-  `load_level`/`new_level` now route through `resize_grid` so non-10×10 levels load
-  correctly.
-- Split `GameManager` return/restart methods into pure `_prepare_*` state mutators (for
-  testability) + thin scene-change callers. Added `test_game_manager_editor_roundtrip.gd`,
-  `test_editor_ui_wiring.gd`, `test_level_editor.gd` (round-trip state, UI node wiring,
-  editor boot/palette/resize/paint).
+- **Deleted** the top-down view/entity layer (`GridManager`, `Cell`, `CellPiece`,
+  grid `Player`, `FoldController`, `InteractionController`, `MainScene`), the
+  level-based meta layer (`GameManager`, `LevelManager`, `LevelValidator`,
+  `ProgressManager`, `LevelEditor`, `LevelData`, level-select/complete/HUD UI,
+  `MainMenu`), the step-log undo (`HistoryManager`, `FoldStep`, `StepReplay`), and
+  the 10-level campaign + 10 custom levels.
+- **Promoted** `scripts/prototype/` → `scripts/world/`; `Proto*` →
+  `FoldWorld` / `WorldCore` / `PlayerBody` / `WorldOverlay`.
+  `scenes/world/World.tscn` is the main scene.
+- **New `BaseFrame`** (kernel): exact base ↔ derived point transport, lifted out of
+  the view layer so pure derivation can use it without a model→view cycle.
+- **New `Occupants`** (from `StepReplay`): tile-riding entities with split-on-unfold
+  latents. The player no longer uses it — a continuous body has no ridden tile.
+- **`TileTypes` wired into the world**: solidity, anchor eligibility
+  (`UNANCHORABLE_*`) and fold-proof tiles (`PIN`) are registry-driven; the fold and
+  collision paths no longer switch on type ints.
+- **`TriggerResolver` reworked** to run against a fragment list and a continuous
+  player position. Determinism, channel idempotence, the fire-once guard and the
+  cascade cap all carry over.
+- **New `WorldData`** (from `LevelData`): regions of ASCII terrain, doors, and
+  pre-placed folds per region. The world boots from `worlds/overworld.json`; region
+  shapes are byte-identical to the previously hardcoded maps.
+- **`PauseMenu`** rebuilt as an in-world overlay (resume / respawn / settings / quit).
 
-### 2026-07-08
-- Phase 8 gameplay interaction (in progress): center-dot highlights (hover any piece
-  of a merged cell), second-anchor fold-region preview, crease dots at fold merge
-  points, player facing + SPACE interact, and configurable interaction axes
-  (`InteractionConfig`/`InteractionController`). Anchor placement now rejects
-  ineligible/invalid anchors in both mouse and facing flows.
-- Fixed unfold shift direction: it derived the shift from `anchor1-anchor2`, which is
-  wrong when anchors were selected in reverse order (normalization picks target/source
-  independently). Now uses stored `target_anchor-source_anchor` (`_fold_shift_vector`).
-- Fixed unfold geometry position: `reverse_shifts_for_fold` re-keyed reversed cells but
-  never translated their geometry back, so cells rendered at the folded location while
-  indexed at the original slot (overlap + vacant-slot). Now translates by the inverse
-  shift.
-- Crease markers ride the cells they sit on through folds/unfolds via
-  `remap_grid_markers` (the extension point for future grid-attached entities).
-- Fixed unfold cell IDENTITY: cut-line cells were rebuilt with the merge's dominant type
-  (a goal merged onto empty left the wrong cell green) and, for diagonal folds, the
-  source cut line's cells were left as holes / stale NULL cells. Reverse-shifted cells and
-  all cut-line cells (both lines) are now reconciled from the pre-fold snapshot
-  (`_populate_cell_from_snapshot`, `reconcile_cut_line_cells`) — rebuilding existing cells
-  and recreating vacated ones — when no other fold's seam remains on them.
-- Campaign rebuilt: removed all pre-existing campaign/custom levels and authored a fresh
-  **10-level campaign** (`levels/campaign/01_first_fold` … `10_the_gauntlet`) of
-  fold-forcing wall/water puzzles with a difficulty ramp (single fold → two-axis → diagonal
-  → 12×12 finale). `ProgressManager` sequence + default unlock updated. Added
-  `test_campaign_levels.gd`, which loads each level, applies its intended fold solution, and
-  BFS-verifies the goal is unreachable by walking but reachable after folding (par matches).
-- Editor: interaction axes (A–D) are now direct enum dropdowns on the Main node
-  (`second_anchor`, `confirm_persistence`, `action_priority`, `null_anchor`) instead of an
-  empty sub-resource, so they can be toggled without creating a resource.
-- ALLOW_MOVEMENT now defers player-position fold validation to commit time (the player may
-  place the 2nd anchor while inside the fold region); the invalid region flashes red at
-  commit if still blocked. Preview visuals now draw ON TOP of the map (raised z_index).
-- Test suite: 568 → **617 passing**, 0 failing, 0 risky.
+### Earlier
 
-### 2026-07-07
-- Fixed unfold bug: `restore_removed_cells_for_fold()` now refills the full fold
-  footprint (removed cells **and** shift-destination positions), not just
-  `removed_cells`. The source-anchor column — vacated when a merge-target cell
-  shifts back on unfold — is now correctly restored. (10-cell gap → full restore.)
-- Rewrote `test_undo_blocked_fold_returns_false` →
-  `test_undo_succeeds_even_with_intersecting_newer_fold` to match the intentional
-  Phase 6 design (undo no longer performs seam-intersection validation).
-- Fixed a silent coverage regression: `test_seam_undo.gd` still called
-  `can_undo_fold_seam_based()`, which the Phase 6 refactor renamed to
-  `has_newer_seam_intersections()`. The calls errored before asserting, so 9
-  seam-intersection tests were marked "risky" (running nothing). Updated all
-  call sites — those tests now assert.
-- Pruned 3 print-only diagnostic scratch tests (deleted
-  `test_diagonal_45deg_fold.gd`; removed `test_understand_keep_side_for_vertical_fold`).
-- Test suite: 556 → **568 passing**, 0 failing, 0 risky.
-- Documentation cleanup: removed obsolete root analysis/planning docs
-  (CELL_MERGE_ANALYSIS, PHASE_5_6_ANALYSIS, UNFOLD_REFACTOR_PLAN), moved completed
-  phase_6 spec to `completed/`, refreshed phase README and AGENTS.md. Replaced the
-  hand-written REFERENCE.md with a source pointer/code map; `run_tests.sh` now
-  falls back to a system Godot when the bundled Linux binary can't execute.
-
-### 2025-11-09
-- Independent unfold system implemented (folds unfold in any order, preserving
-  other folds). Unfold vs undo behavior distinction finalized.
-
-### 2025-11-08
-- Phase 5 (Multi-Seam Handling) complete.
-
-### 2025-11-05 → 11-07
-- Phases 1-4 and 7 complete; level system and audio brought to substantial state.
+The fold kernel (derive/replay engine, diagonal folds, multi-piece fragments) and the
+gravity prototype it drives were built between 2025-11 and 2026-07. See
+`git log` and the `topdown-archive` tag (`8bf8193`) for that history.
 
 ---
 
-## Known Issues
+## Next up
 
-None. All 617 tests pass with no failing or risky tests.
+Roughly in priority order — nothing here is committed to yet:
 
-Several `test_*_bug.gd` / `test_*_debug.gd` / `test_*_trace.gd` files remain from
-past bug hunts; they still assert (not risky) but are print-heavy and could be
-consolidated in a future cleanup pass.
+1. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
+   now placed (east's right wing); `Occupants` and `UNANCHORABLE_*` still are not.
+   Placing them is also how their design gets pressure-tested.
+2. **Settle fold extent.** Infinite-crease is the biggest open question in the
+   direction (see `AGENTS.md` §"Open design questions"). Barrier-scoped folds are
+   the leading candidate.
+3. **Save / checkpoints.** Undo is gone by design; respawn currently sends you to the
+   region spawn. Real save points are the replacement.
+4. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
+5. **Authoring tooling.** ASCII rows in JSON are workable but hand-editing region
+   geometry will not scale. Revisit an editor once the tile vocabulary settles.
 
 ---
 
-## For Detailed Information
+## Known issues
 
-- [AGENTS.md](AGENTS.md) — AI agent quick start
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — development workflow
-- [docs/REFERENCE.md](docs/REFERENCE.md) — API reference
-- [docs/phases/](docs/phases/) — phase-specific documentation
+- The `topdown-archive` tag is **local only** — the remote refused the tag push
+  (session credentials are scoped to the working branch). Use `git checkout 8bf8193`.
+- No audio assets ship; `AudioManager` is wired but silent.
+- Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
+  the world yet. Pins and triggers now are — see east's right wing.
+- The pin/trigger wing lives in **east**, not west, and is reached through a door.
+  West's four authored beats depend on its exact geometry and infinite creases make
+  a pin a global veto on a band of folds, so nothing was placed there without
+  playtesting. See the note in `scripts/world/README.md`.
+
+---
+
+## For detailed information
+
+- [AGENTS.md](AGENTS.md) — start here: architecture, layering, critical decisions
+- [scripts/world/README.md](scripts/world/README.md) — controls and design beats
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions & rationale
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — workflow, testing, pitfalls
+- [docs/REFERENCE.md](docs/REFERENCE.md) — code map

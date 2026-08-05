@@ -22,7 +22,7 @@ class_name TileTypes extends RefCounted
 ## yet; they arrive with the trigger system (F3). `get_def` returns a plain
 ## Dictionary so those keys can be added without changing call sites.
 
-## Canonical type ids (match the legacy BaseTile / CellPiece ints).
+## Canonical type ids (shared with BaseTile).
 const NULL := -1
 const EMPTY := 0
 const WALL := 1

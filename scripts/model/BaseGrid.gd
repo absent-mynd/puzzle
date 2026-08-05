@@ -26,6 +26,35 @@ func _init(p_grid_size: Vector2i = Vector2i(10, 10), p_cell_size: float = 64.0):
 	cell_size = p_cell_size
 
 
+## Build a grid of `grid_size` where every position is materialized, taking non-default
+## types (and optional per-tile data) from a sparse map. `types` is keyed by Vector2i and
+## holds either a plain type int or a `{"type": N, ...params}` dictionary.
+##
+## This is the programmatic constructor; `WorldCore.parse_map` is the authoring one
+## (ASCII rows). Both produce the same thing.
+static func from_types(p_grid_size: Vector2i, p_cell_size: float, types: Dictionary = {}) -> BaseGrid:
+	var bg := BaseGrid.new(p_grid_size, p_cell_size)
+	var arr: Array[BaseTile] = []
+	var next_id := 0
+	for y in range(p_grid_size.y):
+		for x in range(p_grid_size.x):
+			var pos := Vector2i(x, y)
+			var v = types.get(pos, TileTypes.EMPTY)
+			var type := TileTypes.EMPTY
+			var data := {}
+			if v is Dictionary:
+				type = int(v.get("type", TileTypes.EMPTY))
+				data = (v as Dictionary).duplicate(true)
+				data.erase("type")
+			else:
+				type = int(v)
+			arr.append(BaseTile.new(next_id, pos, type, data))
+			next_id += 1
+	bg.tiles = arr
+	bg._rebuild_index()
+	return bg
+
+
 ## Rebuild the position lookup. Call after populating `tiles`.
 func _rebuild_index() -> void:
 	_by_pos.clear()
@@ -52,9 +81,9 @@ func is_in_bounds(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < grid_size.x and pos.y >= 0 and pos.y < grid_size.y
 
 
-## Unit square polygon (LOCAL coords, relative to GridManager) for the base tile
+## Unit square polygon (LOCAL, world-space px) for the base tile
 ## with the given id. Matches Cell._init's square construction so downstream
-## geometry is identical.
+## geometry is built from this.
 func unit_square_local(base_id: int) -> PackedVector2Array:
 	var t := tile_by_id(base_id)
 	if t == null:
@@ -73,43 +102,3 @@ func square_at(pos: Vector2i) -> PackedVector2Array:
 	])
 
 
-## Build a BaseGrid by snapshotting a GridManager's CURRENT cells. Used at fold-
-## engine init time: the live grid (already populated with the level's types, no
-## folds yet) becomes the immutable base. Dominant type of an unfolded cell is its
-## single piece's type (0-3; no null in an unfolded level).
-static func from_grid_manager(gm) -> BaseGrid:
-	var bg := BaseGrid.new(gm.grid_size, gm.cell_size)
-	var tiles_arr: Array[BaseTile] = []
-	var next_id := 0
-	for y in range(gm.grid_size.y):
-		for x in range(gm.grid_size.x):
-			var pos := Vector2i(x, y)
-			var cell = gm.get_cell(pos)
-			var type := BaseTile.TYPE_EMPTY
-			var data := {}
-			if cell:
-				type = cell.get_dominant_type()
-				if type == CellPiece.CELL_TYPE_NULL:
-					type = BaseTile.TYPE_EMPTY
-				data = cell.tile_data
-			tiles_arr.append(BaseTile.new(next_id, pos, type, data))
-			next_id += 1
-	bg.tiles = tiles_arr
-	bg._rebuild_index()
-	return bg
-
-
-## Build a BaseGrid from a LevelData. Every in-bounds position becomes a BaseTile;
-## cell_data (which only stores non-empty cells) supplies non-default types.
-static func from_level_data(ld: LevelData) -> BaseGrid:
-	var bg := BaseGrid.new(ld.grid_size, ld.cell_size)
-	var tiles_arr: Array[BaseTile] = []
-	var next_id := 0
-	for y in range(ld.grid_size.y):
-		for x in range(ld.grid_size.x):
-			var pos := Vector2i(x, y)
-			tiles_arr.append(BaseTile.new(next_id, pos, ld.type_at(pos), ld.data_at(pos)))
-			next_id += 1
-	bg.tiles = tiles_arr
-	bg._rebuild_index()
-	return bg

@@ -91,6 +91,22 @@ static func _apply_fold(pieces: Array, fold: Fold, cell_size: float) -> Array[Fo
 	return out
 
 
-## Convenience: build a Fold and append it (used by FoldEngine in later stages).
+## Convenience: build a Fold from anchors.
 static func make_fold(fold_id: int, anchor1: Vector2i, anchor2: Vector2i, cell_size: float) -> Fold:
 	return Fold.create(fold_id, anchor1, anchor2, cell_size)
+
+
+## Would this fold excise or cut a fold-proof tile (`TileTypes.blocks_fold`, e.g. a PIN)?
+## Such a fold must be refused: the space a pin holds can never be folded away.
+##
+## Kernel rather than view, because every path that creates a fold has to honor it —
+## the player's own folds AND the ones TriggerResolver fires. A pin that a pressure
+## plate could quietly delete would not be a pin.
+static func blocked_by_tile(pieces: Array, fold: Fold, cell_size: float) -> bool:
+	for piece in pieces:
+		if not TileTypes.blocks_fold(piece.type):
+			continue
+		var res := CollisionCore.fold_polygons([piece.polygon], fold, cell_size)
+		if not res["dropped"].is_empty():
+			return true
+	return false

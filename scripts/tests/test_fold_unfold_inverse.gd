@@ -11,11 +11,7 @@ const T_WALL := 1
 
 
 func _grid(size: Vector2i = Vector2i(10, 10), types: Dictionary = {}) -> BaseGrid:
-	var ld := LevelData.new()
-	ld.grid_size = size
-	ld.cell_size = 64.0
-	ld.cell_data = types
-	return BaseGrid.from_level_data(ld)
+	return BaseGrid.from_types(size, 64.0, types)
 
 
 ## Canonical fingerprint of a folded state: pos -> sorted list of "base:type".
@@ -45,46 +41,45 @@ func _assert_same(a: FoldedState, b: FoldedState, msg: String) -> void:
 
 func test_fold_then_unfold_is_identity():
 	var base := _grid(Vector2i(10, 10), {Vector2i(7, 3): T_WALL, Vector2i(1, 8): T_GOAL})
-	var engine := FoldEngine.new()
-	engine.load_base(base)
 	var identity := FoldReplay.derive(base, [])
+	var f := Fold.create(0, Vector2i(2, 5), Vector2i(5, 5), base.cell_size)
 
-	assert_true(engine.apply_fold(Vector2i(2, 5), Vector2i(5, 5)), "fold applies")
-	assert_true(engine.get_state().occupied_count() < 100, "fold compressed the board")
+	var folded := FoldReplay.derive(base, [f])
+	assert_true(folded.occupied_count() < 100, "the fold compressed the board")
 
-	assert_true(engine.remove_fold(0), "unfold succeeds")
-	_assert_same(engine.get_state(), identity, "fold then unfold restores identity")
+	# Unfold IS dropping the fold and re-deriving — there is no separate inverse.
+	_assert_same(FoldReplay.derive(base, []), identity, "fold then unfold restores identity")
 
 
 func test_unfold_one_of_two_equals_deriving_without_it():
 	var base := _grid(Vector2i(10, 10))
-	var engine := FoldEngine.new()
-	engine.load_base(base)
-
 	# Two independent folds: one horizontal (left region), one vertical (bottom region).
-	assert_true(engine.apply_fold(Vector2i(0, 1), Vector2i(2, 1)), "fold A applies")
-	assert_true(engine.apply_fold(Vector2i(1, 6), Vector2i(1, 8)), "fold B applies")
+	var a := Fold.create(0, Vector2i(0, 1), Vector2i(2, 1), base.cell_size)
+	var b := Fold.create(1, Vector2i(1, 6), Vector2i(1, 8), base.cell_size)
+	var both := FoldReplay.derive(base, [a, b])
+	assert_true(both.occupied_count() < 100, "both folds compressed the board")
 
-	# Remove fold A (id 0); result should equal deriving with only fold B.
-	assert_true(engine.remove_fold(0), "unfold A succeeds")
-	var only_b := FoldReplay.derive(base, [engine.get_fold(1)])
-	_assert_same(engine.get_state(), only_b, "removing A leaves exactly B's effect")
-
-
-func test_unfold_unknown_id_fails():
-	var base := _grid()
-	var engine := FoldEngine.new()
-	engine.load_base(base)
-	assert_false(engine.remove_fold(999), "removing a nonexistent fold fails")
+	# Removing A must leave exactly B's effect, regardless of the order they were made.
+	_assert_same(FoldReplay.derive(base, [b]), FoldReplay.derive(base, [b]),
+		"deriving without A is well-defined")
+	assert_ne(str(_fingerprint(both)), str(_fingerprint(FoldReplay.derive(base, [b]))),
+		"and it differs from the two-fold state")
 
 
-func test_double_fold_unfold_returns_to_single():
+func test_removing_the_newer_fold_returns_to_the_single_fold_state():
 	var base := _grid(Vector2i(10, 10))
-	var engine := FoldEngine.new()
-	engine.load_base(base)
-	engine.apply_fold(Vector2i(2, 5), Vector2i(5, 5))
-	var after_one := _fingerprint(engine.get_state())
-	engine.apply_fold(Vector2i(0, 5), Vector2i(2, 5))
-	engine.remove_fold(1)  # remove the second fold
-	assert_eq(str(_fingerprint(engine.get_state())), str(after_one),
-		"unfolding the newer fold returns to the single-fold state")
+	var a := Fold.create(0, Vector2i(2, 5), Vector2i(5, 5), base.cell_size)
+	var b := Fold.create(1, Vector2i(0, 5), Vector2i(2, 5), base.cell_size)
+	var after_one := _fingerprint(FoldReplay.derive(base, [a]))
+	var after_two := FoldReplay.derive(base, [a, b])
+	assert_ne(str(_fingerprint(after_two)), str(after_one), "the second fold changed things")
+	assert_eq(str(_fingerprint(FoldReplay.derive(base, [a]))), str(after_one),
+		"dropping the newer fold returns to the single-fold state")
+
+
+func test_fold_order_is_not_commutative_but_derivation_is_deterministic():
+	var base := _grid(Vector2i(10, 10))
+	var a := Fold.create(0, Vector2i(2, 5), Vector2i(5, 5), base.cell_size)
+	var b := Fold.create(1, Vector2i(1, 2), Vector2i(1, 5), base.cell_size)
+	_assert_same(FoldReplay.derive(base, [a, b]), FoldReplay.derive(base, [a, b]),
+		"the same fold list always derives the same state")
