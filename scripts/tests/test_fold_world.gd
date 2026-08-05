@@ -173,6 +173,44 @@ func test_subspace_wrap_teleports_across_the_glue() -> void:
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Wrap does not eject")
 
 
+func test_wrap_moves_the_camera_with_the_body() -> void:
+	# The strip repeats with period `gap`, so body and camera must move by the
+	# same vector: the frame is then pixel-identical and the seam is invisible.
+	# Snapping the camera to the body instead would discard its smoothing lag.
+	_pinch_over_pit()
+	world.player.teleport(Vector2(18.9 * CS, 12.5 * CS), false)
+	var lag: Vector2 = world.player.camera_position() - world.player.global_position
+	assert_ne(lag, Vector2.ZERO, "Camera is lagging behind (nothing snapped it here)")
+
+	world._subspace_wrap_and_turnback()
+	assert_almost_eq(
+		(world.player.camera_position() - world.player.global_position - lag).length(),
+		0.0, 0.01, "The wrap preserved the camera's offset from the body exactly")
+
+
+func test_player_is_drawn_in_every_visible_copy_of_the_strip() -> void:
+	_pinch_over_pit()
+	assert_eq(world.sub_player_ghosts.size(), 2 * world.sub_copies,
+		"One drawn copy of the player per band, minus the one the body is in")
+
+	world.player.teleport(Vector2(15.5 * CS, 12.5 * CS), false)
+	world._update_player_ghosts()
+	var n: Vector2 = world.sub_fold.crease_normal
+	var gap: float = world.sub_fold.gap_distance()
+	# Each copy sits at the body's position offset by a whole number of bands.
+	for ghost in world.sub_player_ghosts:
+		var delta: Vector2 = ghost.global_position - world.player.global_position
+		var k: float = delta.dot(n) / gap
+		assert_almost_eq(delta.distance_to(n * (k * gap)), 0.0, 0.01,
+			"Copy is displaced along the crease normal only")
+		assert_almost_eq(k, roundf(k), 0.01,
+			"Copy sits a whole number of band widths from the body")
+		assert_ne(roundi(k), 0, "...and never on top of it")
+
+	world.try_exit()
+	assert_eq(world.sub_player_ghosts.size(), 0, "Copies are gone outside the fold")
+
+
 func test_outside_unfold_splices_interiors() -> void:
 	# Rule 4: unfolding a fold from the outside carries its interior folds
 	# into the level at its index.

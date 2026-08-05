@@ -16,6 +16,8 @@ const JUMP_VELOCITY := -780.0
 const COYOTE_TIME := 0.09
 const JUMP_BUFFER := 0.11
 const RADIUS := 20.0
+## Exponential approach rate of the camera toward the body (1/s).
+const CAM_SMOOTHING := 8.0
 
 var _coyote := 0.0
 var _buffer := 0.0
@@ -46,11 +48,26 @@ func _ready() -> void:
 	_visual.color = Color("ffd27f")
 	add_child(_visual)
 
+	# Smoothing is driven here rather than by Camera2D's own, because the
+	# subspace wrap must displace the camera by exactly one strip width while
+	# KEEPING its lag. Camera2D exposes no way to move its smoothed centre —
+	# only reset_smoothing(), which drops the lag to zero and reads as a jolt
+	# every time you walk through a glue line. So the camera is top_level and
+	# this script owns its position.
 	_cam = Camera2D.new()
-	_cam.position_smoothing_enabled = true
-	_cam.position_smoothing_speed = 8.0
+	_cam.position_smoothing_enabled = false
+	_cam.top_level = true
 	add_child(_cam)
+	_cam.global_position = global_position
 	_cam.make_current()
+
+
+func _process(delta: float) -> void:
+	if _cam == null:
+		return
+	# Frame-rate independent exponential approach (stable for large deltas).
+	_cam.global_position = _cam.global_position.lerp(
+		global_position, 1.0 - exp(-CAM_SMOOTHING * delta))
 
 
 func _physics_process(delta: float) -> void:
@@ -108,8 +125,37 @@ func point_dir() -> Vector2i:
 	return Vector2i(facing, 0)
 
 
-## Kill camera smoothing for one frame. The subspace wrap must be invisible —
-## the copies are identical, so a smoothed camera pan would betray the seam.
+## Cut the camera to the body with no pan. For hard relocations — respawn,
+## doors, region changes, being turned back by the fold.
 func snap_camera() -> void:
 	if _cam != null:
-		_cam.reset_smoothing()
+		_cam.global_position = global_position
+
+
+## Carry the camera through a wrap teleport. Inside a fold the strip repeats
+## with period `offset`, so displacing the body AND the camera by the same
+## vector leaves the rendered frame pixel-identical: crossing a glue line is
+## just walking. Snapping instead would discard the smoothing lag (~40px at a
+## full run) and jolt the view by it — the hitch this replaces.
+func shift_camera(offset: Vector2) -> void:
+	if _cam != null:
+		_cam.global_position += offset
+
+
+## Where the camera actually is, lag and all.
+func camera_position() -> Vector2:
+	return _cam.global_position if _cam != null else global_position
+
+
+## A fresh Polygon2D matching the blob's outline and colour. The subspace wrap
+## draws one of these in every visible copy of the strip.
+func make_visual_copy() -> Polygon2D:
+	var node := Polygon2D.new()
+	node.polygon = _visual.polygon
+	node.color = _visual.color
+	return node
+
+
+## The blob's current squash, so the copies breathe with the original.
+func visual_squash() -> Vector2:
+	return _visual.scale

@@ -103,6 +103,9 @@ var sub_goal_polys: Array = []
 var sub_extent: Dictionary = {}
 var sub_glue_segs: Array = []
 var sub_copies := 1
+## One Polygon2D per wrap copy except the one the real body occupies — see
+## `_update_player_ghosts`.
+var sub_player_ghosts: Array = []
 
 # --- Animation ---
 var anim_enabled := true
@@ -120,6 +123,12 @@ var _flash_left := 0.0
 
 
 func _ready() -> void:
+	# Run the per-frame world logic AFTER the player has moved this step — the
+	# wrap, doors and triggers should see where the body actually ended up, not
+	# where it was a frame ago. Children process after their parent by default,
+	# and the player is a child, so raise this node's priority past it.
+	process_physics_priority = 1
+
 	world_geo = Node2D.new()
 	add_child(world_geo)
 	sub_geo = Node2D.new()
@@ -248,6 +257,7 @@ func rebuild_sub() -> void:
 
 	for child in sub_geo.get_children():
 		child.queue_free()
+	sub_player_ghosts = []
 	var gap := sub_fold.gap_distance()
 	sub_copies = clampi(int(ceil(1400.0 / gap)), 1, 24)
 	for k in range(-sub_copies, sub_copies + 1):
@@ -268,6 +278,30 @@ func rebuild_sub() -> void:
 				var col := CollisionPolygon2D.new()
 				col.polygon = piece.polygon
 				solid.add_child(col)
+		# The real body lives in copy 0; every other copy gets a drawn twin.
+		if k != 0:
+			var ghost := player.make_visual_copy()
+			# Above all terrain, not just this copy's: a twin standing near a
+			# band edge overlaps the neighbouring copy, which draws later.
+			ghost.z_index = player.z_index
+			copy.add_child(ghost)
+			sub_player_ghosts.append(ghost)
+	_update_player_ghosts()
+
+
+## The strip renders repeating across the glue, and the player repeats with it:
+## you are in every band at once, because they are all the same band. One lone
+## body would make the wrap read as a jump between worlds instead of a lap
+## around a cylinder. Copies are children of their band's node, so the offset
+## is the parent transform and their local position is just the body's.
+func _update_player_ghosts() -> void:
+	if sub_player_ghosts.is_empty():
+		return
+	var p := player.global_position
+	var squash := player.visual_squash()
+	for ghost in sub_player_ghosts:
+		ghost.position = p
+		ghost.scale = squash
 
 
 ## The fold list of the CURRENT level: the region's folds, or the entered
@@ -321,6 +355,7 @@ func _apply_context() -> void:
 		sub_by_pos = {}
 		for child in sub_geo.get_children():
 			child.queue_free()
+		sub_player_ghosts = []
 		world_geo.visible = true
 		_bg.color = Color("14151f")
 		rebuild_world()
@@ -915,6 +950,7 @@ func _physics_process(delta: float) -> void:
 
 	if mode == Mode.SUBSPACE:
 		_subspace_wrap_and_turnback()
+		_update_player_ghosts()
 	else:
 		if player.global_position.y > (base.grid_size.y + 6) * CS:
 			player.teleport(_spawn, false)
@@ -929,12 +965,17 @@ func _subspace_wrap_and_turnback() -> void:
 	var gap := sub_fold.gap_distance()
 	var c1 := sub_fold.crease_point1.dot(n)
 	var proj := player.global_position.dot(n)
+	# Walking through a glue line lands you in the next copy of the strip —
+	# which is this one. Slide the body back by one band width and slide the
+	# CAMERA by the same vector: the strip repeats with exactly that period, so
+	# the rendered frame is unchanged and the crossing is invisible. (Snapping
+	# the camera instead would throw away its smoothing lag and jolt the view.)
 	if proj < c1:
 		player.global_position += n * gap
-		player.snap_camera()
+		player.shift_camera(n * gap)
 	elif proj >= c1 + gap:
 		player.global_position -= n * gap
-		player.snap_camera()
+		player.shift_camera(-n * gap)
 
 	# Falling out of the strip's tangential extent doesn't force-exit (exit
 	# can be blocked by crossing folds): the fold turns you back to its anchor.
