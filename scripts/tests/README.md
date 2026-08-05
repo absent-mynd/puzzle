@@ -45,7 +45,8 @@ One `test_<subject>.gd` per subject, matching the source file it covers.
 | `test_occupants.gd` | Entities riding tiles; split-on-unfold |
 | `test_trigger_cascade.gd` | Fold-on-enter cascade |
 | `test_world_data.gd` | World format + the shipped world |
-| `test_world_core.gd` | Map parsing, seams, anchor/fold eligibility |
+| `test_world_core.gd` | Map parsing, seams, anchor/fold eligibility, camera zoom + lookahead |
+| `test_player_body.gd` | Look/point keys, velocity-as-fraction-of-limits, motion scalar |
 | `test_audio_manager.gd` | Buses, playback, volume |
 | **`test_fold_world.gd`** | **Scene-driven integration** |
 

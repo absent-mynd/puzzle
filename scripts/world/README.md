@@ -38,6 +38,13 @@ then choose where to be standing before pressing F — inside the red band to
 be folded in, outside it to ride a flap. Any active fold can be unfolded by
 walking up to its seam diamond (where its two anchors met) and interacting.
 
+Two folds can **meet in the same cell**, and then one diamond stands for both.
+F there acts on the newest fold that can actually come out — not the first in
+fold order, which is precisely the one the newer fold is blocking (see
+`FoldWorld.aimed_fold`). The diamond is drawn once per cell and reads unblocked
+whenever F would do something, so the marker never promises what the act
+refuses.
+
 **Inside a fold, the same rules apply.** The subspace is a real place: the
 pinch fold is applied to the world, and the outer fold's two anchors coincide
 at one point on the glue line — the white diamond. F there unfolds the
@@ -51,6 +58,58 @@ diamond turns red to show it. Player and anchors move by **exact base-tile
 riding** (each fragment knows its base identity and offset), not approximate
 crease math. Folds and unfolds animate: flaps slide, the strip collapses
 onto — or springs from — the seam.
+
+## The camera
+
+The frame is not a fixed lens — it opens and closes with what the moment is
+about, and it only ever opens (resting is the tightest it sits, so it never
+closes in on you unasked):
+
+- **Speed.** Running widens it a little, falling hard widens it a lot. A long
+  drop is the one move where the frame you have is certainly not the frame you
+  need.
+- **The fold you are composing.** Pin an anchor and walk away, and the view
+  opens to keep it on screen. The camera is showing you how big the fold has
+  got — that span *is* the decision you are about to make.
+- **The band you are inside.** In a subspace the strip is framed glue to glue,
+  so a wide band reads as the cylinder it is rather than a corridor with no
+  visible walls.
+- **A fold rearranging the world.** The transition steps the camera back so you
+  watch the space move, then settles.
+
+Zoom eases much more slowly than the follow does — a frame that resizes as
+briskly as it pans reads as breathing rather than attention. `PlayerBody` owns
+the camera, `WorldCore.camera_zoom_for` decides the target, and
+`FoldWorld._camera_focus` is the list of things it would be a mistake to leave
+off screen. Hard relocations (respawn, doors) cut the zoom along with the
+position — easing it would read as the new room inflating.
+
+**And the frame leads where you are going.** Zoom decides how *much* to show;
+lookahead decides *where to centre it*. Sitting the body dead centre spends half
+the frame on ground you have already crossed, which is the wrong half. So the
+view sits ahead of you, and the asymmetries are the design:
+
+- **A fall leads much further than a rise.** A fall is committed and its landing
+  is the thing you need to see; the top of a jump is about to reverse, and
+  leading hard there would swing the frame back a moment later.
+- **Holding a look key leads on its own.** The same W/S that aim an anchor lean
+  the frame, so pressing up to point up shows you what you are pointing at —
+  wanting to see up there is a thing you can ask for without moving.
+- **Inside a fold the lead is flat along the band.** The strip repeats along the
+  crease normal, so the frame already shows every copy there is that way; leading
+  along it would slide the view across identical bands for nothing.
+
+The lead eases even more lazily than the zoom, because it *flips sign* the
+instant you turn around: eased, a reversal reads as the view swinging round to
+your new heading instead of whipping across the body. It is capped, and a hard
+relocation cuts it along with the lens. `WorldCore.camera_lookahead_for` is the
+pure decision; the body supplies its own velocity-as-a-fraction-of-its-limits
+(`motion_fraction`) and the held look keys (`look_dir`).
+
+One ordering matters: the lead is decided *before* the zoom, because the lead
+moves the camera and the zoom's focus distances are measured from where the
+camera ends up. The other way round, a hard lead would quietly crop the very
+things the focus set exists to keep on screen.
 
 ## Regions & doors
 
@@ -155,14 +214,18 @@ Placing them in west is a playtesting job, not an editing one.
 ## Files
 
 - `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
-  and glue segments, depenetration, anchor/fold eligibility). Covered by
-  `scripts/tests/test_world_core.gd`.
+  and glue segments, depenetration, anchor/fold eligibility, camera zoom and
+  lookahead). Covered by `scripts/tests/test_world_core.gd`.
 - `FoldWorld.gd` — scene driver: derived geometry → Polygon2D + colliders,
   fold/unfold with player riding, subspace enter/wrap/exit, regions, doors,
   triggers.
 - `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, squash) and
   the camera, whose smoothing is driven here so the wrap can displace it by a
-  whole band width without losing its lag.
+  whole band width without losing its lag. Its camera-facing readings
+  (`look_dir`, `motion_fraction`, `motion_intensity`) are covered by
+  `scripts/tests/test_player_body.gd`.
 - `WorldOverlay.gd` — anchors, strip preview band, seam markers, glue lines.
-  Everything point-like repeats across the wrap copies (`_copy_offsets`).
+  Everything point-like repeats across the wrap copies (`_copy_offsets`); seam
+  diamonds are one per meeting CELL, since folds can share one
+  (`FoldWorld.seam_markers`).
 - Scene flows in `scripts/tests/test_fold_world.gd`.
