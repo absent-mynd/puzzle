@@ -51,11 +51,15 @@ scenes/world/  # World.tscn — the main scene
 assets/        # the lighting shader; the tileset layout (assets/sprites/README.md)
 ```
 
-The art is **pixel art with dynamic lighting**: the world renders into a 320x180
-target scaled up 4x, tiles come from a 16px tileset, and lights are evaluated per
-art pixel. It is style only — world coordinates, physics and reachability are
-unchanged, and unlit ground is exactly as navigable as lit ground. See
-[scripts/world/README.md](scripts/world/README.md) §"Art & light".
+The art is **pixel art with dynamic lighting**: the world renders into a
+low-resolution target scaled up with nearest filtering (320x180 at 1:1), tiles
+come from a 16px tileset, and lights are evaluated per art pixel. The camera
+zooms and leads with the moment; because the lens must stay fixed to keep an art
+pixel exactly 4 world units, opening the frame **resizes the render target**
+rather than moving the lens. It is style only — world coordinates, physics and
+reachability are unchanged, and unlit ground is exactly as navigable as lit
+ground. See [scripts/world/README.md](scripts/world/README.md) §"Art & light"
+and §"The camera".
 
 The kernel is pure and headless; it must never reference `scripts/world/`.
 

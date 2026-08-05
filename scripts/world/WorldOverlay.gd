@@ -30,35 +30,49 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if world == null or world.animating():
 		return
+	var offsets := _copy_offsets()
 	if world.mode == world.Mode.SUBSPACE:
-		_draw_subspace_glue()
-		_draw_subspace_markers()
+		_draw_subspace_glue(offsets)
+		_draw_subspace_markers(offsets)
 	else:
 		_draw_seam_markers()
-	_draw_doors()
-	_draw_anchor_and_preview()
+	_draw_doors(offsets)
+	_draw_anchor_and_preview(offsets)
 
 
+## Where each visible copy of the current view sits. Inside a subspace the
+## strip repeats across the glue, so everything that belongs to it — terrain,
+## the player, doors, seam anchors, your aim — is drawn once per copy. Outside,
+## there is one copy at the origin and every loop over this runs once.
+func _copy_offsets() -> Array:
+	if world.mode != world.Mode.SUBSPACE or world.sub_fold == null:
+		return [Vector2.ZERO]
+	var out: Array = []
+	var n: Vector2 = world.sub_fold.crease_normal
+	var gap: float = world.sub_fold.gap_distance()
+	var copies: int = world.sub_copies
+	for k in range(-copies, copies + 1):
+		out.append(n * (k * gap))
+	return out
+
+
+## One diamond per meeting CELL, not per fold: folds can share a seam cell, and
+## stacking two markers there would draw the buried fold's refusal over the free
+## fold's invitation. `world.seam_markers()` resolves the cell the same way F
+## does. See FoldWorld.aimed_fold.
 func _draw_seam_markers() -> void:
 	var cs: float = world.base.cell_size
-	for fold in world.folds:
-		var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs
-		var ok: bool = world.can_unfold_fold(fold)
-		_draw_diamond(center, 12.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
+	var markers: Dictionary = world.seam_markers()
+	for cell in markers:
+		var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
+		_draw_diamond(center, 12.0,
+			Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
 
 
 ## Doors are warp POINTS riding tile centers: drawn only where the point
 ## strictly resolves in the current view (a split door draws nowhere — it is
 ## dormant). Inside a subspace the glyph repeats across the wrap copies.
-func _draw_doors() -> void:
-	var offsets: Array = [Vector2.ZERO]
-	if world.mode == world.Mode.SUBSPACE:
-		offsets = []
-		var n: Vector2 = world.sub_fold.crease_normal
-		var gap: float = world.sub_fold.gap_distance()
-		var copies: int = world.sub_copies
-		for k in range(-copies, copies + 1):
-			offsets.append(n * (k * gap))
+func _draw_doors(offsets: Array) -> void:
 	for id in world.doors:
 		var wp = world.door_point_here(id)
 		if wp == null:
@@ -72,42 +86,47 @@ func _draw_doors() -> void:
 ## Inside the subspace: seam anchors of interior folds (every wrap copy), and
 ## the OUTER fold's anchor point on the glue — both original anchors coincide
 ## there; F at the white diamond unfolds the subspace.
-func _draw_subspace_markers() -> void:
+func _draw_subspace_markers(offsets: Array) -> void:
 	var cs: float = world.base.cell_size
 	var outer: Fold = world.sub_fold
 	if outer == null:
 		return
-	var n := outer.crease_normal
-	var gap := outer.gap_distance()
-	var copies: int = world.sub_copies
 	var exit_ok: bool = world.exit_blocker() == null
 	var aimed_glue: bool = world.aiming_at_glue()
-	for k in range(-copies, copies + 1):
-		var off := n * (k * gap)
+	var markers: Dictionary = world.seam_markers()
+	for off in offsets:
 		var glue_col := Color(1, 1, 1, 0.95) if exit_ok else Color("e06a6a", 0.95)
 		_draw_diamond(outer.crease_point1 + off, 12.0, glue_col)
 		if aimed_glue:
 			draw_arc(outer.crease_point1 + off, 20.0, 0, TAU, 24, glue_col, STROKE)
-		for fold in world.level_folds():
-			var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs + off
-			var ok: bool = world.can_unfold_fold(fold)
-			_draw_diamond(center, 12.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
+		for cell in markers:
+			var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs + off
+			_draw_diamond(center, 12.0,
+				Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
 
 
-func _draw_anchor_and_preview() -> void:
+## Point markers here repeat across the wrap copies, so a player copy is never
+## shown standing next to an aim ring that isn't there. The full-extent guides
+## and the preview band do NOT: repeated they would tile the screen with lines
+## and stack their alpha, and they read fine drawn once in the band you occupy.
+func _draw_anchor_and_preview(offsets: Array) -> void:
 	var cs: float = world.base.cell_size
 	var world_px := Vector2(world.base.grid_size) * cs
 
 	# Where Q/E/F aim right now (follows pointing continuously).
 	var cand: Vector2i = world.candidate_anchor()
 	var cand_center: Vector2 = (Vector2(cand) + Vector2(0.5, 0.5)) * cs
-	draw_arc(cand_center, 16.0, 0, TAU, 24, Color(1, 1, 1, 0.30), HAIR)
 
 	# Aimed seam: F here unfolds this fold.
 	var aimed = world.aimed_fold()
+	var aimed_center := Vector2.ZERO
 	if aimed != null:
-		var m: Vector2 = (Vector2(aimed.meeting_pos) + Vector2(0.5, 0.5)) * cs
-		draw_arc(m, 20.0, 0, TAU, 24, Color("59e0d0"), STROKE)
+		aimed_center = (Vector2(aimed.meeting_pos) + Vector2(0.5, 0.5)) * cs
+
+	for off in offsets:
+		draw_arc(cand_center + off, 16.0, 0, TAU, 24, Color(1, 1, 1, 0.30), HAIR)
+		if aimed != null:
+			draw_arc(aimed_center + off, 20.0, 0, TAU, 24, Color("59e0d0"), STROKE)
 
 	# The two pending anchor slots (Q = orange, E = blue), with soft axis
 	# guides — folds may be diagonal; guides just help line up straight ones.
@@ -122,7 +141,8 @@ func _draw_anchor_and_preview() -> void:
 		var guide := Color(1, 1, 1, 0.08)
 		draw_line(Vector2(0, c.y), Vector2(world_px.x, c.y), guide, HAIR)
 		draw_line(Vector2(c.x, 0), Vector2(c.x, world_px.y), guide, HAIR)
-		draw_arc(c, 16.0, 0, TAU, 24, colors[i], STROKE)
+		for off in offsets:
+			draw_arc(c + off, 16.0, 0, TAU, 24, colors[i], STROKE)
 
 	if centers[0] == null or centers[1] == null:
 		return
@@ -145,22 +165,17 @@ func _draw_anchor_and_preview() -> void:
 
 ## Inside the subspace: mark the identified crease lines (the glue) so the
 ## wrap reads as a real join, not a rendering glitch.
-func _draw_subspace_glue() -> void:
+func _draw_subspace_glue(offsets: Array) -> void:
 	var fold: Fold = world.sub_fold
 	if fold == null:
 		return
 	var n := fold.crease_normal
 	var t := Vector2(-n.y, n.x)
-	var gap := fold.gap_distance()
 	var c1 := fold.crease_point1.dot(n)
 	var lo: float = world.sub_extent["min"] - 2.0 * world.base.cell_size
 	var hi: float = world.sub_extent["max"] + 2.0 * world.base.cell_size
-	var copies: int = world.sub_copies
-	for k in range(-copies, copies + 1):
-		var offset: float = c1 + k * gap
-		var from := n * offset + t * lo
-		var to := n * offset + t * hi
-		draw_line(from, to, Color("59e0d0", 0.55), HAIR)
+	for off in offsets:
+		draw_line(n * c1 + t * lo + off, n * c1 + t * hi + off, Color("59e0d0", 0.55), HAIR)
 
 
 ## Marker diamonds are snapped to the art-pixel grid: a diamond is only three

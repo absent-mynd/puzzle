@@ -107,6 +107,9 @@ var sub_goal_polys: Array = []
 var sub_extent: Dictionary = {}
 var sub_glue_segs: Array = []
 var sub_copies := 1
+## One Polygon2D per wrap copy except the one the real body occupies — see
+## `_update_player_ghosts`.
+var sub_player_ghosts: Array = []
 
 # --- Animation ---
 var anim_enabled := true
@@ -128,6 +131,12 @@ var _flash_left := 0.0
 
 
 func _ready() -> void:
+	# Run the per-frame world logic AFTER the player has moved this step — the
+	# wrap, doors and triggers should see where the body actually ended up, not
+	# where it was a frame ago. Children process after their parent by default,
+	# and the player is a child, so raise this node's priority past it.
+	process_physics_priority = 1
+
 	_atlas = TileAtlas.texture()
 	_build_pixel_view()
 
@@ -154,15 +163,20 @@ func _ready() -> void:
 	_setup_all()
 
 
-## The pixel pass. The world renders into a VIEW_PX target and a TextureRect
-## scales it up with nearest filtering; the HUD is added later on its own
-## CanvasLayer, outside this viewport, so it stays at window resolution.
+## The pixel pass. The world renders into a low-resolution target and a
+## TextureRect scales it up with nearest filtering; the HUD is added later on its
+## own CanvasLayer, outside this viewport, so it stays at window resolution.
 ##
-## The target's world extent equals the window's (PixelArt.CAMERA_ZOOM), so this
-## changes resolution and nothing else — the same amount of world is on screen.
+## The target is RESIZED as the camera's logical zoom changes (`_size_pixel_view`)
+## rather than the lens moving, which is what keeps an art pixel exactly
+## `PixelArt.WORLD_PER_PIXEL` world units at every zoom. See `PixelArt`.
+##
+## Note this node is OUTSIDE `pixel_view`, so `get_viewport_rect()` here is still
+## the window — which is what the zoom decision needs.
 func _build_pixel_view() -> void:
 	pixel_view = SubViewport.new()
-	pixel_view.size = PixelArt.VIEW_PX
+	pixel_view.size = PixelArt.target_size(
+		get_viewport_rect().size, WorldCore.ZOOM_RESTING)
 	pixel_view.transparent_bg = true            # the background ColorRect shows through
 	pixel_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	pixel_view.snap_2d_transforms_to_pixel = true
@@ -245,7 +259,7 @@ func _setup_all() -> void:
 	context.clear()
 	_apply_context()
 	player.teleport(_spawn, false)
-	player.snap_camera()
+	_cut_camera()
 
 
 func _take_fold_id() -> int:
@@ -341,8 +355,13 @@ func rebuild_sub() -> void:
 
 	for child in sub_geo.get_children():
 		child.queue_free()
+	sub_player_ghosts = []
 	var gap := sub_fold.gap_distance()
-	sub_copies = clampi(int(ceil(1400.0 / gap)), 1, 24)
+	# Enough copies to fill the WIDEST frame the camera can pull out to, not the
+	# current one: the count is fixed when the subspace is built, and a visible
+	# end to the repetition would break the cylinder the moment the lens opened.
+	var reach := WorldCore.camera_view_radius(get_viewport_rect().size, WorldCore.ZOOM_WIDEST)
+	sub_copies = clampi(int(ceil(reach / gap)), 1, 24)
 	for k in range(-sub_copies, sub_copies + 1):
 		var copy := Node2D.new()
 		copy.position = sub_fold.crease_normal * (k * gap)
@@ -357,7 +376,31 @@ func rebuild_sub() -> void:
 				var col := CollisionPolygon2D.new()
 				col.polygon = piece.polygon
 				solid.add_child(col)
+		# The real body lives in copy 0; every other copy gets a drawn twin.
+		if k != 0:
+			var ghost := player.make_visual_copy()
+			# Above all terrain, not just this copy's: a twin standing near a
+			# band edge overlaps the neighbouring copy, which draws later.
+			ghost.z_index = player.z_index
+			copy.add_child(ghost)
+			sub_player_ghosts.append(ghost)
+	_update_player_ghosts()
 	_refresh_lights()
+
+
+## The strip renders repeating across the glue, and the player repeats with it:
+## you are in every band at once, because they are all the same band. One lone
+## body would make the wrap read as a jump between worlds instead of a lap
+## around a cylinder. Copies are children of their band's node, so the offset
+## is the parent transform and their local position is just the body's.
+func _update_player_ghosts() -> void:
+	if sub_player_ghosts.is_empty():
+		return
+	var p := player.global_position
+	var squash := player.visual_squash()
+	for ghost in sub_player_ghosts:
+		ghost.position = p
+		ghost.scale = squash
 
 
 ## Re-resolve the region's lights against whatever is now on screen and hand
@@ -456,6 +499,7 @@ func _apply_context() -> void:
 		sub_by_pos = {}
 		for child in sub_geo.get_children():
 			child.queue_free()
+		sub_player_ghosts = []
 		world_geo.visible = true
 		_bg.color = Color("0a0b12")
 		rebuild_world()
@@ -553,13 +597,29 @@ func place_pending(slot: int, dir: Vector2i) -> void:
 		pending_b = null if pending_cell(1) != null and pending_cell(1) == cand else entry
 
 
+## The fold that F should unfold from where you are standing / aiming. Several
+## folds can meet in the SAME cell — a horizontal pair and a vertical pair whose
+## halves happen to join at one spot — and then one diamond stands for all of
+## them. Search NEWEST FIRST and prefer one that can actually come out, because
+## the older of a stacked pair is exactly the one the newer is blocking: taking
+## the first match in fold order would offer you nothing but the refusal.
+##
+## Falls back to the newest match when none is unfoldable, so the message you get
+## is still about the fold you were pointing at.
 func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
 	var cand := candidate_anchor(dir)
 	var here := player_cell()
-	for fold in level_folds():
-		if fold.meeting_pos == cand or fold.meeting_pos == here:
+	var list: Array = level_folds()
+	var blocked: Fold = null
+	for i in range(list.size() - 1, -1, -1):
+		var fold: Fold = list[i]
+		if fold.meeting_pos != cand and fold.meeting_pos != here:
+			continue
+		if can_unfold_fold(fold):
 			return fold
-	return null
+		if blocked == null:
+			blocked = fold
+	return blocked
 
 
 ## Inside a subspace, is the player aiming at (or standing on) the outer
@@ -709,6 +769,18 @@ func can_unfold_fold(fold: Fold) -> bool:
 		if WorldCore.segment_intersects_band(seg[0], seg[1], list[j]):
 			return false
 	return true
+
+
+## The seam diamonds to draw: meeting cell -> can anything there come out.
+## Several folds can meet in one cell, so the marker is one diamond for all of
+## them and reads unblocked when F there would DO something — the same choice
+## `aimed_fold` makes, so the colour never promises what the act refuses.
+func seam_markers() -> Dictionary:
+	var out: Dictionary = {}
+	for fold in level_folds():
+		var cell: Vector2i = fold.meeting_pos
+		out[cell] = bool(out.get(cell, false)) or can_unfold_fold(fold)
+	return out
 
 
 ## An interior fold of `fold` whose band crosses `fold`'s glue blocks
@@ -943,7 +1015,7 @@ func _traverse(id: String) -> void:
 		context.append(f)
 	_apply_context()
 	player.teleport(landed)
-	player.snap_camera()
+	_cut_camera()
 	_show_flash("You emerge INSIDE a fold." if into_fold else "You step through the door.")
 
 
@@ -996,6 +1068,8 @@ func _make_frag(layer: Node2D, piece, poly: PackedVector2Array, in_sub: bool,
 
 
 func _process(delta: float) -> void:
+	# Before the early-out: the lens has to keep working while a fold plays.
+	_update_camera()
 	if _anim.is_empty():
 		return
 	_anim["progress"] = minf(_anim["progress"] + delta / ANIM_TIME, 1.0)
@@ -1037,6 +1111,99 @@ func _apply_anim_frame() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Camera framing
+# ---------------------------------------------------------------------------
+# The player owns the camera (see PlayerBody); this decides what it should be
+# SHOWING — how much (zoom) and from where (lookahead). The body supplies motion
+# and the look keys, because it knows its own limits and its own input; the world
+# supplies the focus set and the flat axis, because only the world knows what the
+# moment is about.
+
+## `center` overrides where the BODY is taken to be — the cut path needs the
+## framing of where it is going, not of where the lens still is.
+func _update_camera(center: Vector2 = Vector2.INF) -> void:
+	if player == null:
+		return
+	var body: Vector2 = player.global_position if center == Vector2.INF else center
+	# The lead first: it moves the camera, and the zoom's focus distances are
+	# measured from where the camera ends up. Decided in the other order, a hard
+	# lead would quietly crop the very things the focus set exists to keep on screen.
+	player.lookahead_target = WorldCore.camera_lookahead_for({
+		"velocity": player.motion_fraction(),
+		"look": player.look_dir(),
+		# Inside a fold the strip repeats along the crease normal, so the frame
+		# already shows every band there is that way: leading along it would slide
+		# the view across identical copies for nothing.
+		"flat_axis": sub_fold.crease_normal if _in_subspace() else Vector2.ZERO,
+		"frozen": animating(),
+	})
+	var eye := (player.camera_position() if center == Vector2.INF
+		else body + player.lookahead_target)
+	player.zoom_target = WorldCore.camera_zoom_for({
+		"viewport": get_viewport_rect().size,
+		"center": eye,
+		"motion": player.motion_intensity(),
+		# A fold rearranging the world is its own reason to step back and watch.
+		"widen": 1.0 if animating() else 0.0,
+		"focus": _camera_focus(),
+	})
+	_size_pixel_view()
+
+
+## Give the render target the resolution the CURRENT zoom asks for. The camera's
+## lens never moves — inside a render target, zoom is what sets the size of an art
+## pixel, so moving it would resample the 16px tileset and soften the world. A
+## wider frame is therefore MORE pixels, not bigger ones.
+##
+## Sized from `camera_zoom()` (the eased value) rather than the target, so the
+## buffer tracks what is actually on screen while the frame is still opening.
+func _size_pixel_view() -> void:
+	if pixel_view == null:
+		return
+	var want := PixelArt.target_size(get_viewport_rect().size, player.camera_zoom())
+	# Only on change: assigning size re-allocates the render target.
+	if pixel_view.size != want:
+		pixel_view.size = want
+
+
+## Cut the camera — position, lens AND lead — to where the body now is. For hard
+## relocations (spawn, doors, being turned back by the fold): the destination's
+## framing is computed first, because easing into it would read as the new room
+## inflating around you.
+func _cut_camera() -> void:
+	_update_camera(player.global_position)
+	player.snap_camera()
+
+
+func _in_subspace() -> bool:
+	return mode == Mode.SUBSPACE and sub_fold != null
+
+
+## World points that would be a mistake to leave off screen right now.
+func _camera_focus() -> PackedVector2Array:
+	var pts := PackedVector2Array([player.global_position])
+	# A pinned anchor is one half of a fold you are still composing. Walk away
+	# from it and the frame opens to keep the span you are judging in view — the
+	# camera showing you how big the fold has got.
+	for slot in [0, 1]:
+		var cell = pending_cell(slot)
+		if cell != null:
+			pts.append((Vector2(cell) + Vector2(0.5, 0.5)) * CS)
+	# Inside a fold the band IS the room: frame it glue to glue, so a wide strip
+	# reads as the cylinder it is rather than a corridor with no visible walls.
+	if _in_subspace():
+		var n := sub_fold.crease_normal
+		var d := (player.global_position - sub_fold.crease_point1).dot(n)
+		pts.append(player.global_position - n * d)
+		pts.append(player.global_position + n * (sub_fold.gap_distance() - d))
+	# A fold ride can carry you further than a frame's width. Hold both ends.
+	if animating():
+		pts.append(_anim["p_from"])
+		pts.append(_anim["p_to"])
+	return pts
+
+
+# ---------------------------------------------------------------------------
 # Per-frame world logic
 # ---------------------------------------------------------------------------
 
@@ -1054,6 +1221,7 @@ func _physics_process(delta: float) -> void:
 
 	if mode == Mode.SUBSPACE:
 		_subspace_wrap_and_turnback()
+		_update_player_ghosts()
 	else:
 		if player.global_position.y > (base.grid_size.y + 6) * CS:
 			player.teleport(_spawn, false)
@@ -1068,12 +1236,17 @@ func _subspace_wrap_and_turnback() -> void:
 	var gap := sub_fold.gap_distance()
 	var c1 := sub_fold.crease_point1.dot(n)
 	var proj := player.global_position.dot(n)
+	# Walking through a glue line lands you in the next copy of the strip —
+	# which is this one. Slide the body back by one band width and slide the
+	# CAMERA by the same vector: the strip repeats with exactly that period, so
+	# the rendered frame is unchanged and the crossing is invisible. (Snapping
+	# the camera instead would throw away its smoothing lag and jolt the view.)
 	if proj < c1:
 		player.global_position += n * gap
-		player.snap_camera()
+		player.shift_camera(n * gap)
 	elif proj >= c1 + gap:
 		player.global_position -= n * gap
-		player.snap_camera()
+		player.shift_camera(-n * gap)
 
 	# Falling out of the strip's tangential extent doesn't force-exit (exit
 	# can be blocked by crossing folds): the fold turns you back to its anchor.
@@ -1083,7 +1256,7 @@ func _subspace_wrap_and_turnback() -> void:
 		var back := sub_fold.crease_point1 + n * (gap * 0.5)
 		var landed := WorldCore.depenetrate(back, PlayerBody.RADIUS, sub_wall_polys)
 		player.teleport(back if landed == Vector2.INF else landed, false)
-		player.snap_camera()
+		_cut_camera()
 		_show_flash("The fold turns back on itself here.")
 
 

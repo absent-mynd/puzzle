@@ -38,6 +38,13 @@ then choose where to be standing before pressing F — inside the red band to
 be folded in, outside it to ride a flap. Any active fold can be unfolded by
 walking up to its seam diamond (where its two anchors met) and interacting.
 
+Two folds can **meet in the same cell**, and then one diamond stands for both.
+F there acts on the newest fold that can actually come out — not the first in
+fold order, which is precisely the one the newer fold is blocking (see
+`FoldWorld.aimed_fold`). The diamond is drawn once per cell and reads unblocked
+whenever F would do something, so the marker never promises what the act
+refuses.
+
 **Inside a fold, the same rules apply.** The subspace is a real place: the
 pinch fold is applied to the world, and the outer fold's two anchors coincide
 at one point on the glue line — the white diamond. F there unfolds the
@@ -51,6 +58,63 @@ diamond turns red to show it. Player and anchors move by **exact base-tile
 riding** (each fragment knows its base identity and offset), not approximate
 crease math. Folds and unfolds animate: flaps slide, the strip collapses
 onto — or springs from — the seam.
+
+## The camera
+
+The frame is not a fixed lens — it opens and closes with what the moment is
+about, and it only ever opens (resting is the tightest it sits, so it never
+closes in on you unasked):
+
+- **Speed.** Running widens it a little, falling hard widens it a lot. A long
+  drop is the one move where the frame you have is certainly not the frame you
+  need.
+- **The fold you are composing.** Pin an anchor and walk away, and the view
+  opens to keep it on screen. The camera is showing you how big the fold has
+  got — that span *is* the decision you are about to make.
+- **The band you are inside.** In a subspace the strip is framed glue to glue,
+  so a wide band reads as the cylinder it is rather than a corridor with no
+  visible walls.
+- **A fold rearranging the world.** The transition steps the camera back so you
+  watch the space move, then settles.
+
+Zoom eases much more slowly than the follow does — a frame that resizes as
+briskly as it pans reads as breathing rather than attention. `PlayerBody` owns
+the camera, `WorldCore.camera_zoom_for` decides the target, and
+`FoldWorld._camera_focus` is the list of things it would be a mistake to leave
+off screen. Hard relocations (respawn, doors) cut the zoom along with the
+position — easing it would read as the new room inflating.
+
+**And the frame leads where you are going.** Zoom decides how *much* to show;
+lookahead decides *where to centre it*. Sitting the body dead centre spends half
+the frame on ground you have already crossed, which is the wrong half. So the
+view sits ahead of you, and the asymmetries are the design:
+
+- **A fall leads much further than a rise.** A fall is committed and its landing
+  is the thing you need to see; the top of a jump is about to reverse, and
+  leading hard there would swing the frame back a moment later.
+- **Holding a look key leads on its own.** The same W/S that aim an anchor lean
+  the frame, so pressing up to point up shows you what you are pointing at —
+  wanting to see up there is a thing you can ask for without moving.
+- **Inside a fold the lead is flat along the band.** The strip repeats along the
+  crease normal, so the frame already shows every copy there is that way; leading
+  along it would slide the view across identical bands for nothing.
+
+The lead eases even more lazily than the zoom, because it *flips sign* the
+instant you turn around: eased, a reversal reads as the view swinging round to
+your new heading instead of whipping across the body. It is capped, and a hard
+relocation cuts it along with the lens. `WorldCore.camera_lookahead_for` is the
+pure decision; the body supplies its own velocity-as-a-fraction-of-its-limits
+(`motion_fraction`) and the held look keys (`look_dir`).
+
+One ordering matters: the lead is decided *before* the zoom, because the lead
+moves the camera and the zoom's focus distances are measured from where the
+camera ends up. The other way round, a hard lead would quietly crop the very
+things the focus set exists to keep on screen.
+
+**Zoom here is a *logical* zoom, and the Camera2D's own zoom never changes.**
+Opening the frame resizes the pixel render target instead of moving the lens —
+otherwise the tileset would be resampled and the pixel art would go soft. See
+*Art & light → The pixel pass* for why, before changing anything about zoom.
 
 ## Regions & doors
 
@@ -84,8 +148,12 @@ pinned and resolve again when you return.
    this is the gravity-specific verb.
 2. **Get folded in.** Stand *inside* the red preview band and commit the fold:
    instead of blocking, the fold swallows you. You're inside the excised strip,
-   rendered repeating across the glue lines (cyan) — walk "through" one and
-   you wrap around the cylinder seamlessly.
+   rendered repeating across the glue lines (cyan) — **and so are you.** Every
+   visible copy of the strip shows you at the same place in its own band,
+   because they are all the same band: the strip is a cylinder and you are one
+   point on it. Walking "through" a glue line slides body and camera together
+   by exactly one band width, so the frame does not change and the crossing is
+   invisible — there is no seam to cross, only a lap to finish.
 3. **Dive-traverse.** While inside, walk somewhere else along the strip, then
    press U. The fold springs open and you emerge **where you walked to** —
    fold, dive, surface: movement through the inside of a fold.
@@ -141,11 +209,24 @@ unlit corner is exactly as navigable as a lit one.
 
 ### The pixel pass
 
-Everything in the world renders into a **320×180 SubViewport** that is scaled up
-4× with nearest filtering (`PixelArt`). World coordinates did not change — a
-cell is still 64 units and every physics constant is untouched — so one art
-pixel is 4 world units and a cell is 16 art pixels. The camera zooms out by the
-same factor, so exactly as much world is on screen as before.
+Everything in the world renders into a **low-resolution SubViewport** that is
+scaled up with nearest filtering (`PixelArt`). World coordinates did not change —
+a cell is still 64 units and every physics constant is untouched — so one art
+pixel is 4 world units and a cell is 16 art pixels. At 1:1 the target is 320×180.
+
+**The camera's lens never moves, even though the zoom is dynamic.** These are the
+two facts that have to coexist, and the way they do is worth knowing before you
+touch either: inside a render target, the size of an art pixel is purely a
+function of camera zoom. Move the lens and a 16px tile stops covering 16 target
+pixels — the atlas gets resampled and the world goes soft, which is the one thing
+this pass exists to prevent.
+
+So "the frame opens" is answered with **more pixels, not a wider lens**:
+`PixelArt.target_size` gives the resolution a given logical zoom needs, and
+`FoldWorld._size_pixel_view` resizes the target as the zoom eases. World-per-art-
+pixel stays 4.0 at every zoom, so a cell always spans a whole tile. The camera's
+`zoom_target` is therefore a *logical* zoom — it sizes the buffer; `_cam.zoom`
+stays pinned at `PixelArt.CAMERA_ZOOM` forever.
 
 - **Tiles come from a 16px tileset** (`TileAtlas`, and `assets/sprites/README.md`
   for the layout). Fragments are textured through **base-space UVs**: a fragment
@@ -227,15 +308,22 @@ do not want yet.
 ## Files
 
 - `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
-  and glue segments, depenetration, anchor/fold eligibility). Covered by
-  `scripts/tests/test_world_core.gd`.
+  and glue segments, depenetration, anchor/fold eligibility, camera zoom and
+  lookahead). Covered by `scripts/tests/test_world_core.gd`.
 - `FoldWorld.gd` — scene driver: derived geometry → textured Polygon2D + colliders,
   fold/unfold with player riding, subspace enter/wrap/exit, regions, doors,
-  triggers, and the pixel render target.
+  triggers, and the pixel render target (which it resizes as the zoom changes).
 - `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, squash) and
-  the pixel-snapped camera.
+  the pixel-snapped camera, whose smoothing is driven here so the wrap can
+  displace it by a whole band width without losing its lag. Its camera-facing
+  readings (`look_dir`, `motion_fraction`, `motion_intensity`) are covered by
+  `scripts/tests/test_player_body.gd`.
 - `WorldOverlay.gd` — anchors, strip preview band, seam markers, glue lines.
-- `PixelArt.gd` — how big an art pixel is; the one place that says so.
+  Everything point-like repeats across the wrap copies (`_copy_offsets`); seam
+  diamonds are one per meeting CELL, since folds can share one
+  (`FoldWorld.seam_markers`). Stroke widths are multiples of one art pixel.
+- `PixelArt.gd` — how big an art pixel is; the one place that says so, including
+  the target size a given zoom needs (`target_size`).
 - `TileAtlas.gd` — the tileset: kinds, variants, and base-space UVs for fragments.
 - `LightRig.gd` — lit materials, per-frame light uniforms, lamp glyphs.
 - Scene flows in `scripts/tests/test_fold_world.gd`.

@@ -175,18 +175,23 @@ constant, cell size or coordinate changed. See `scripts/world/README.md`
 world (unchanged: CELL = 64 world units)
         │
         ▼
-  SubViewport 320x180  ← 1 art pixel = 4 world units = PixelArt.WORLD_PER_PIXEL
-        │                 camera zoom cancels it, so the same world is on screen
+  SubViewport, RESIZED per zoom  ← 1 art pixel = 4 world units = WORLD_PER_PIXEL
+        │  320x180 at 1:1          the LENS never moves; the target grows instead
         ├── tiles: Polygon2D + tileset texture + base-space UVs (TileAtlas)
-        │            uv = (polygon - src_offset) mapped into the tile's atlas cell
-        └── lit by pixel_lit.gdshader (ambient + snapped, quantized, dithered lights)
-        │
-        ▼
-  TextureRect, nearest, 4x        HUD renders OUTSIDE this, at window resolution
+		│            uv = (polygon - src_offset) mapped into the tile's atlas cell
+		└── lit by pixel_lit.gdshader (ambient + snapped, quantized, dithered lights)
+		│
+		▼
+  TextureRect, nearest             HUD renders OUTSIDE this, at window resolution
 ```
 
 Three rules worth keeping:
 
+- **The camera's zoom is fixed; the render target resizes.** Inside a render
+  target the size of an art pixel is purely a function of zoom, so moving the lens
+  would resample the tileset and soften everything. The camera IS dynamic
+  (`WorldCore.camera_zoom_for`) — that is a *logical* zoom, which sizes the target
+  via `PixelArt.target_size`. Never set `_cam.zoom` from gameplay code.
 - **Appearance is a base-space fact.** Variant, edge kind and UVs all come from
   the base grid, so a tile looks the same however it has been folded, ridden or
   cut. Do not key art off the folded neighbourhood.

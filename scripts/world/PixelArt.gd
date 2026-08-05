@@ -12,20 +12,30 @@ class_name PixelArt extends RefCounted
 ##
 ##     CELL (64 world units)  /  WORLD_PER_PIXEL (4)  =  TILE_PX (16 art px)
 ##
-## 16px tiles at a 320x180 render target upscaled 4x into the 1280x720 window.
-## Keeping the render target's world extent equal to the window's world extent
-## (via `CAMERA_ZOOM`) means the pixel pass changes the LOOK and nothing else:
-## the same amount of world is on screen as before.
+## 16px tiles drawn into a low-resolution target and upscaled with nearest
+## filtering into the window. `VIEW_PX` (320x180) is the 1:1 shape.
+##
+## **The camera's zoom never moves.** Inside a render target, the size of an art
+## pixel is purely a function of zoom — so if the lens moved, a 16px tile would
+## stop covering 16 target pixels, the atlas would be resampled, and the world
+## would go soft. That is the one thing this pass exists to prevent.
+##
+## But the camera IS dynamic: the frame opens with the moment (see
+## `WorldCore.camera_zoom_for`). Both facts hold at once because "show more world"
+## is answered with more PIXELS, not a wider lens — `target_size` resizes the
+## render target so that world-per-target-pixel stays `WORLD_PER_PIXEL` at every
+## zoom. The tile is never resampled; there is simply more of the world in the
+## buffer, and the upscale to the window absorbs the difference.
 ##
 ## The HUD is deliberately outside this: it lives on a normal CanvasLayer at
 ## window resolution, so text stays legible while the world stays chunky.
 ##
-## Window scaling is left FRACTIONAL on purpose. The render target is already an
-## exact quarter of the 1280x720 canvas, so an art pixel is 4 canvas units and
-## any window that is a whole multiple of 320 wide lands on a whole number of
-## screen pixels per art pixel — 1920 gives 6x, 2560 gives 8x. Forcing integer
-## stretch on the CANVAS would do the opposite: 1920/1280 rounds down to 1x and
-## a 1080p window would play in a 1280x720 box with black bars around it.
+## Window scaling is left FRACTIONAL on purpose. Forcing integer stretch on the
+## CANVAS would mean a 1080p window playing in a 1280x720 box with black bars
+## around it. With a resizing target the upscale factor is fractional at most
+## zooms anyway — the crispness that matters is the tile landing 1:1 in the
+## buffer, which `target_size` guarantees; the final blit is a clean nearest
+## magnification of an already-correct image.
 
 ## World units covered by one art pixel.
 const WORLD_PER_PIXEL := 4.0
@@ -34,17 +44,47 @@ const WORLD_PER_PIXEL := 4.0
 ## the number a tileset is authored against (see `TileAtlas`).
 const TILE_PX := 16
 
-## Size of the low-resolution render target, in art pixels.
+## Size of the low-resolution render target at the RESTING zoom, in art pixels.
+## The target grows past this as the camera opens — see `target_size`.
 const VIEW_PX := Vector2i(320, 180)
 
-## Camera zoom that makes VIEW_PX show the same world extent the un-pixelated
-## camera did (VIEW_PX * WORLD_PER_PIXEL == 1280x720 world units).
+## Ceiling on the render target. `target_size` is called every frame, so the
+## growth has to be bounded: a cap is what makes it safe. Generous enough for the
+## widest zoom on a 4K window.
+const MAX_VIEW_PX := Vector2i(1280, 720)
+
+## The camera's FIXED zoom. This is the single fact that keeps the art crisp: at
+## this zoom one target pixel covers exactly WORLD_PER_PIXEL world units, so the
+## 16px tileset lands 1:1 and a cell spans TILE_PX pixels. It never changes — see
+## `target_size` for why.
 const CAMERA_ZOOM := Vector2(1.0 / WORLD_PER_PIXEL, 1.0 / WORLD_PER_PIXEL)
 
 
-## World extent visible in the render target, in world units.
+## World extent a VIEW_PX target covers, in world units — the 1:1 frame the
+## tileset was authored against. The live target is `target_size` of the current
+## zoom, which is larger whenever the frame has opened past 1:1.
 static func view_world_size() -> Vector2:
 	return Vector2(VIEW_PX) * WORLD_PER_PIXEL
+
+
+## How big the render target must be for a logical `zoom` to show the right amount
+## of world at the right resolution.
+##
+## The camera's lens is fixed (`CAMERA_ZOOM`), because inside a render target the
+## size of an art pixel is purely a function of zoom: move the lens and a 16px
+## tile stops covering 16 target pixels, the atlas gets resampled, and the world
+## goes soft — which is the one thing the pixel pass exists to prevent.
+##
+## So "show more world" is answered with more PIXELS instead. The target is sized
+## so that world-per-target-pixel stays WORLD_PER_PIXEL at any zoom; the upscale
+## to the window absorbs the difference. At the resting zoom this returns exactly
+## `VIEW_PX`, the shape the tileset was authored against.
+static func target_size(window: Vector2, zoom: float) -> Vector2i:
+	var world_seen := window / maxf(zoom, 0.01)
+	var px := (world_seen / WORLD_PER_PIXEL).round()
+	return Vector2i(
+		clampi(int(px.x), 1, MAX_VIEW_PX.x),
+		clampi(int(px.y), 1, MAX_VIEW_PX.y))
 
 
 ## Snap a world point DOWN to the art-pixel grid (the top-left of the art pixel

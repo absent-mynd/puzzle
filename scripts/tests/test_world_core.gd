@@ -235,3 +235,170 @@ func test_ordinary_walls_do_not_block_folds() -> void:
 	var f := Fold.create(0, Vector2i(1, 0), Vector2i(5, 0), CS)
 	assert_false(WorldCore.fold_blocked_by_tile(pieces, f, CS),
 		"only blocks_fold types stop a fold — walls fold away normally")
+
+
+# ---------------------------------------------------------------------------
+# Camera framing
+# ---------------------------------------------------------------------------
+
+const VIEW := Vector2(1280, 720)
+
+
+func _zoom(ctx: Dictionary) -> float:
+	var full := {"viewport": VIEW, "center": Vector2.ZERO}
+	full.merge(ctx, true)
+	return WorldCore.camera_zoom_for(full)
+
+
+func test_camera_rests_wider_than_one_to_one() -> void:
+	var z := _zoom({})
+	assert_eq(z, WorldCore.ZOOM_RESTING, "Nothing happening: the camera sits at its resting zoom")
+	assert_lt(z, 1.0, "Resting shows MORE than the raw design scale")
+
+
+func test_camera_widens_with_motion() -> void:
+	var still := _zoom({"motion": 0.0})
+	var running := _zoom({"motion": 0.45})
+	var falling := _zoom({"motion": 1.0})
+	assert_lt(running, still, "Moving pulls the frame out")
+	assert_lt(falling, running, "All-out motion pulls it out further")
+	assert_gt(falling, WorldCore.ZOOM_WIDEST * 0.999, "Motion alone never blows past the floor")
+
+
+func test_camera_ignores_focus_points_that_already_fit() -> void:
+	# A couple of cells away is well inside the resting frame; the camera should
+	# not twitch for every anchor pinned at arm's length.
+	var near := _zoom({"focus": PackedVector2Array([Vector2(2.0 * CS, 0)])})
+	assert_eq(near, WorldCore.ZOOM_RESTING, "A point already on screen changes nothing")
+
+
+func test_camera_widens_to_keep_a_far_focus_point_on_screen() -> void:
+	var far := Vector2(13.0 * CS, 0)
+	var z := _zoom({"focus": PackedVector2Array([far])})
+	assert_lt(z, WorldCore.ZOOM_RESTING, "A distant anchor pulls the frame out")
+	assert_lt(far.x + WorldCore.ZOOM_FOCUS_MARGIN, VIEW.x * 0.5 / z + 0.01,
+		"...far enough out that the point is actually in frame, with its margin")
+
+
+func test_camera_framing_is_governed_by_the_tightest_axis() -> void:
+	# The window is wider than it is tall, so the same offset in y binds harder
+	# than it does in x.
+	var o := 7.0 * CS
+	var wide := _zoom({"focus": PackedVector2Array([Vector2(o, 0)])})
+	var tall := _zoom({"focus": PackedVector2Array([Vector2(0, o)])})
+	assert_lt(tall, wide, "Height is the binding constraint at 16:9")
+	assert_eq(_zoom({"focus": PackedVector2Array([Vector2(o, o)])}), tall,
+		"Both at once is governed by whichever axis is tightest")
+
+
+func test_camera_measures_focus_from_the_camera_not_the_span() -> void:
+	# The camera sits at `center`, not at the middle of the focus set: two points
+	# 5 cells apart but both well off to one side must be framed by their
+	# DISTANCE, not by the 5-cell span between them.
+	var pair := PackedVector2Array([Vector2(8.0 * CS, 0), Vector2(13.0 * CS, 0)])
+	var offset := _zoom({"center": Vector2.ZERO, "focus": pair})
+	var centred := _zoom({"center": Vector2(10.5 * CS, 0), "focus": pair})
+	assert_lt(offset, centred, "Points far from the camera need a wider frame than a tight span")
+
+
+func test_camera_never_leaves_its_bounds() -> void:
+	var absurd := _zoom({"motion": 1.0, "widen": 1.0,
+		"focus": PackedVector2Array([Vector2(400.0 * CS, 400.0 * CS)])})
+	assert_eq(absurd, WorldCore.ZOOM_WIDEST, "A region-spanning fold clamps at the floor")
+	assert_eq(_zoom({"motion": -5.0, "widen": -5.0}), WorldCore.ZOOM_RESTING,
+		"Nothing can pull the frame TIGHTER than resting")
+
+
+func test_camera_widen_pulls_out_during_a_fold() -> void:
+	assert_lt(_zoom({"widen": 1.0}), _zoom({"widen": 0.0}),
+		"The world rearranging is its own reason to step back")
+
+
+func test_camera_view_radius_covers_the_frame_corner() -> void:
+	# Everything drawn must reach the corner of the frame, or the repeated bands
+	# inside a fold would visibly run out.
+	var r := WorldCore.camera_view_radius(VIEW, 0.5)
+	assert_almost_eq(r, Vector2(1280.0, 720.0).length(), 0.01,
+		"At half zoom the visible half-diagonal is the full-scale diagonal")
+	assert_gt(WorldCore.camera_view_radius(VIEW, 0.5), WorldCore.camera_view_radius(VIEW, 1.0),
+		"Zooming out sees further")
+
+
+# ---------------------------------------------------------------------------
+# Camera lookahead
+# ---------------------------------------------------------------------------
+
+func _lead(ctx: Dictionary) -> Vector2:
+	return WorldCore.camera_lookahead_for(ctx)
+
+
+func test_standing_still_the_camera_leads_nowhere() -> void:
+	assert_eq(_lead({}), Vector2.ZERO, "Nothing moving: the body sits in the middle")
+	assert_eq(_lead({"velocity": Vector2.ZERO}), Vector2.ZERO, "Explicitly still, too")
+
+
+func test_the_camera_leads_the_way_you_are_running() -> void:
+	var right := _lead({"velocity": Vector2(1, 0)})
+	assert_gt(right.x, 0.0, "Running right shows you what is to your right")
+	assert_almost_eq(right.y, 0.0, 0.001, "...and nothing vertical, because you are level")
+	assert_almost_eq(_lead({"velocity": Vector2(-1, 0)}).x, -right.x, 0.001,
+		"Leftward is the mirror of rightward")
+
+
+func test_lookahead_saturates_rather_than_tracking_speed_forever() -> void:
+	# The lead is a FRACTION of full speed, not a multiple of velocity: past the
+	# body's own limit there is nothing more to show, and a lead that kept growing
+	# would push the body off its own frame.
+	var half := _lead({"velocity": Vector2(0.5, 0)})
+	var full := _lead({"velocity": Vector2(1.0, 0)})
+	var absurd := _lead({"velocity": Vector2(9.0, 0)})
+	assert_gt(full.x, half.x, "Faster leads further")
+	assert_almost_eq(absurd.x, full.x, 0.001, "Beyond full speed the lead stops growing")
+	assert_almost_eq(full.x, WorldCore.LOOKAHEAD_RUN, 0.001,
+		"At a full run the lead is exactly its horizontal reach")
+
+
+func test_falling_leads_further_than_rising() -> void:
+	# Asymmetric on purpose: a fall is committed and you need to see the landing,
+	# while the top of a jump is about to reverse — leading up there would swing
+	# the frame down again a moment later.
+	var down := _lead({"velocity": Vector2(0, 1)})
+	var up := _lead({"velocity": Vector2(0, -1)})
+	assert_gt(down.y, 0.0, "Falling shows you the ground you are heading for")
+	assert_lt(up.y, 0.0, "Rising still leads up, a little")
+	assert_gt(down.y, absf(up.y), "But a fall leads further than a rise")
+	assert_almost_eq(down.y, WorldCore.LOOKAHEAD_FALL, 0.001,
+		"A full-speed fall leads exactly its fall reach")
+
+
+func test_holding_a_look_direction_leads_that_way_on_its_own() -> void:
+	# Peering: hold up or down while standing still and the frame leans that way,
+	# because wanting to see up there is a thing you can ask for without moving.
+	var up := _lead({"look": -1.0})
+	assert_lt(up.y, 0.0, "Holding up leans the frame up while you stand still")
+	assert_almost_eq(up.y, -WorldCore.LOOKAHEAD_PEEK, 0.001, "...by its peek reach")
+	assert_almost_eq(_lead({"look": 1.0}).y, WorldCore.LOOKAHEAD_PEEK, 0.001,
+		"Holding down leans it down by the same amount")
+
+
+func test_peeking_and_moving_add_but_stay_bounded() -> void:
+	var both := _lead({"velocity": Vector2(0, 1), "look": 1.0})
+	assert_gt(both.y, WorldCore.LOOKAHEAD_PEEK,
+		"Looking down while falling leads further than either alone")
+	assert_lt(both.y, WorldCore.LOOKAHEAD_FALL + WorldCore.LOOKAHEAD_PEEK + 0.001,
+		"...but never past the sum of the two reaches")
+
+
+func test_lookahead_is_flat_along_a_folded_band() -> void:
+	# Inside a fold the strip repeats along the crease normal, so the frame is
+	# already showing every band there is in that direction: leading along it
+	# would slide the view for nothing. Across the band is what still moves.
+	var n := Vector2(1, 0)
+	var lead := _lead({"velocity": Vector2(1, 1), "flat_axis": n})
+	assert_almost_eq(lead.dot(n), 0.0, 0.001, "No lead along the repeating axis")
+	assert_gt(lead.y, 0.0, "The tangential component survives")
+
+
+func test_lookahead_holds_still_while_the_world_rearranges() -> void:
+	assert_eq(_lead({"velocity": Vector2(1, 1), "frozen": true}), Vector2.ZERO,
+		"Riding a fold: the transition frames itself, and stale velocity leads nowhere")
