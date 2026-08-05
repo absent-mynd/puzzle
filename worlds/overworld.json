@@ -31,7 +31,42 @@
 				"y": 12.5
 			},
 			"tile_data": {},
-			"folds": []
+			"folds": [],
+			"lights": [
+				{
+					"id": "w_spawn",
+					"cell": {
+						"x": 3,
+						"y": 13
+					},
+					"color": "#ffd08a",
+					"radius": 5.0,
+					"energy": 1.0,
+					"flicker": 0.12
+				},
+				{
+					"id": "w_pit",
+					"cell": {
+						"x": 13,
+						"y": 13
+					},
+					"color": "#7fd4ff",
+					"radius": 6.0,
+					"energy": 1.0,
+					"flicker": 0.05
+				},
+				{
+					"id": "w_chamber",
+					"cell": {
+						"x": 36,
+						"y": 12
+					},
+					"color": "#ffc65c",
+					"radius": 4.0,
+					"energy": 1.15,
+					"flicker": 0.18
+				}
+			]
 		},
 		"east": {
 			"rows": [
@@ -79,6 +114,30 @@
 						"x": 16,
 						"y": 6
 					}
+				}
+			],
+			"lights": [
+				{
+					"id": "e_vault",
+					"cell": {
+						"x": 14,
+						"y": 8
+					},
+					"color": "#ffb85c",
+					"radius": 5.0,
+					"energy": 1.2,
+					"flicker": 0.22
+				},
+				{
+					"id": "e_reward",
+					"cell": {
+						"x": 29,
+						"y": 8
+					},
+					"color": "#ffe0a0",
+					"radius": 4.0,
+					"energy": 1.0,
+					"flicker": 0.0
 				}
 			]
 		}

@@ -201,6 +201,35 @@ Extracting the pure part was the fix; importing upward would have been a cycle.
 
 ---
 
+## Decision 10: Anything in the world is an occupant; rendering asks base space
+
+Doors and lights do not store a world position. They store a **base identity plus a
+point inside that tile**, and where they are is a question asked of the current
+fragment list through `BaseFrame`. `LightSource` is the second instance of the
+pattern, and it is what makes the design work read as inevitable rather than
+implemented: a lamp folded away is not in the overworld, and the same lamp is what
+lights that fold's interior. Nobody wrote either behaviour — both are the answer to
+"where are you?" in two different configurations.
+
+The one place the two differ is strictness. A door resolves with
+`resolve_base_point` and goes **dormant** when its point sits exactly on a cut:
+there is no unambiguous side to arrive on. A light resolves with
+`world_point_from_base` and keeps burning on whichever half its point landed in,
+because a light has no such ambiguity to resolve.
+
+**Rendering follows the same rule.** A fragment's tile art, its variant and its
+edge kind all come from base space (`TileAtlas.uv_for` sends each vertex back
+through `src_offset`), so a tile looks identical however it has been folded,
+ridden or cut — and a crease cuts the *art* exactly as it cuts the geometry. That
+is what keeps the seam a hard line for free, rather than as a special case.
+
+**Why the render pass lives in `scripts/world/`:** it is view. `LightSource` is
+kernel because it is data plus a `BaseFrame` question; `LightRig`, `TileAtlas` and
+`PixelArt` are the view that draws the answer. The layering rule (Decision 9) is
+unchanged.
+
+---
+
 ## Implementation patterns
 
 **Validate before folding.** `WorldCore.fold_blocked_by_tile` (pins) and
@@ -226,3 +255,6 @@ scene-driven `test_fold_world.gd` is what catches integration regressions.
   folds into an interior list mid-cascade.
 - **Unfold animation** plays only for newest-fold unfolds at world level; the reverse
   transform is exact only there.
+- **Lights do not cast shadows,** and the seam is not lit or blended specially.
+  Occluders would have to be re-derived per fold and would want to soften the seam,
+  which is the one thing the art is currently committed to keeping hard.

@@ -31,15 +31,17 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 |---|---|
 | Immutable base level: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
 | One base tile: stable `base_id`, `grid_position`, `type`, per-instance `data` | `BaseTile.gd` |
-| One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel` | `Fold.gd` |
+| One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel`, `held_anchors` | `Fold.gd` |
 | **The derivation engine.** `derive()`, `derive_pieces()`, `apply_one_fold()` — replays a fold list over the base grid | `FoldReplay.gd` |
 | A derived fragment: `base_id`, `type`, `polygon`, `plane_pos`, **`src_offset`** | `FoldedPiece.gd` |
 | Queryable derived state: per-position stacks, `dominant_type_at`, `pieces_of_base` | `FoldedState.gd` |
 | **Base ↔ derived point transport.** `transport()`, `world_point_from_base()`, `resolve_base_point()`, `piece_at()` | `BaseFrame.gd` |
-| **The tile registry.** walkable / merge_rank / blocks_fold / blocks_anchor / on_enter | `TileTypes.gd` |
+| **The tile registry.** walkable / merge_rank / blocks_fold / blocks_anchor / on_enter / grant | `TileTypes.gd` |
+| **The anchor ledger.** `held_by()`, `held_in()`, `available()`, `can_pin()`, `capacity_with()` — conservation arithmetic, nothing stored | `AnchorStock.gd` |
 | Entities that ride base tiles: split-on-unfold latents, carried geometry, footprints | `Occupants.gd` |
 | Fold-on-enter cascade: channels, fire-once guard, bounded fixpoint | `TriggerResolver.gd` |
-| Authored world: regions (ASCII rows), doors, pre-placed folds; JSON round trip | `WorldData.gd` |
+| Authored world: regions (ASCII rows), doors, pre-placed folds, lights, `anchor_capacity`; JSON round trip | `WorldData.gd` |
+| A light as an occupant: base identity + point in tile, resolved per configuration | `LightSource.gd` |
 
 ## Kernel — `scripts/utils/`
 
@@ -55,10 +57,13 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 
 | Concern | File |
 |---|---|
-| **Everything that makes it a game**: regions, the context stack (subspaces), doors, input, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
-| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility | `WorldCore.gd` |
-| Player physics body: coyote time, jump buffer, squash | `PlayerBody.gd` |
-| Anchors, fold preview band, seam diamonds, glue lines | `WorldOverlay.gd` |
+| **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/hold verb, the anchor ledger and caches, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
+| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
+| Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing) | `PlayerBody.gd` |
+| Anchors, fold preview band, seam diamonds, glue lines, the hold-progress ring | `WorldOverlay.gd` |
+| **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping | `PixelArt.gd` |
+| **The tileset.** Kinds, variants, and base-space UVs for cut fragments | `TileAtlas.gd` |
+| Lit materials, per-frame light uniforms, lamp glyphs | `LightRig.gd` |
 | Controls and the design beats | `README.md` |
 
 `FoldWorld.gd` is the largest file and the one to read first if you want to
@@ -76,6 +81,13 @@ understand how the pieces meet. Its header comment is the map.
 | …exiting a subspace work? | `FoldWorld.try_exit()`, `exit_blocker()` |
 | …a door find its partner? | `FoldWorld._check_doors()`, `BaseFrame.resolve_base_point` |
 | …a trigger fire? | `FoldWorld._check_triggers()` → `TriggerResolver.resolve` |
+| …a tile get its art? | `FoldWorld._make_tile()` → `TileAtlas.uv_for` |
+| …a light know where it is? | `FoldWorld.lights_here()` → `LightSource.position_in` |
+| …lighting stay pixelly? | `assets/shaders/pixel_lit.gdshader` (snap, quantize, dither) |
+| …the camera decide how far to zoom? | `FoldWorld._update_camera()` / `_camera_focus()` → `WorldCore.camera_zoom_for` |
+| …the camera decide where to look ahead? | `FoldWorld._update_camera()` → `WorldCore.camera_lookahead_for` (+ `PlayerBody.motion_fraction` / `look_dir`) |
+| …zoom stay compatible with pixel art? | `PixelArt.target_size` → `FoldWorld._size_pixel_view()` — the target resizes, the lens never moves |
+| …F pick which fold to unfold? | `FoldWorld.aimed_fold()` — newest-first, prefers one that can actually come out |
 
 ---
 
@@ -95,6 +107,8 @@ understand how the pieces meet. Its header comment is the map.
 |---|---|
 | The authored world | `worlds/overworld.json` |
 | Main scene | `scenes/world/World.tscn` |
+| The lighting shader | `assets/shaders/pixel_lit.gdshader` |
+| Tileset layout & how to drop in a drawn one | `assets/sprites/README.md` |
 
 ---
 

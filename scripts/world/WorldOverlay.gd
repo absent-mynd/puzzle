@@ -6,6 +6,19 @@ class_name WorldOverlay extends Node2D
 ## preview, seam-anchor diamonds (with unfoldability tint), the glue lines and
 ## outer seam anchor inside a subspace. Reads everything from its owning
 ## FoldWorld each frame.
+##
+## The overlay draws INSIDE the pixel render target, so every stroke is measured
+## in art pixels: a 1-unit line would be a quarter of a pixel and would flicker
+## in and out of existence as it moved. Widths are multiples of `HAIR`, and
+## marker centres are snapped, so the markers stay crisp and stationary.
+##
+## It is also drawn UNLIT, on purpose. Lighting is style; the markers you
+## navigate and fold by must read the same in a dark corner as under a lamp.
+
+## One art pixel.
+const HAIR := PixelArt.WORLD_PER_PIXEL
+## Two art pixels — for anything that has to be found at a glance.
+const STROKE := HAIR * 2.0
 
 var world  # FoldWorld; untyped to avoid a load-order cycle
 
@@ -43,12 +56,17 @@ func _copy_offsets() -> Array:
 	return out
 
 
+## One diamond per meeting CELL, not per fold: folds can share a seam cell, and
+## stacking two markers there would draw the buried fold's refusal over the free
+## fold's invitation. `world.seam_markers()` resolves the cell the same way F
+## does. See FoldWorld.aimed_fold.
 func _draw_seam_markers() -> void:
 	var cs: float = world.base.cell_size
-	for fold in world.folds:
-		var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs
-		var ok: bool = world.can_unfold_fold(fold)
-		_draw_diamond(center, 10.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
+	var markers: Dictionary = world.seam_markers()
+	for cell in markers:
+		var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
+		_draw_diamond(center, 12.0,
+			Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
 
 
 ## Doors are warp POINTS riding tile centers: drawn only where the point
@@ -61,8 +79,8 @@ func _draw_doors(offsets: Array) -> void:
 			continue
 		for off in offsets:
 			var p: Vector2 = Vector2(wp) + off
-			draw_arc(p, 11.0, 0, TAU, 20, Color("7ce07c"), 3.0)
-			draw_circle(p, 4.0, Color("7ce07c", 0.9))
+			draw_arc(p, 12.0, 0, TAU, 20, Color("7ce07c"), STROKE)
+			draw_circle(p, HAIR, Color("7ce07c", 0.9))
 
 
 ## Inside the subspace: seam anchors of interior folds (every wrap copy), and
@@ -75,15 +93,16 @@ func _draw_subspace_markers(offsets: Array) -> void:
 		return
 	var exit_ok: bool = world.exit_blocker() == null
 	var aimed_glue: bool = world.aiming_at_glue()
+	var markers: Dictionary = world.seam_markers()
 	for off in offsets:
 		var glue_col := Color(1, 1, 1, 0.95) if exit_ok else Color("e06a6a", 0.95)
 		_draw_diamond(outer.crease_point1 + off, 12.0, glue_col)
 		if aimed_glue:
-			draw_arc(outer.crease_point1 + off, 18.0, 0, TAU, 24, glue_col, 3.0)
-		for fold in world.level_folds():
-			var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs + off
-			var ok: bool = world.can_unfold_fold(fold)
-			_draw_diamond(center, 10.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
+			draw_arc(outer.crease_point1 + off, 20.0, 0, TAU, 24, glue_col, STROKE)
+		for cell in markers:
+			var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs + off
+			_draw_diamond(center, 12.0,
+				Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
 
 
 ## Point markers here repeat across the wrap copies, so a player copy is never
@@ -113,14 +132,14 @@ func _draw_anchor_and_preview(offsets: Array) -> void:
 	var hold: float = world.hold_progress()
 
 	for off in offsets:
-		draw_arc(cand_center + off, 14.0, 0, TAU, 24, aim_col, 2.0)
+		draw_arc(cand_center + off, 16.0, 0, TAU, 24, aim_col, HAIR)
 		if aimed != null:
-			draw_arc(aimed_center + off, 17.0, 0, TAU, 24, Color("59e0d0"), 3.0)
+			draw_arc(aimed_center + off, 20.0, 0, TAU, 24, Color("59e0d0"), STROKE)
 		if hold > 0.0:
-			draw_arc(cand_center + off, 20.0, -PI / 2.0, -PI / 2.0 + TAU * hold, 32,
-				Color("ffd27f"), 3.0)
+			draw_arc(cand_center + off, 23.0, -PI / 2.0, -PI / 2.0 + TAU * hold, 32,
+				Color("ffd27f"), STROKE)
 
-	# The two pending anchor slots (Q = orange, E = blue), with soft axis
+	# The two pending anchor slots (first tap orange, second blue), with soft axis
 	# guides — folds may be diagonal; guides just help line up straight ones.
 	var colors: Array = [Color("ff9d5c"), Color("5cc8ff")]
 	var centers: Array = [null, null]
@@ -131,10 +150,10 @@ func _draw_anchor_and_preview(offsets: Array) -> void:
 		var c: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
 		centers[i] = c
 		var guide := Color(1, 1, 1, 0.08)
-		draw_line(Vector2(0, c.y), Vector2(world_px.x, c.y), guide, 1.0)
-		draw_line(Vector2(c.x, 0), Vector2(c.x, world_px.y), guide, 1.0)
+		draw_line(Vector2(0, c.y), Vector2(world_px.x, c.y), guide, HAIR)
+		draw_line(Vector2(c.x, 0), Vector2(c.x, world_px.y), guide, HAIR)
 		for off in offsets:
-			draw_arc(c + off, 14.0, 0, TAU, 24, colors[i], 3.0)
+			draw_arc(c + off, 16.0, 0, TAU, 24, colors[i], STROKE)
 
 	if centers[0] == null or centers[1] == null:
 		return
@@ -167,12 +186,16 @@ func _draw_subspace_glue(offsets: Array) -> void:
 	var lo: float = world.sub_extent["min"] - 2.0 * world.base.cell_size
 	var hi: float = world.sub_extent["max"] + 2.0 * world.base.cell_size
 	for off in offsets:
-		draw_line(n * c1 + t * lo + off, n * c1 + t * hi + off, Color("59e0d0", 0.55), 2.0)
+		draw_line(n * c1 + t * lo + off, n * c1 + t * hi + off, Color("59e0d0", 0.55), HAIR)
 
 
+## Marker diamonds are snapped to the art-pixel grid: a diamond is only three
+## pixels across, and half a pixel of drift is the difference between a shape
+## and a smear.
 func _draw_diamond(center: Vector2, r: float, col: Color) -> void:
+	var c := PixelArt.snap_round(center)
 	var pts := PackedVector2Array([
-		center + Vector2(0, -r), center + Vector2(r, 0),
-		center + Vector2(0, r), center + Vector2(-r, 0),
+		c + Vector2(0, -r), c + Vector2(r, 0),
+		c + Vector2(0, r), c + Vector2(-r, 0),
 	])
 	draw_colored_polygon(pts, col)

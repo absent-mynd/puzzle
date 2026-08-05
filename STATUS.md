@@ -3,8 +3,9 @@
 **Last Updated:** 2026-08-05
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
-and folding as a **finite carried resource**.
-**Tests:** **254 passing** / 254 (0 failing, 0 risky), 15 scripts, ~4.7s.
+folding as a **finite carried resource** — rendered as pixel art with fold-aware
+dynamic lighting, framed by a camera that zooms and leads with the moment.
+**Tests:** **358 passing** / 358 (0 failing, 0 risky), 19 scripts, ~10.4s.
 
 ---
 
@@ -31,6 +32,9 @@ What exists and works today:
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
+| Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
+| Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
+| Hand-drawn tilesheet | ⚙️ Layout + drop-in path done; sheet is generated in code |
 | Audio | ⚙️ `AudioManager` + `Settings` carried over; no assets |
 | Save / progression | ❌ Not started |
 | Entities (items, enemies, save points) | ❌ Not started |
@@ -39,28 +43,33 @@ What exists and works today:
 
 ## Test suite
 
-254 passing across 15 scripts. Composition:
+358 passing across 19 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
+| `test_fold_world` | 57 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the anchor economy |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
-| `test_fold_world` | 32 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, the anchor economy |
+| `test_world_core` | 36 | Map parsing, seams, anchor/fold eligibility, camera framing + lookahead |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
-| `test_world_data` | 22 | World format + the shipped world's content |
+| `test_world_data` | 28 | World format + the shipped world's content, incl. lights and caches |
 | `test_tile_types` | 20 | The registry |
-| `test_world_core` | 19 | Map parsing, seams, anchor/fold eligibility |
+| `test_tile_atlas` | 17 | Tileset kinds/variants, base-space UVs, the generated sheet |
+| `test_light_source` | 15 | Lights as occupants: fold-away, ride, split, serialization |
+| `test_pixel_art` | 14 | The art-pixel quantum; the target that resizes so zoom stays crisp |
 | `test_collision_core` | 13 | Polygon clipping under folds |
 | `test_trigger_cascade` | 12 | Firing, idempotence, pin veto, cascade cap |
 | `test_occupants` | 11 | Split-on-unfold, footprints, carried geometry |
 | `test_folded_state` | 11 | Per-position stacks, dominant type |
 | `test_fold_replay` | 11 | The derivation engine |
 | `test_anchor_stock` | 10 | Anchor conservation: pocket ↔ pending ↔ fold |
+| `test_player_body` | 10 | Look/point keys, velocity-as-fraction, motion scalar |
 | `test_base_grid` | 9 | Immutable base model |
 | `test_base_frame` | 9 | Base ↔ derived transport |
 | `test_fold_unfold_inverse` | 4 | Unfold-as-drop-and-re-derive |
 
-> The count fell from 525 because ~340 tests covered code the consolidation
-> deleted. Kernel coverage is intact; every ported subsystem shipped with tests.
+> The consolidation dropped the count from 525 to 226 because ~340 tests covered
+> code it deleted. Kernel coverage is intact; every ported subsystem — and every
+> subsystem added since — shipped with tests.
 
 `test_fold_world` is the one that matters most for confidence: it drives the real
 scene and exercises the beats end to end.
@@ -97,6 +106,111 @@ stock, and the whole verb collapsed onto one key.
   lost. Collected caches dim in place; collection is per-region runtime state.
 - `WorldData.anchor_capacity` (4) authors the starting allowance. The old level-era
   "fold budget" this resembles was a per-level par; this one is carried and refunded.
+- Integrated with the pixel pass: `ANCHOR_CACHE` is a tileset row (`TileAtlas.K_CACHE`,
+  a pair of upright pegs — two is what it grants and what a fold costs), and a spent
+  cache is the same tile modulated dark rather than a different one.
+
+### 2026-08-05 — Pixel art meets the dynamic camera
+
+The pixel pass and the dynamic camera were built in parallel and are, on their
+face, incompatible: the pass wanted the lens pinned at 1/4 so a 64-unit cell
+covers exactly 16 art pixels, and the camera wanted to open from 0.80 to 0.55.
+
+- **Resolved by resizing the render target instead of moving the lens.** Inside a
+  render target the size of an art pixel is purely a function of camera zoom — so
+  the lens now *never* moves (`PixelArt.CAMERA_ZOOM`), and "show more world" is
+  answered with more pixels: `PixelArt.target_size` gives the resolution a given
+  logical zoom needs and `FoldWorld._size_pixel_view` applies it as the zoom eases.
+  World-per-art-pixel holds at 4.0 across the whole zoom range, so the tileset is
+  never resampled.
+- `PlayerBody.zoom_target` / `camera_zoom()` are therefore **logical** zoom: they
+  size the buffer. The pixel snap moved into `_cam.offset`, leaving
+  `global_position` the unsnapped truth — quantizing the smoothing state itself
+  would let a slow pan stall inside a pixel.
+- Verified in the real scene: opening the frame from 0.80 to 0.55 grows the target
+  400x225 → 582x327 with the lens fixed at 0.250 and a cell steady at ~16 art px.
+
+### 2026-08-05 — Pixel art + dynamic lighting
+
+- **Pixel render pass.** The world draws into a low-resolution `SubViewport` scaled
+  up with nearest filtering; one art pixel is 4 world units and a cell is 16 art
+  pixels. No physics constant, cell size or coordinate changed. `PixelArt` is the
+  one place that says how big an art pixel is. The HUD stays outside the pixel
+  viewport at window resolution. (The target is sized from the camera's logical
+  zoom — see the entry above.)
+- **A real tileset** (`TileAtlas`): 16px tiles, one row per kind, one column per
+  variant, generated procedurally so it ships as readable code and headless tests
+  never touch the import pipeline. Drop a sheet at `assets/sprites/tiles.png` and it
+  is used instead — see `assets/sprites/README.md`.
+- **Base-space UVs.** Fold fragments are arbitrary polygons, so tiles cannot be
+  blitted on a grid. `TileAtlas.uv_for` sends each vertex back through `src_offset`
+  to its base tile, so a fragment carries the patch of art it was cut from and the
+  crease cuts the art exactly as it cuts the geometry. **The seam stays a hard
+  line** — deliberately, for now.
+- **Lights are occupants** (`LightSource`, kernel): a base identity plus a point in
+  the tile, resolved through `BaseFrame` against whatever configuration is on
+  screen. Fold a lamp away and it leaves the overworld and lights that fold's
+  *interior*; fold something else and it rides the flap. Nothing special-cases
+  this — it is the door machinery applied to light. Five lamps placed in the
+  shipped world, including one sealed inside east's pre-placed fold.
+- **Pixel-level lighting** (`assets/shaders/pixel_lit.gdshader`, `LightRig`):
+  shaded point and light position are snapped to the art-pixel grid, intensity is
+  quantized into bands, and band edges are ordered-dithered with a 4x4 Bayer
+  threshold — light arrives in chunky rings, not a smooth glow. Ambient is
+  deliberately generous: **lighting is style, not fog of war**, and the player and
+  overlay markers are drawn unlit so they never vanish into a dark corner.
+- Foreground and background answer light differently (the registry's walkability
+  picks which), which is the only depth cue the flat world has.
+
+### 2026-08-05 — The frame leads where you are going
+
+- **Camera lookahead.** Zoom decides how *much* to show; lookahead decides *where
+  to centre it*. The body sat dead centre, which spent half the frame on ground
+  already crossed. The view now leads:
+  - **speed** — the lead is a fraction of the body's own limits, so it saturates
+    at a full run rather than tracking velocity forever;
+  - **falling much harder than rising** — a fall is committed and its landing is
+    what you need to see; the top of a jump is about to reverse, and leading hard
+    there would swing the frame back a moment later;
+  - **held look keys** — the same W/S that aim an anchor lean the frame, so
+    pressing up to point up shows you what you are pointing at;
+  - **flat along a folded band** — inside a fold the strip repeats along the
+    crease normal, so a lead that way slides the view across identical copies.
+- **`WorldCore.camera_lookahead_for` is the pure decision**; `PlayerBody` supplies
+  `motion_fraction` (velocity as a signed fraction of *its own* run / fall / jump
+  limits) and `look_dir`, and eases the lead even more lazily than the zoom —
+  the lead flips sign when you turn around, and eased that reads as the view
+  swinging round rather than whipping across the body. Capped at 6 cells; hard
+  relocations cut it along with the lens.
+- **Ordering matters and is now load-bearing**: the lead is computed *before* the
+  zoom, because the lead moves the camera and the zoom's focus distances are
+  measured from where the camera ends up. Reversed, a hard lead would quietly
+  crop the very things the focus set exists to keep on screen.
+- **Fixed: stacked seam diamonds offered you the fold you could not unfold.**
+  Two folds can meet in the same cell; `aimed_fold` took the first in fold order,
+  which is exactly the one the newer fold blocks — so F on the diamond only ever
+  reported the refusal. It now searches newest-first and prefers a fold that can
+  actually come out. The overlay draws one diamond per meeting *cell*
+  (`FoldWorld.seam_markers`) so the colour cannot promise what the act refuses.
+
+### 2026-08-05 — The camera frames the moment, not a fixed lens
+
+- **Zoom is dynamic.** The frame rested at 1:1 — about twenty cells across — which
+  read tight for a game whose subject is the shape of the space. It now rests at
+  `WorldCore.ZOOM_RESTING` (0.80) and *opens* from there, never closes:
+  - **speed** — running widens a little, falling hard widens a lot;
+  - **the fold you are composing** — pin an anchor, walk away, and the view opens
+    to keep it on screen; the span you can see IS the decision you are making;
+  - **the band you are inside** — a subspace is framed glue to glue, so a wide
+    strip reads as a cylinder rather than a corridor with no visible walls;
+  - **a fold rearranging the world** — the transition steps the camera back.
+- **`WorldCore.camera_zoom_for` is the pure decision** (a motion scalar, a widen
+  scalar, and a focus set of points that must stay on screen); `FoldWorld` supplies
+  the context, `PlayerBody` supplies motion from its own limits and eases the lens
+  (much lazier than the follow — a frame that resizes as fast as it pans breathes).
+  Hard relocations cut the zoom with the position.
+- **Subspace wrap copies now derive from the widest frame** rather than a hardcoded
+  1400px, so the repeating strip has no visible end when the lens opens.
 
 ### 2026-08-05 — The inside of a fold reads as one cylinder
 
@@ -155,18 +269,20 @@ Roughly in priority order — nothing here is committed to yet:
    guesses, and west's beats were authored when folding was free. The question to
    answer by feel: does scarcity make the world read as *considered*, or merely
    fussy? Tuning is a playtesting job, not an editing one.
-2. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
+2. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
+   and drop-in path are done, so this is now an art job, not an engineering one.
+3. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
    now placed (east's right wing); `Occupants` and `UNANCHORABLE_*` still are not.
    Placing them is also how their design gets pressure-tested.
-3. **Settle fold extent.** Infinite-crease is the biggest open question in the
+4. **Settle fold extent.** Infinite-crease is the biggest open question in the
    direction (see `AGENTS.md` §"Open design questions"). Barrier-scoped folds are
    the leading candidate.
-4. **Save / checkpoints.** Undo is gone by design; respawn currently sends you to the
+5. **Save / checkpoints.** Undo is gone by design; respawn currently sends you to the
    region spawn. Real save points are the replacement — and they are now also what
    collected caches need to outlive a session, and the answer to stranding yourself
    with no anchors and no reachable seam.
-5. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
-6. **Authoring tooling.** ASCII rows in JSON are workable but hand-editing region
+6. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
+7. **Authoring tooling.** ASCII rows in JSON are workable but hand-editing region
    geometry will not scale. Revisit an editor once the tile vocabulary settles.
 
 ---
@@ -183,6 +299,11 @@ Roughly in priority order — nothing here is committed to yet:
   no remote unfold; save points are the real fix.
 - Collected anchor caches are runtime-only state (`regions[id].collected`) and reset
   with `R` — the first piece of world state that is not `(base, folds)`.
+- Lights do not cast shadows: they pass through walls. Occluders would have to be
+  re-derived per fold and would want to soften the seam, which the art is currently
+  committed to keeping hard.
+- The tilesheet is generated in code, so the world looks systematic rather than
+  authored. The layout is fixed and a drawn sheet drops in without code changes.
 - The pin/trigger wing lives in **east**, not west, and is reached through a door.
   West's four authored beats depend on its exact geometry and infinite creases make
   a pin a global veto on a band of folds, so nothing was placed there without

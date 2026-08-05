@@ -115,6 +115,54 @@ func test_unfold_blocked_by_newer_crossing_fold() -> void:
 	assert_eq(world.folds.size(), 0, "X unfolds once nothing newer crosses it")
 
 
+func test_stacked_seams_unfold_the_one_that_can_actually_come_out() -> void:
+	# Two folds can meet in the SAME cell — a horizontal pair and a vertical pair
+	# whose halves happen to join at one spot. The diamond there is one marker for
+	# both, and the older of the two is blocked by the newer crossing its seam. F
+	# must act on the fold that can come out, not on the buried one.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)   # clear of both bands
+	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))           # X: seam cell (22,12)
+	world.do_fold(Vector2i(22, 10), Vector2i(22, 14))           # Y: the SAME seam cell
+	assert_eq(world.folds.size(), 2, "Both folds applied")
+	assert_eq(world.folds[0].meeting_pos, world.folds[1].meeting_pos,
+		"Their seams land on one cell — one diamond, two folds")
+	assert_false(world.can_unfold_fold(world.folds[0]), "The older one is buried by the newer")
+	assert_true(world.can_unfold_fold(world.folds[1]), "The newer one is free to come out")
+
+	world.player.teleport(Vector2(22.5 * CS, 12.5 * CS), false) # stand on the diamond
+	assert_eq(world.aimed_fold(Vector2i(1, 0)), world.folds[1],
+		"The shared diamond resolves to the fold that can actually come out")
+	world.hold_action(Vector2i(1, 0))
+	assert_eq(world.folds.size(), 1, "A hold on the shared diamond unfolds something")
+	assert_eq(world.folds[0].anchor1, Vector2i(20, 12),
+		"...the newest one that can come out; the buried one stays")
+
+	# With only the buried fold left, the same diamond now unfolds it: nothing
+	# crosses its seam any more.
+	world.player.teleport(Vector2(22.5 * CS, 12.5 * CS), false)
+	world.hold_action(Vector2i(1, 0))
+	assert_eq(world.folds.size(), 0, "Once nothing crosses it, the older fold unfolds too")
+
+
+func test_a_shared_seam_cell_draws_one_diamond_that_reads_unblocked() -> void:
+	# The marker has to promise what F delivers. Two folds meeting in one cell get
+	# ONE diamond, and it reads open because pressing F there does unfold something
+	# — drawing the buried fold's refusal over the free fold's invitation was the
+	# other half of the stacked-seam bug.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)
+	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))
+	world.do_fold(Vector2i(22, 10), Vector2i(22, 14))
+	var markers: Dictionary = world.seam_markers()
+	assert_eq(markers.size(), 1, "Two folds sharing a meeting cell draw one diamond")
+	assert_true(bool(markers[Vector2i(22, 12)]),
+		"It reads unblocked, because a hold there unfolds the newer fold")
+
+	world.player.teleport(Vector2(22.5 * CS, 12.5 * CS), false)
+	world.hold_action(Vector2i(1, 0))
+	assert_eq(world.seam_markers(), {Vector2i(22, 12): true},
+		"With one fold left the cell still has its diamond, still open")
+
+
 func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
 	world.tap_action(Vector2i(1, 0))                # (5,12)
 	world.player.teleport(Vector2(7.5 * CS, 10.5 * CS), false)
@@ -528,3 +576,344 @@ func test_no_hud_control_swallows_mouse_input() -> void:
 			assert_ne(node.mouse_filter, Control.MOUSE_FILTER_STOP,
 				"%s must not stop mouse events" % node.get_path())
 		stack.append_array(node.get_children())
+
+
+# ---------------------------------------------------------------------------
+# Pixel rendering & dynamic lights
+# ---------------------------------------------------------------------------
+
+func _light_ids() -> Array:
+	var ids: Array = []
+	for entry in world.lights_here():
+		if not ids.has(entry["id"]):
+			ids.append(entry["id"])
+	ids.sort()
+	return ids
+
+
+func _light_pos(id: String):
+	for entry in world.lights_here():
+		if entry["id"] == id:
+			return Vector2(entry["pos"])
+	return null
+
+
+func test_the_world_draws_through_the_pixel_viewport() -> void:
+	assert_not_null(world.pixel_view, "there is a low-resolution render target")
+	# Sized for the CURRENT zoom, not fixed: the frame opens by giving the target
+	# more art pixels rather than by moving the lens. See PixelArt.target_size.
+	assert_eq(world.pixel_view.size,
+		PixelArt.target_size(world.get_viewport_rect().size, world.player.camera_zoom()),
+		"sized in art pixels, for the zoom in force")
+	# Everything that is part of the WORLD renders inside it; the HUD does not,
+	# which is what keeps text legible over chunky tiles.
+	for node in [world.world_geo, world.sub_geo, world.player, world.overlay, world.light_rig]:
+		assert_eq(node.get_parent(), world.pixel_view,
+			"%s draws at art-pixel resolution" % node.name)
+
+
+func test_opening_the_frame_grows_the_target_and_never_moves_the_lens() -> void:
+	# Where the pixel pass and the dynamic camera meet. The lens must NOT move —
+	# inside a render target, zoom is what sets the size of an art pixel, so a
+	# moving lens would resample the 16px tileset and soften the world. Showing
+	# more world is answered with more pixels instead.
+	var lens: Vector2 = world.player._cam.zoom
+	var small: Vector2i = world.pixel_view.size
+
+	world.player.velocity = Vector2(PlayerBody.RUN_SPEED, PlayerBody.MAX_FALL)
+	world._update_camera()
+	world.player.snap_camera()
+	world._size_pixel_view()
+
+	assert_lt(world.player.camera_zoom(), WorldCore.ZOOM_RESTING, "The frame opened")
+	assert_eq(world.player._cam.zoom, lens, "...and the lens did not move a hair")
+	assert_gt(world.pixel_view.size.x, small.x, "The target grew instead")
+
+	# The invariant that makes the art crisp: one art pixel is still exactly
+	# WORLD_PER_PIXEL world units, so a cell still covers a whole 16px tile.
+	var seen: Vector2 = world.get_viewport_rect().size / world.player.camera_zoom()
+	var per_px: float = seen.x / float(world.pixel_view.size.x)
+	assert_almost_eq(per_px, PixelArt.WORLD_PER_PIXEL, 0.05,
+		"An art pixel is the same size wide open as at rest — the tile is not resampled")
+
+
+func test_tiles_are_drawn_from_the_tileset_and_lit() -> void:
+	var textured := 0
+	for child in world.world_geo.get_children():
+		if not (child is Polygon2D):
+			continue
+		var vis: Polygon2D = child
+		assert_not_null(vis.texture, "every drawn fragment samples the tileset")
+		assert_eq(vis.uv.size(), vis.polygon.size(), "with one UV per vertex")
+		assert_not_null(vis.material, "and is drawn with a lit material")
+		textured += 1
+	assert_gt(textured, 0, "the world drew some tiles")
+
+
+func test_lights_are_placed_in_the_world() -> void:
+	assert_eq(_light_ids(), ["w_chamber", "w_pit", "w_spawn"],
+		"west's three lamps are all burning at the start")
+
+
+func test_folding_a_lamp_away_removes_it_from_the_overworld() -> void:
+	# Fold the pit shut from outside it: the player rides a flap, and the lamp
+	# standing over the pit goes into the excised strip with everything else.
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
+	assert_eq(world.mode, world.Mode.WORLD, "the player rode a flap rather than being pinched")
+	assert_eq(_light_ids(), ["w_chamber", "w_spawn"],
+		"the folded-away lamp is not in the world at all — it casts nothing here")
+
+	world.unfold_level_fold(world.folds[0])
+	assert_eq(_light_ids(), ["w_chamber", "w_pit", "w_spawn"],
+		"unfolding re-derives it back into the world")
+
+
+func test_a_lamp_rides_the_flap_that_carries_its_tile() -> void:
+	var before = _light_pos("w_spawn")
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
+	var after = _light_pos("w_spawn")
+	assert_not_null(after, "the spawn lamp is outside the band and survives")
+	assert_almost_eq(Vector2(after).x, Vector2(before).x + 4 * CS, 0.001,
+		"it moved by exactly its flap's shift — a light is an occupant, not an overlay")
+
+
+func test_a_lamp_folded_in_with_you_lights_the_inside() -> void:
+	_pinch_over_pit()
+	assert_eq(world.mode, world.Mode.SUBSPACE, "the fold swallowed the player")
+	assert_eq(_light_ids(), ["w_pit"],
+		"the lamp that was over the pit is in here with you, and the ones outside are not")
+	# The strip repeats across the glue, so its lights repeat with it — walking
+	# through the cylinder must not walk into a dark copy of a lit room.
+	var copies: int = 2 * world.SUB_LIGHT_COPIES + 1
+	assert_eq(world.lights_here().size(), copies, "one lamp per wrap copy")
+
+
+func test_the_vault_lamp_is_dark_from_the_overworld() -> void:
+	_enter_east()
+	assert_eq(_light_ids(), ["e_reward"],
+		"east ships pre-folded: the vault's lamp is inside that fold, not in the region")
+
+
+func test_walking_into_the_folded_vault_finds_its_lamp_burning() -> void:
+	# W1's partner is folded away, so the door delivers you INSIDE the fold.
+	world._traverse("W1")
+	assert_eq(world.region_id, "east", "the door crossed regions")
+	assert_eq(world.mode, world.Mode.SUBSPACE, "...and landed inside the pre-placed fold")
+	assert_true(_light_ids().has("e_vault"),
+		"the lamp that is invisible from the overworld is what lights the vault")
+
+
+# ---------------------------------------------------------------------------
+# Dynamic camera framing
+# ---------------------------------------------------------------------------
+
+func test_camera_starts_at_the_resting_zoom() -> void:
+	assert_almost_eq(world.player.camera_zoom(), WorldCore.ZOOM_RESTING, 0.001,
+		"A fresh world snaps the lens to resting, it does not ease in from 1:1")
+
+
+func test_running_pulls_the_frame_out() -> void:
+	world._update_camera()
+	var still: float = world.player.zoom_target
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	var running: float = world.player.zoom_target
+	assert_lt(running, still, "At a full run the camera shows more ground")
+
+	world.player.velocity.y = PlayerBody.MAX_FALL
+	world._update_camera()
+	assert_lt(world.player.zoom_target, running, "Falling hard pulls it out further still")
+
+
+func test_a_far_pinned_anchor_stays_in_frame() -> void:
+	world._update_camera()
+	var before: float = world.player.zoom_target
+	world.place_pending(0, Vector2i(1, 0))              # anchor 1 at (5,12)
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor pinned")
+
+	# Walk 20 cells away: the fold being composed is now wider than the frame.
+	world.player.teleport(Vector2(25.5 * CS, 12.5 * CS), false)
+	world.player.snap_camera()
+	world._update_camera()
+	assert_lt(world.player.zoom_target, before,
+		"The far half of the fold you are building drags the frame open")
+
+	world.pending_a = null
+	world._update_camera()
+	assert_almost_eq(world.player.zoom_target, before, 0.001,
+		"Clearing the anchor lets the frame settle back")
+
+
+func test_inside_a_fold_the_band_is_framed_glue_to_glue() -> void:
+	_pinch_over_pit()
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	var focus: PackedVector2Array = world._camera_focus()
+	var n: Vector2 = world.sub_fold.crease_normal
+	var near: float = world.sub_fold.crease_point1.dot(n)
+	var far: float = near + world.sub_fold.gap_distance()
+	var seen := {}
+	for p in focus:
+		seen[snappedf(Vector2(p).dot(n), 0.01)] = true
+	assert_true(seen.has(snappedf(near, 0.01)), "The near glue line is held in frame")
+	assert_true(seen.has(snappedf(far, 0.01)), "...and so is the far one: the band is the room")
+
+
+func test_the_fold_animation_draws_where_the_world_draws() -> void:
+	# The transition replaces the world's geometry for a moment, so it has to be
+	# drawn by the same camera through the same render target. Parented outside
+	# `pixel_view` it renders in raw window space with no camera transform, which
+	# reads as the map flying off to the origin and snapping back when the real
+	# geometry returns.
+	world.anim_enabled = true
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_true(world.animating(), "The fold is playing")
+
+	var layer: Node2D = world._anim["layer"]
+	assert_eq(layer.get_parent(), world.pixel_view,
+		"The animation layer draws inside the pixel viewport, like world_geo does")
+	assert_eq(layer.get_viewport(), world.world_geo.get_viewport(),
+		"...which is to say: the same viewport the geometry it replaces was in")
+
+
+func test_a_fold_transition_steps_the_camera_back() -> void:
+	world.anim_enabled = true
+	world._update_camera()
+	var before: float = world.player.zoom_target
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_true(world.animating(), "The fold is playing")
+	world._update_camera()
+	assert_lt(world.player.zoom_target, before, "The world rearranging pulls the lens back")
+
+	world._process(world.ANIM_TIME)                     # play the transition out
+	assert_false(world.animating(), "The fold settled")
+	world._update_camera()
+	assert_almost_eq(world.player.zoom_target, before, 0.001,
+		"...and the frame settles back once it has")
+
+
+func test_a_hard_relocation_cuts_the_lens_as_well_as_the_position() -> void:
+	# Falling wide, then warped. Easing into the destination's framing would read
+	# as the new room inflating around you, so the cut takes the lens with it.
+	world.player.velocity.y = PlayerBody.MAX_FALL
+	world._update_camera()
+	assert_lt(world.player.zoom_target, WorldCore.ZOOM_RESTING, "The fall opened the frame")
+
+	world.player.velocity = Vector2.ZERO
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+	world._cut_camera()
+	assert_almost_eq(world.player.camera_zoom(), WorldCore.ZOOM_RESTING, 0.001,
+		"The cut lands on the destination's own framing, with nothing left to ease")
+
+
+# ---------------------------------------------------------------------------
+# Camera lookahead
+# ---------------------------------------------------------------------------
+
+func test_the_frame_leads_the_direction_you_run() -> void:
+	world._update_camera()
+	assert_eq(world.player.lookahead_target, Vector2.ZERO, "Standing still: no lead")
+
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	assert_almost_eq(world.player.lookahead_target.x, WorldCore.LOOKAHEAD_RUN, 0.001,
+		"A full run right leads a full run's reach right")
+
+	world.player.velocity.x = -PlayerBody.RUN_SPEED
+	world._update_camera()
+	assert_almost_eq(world.player.lookahead_target.x, -WorldCore.LOOKAHEAD_RUN, 0.001,
+		"...and the mirror of that going left")
+
+
+func test_the_camera_eases_into_a_lead_rather_than_snapping_to_it() -> void:
+	# The lead flips sign the moment you turn around. Snapping it would whip the
+	# frame across the body on every direction change.
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	world.player._process(1.0 / 60.0)
+	var partial: Vector2 = world.player.camera_lookahead()
+	assert_gt(partial.x, 0.0, "One frame in, the lead has started")
+	assert_lt(partial.x, WorldCore.LOOKAHEAD_RUN,
+		"...but is nowhere near arrived: it eases")
+
+	for _i in range(240):
+		world.player._process(1.0 / 60.0)
+	assert_almost_eq(world.player.camera_lookahead().x, WorldCore.LOOKAHEAD_RUN, 1.0,
+		"Given time it settles on the full lead")
+
+
+func test_the_camera_follows_the_led_point_not_the_body() -> void:
+	# The lead is what makes the frame show the ground ahead: the follow has to
+	# chase body+lead, or easing the lead would change nothing on screen.
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	for _i in range(240):
+		world.player._process(1.0 / 60.0)
+	var ahead: float = world.player.camera_position().x - world.player.global_position.x
+	assert_almost_eq(ahead, WorldCore.LOOKAHEAD_RUN, 2.0,
+		"The camera settles a run's reach ahead of the body, not on top of it")
+
+
+func test_a_hard_relocation_cuts_the_lead_too() -> void:
+	# Arriving somewhere new with a stale lead would drift the frame sideways as
+	# you land, which reads as the camera having lost you.
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	for _i in range(240):
+		world.player._process(1.0 / 60.0)
+	assert_gt(world.player.camera_lookahead().x, 0.0, "Leading hard right")
+
+	world.player.velocity = Vector2.ZERO
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+	world._cut_camera()
+	assert_eq(world.player.camera_lookahead(), Vector2.ZERO,
+		"The cut drops the stale lead")
+	assert_eq(world.player.camera_position(), world.player.global_position,
+		"...so the camera lands exactly on the body")
+
+
+func test_the_zoom_is_measured_from_the_led_camera_not_the_body() -> void:
+	# The lead moves the camera, and the focus reach is measured from where the
+	# camera ENDS UP — so which WAY you are leading changes what the frame has to
+	# cover. Running away from a pinned anchor must open the frame wider than
+	# running toward it at the same speed. (Same speed in both, so the motion pull
+	# is identical and the lead is the only difference.)
+	world.place_pending(0, Vector2i(1, 0))                      # anchor at (5,12)
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor pinned")
+	world.player.teleport(Vector2(16.0 * CS, 12.5 * CS), false)
+
+	world.player.velocity.x = PlayerBody.RUN_SPEED              # leading away from it
+	world._cut_camera()
+	var away: float = world.player.camera_zoom()
+
+	world.player.velocity.x = -PlayerBody.RUN_SPEED             # leading back toward it
+	world._cut_camera()
+	var toward: float = world.player.camera_zoom()
+
+	assert_lt(away, toward,
+		"Leading away from the anchor puts it further off the led frame, so the frame opens")
+	assert_gt(away, WorldCore.ZOOM_WIDEST,
+		"...and this is a real framing decision, not the floor being hit")
+
+
+func test_inside_a_fold_the_lead_is_flat_along_the_band() -> void:
+	# The strip repeats along the crease normal, so the frame already shows every
+	# band there is that way. Leading along it slides the view for nothing.
+	_pinch_over_pit()
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.player.velocity = Vector2(PlayerBody.RUN_SPEED, PlayerBody.MAX_FALL)
+	world._update_camera()
+	var n: Vector2 = world.sub_fold.crease_normal
+	assert_almost_eq(world.player.lookahead_target.dot(n), 0.0, 0.001,
+		"No lead along the repeating axis")
+	assert_gt(world.player.lookahead_target.length(), 0.0,
+		"...but the lead across the band survives")
+
+
+func test_the_lead_holds_still_while_a_fold_plays() -> void:
+	world.anim_enabled = true
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_true(world.animating(), "The fold is playing")
+	world._update_camera()
+	assert_eq(world.player.lookahead_target, Vector2.ZERO,
+		"Riding a fold: the transition frames itself from its own endpoints")

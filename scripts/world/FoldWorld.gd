@@ -29,11 +29,21 @@ extends Node2D
 ##     fold is holding two of yours, so the budget is how many folds may stand
 ##     at once, not how many you may ever make; unfolding refunds them because
 ##     the fold leaves the list. Anchor caches raise the ceiling permanently.
+##   - LIGHTS are occupants like doors: base identity + a point in the tile,
+##     resolved through BaseFrame against whatever is on screen. Fold a lamp
+##     away and it leaves the overworld and lights the fold's interior
+##     instead (see LightSource). Fold something else and it rides the flap.
 ##
 ## ONE KEY drives all of it. Tap = push anchors in (pin, pin, commit); hold =
 ## pull them back out (retrieve a pending anchor, unfold the fold you point at,
 ## or exit a subspace by its glue anchor). There is no remote unfold: to get the
 ## anchors out of a fold you must go back to its seam.
+##
+## Rendering is a PIXEL pass: the world draws into a low-resolution SubViewport
+## (see PixelArt) that is scaled up with nearest filtering, tiles are textured
+## from a 16px tileset through base-space UVs (see TileAtlas), and lighting is
+## quantized per art pixel (see LightRig). The HUD stays outside the pixel
+## viewport, at window resolution, so text stays legible.
 ##
 ## Known limits: no nested pinch (you cannot fold yourself deeper while inside),
 ## fold extent is infinite-crease (a fold here guts a structure over there — the
@@ -51,18 +61,9 @@ const ANIM_TIME := 0.24
 ## How long the fold key must be held before it reads as "pull back" rather than
 ## "push in". Long enough that a committing tap never trips it by accident.
 const HOLD_TIME := 0.35
-const TYPE_COLORS := {
-	TileTypes.EMPTY: Color(0.13, 0.14, 0.20),   # faint: the "paper" exists
-	TileTypes.WALL: Color(0.55, 0.60, 0.70),
-	TileTypes.WATER: Color(0.25, 0.45, 0.75),
-	TileTypes.GOAL: Color(0.91, 0.76, 0.35),
-	TileTypes.TRIGGER_FOLD: Color(0.85, 0.45, 0.75),
-	TileTypes.PIN: Color(0.90, 0.30, 0.28),             # fold-proof: reads as "solid fact"
-	TileTypes.UNANCHORABLE_FLOOR: Color(0.20, 0.22, 0.26),
-	TileTypes.UNANCHORABLE_WALL: Color(0.42, 0.44, 0.50),
-	TileTypes.ANCHOR_CACHE: Color(1.0, 0.62, 0.36),   # the colour of anchor 1: "this is yours"
-}
-const SUB_TINT := Color(0.72, 0.62, 0.95)  # subspace pieces shift hue
+## How many wrap copies either side of the strip carry their lights. The subspace
+## repeats forever; its lamps do not need to.
+const SUB_LIGHT_COPIES := 2
 
 ## The authored world (regions, doors, pre-placed folds).
 var world_data: WorldData
@@ -74,6 +75,8 @@ var region_id := ""
 ## Doors: id -> {"region", "cell", "bid", "bp", "pair"}. Points, not tiles.
 var doors: Dictionary = {}
 var _door_latch: Dictionary = {}
+## Lights: region id -> Array[LightSource], bound to their base tiles.
+var region_lights: Dictionary = {}
 
 # --- Current region working state (views into regions[region_id]) ---
 var base: BaseGrid
@@ -140,6 +143,10 @@ var world_geo: Node2D
 var world_solid: StaticBody2D
 var sub_geo: Node2D
 var overlay: WorldOverlay
+var light_rig: LightRig
+## The low-resolution render target everything in the world is drawn into.
+var pixel_view: SubViewport
+var _atlas: Texture2D
 var _bg: ColorRect
 var _status: Label
 var _flash: Label
@@ -153,27 +160,71 @@ func _ready() -> void:
 	# and the player is a child, so raise this node's priority past it.
 	process_physics_priority = 1
 
+	_atlas = TileAtlas.texture()
+	_build_pixel_view()
+
 	world_geo = Node2D.new()
-	add_child(world_geo)
+	pixel_view.add_child(world_geo)
 	sub_geo = Node2D.new()
-	add_child(sub_geo)
+	pixel_view.add_child(sub_geo)
+
+	light_rig = LightRig.new()
+	light_rig.cell_size = CS
+	light_rig.z_index = 20
+	pixel_view.add_child(light_rig)
 
 	overlay = WorldOverlay.new()
 	overlay.world = self
 	overlay.z_index = 50
-	add_child(overlay)
+	pixel_view.add_child(overlay)
 
 	player = PlayerBody.new()
 	player.z_index = 40
-	add_child(player)
+	pixel_view.add_child(player)
 
 	_build_hud()
 	_setup_all()
 
 
+## The pixel pass. The world renders into a low-resolution target and a
+## TextureRect scales it up with nearest filtering; the HUD is added later on its
+## own CanvasLayer, outside this viewport, so it stays at window resolution.
+##
+## The target is RESIZED as the camera's logical zoom changes (`_size_pixel_view`)
+## rather than the lens moving, which is what keeps an art pixel exactly
+## `PixelArt.WORLD_PER_PIXEL` world units at every zoom. See `PixelArt`.
+##
+## Note this node is OUTSIDE `pixel_view`, so `get_viewport_rect()` here is still
+## the window — which is what the zoom decision needs.
+func _build_pixel_view() -> void:
+	pixel_view = SubViewport.new()
+	pixel_view.size = PixelArt.target_size(
+		get_viewport_rect().size, WorldCore.ZOOM_RESTING)
+	pixel_view.transparent_bg = true            # the background ColorRect shows through
+	pixel_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	pixel_view.snap_2d_transforms_to_pixel = true
+	pixel_view.snap_2d_vertices_to_pixel = true
+	pixel_view.canvas_item_default_texture_filter = \
+		Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+	pixel_view.audio_listener_enable_2d = true
+	add_child(pixel_view)
+
+	var screen := CanvasLayer.new()
+	screen.layer = -5
+	add_child(screen)
+	var view := TextureRect.new()
+	view.texture = pixel_view.get_texture()
+	view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	view.stretch_mode = TextureRect.STRETCH_SCALE
+	view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen.add_child(view)
+
+
 func _setup_all() -> void:
 	next_fold_id = 0
 	regions = {}
+	region_lights = {}
 	_door_latch = {}
 	pending_a = null
 	pending_b = null
@@ -205,6 +256,17 @@ func _setup_all() -> void:
 		regions[id] = {"base": rbase, "folds": rfolds, "seam_segs": rsegs,
 			"interiors": {}, "spawn": world_data.spawn_px(id), "collected": {}}
 
+		# Lights bind to base tiles exactly as doors do: from here on a light has
+		# no world position, only a base identity that the current configuration
+		# is asked about (see LightSource).
+		var bound: Array = []
+		for light in world_data.lights_of(id):
+			if light.bind(rbase):
+				bound.append(light)
+			else:
+				push_error("FoldWorld: light %s sits outside region %s" % [light.id, id])
+		region_lights[id] = bound
+
 	# Doors are warp POINTS at base-tile centers: they ride folds with their tile, so a
 	# door's current location is resolved from its base identity, never stored.
 	doors = {}
@@ -224,7 +286,7 @@ func _setup_all() -> void:
 	context.clear()
 	_apply_context()
 	player.teleport(_spawn, false)
-	player.snap_camera()
+	_cut_camera()
 
 
 func _take_fold_id() -> int:
@@ -261,10 +323,7 @@ func rebuild_world() -> void:
 	world_solid.collision_layer = 1 if mode == Mode.WORLD else 0
 	world_geo.add_child(world_solid)
 	for piece in current_pieces:
-		var vis := Polygon2D.new()
-		vis.polygon = piece.polygon
-		vis.color = _piece_color(piece)
-		world_geo.add_child(vis)
+		world_geo.add_child(_make_tile(piece, piece.polygon, false))
 		# Solidity comes from the registry, not a type check: a new blocking tile
 		# collides correctly without touching this loop.
 		if not TileTypes.is_walkable(piece.type):
@@ -274,6 +333,50 @@ func rebuild_world() -> void:
 			world_solid.add_child(col)
 		elif piece.type == TileTypes.GOAL:
 			goal_polys.append(piece.polygon)
+	_refresh_lights()
+
+
+## One drawn fragment: tileset texture, base-space UVs, lit material.
+##
+## `poly` is passed separately from `piece` because the fold ANIMATION draws
+## sub-fragments of a piece — cut again by the crease being applied. They share
+## the piece's `src_offset`, so their UVs come out of the same base tile and the
+## art slides with the geometry instead of swimming across it.
+func _make_tile(piece, poly: PackedVector2Array, in_sub: bool) -> Polygon2D:
+	var vis := Polygon2D.new()
+	vis.polygon = poly
+	var kind := _kind_of(piece)
+	if _atlas != null:
+		vis.texture = _atlas
+		vis.uv = TileAtlas.uv_for(poly, piece.src_offset, kind,
+			TileAtlas.variant_for(piece.base_id), CS)
+		vis.color = Color.WHITE
+	else:
+		vis.color = TileAtlas.base_color(piece.type)
+	# A collected anchor cache stays in the world as a spent husk rather than
+	# vanishing: the place you took anchors from should still be legible when you
+	# come back. Modulating the tile rather than swapping its art keeps it
+	# recognisably the same object, just used up.
+	if piece.type == TileTypes.ANCHOR_CACHE and collected.has(piece.base_id):
+		vis.color = vis.color.darkened(0.6)
+	if light_rig != null:
+		var mat := light_rig.material_for(piece.type, in_sub)
+		if mat != null:
+			vis.material = mat
+	return vis
+
+
+## Which tileset row a fragment draws from. The "open sky above" edge kind is
+## decided in BASE space, so a wall keeps its lit cap when a fold slides it under
+## something else — material belongs to the sheet, not to the current stacking.
+func _kind_of(piece) -> int:
+	var open_above := false
+	if piece.type == TileTypes.WALL and base != null:
+		var tile := base.tile_by_id(piece.base_id)
+		if tile != null:
+			var above := base.tile_at(tile.grid_position + Vector2i(0, -1))
+			open_above = above == null or above.type == TileTypes.EMPTY
+	return TileAtlas.kind_for(piece.type, open_above)
 
 
 func rebuild_sub() -> void:
@@ -288,7 +391,11 @@ func rebuild_sub() -> void:
 		child.queue_free()
 	sub_player_ghosts = []
 	var gap := sub_fold.gap_distance()
-	sub_copies = clampi(int(ceil(1400.0 / gap)), 1, 24)
+	# Enough copies to fill the WIDEST frame the camera can pull out to, not the
+	# current one: the count is fixed when the subspace is built, and a visible
+	# end to the repetition would break the cylinder the moment the lens opened.
+	var reach := WorldCore.camera_view_radius(get_viewport_rect().size, WorldCore.ZOOM_WIDEST)
+	sub_copies = clampi(int(ceil(reach / gap)), 1, 24)
 	for k in range(-sub_copies, sub_copies + 1):
 		var copy := Node2D.new()
 		copy.position = sub_fold.crease_normal * (k * gap)
@@ -298,11 +405,7 @@ func rebuild_sub() -> void:
 			solid = StaticBody2D.new()
 			copy.add_child(solid)
 		for piece in sub_pieces:
-			var vis := Polygon2D.new()
-			vis.polygon = piece.polygon
-			var c: Color = _piece_color(piece)
-			vis.color = c.lerp(SUB_TINT, 0.35) if piece.type != TileTypes.EMPTY else c
-			copy.add_child(vis)
+			copy.add_child(_make_tile(piece, piece.polygon, true))
 			if not TileTypes.is_walkable(piece.type) and solid != null:
 				var col := CollisionPolygon2D.new()
 				col.polygon = piece.polygon
@@ -316,6 +419,7 @@ func rebuild_sub() -> void:
 			copy.add_child(ghost)
 			sub_player_ghosts.append(ghost)
 	_update_player_ghosts()
+	_refresh_lights()
 
 
 ## The strip renders repeating across the glue, and the player repeats with it:
@@ -331,6 +435,51 @@ func _update_player_ghosts() -> void:
 	for ghost in sub_player_ghosts:
 		ghost.position = p
 		ghost.scale = squash
+
+
+## Re-resolve the region's lights against whatever is now on screen and hand
+## the result to the rig. Called from the rebuilds, because a light can only
+## move when the geometry does.
+func _refresh_lights() -> void:
+	if light_rig == null:
+		return
+	light_rig.set_lights(lights_here())
+
+
+## The lights burning in the CURRENT configuration, as view records
+## (`{pos, color, radius, energy, flicker}`), radius already in world px.
+##
+## This is the whole fold-awareness of lighting: a light is asked where it is,
+## and a light whose base tile has been folded away has no answer here — it is
+## not in this list, casts nothing, and shows no lamp. Step into that fold's
+## subspace and the same question, asked of the strip content, answers.
+##
+## Inside a subspace the strip repeats across the glue, so its lights repeat
+## with it — otherwise you would walk through the cylinder into a dark copy of
+## a lit room.
+func lights_here() -> Array:
+	var lights: Array = region_lights.get(region_id, [])
+	if lights.is_empty():
+		return []
+	var offsets: Array = [Vector2.ZERO]
+	if mode == Mode.SUBSPACE and sub_fold != null:
+		offsets = []
+		var step := sub_fold.crease_normal * sub_fold.gap_distance()
+		for k in range(-SUB_LIGHT_COPIES, SUB_LIGHT_COPIES + 1):
+			offsets.append(step * k)
+	var out: Array = []
+	for entry in LightSource.resolve_all(_frame_pieces(), lights):
+		var light: LightSource = entry["light"]
+		for off in offsets:
+			out.append({
+				"id": light.id,
+				"pos": Vector2(entry["pos"]) + off,
+				"color": light.color,
+				"radius": light.radius_px(CS),
+				"energy": light.energy,
+				"flicker": light.flicker,
+			})
+	return out
 
 
 ## The fold list of the CURRENT level: the region's folds, or the entered
@@ -386,7 +535,7 @@ func _apply_context() -> void:
 			child.queue_free()
 		sub_player_ghosts = []
 		world_geo.visible = true
-		_bg.color = Color("14151f")
+		_bg.color = Color("0a0b12")
 		rebuild_world()
 		return
 	mode = Mode.SUBSPACE
@@ -398,18 +547,9 @@ func _apply_context() -> void:
 	sub_glue_segs = WorldCore.glue_segments(sub_fold, sub_base_pieces)
 	world_geo.visible = false
 	sub_geo.visible = true
-	_bg.color = Color("191030")
+	_bg.color = Color("140a2a")
 	rebuild_world()   # keeps world colliders synced (and inert)
 	rebuild_sub()
-
-
-## A collected cache stays in the world as a spent husk rather than vanishing: the
-## place you took anchors from should still be legible when you come back.
-func _piece_color(piece) -> Color:
-	var c: Color = TYPE_COLORS.get(piece.type, Color.MAGENTA)
-	if piece.type == TileTypes.ANCHOR_CACHE and collected.has(piece.base_id):
-		return c.darkened(0.72)
-	return c
 
 
 func _frame_pieces() -> Array:
@@ -536,13 +676,29 @@ func place_pending(slot: int, dir: Vector2i) -> void:
 	_set_pending(slot, {"bid": piece.base_id, "bp": center - piece.src_offset})
 
 
+## The fold that F should unfold from where you are standing / aiming. Several
+## folds can meet in the SAME cell — a horizontal pair and a vertical pair whose
+## halves happen to join at one spot — and then one diamond stands for all of
+## them. Search NEWEST FIRST and prefer one that can actually come out, because
+## the older of a stacked pair is exactly the one the newer is blocking: taking
+## the first match in fold order would offer you nothing but the refusal.
+##
+## Falls back to the newest match when none is unfoldable, so the message you get
+## is still about the fold you were pointing at.
 func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
 	var cand := candidate_anchor(dir)
 	var here := player_cell()
-	for fold in level_folds():
-		if fold.meeting_pos == cand or fold.meeting_pos == here:
+	var list: Array = level_folds()
+	var blocked: Fold = null
+	for i in range(list.size() - 1, -1, -1):
+		var fold: Fold = list[i]
+		if fold.meeting_pos != cand and fold.meeting_pos != here:
+			continue
+		if can_unfold_fold(fold):
 			return fold
-	return null
+		if blocked == null:
+			blocked = fold
+	return blocked
 
 
 ## Inside a subspace, is the player aiming at (or standing on) the outer
@@ -792,6 +948,18 @@ func can_unfold_fold(fold: Fold) -> bool:
 	return true
 
 
+## The seam diamonds to draw: meeting cell -> can anything there come out.
+## Several folds can meet in one cell, so the marker is one diamond for all of
+## them and reads unblocked when F there would DO something — the same choice
+## `aimed_fold` makes, so the colour never promises what the act refuses.
+func seam_markers() -> Dictionary:
+	var out: Dictionary = {}
+	for fold in level_folds():
+		var cell: Vector2i = fold.meeting_pos
+		out[cell] = bool(out.get(cell, false)) or can_unfold_fold(fold)
+	return out
+
+
 ## An interior fold of `fold` whose band crosses `fold`'s glue blocks
 ## unfolding it from EITHER side (the outer seam isn't the newest fold
 ## affecting itself). Returns the blocker or null.
@@ -937,7 +1105,7 @@ func try_exit() -> void:
 		else:
 			_show_flash("Unfolded — you emerge where you walked to.")
 	if to_world and idx == plist.size() - kids.size() and kids.is_empty():
-		_bg.color = Color("14151f")
+		_bg.color = Color("0a0b12")
 		_play_transition(new_pieces, outer, false, true,
 			player.global_position, landed, false, finalize)
 	else:
@@ -1021,7 +1189,7 @@ func _traverse(id: String) -> void:
 		context.append(f)
 	_apply_context()
 	player.teleport(landed)
-	player.snap_camera()
+	_cut_camera()
 	_show_flash("You emerge INSIDE a fold." if into_fold else "You step through the door.")
 
 
@@ -1040,23 +1208,28 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 		return
 	var layer := Node2D.new()
 	layer.z_index = 30
-	add_child(layer)
+	# Inside `pixel_view`, with the geometry it stands in for. Parented to this
+	# node instead it would be outside the render target and so outside the
+	# camera's transform, drawing world coordinates as raw window pixels: the map
+	# appears to fly off to one side for the length of the transition and snap
+	# back when the real geometry returns.
+	pixel_view.add_child(layer)
 	var frags: Array = []
 	var shift_a := fold.shift_a_px(CS)
 	var shift_b := fold.shift_b_px(CS)
 	for piece in pre_pieces:
 		var res := CollisionCore.fold_polygons([piece.polygon], fold, CS)
-		var color: Color = _piece_color(piece)
-		if sub_tint and piece.type != BaseTile.TYPE_EMPTY:
-			color = color.lerp(SUB_TINT, 0.35)
 		for poly in res["a"]:
-			frags.append(_make_frag(layer, CollisionCore.shift(poly, -shift_a), color, "a"))
+			frags.append(_make_frag(layer, piece, CollisionCore.shift(poly, -shift_a), sub_tint, "a"))
 		for poly in res["b"]:
-			frags.append(_make_frag(layer, CollisionCore.shift(poly, -shift_b), color, "b"))
+			frags.append(_make_frag(layer, piece, CollisionCore.shift(poly, -shift_b), sub_tint, "b"))
 		for poly in res["dropped"]:
-			frags.append(_make_frag(layer, poly, color, "strip"))
+			frags.append(_make_frag(layer, piece, poly, sub_tint, "strip"))
 	world_geo.visible = false
 	sub_geo.visible = false
+	# The lamps belong to the pre-fold arrangement; the lighting itself stays
+	# lit through the transition, so the flaps slide through standing light.
+	light_rig.visible = false
 	player.frozen = true
 	_anim = {
 		"layer": layer, "frags": frags, "fold": fold, "forward": forward,
@@ -1066,16 +1239,17 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 	_apply_anim_frame()
 
 
-func _make_frag(layer: Node2D, poly: PackedVector2Array, color: Color, kind: String) -> Dictionary:
-	var node := Polygon2D.new()
-	node.polygon = poly
-	node.color = color
+func _make_frag(layer: Node2D, piece, poly: PackedVector2Array, in_sub: bool,
+		kind: String) -> Dictionary:
+	var node := _make_tile(piece, poly, in_sub)
 	layer.add_child(node)
 	return {"node": node, "base": poly, "kind": kind}
 
 
 func _process(delta: float) -> void:
 	_tick_hold(delta)
+	# Before the early-out: the lens has to keep working while a fold plays.
+	_update_camera()
 	if _anim.is_empty():
 		return
 	_anim["progress"] = minf(_anim["progress"] + delta / ANIM_TIME, 1.0)
@@ -1086,6 +1260,7 @@ func _process(delta: float) -> void:
 		_anim = {}
 		layer.queue_free()
 		player.frozen = false
+		light_rig.visible = true
 		world_geo.visible = mode == Mode.WORLD
 		sub_geo.visible = mode == Mode.SUBSPACE
 		finalize.call()
@@ -1116,6 +1291,99 @@ func _apply_anim_frame() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Camera framing
+# ---------------------------------------------------------------------------
+# The player owns the camera (see PlayerBody); this decides what it should be
+# SHOWING — how much (zoom) and from where (lookahead). The body supplies motion
+# and the look keys, because it knows its own limits and its own input; the world
+# supplies the focus set and the flat axis, because only the world knows what the
+# moment is about.
+
+## `center` overrides where the BODY is taken to be — the cut path needs the
+## framing of where it is going, not of where the lens still is.
+func _update_camera(center: Vector2 = Vector2.INF) -> void:
+	if player == null:
+		return
+	var body: Vector2 = player.global_position if center == Vector2.INF else center
+	# The lead first: it moves the camera, and the zoom's focus distances are
+	# measured from where the camera ends up. Decided in the other order, a hard
+	# lead would quietly crop the very things the focus set exists to keep on screen.
+	player.lookahead_target = WorldCore.camera_lookahead_for({
+		"velocity": player.motion_fraction(),
+		"look": player.look_dir(),
+		# Inside a fold the strip repeats along the crease normal, so the frame
+		# already shows every band there is that way: leading along it would slide
+		# the view across identical copies for nothing.
+		"flat_axis": sub_fold.crease_normal if _in_subspace() else Vector2.ZERO,
+		"frozen": animating(),
+	})
+	var eye := (player.camera_position() if center == Vector2.INF
+		else body + player.lookahead_target)
+	player.zoom_target = WorldCore.camera_zoom_for({
+		"viewport": get_viewport_rect().size,
+		"center": eye,
+		"motion": player.motion_intensity(),
+		# A fold rearranging the world is its own reason to step back and watch.
+		"widen": 1.0 if animating() else 0.0,
+		"focus": _camera_focus(),
+	})
+	_size_pixel_view()
+
+
+## Give the render target the resolution the CURRENT zoom asks for. The camera's
+## lens never moves — inside a render target, zoom is what sets the size of an art
+## pixel, so moving it would resample the 16px tileset and soften the world. A
+## wider frame is therefore MORE pixels, not bigger ones.
+##
+## Sized from `camera_zoom()` (the eased value) rather than the target, so the
+## buffer tracks what is actually on screen while the frame is still opening.
+func _size_pixel_view() -> void:
+	if pixel_view == null:
+		return
+	var want := PixelArt.target_size(get_viewport_rect().size, player.camera_zoom())
+	# Only on change: assigning size re-allocates the render target.
+	if pixel_view.size != want:
+		pixel_view.size = want
+
+
+## Cut the camera — position, lens AND lead — to where the body now is. For hard
+## relocations (spawn, doors, being turned back by the fold): the destination's
+## framing is computed first, because easing into it would read as the new room
+## inflating around you.
+func _cut_camera() -> void:
+	_update_camera(player.global_position)
+	player.snap_camera()
+
+
+func _in_subspace() -> bool:
+	return mode == Mode.SUBSPACE and sub_fold != null
+
+
+## World points that would be a mistake to leave off screen right now.
+func _camera_focus() -> PackedVector2Array:
+	var pts := PackedVector2Array([player.global_position])
+	# A pinned anchor is one half of a fold you are still composing. Walk away
+	# from it and the frame opens to keep the span you are judging in view — the
+	# camera showing you how big the fold has got.
+	for slot in [0, 1]:
+		var cell = pending_cell(slot)
+		if cell != null:
+			pts.append((Vector2(cell) + Vector2(0.5, 0.5)) * CS)
+	# Inside a fold the band IS the room: frame it glue to glue, so a wide strip
+	# reads as the cylinder it is rather than a corridor with no visible walls.
+	if _in_subspace():
+		var n := sub_fold.crease_normal
+		var d := (player.global_position - sub_fold.crease_point1).dot(n)
+		pts.append(player.global_position - n * d)
+		pts.append(player.global_position + n * (sub_fold.gap_distance() - d))
+	# A fold ride can carry you further than a frame's width. Hold both ends.
+	if animating():
+		pts.append(_anim["p_from"])
+		pts.append(_anim["p_to"])
+	return pts
+
+
+# ---------------------------------------------------------------------------
 # Per-frame world logic
 # ---------------------------------------------------------------------------
 
@@ -1124,6 +1392,10 @@ func _physics_process(delta: float) -> void:
 	if _flash_left == 0.0 and _flash != null:
 		_flash.visible = false
 	_update_status()
+	# Only the nearest handful of lights reach the shader; "nearest" is measured
+	# from the player, not the origin.
+	if light_rig != null:
+		light_rig.set_focus(player.global_position)
 	if animating():
 		return
 
@@ -1165,7 +1437,7 @@ func _subspace_wrap_and_turnback() -> void:
 		var back := sub_fold.crease_point1 + n * (gap * 0.5)
 		var landed := WorldCore.depenetrate(back, PlayerBody.RADIUS, sub_wall_polys)
 		player.teleport(back if landed == Vector2.INF else landed, false)
-		player.snap_camera()
+		_cut_camera()
 		_show_flash("The fold turns back on itself here.")
 
 
@@ -1258,6 +1530,7 @@ func _reset() -> void:
 		layer.queue_free()
 		_anim = {}
 		player.frozen = false
+		light_rig.visible = true
 	_hold_active = false
 	_hold_fired = false
 	context.clear()
@@ -1274,7 +1547,7 @@ func _build_hud() -> void:
 	bg_layer.layer = -10
 	add_child(bg_layer)
 	_bg = ColorRect.new()
-	_bg.color = Color("14151f")
+	_bg.color = Color("0a0b12")
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	# Controls default to MOUSE_FILTER_STOP; a full-screen rect would eat every
 	# click before _unhandled_input sees it. HUD must never take the mouse.
