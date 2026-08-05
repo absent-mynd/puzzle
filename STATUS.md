@@ -5,7 +5,7 @@
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **358 passing** / 358 (0 failing, 0 risky), 19 scripts, ~10.4s.
+**Tests:** **360 passing** / 360 (0 failing, 0 risky), 19 scripts, ~8s.
 
 ---
 
@@ -43,11 +43,11 @@ What exists and works today:
 
 ## Test suite
 
-358 passing across 19 scripts. Composition:
+360 passing across 19 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 57 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the anchor economy |
+| `test_fold_world` | 59 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the anchor economy |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 36 | Map parsing, seams, anchor/fold eligibility, camera framing + lookahead |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
@@ -77,6 +77,21 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — Reset stops confiscating your caches; the HUD stops lecturing
+
+- **`R` keeps what you found.** Collected caches were per-region state inside
+  `regions`, so `_setup_all` wiped them on every reset — and reset is the only way
+  out of stranding yourself with no anchors and no reachable seam. Using the escape
+  hatch cost you your progression. Caches now live in `FoldWorld.collected_caches`
+  (region id -> {base_id: grant}), **outside** `regions` precisely so the rebuild
+  cannot reach them. Folds still reset, which is what makes `R` a real remedy: with
+  no fold standing, every anchor is back in hand.
+- **The on-screen help is one line of controls.** It was nine lines that explained
+  the fold verb, the economy, the caches and the doors — teaching, in text, over the
+  top of a game whose aim ring, preview band, seam diamonds and anchor readout
+  already say those things in place. Flash messages lost their instructional tails
+  too ("Folded IN. F at the seam anchor (white diamond) unfolds it." → "Folded in.").
 
 ### 2026-08-05 — Anchors are a thing you carry, and one key spends them
 
@@ -295,10 +310,12 @@ Roughly in priority order — nothing here is committed to yet:
 - Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
   the world yet. Pins and triggers now are — see east's right wing.
 - **You can strand yourself.** Spend your last anchors on a fold, walk somewhere its
-  seam cannot be reached from, and `R` is the only way back. Accepted cost of having
-  no remote unfold; save points are the real fix.
-- Collected anchor caches are runtime-only state (`regions[id].collected`) and reset
-  with `R` — the first piece of world state that is not `(base, folds)`.
+  seam cannot be reached from, and `R` is the only way back. `R` is survivable by
+  design — it refunds every anchor and keeps your caches — but it still costs your
+  position and fold configuration. Save points are the real fix.
+- Collected anchor caches are runtime-only state (`FoldWorld.collected_caches`) — the
+  first thing that is not `(base, folds)`. They survive `R` but not the session; a save
+  system is what they need next.
 - Lights do not cast shadows: they pass through walls. Occluders would have to be
   re-derived per fold and would want to soften the seam, which the art is currently
   committed to keeping hard.

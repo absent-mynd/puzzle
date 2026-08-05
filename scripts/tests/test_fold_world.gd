@@ -551,6 +551,39 @@ func test_a_collected_cache_stays_collected_across_regions() -> void:
 		"East's own cache is folded away, so it is not standing here to be taken")
 
 
+func test_reset_keeps_your_caches_but_takes_the_world_back() -> void:
+	# Reset is the only way out of stranding yourself with no anchors and no
+	# reachable seam. An escape hatch that confiscates what you have found is a
+	# punishment for using it, so caches are player progression and outlive it —
+	# while the folds, which hold anchors, do not.
+	var cap: int = world.anchor_capacity()
+	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
+	world._check_caches()
+	assert_eq(world.anchor_capacity(), cap + 2, "Cache collected")
+
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_eq(world.anchors_free(), cap, "A standing fold is holding two of them")
+
+	world._reset()
+	assert_eq(world.folds.size(), 0, "Reset takes the world back to its authored folds")
+	assert_eq(world.anchor_capacity(), cap + 2, "...but the cache you found is still yours")
+	assert_eq(world.anchors_free(), cap + 2,
+		"...and every anchor is back in hand, because no fold is holding any")
+
+
+func test_reset_does_not_re_grant_a_cache_you_already_took() -> void:
+	# The husk has to stay spent across a reset too, or reset becomes a way to
+	# farm the same cache for capacity.
+	var cap: int = world.anchor_capacity()
+	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
+	world._check_caches()
+	world._reset()
+
+	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
+	world._check_caches()
+	assert_eq(world.anchor_capacity(), cap + 2, "Standing on it again grants nothing")
+
+
 func test_a_cache_folded_away_is_collectable_inside_the_fold() -> void:
 	# East's shipped pre-fold excised the cache at (14,9) along with door E1. A cache
 	# inside a fold is not lost — the strip is a real place, and taking it in there counts.

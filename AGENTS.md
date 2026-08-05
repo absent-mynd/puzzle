@@ -205,9 +205,12 @@ Consequences worth keeping in mind when designing:
   inside, a door jammed shut.
 - **There is no remote unfold** — `hold` requires you to be at the seam. This was a
   deliberate choice over a recall key, and it means **you can strand yourself**:
-  last anchors spent, seam unreachable, `R` the only way out. Save points are the
-  real answer and do not exist yet. Do not paper over it with a recall key without
-  a design conversation.
+  last anchors spent, seam unreachable, `R` the only way out. `R` is built to be
+  usable for that — it drops every fold (so every anchor comes back) and **keeps
+  your collected caches**, because an escape hatch that confiscates what you found
+  is a punishment for using it. It still costs you your position and your fold
+  configuration; save points are the real answer and do not exist yet. Do not paper
+  over any of this with a recall key without a design conversation.
 - **A cache folded away is not lost.** It is inside the fold, and collecting it in
   there counts — `_check_caches` runs at world level and in subspaces alike.
 
@@ -269,8 +272,10 @@ These are live, not settled. Do not close them silently in a refactor.
   folds) and the cache grant (2) are first guesses; the west beats were authored
   before anchors were finite. Whether scarcity makes the world feel considered or
   merely fussy is a playtesting question, not an editing one.
-- **Cache collection is state outside `(base, folds)`** — `regions[id].collected`,
-  per-region runtime only. It is the first thing that will need the save system.
+- **Cache collection is state outside `(base, folds)`** — `FoldWorld.collected_caches`,
+  region id -> {base_id: grant}. It is PLAYER progression, not world state, which is
+  why it lives outside `regions` and survives `_setup_all` (and therefore `R`). It is
+  the first thing that will need the save system to outlive a session.
 - **Lights do not cast shadows.** Occluders would have to be re-derived per fold,
   and they would want to soften the seam — which is the one thing the art is
   currently committed to keeping hard.

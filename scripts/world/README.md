@@ -347,12 +347,12 @@ do not want yet.
 - Unanchorable tiles (`_`, `X`) and occupants are supported by the format and covered
   by tests, but the shipped world does not place any yet.
 - **You can strand yourself.** Spend your last anchors on a fold, walk somewhere
-  its seam cannot be reached from, and there is no way back to them but `R`.
-  This is the accepted cost of having no remote unfold; save points are the real
+  its seam cannot be reached from, and there is no way back to them but `R` —
+  which drops every fold, hands every anchor back, and keeps the caches you have
+  found. The accepted cost of having no remote unfold; save points are the real
   answer and do not exist yet.
-- Anchor caches are collected per region into runtime state (`regions[id].collected`)
-  — the one piece of world state that is not `(base, folds)`. It resets with `R`
-  and will need the save system to outlive a session.
+- Anchor caches are collected into runtime state (`FoldWorld.collected_caches`) — the
+  one thing tracked that is not `(base, folds)`. `R` keeps them; the session does not.
 - Lights do not cast shadows, and the seam is not lit specially — see *Art & light*.
 - The player and the overlay markers are drawn unlit, so they never disappear
   into an unlit corner.

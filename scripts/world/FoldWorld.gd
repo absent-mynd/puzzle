@@ -69,7 +69,7 @@ const SUB_LIGHT_COPIES := 2
 var world_data: WorldData
 
 # --- Regions ---
-## region id -> {"base", "folds", "seam_segs", "interiors", "spawn", "collected"}
+## region id -> {"base", "folds", "seam_segs", "interiors", "spawn"}
 var regions: Dictionary = {}
 var region_id := ""
 ## Doors: id -> {"region", "cell", "bid", "bp", "pair"}. Points, not tiles.
@@ -84,9 +84,15 @@ var folds: Array[Fold] = []
 var seam_segs: Dictionary = {}
 ## fold_id -> Array[Fold]: a fold's interior folds, persistent while it lives.
 var interiors: Dictionary = {}
-## base_id -> grant: anchor caches already taken in this region.
+## base_id -> grant: anchor caches already taken in THIS region (a view into
+## `collected_caches`).
 var collected: Dictionary = {}
 var _spawn := Vector2.ZERO
+
+## Anchor caches taken, region id -> {base_id: grant}. This is the player's
+## progression, not the world's state, so it deliberately lives OUTSIDE `regions`
+## and survives `_setup_all` — see `_reset`.
+var collected_caches: Dictionary = {}
 
 var next_fold_id := 0
 ## Triggered folds draw ids from a reserved high range so they never collide with
@@ -250,11 +256,8 @@ func _setup_all() -> void:
 			rsegs[f.fold_id] = WorldCore.seam_segment(f, dropped, CS)
 			rfolds.append(f)
 			pieces = FoldReplay.apply_one_fold(pieces, f, CS)
-		# "collected": base_id -> grant, for anchor caches already taken. Per-region
-		# persistent runtime state, like the fold list — keyed by BASE id so it
-		# survives folding, unfolding and leaving the region.
 		regions[id] = {"base": rbase, "folds": rfolds, "seam_segs": rsegs,
-			"interiors": {}, "spawn": world_data.spawn_px(id), "collected": {}}
+			"interiors": {}, "spawn": world_data.spawn_px(id)}
 
 		# Lights bind to base tiles exactly as doors do: from here on a light has
 		# no world position, only a base identity that the current configuration
@@ -302,7 +305,14 @@ func _load_region(id: String) -> void:
 	seam_segs = r["seam_segs"]
 	interiors = r["interiors"]
 	_spawn = r["spawn"]
-	collected = r["collected"]
+	collected = _ensure_collected(id)
+
+
+## The caches taken in a region, creating the entry on first ask.
+func _ensure_collected(id: String) -> Dictionary:
+	if not collected_caches.has(id):
+		collected_caches[id] = {}
+	return collected_caches[id]
 
 
 # ---------------------------------------------------------------------------
@@ -666,12 +676,12 @@ func place_pending(slot: int, dir: Vector2i) -> void:
 	# (Skipped when the other anchor is inert — pinned in a frame we cannot resolve.)
 	var other = pending_cell(1 - slot)
 	if other != null and not WorldCore.anchors_valid(other, cand):
-		_show_flash("Too close to your other anchor — 2 tiles apart, minimum.")
+		_show_flash("Too close to your other anchor.")
 		return
 	# An anchor is an object. Pinning takes it out of your pocket right now; only
 	# re-siting one you already placed is free.
 	if pending_slot(slot) == null and not can_pin_anchor():
-		_show_flash("No anchors left — hold to pull one back out of a fold.")
+		_show_flash("No anchors left.")
 		return
 	_set_pending(slot, {"bid": piece.base_id, "bp": center - piece.src_offset})
 
@@ -807,8 +817,8 @@ func _all_fold_lists() -> Array:
 ## The world's authored start plus every cache collected anywhere.
 func anchor_capacity() -> int:
 	var grants: Array = []
-	for id in regions:
-		var taken: Dictionary = regions[id]["collected"]
+	for id in collected_caches:
+		var taken: Dictionary = collected_caches[id]
 		for bid in taken:
 			grants.append(taken[bid])
 	return AnchorStock.capacity_with(_base_capacity, grants)
@@ -871,7 +881,7 @@ func do_fold(a1: Vector2i, a2: Vector2i) -> bool:
 		var finalize_pinch := func() -> void:
 			context.append(fold)
 			_apply_context()
-			_show_flash("Folded IN. F at the seam anchor (white diamond) unfolds it.")
+			_show_flash("Folded in.")
 		_play_transition(pre, fold, true, false, p, p, false, finalize_pinch)
 		return true
 
@@ -1056,7 +1066,7 @@ func try_exit() -> void:
 	if mode != Mode.SUBSPACE or animating():
 		return
 	if exit_blocker() != null:
-		_show_flash("Blocked — an inner fold crosses the outer seam. Unfold it first.")
+		_show_flash("Blocked — an inner fold crosses the outer seam.")
 		return
 	var outer := sub_fold
 	var parent_path := context.slice(0, context.size() - 1)
@@ -1508,8 +1518,7 @@ func _check_caches() -> void:
 		rebuild_sub()
 	else:
 		rebuild_world()
-	_show_flash("+%d anchors — %d folds can stand at once." \
-		% [collected[here.base_id], anchor_capacity() / AnchorStock.COST_PER_FOLD])
+	_show_flash("+%d anchors." % collected[here.base_id])
 
 
 func _check_goal() -> void:
@@ -1524,6 +1533,14 @@ func _check_goal() -> void:
 	_on_goal = touching
 
 
+## Put the WORLD back, not the player. Folds, position and pending anchors go;
+## collected caches stay, because reset is also the only way out of stranding
+## yourself with no anchors and no reachable seam. An escape hatch that confiscates
+## what you have found is a punishment for using it — and since unfolding every
+## fold refunds every anchor, a reset already hands your whole stock back.
+##
+## `collected_caches` lives outside `regions` precisely so `_setup_all` cannot
+## clear it. If you ever add more player progression, put it there too.
 func _reset() -> void:
 	if not _anim.is_empty():
 		var layer: Node2D = _anim["layer"]
@@ -1535,7 +1552,7 @@ func _reset() -> void:
 	_hold_fired = false
 	context.clear()
 	_setup_all()
-	_show_flash("Reset.")
+	_show_flash("Reset — %d anchors, all free." % anchor_capacity())
 
 
 # ---------------------------------------------------------------------------
@@ -1558,22 +1575,18 @@ func _build_hud() -> void:
 	hud.layer = 10
 	add_child(hud)
 
+	# Controls only — what the keys are, not what they mean. The mechanics are the
+	# game's to teach: the aim ring, the preview band, the seam diamonds and the
+	# anchor readout all say their piece in place, and a wall of text on top of
+	# them explains away the thing the player is meant to work out.
 	var help := Label.new()
-	help.text = "Move: A/D or arrows   Jump: Space\n" \
-		+ "Point: hold Up/W or Down/S — otherwise you point where you face\n" \
-		+ "TAP F: pin anchor 1, then anchor 2, then commit the fold\n" \
-		+ "HOLD F: pull back — your last anchor, or the fold you point at\n" \
-		+ "   (on a seam diamond it unfolds; on a fold's white glue diamond you exit)\n" \
-		+ "Anchors are finite and a standing fold holds two. Orange tiles are\n" \
-		+ "caches: walk into one to carry more. R: reset\n" \
-		+ "Green rings are DOORS — walk into one to warp. A folded-away door\n" \
-		+ "leads INSIDE the fold. Doors exit folds without unfolding them."
+	help.text = "A/D move   Space jump   W/S aim   F tap: anchor · hold: pull back   R reset"
 	help.position = Vector2(12, 8)
-	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
+	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
 	hud.add_child(help)
 
 	_status = Label.new()
-	_status.position = Vector2(12, 168)
+	_status.position = Vector2(12, 30)
 	_status.add_theme_color_override("font_color", Color("59e0d0"))
 	hud.add_child(_status)
 
