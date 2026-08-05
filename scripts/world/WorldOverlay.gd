@@ -104,10 +104,21 @@ func _draw_anchor_and_preview(offsets: Array) -> void:
 	if aimed != null:
 		aimed_center = (Vector2(aimed.meeting_pos) + Vector2(0.5, 0.5)) * cs
 
+	# The aim ring reddens when you have no anchor left to pin — the limit is
+	# visible on the cell you are pointing at, before you press anything.
+	var out_of_anchors: bool = not world.can_pin_anchor() and world.pending_b == null
+	var aim_col := Color("e06a6a", 0.55) if out_of_anchors else Color(1, 1, 1, 0.30)
+	# A hold in progress fills a ring: the two gestures are distinguishable while
+	# the key is still down, so a hold never lands as a surprise.
+	var hold: float = world.hold_progress()
+
 	for off in offsets:
-		draw_arc(cand_center + off, 14.0, 0, TAU, 24, Color(1, 1, 1, 0.30), 2.0)
+		draw_arc(cand_center + off, 14.0, 0, TAU, 24, aim_col, 2.0)
 		if aimed != null:
 			draw_arc(aimed_center + off, 17.0, 0, TAU, 24, Color("59e0d0"), 3.0)
+		if hold > 0.0:
+			draw_arc(cand_center + off, 20.0, -PI / 2.0, -PI / 2.0 + TAU * hold, 32,
+				Color("ffd27f"), 3.0)
 
 	# The two pending anchor slots (Q = orange, E = blue), with soft axis
 	# guides — folds may be diagonal; guides just help line up straight ones.

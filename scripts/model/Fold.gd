@@ -28,6 +28,12 @@ class_name Fold extends Resource
 ## Symbolic tag for trigger-created folds (F3); "" for ordinary player folds.
 @export var channel: String = ""
 
+## How many of the PLAYER'S anchors this fold is holding (see `AnchorStock`). Two for
+## a fold the player committed, zero for folds the world made — authored pre-folds and
+## trigger folds are anchored by the world, not out of your pocket. Unfolding refunds
+## this implicitly: the fold leaves the list and its anchors stop being counted.
+@export var held_anchors: int = 0
+
 @export var anchor_a: Vector2i = Vector2i.ZERO   # ordered: lexicographic min (y,x)
 @export var anchor_b: Vector2i = Vector2i.ZERO
 

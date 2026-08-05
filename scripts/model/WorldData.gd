@@ -30,6 +30,12 @@ extends Resource
 ## Region id the player spawns in.
 @export var start_region: String = ""
 
+## Anchors the player starts the world carrying (see `AnchorStock`). A standing fold
+## holds two, so this is the number of folds that may be left standing before any cache
+## is found. NOT the old per-level fold budget: it is carried, world-wide, and refunded
+## in full by unfolding.
+@export var anchor_capacity: int = 4
+
 ## region id -> {
 ##   "rows":      Array[String],  ASCII terrain (see WorldCore.CHARS)
 ##   "spawn":     Vector2,        spawn point, in CELL units (0.5 = cell center)
@@ -69,6 +75,7 @@ func to_dict() -> Dictionary:
 		"world_name": world_name,
 		"cell_size": cell_size,
 		"start_region": start_region,
+		"anchor_capacity": anchor_capacity,
 		"regions": out_regions,
 		"doors": out_doors,
 		"metadata": metadata,
@@ -80,6 +87,7 @@ func from_dict(dict: Dictionary) -> void:
 	world_name = dict.get("world_name", "")
 	cell_size = float(dict.get("cell_size", 64.0))
 	start_region = dict.get("start_region", "")
+	anchor_capacity = int(dict.get("anchor_capacity", 4))
 	metadata = dict.get("metadata", {})
 
 	regions = {}

@@ -17,6 +17,10 @@ class_name TileTypes extends RefCounted
 ##                 water > empty reproduces the two legacy orderings exactly.
 ##   blocks_fold : does an occupant of this type block a fold that would cut/excise
 ##                 it? (Consumed by the general fold-block predicate — F5.)
+##   grant       : anchors handed to the player on entry (absent = 0). Only
+##                 ANCHOR_CACHE carries one; it ties with GOAL on merge_rank, which is
+##                 harmless because the only consumers of dominance (walkability,
+##                 blocks_anchor) answer identically for both.
 ##
 ## Behavior hooks (on_enter / on_fold / on_unfold) are intentionally NOT baked in
 ## yet; they arrive with the trigger system (F3). `get_def` returns a plain
@@ -40,6 +44,10 @@ const UNANCHORABLE_FLOOR := 6
 ## An UNANCHORABLE_WALL tile is not walkable (like a wall) and also cannot be used
 ## as a fold anchor. Useful for walls that must never become fold reference points.
 const UNANCHORABLE_WALL := 7
+## An ANCHOR_CACHE grants anchors when the player enters it, permanently raising how
+## many folds they can leave standing (see `AnchorStock`). Walkable and foldable like
+## air — a cache folded away is not lost, it is inside the fold, waiting.
+const ANCHOR_CACHE := 8
 
 ## type -> definition. Keep merge_rank strictly ordered: null(5) > goal(4) >
 ## wall(3) > water(2) > empty(1). FoldedState never produces null pieces, so its
@@ -59,6 +67,8 @@ const _REGISTRY := {
 	PIN:          {"walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": ""},
 	UNANCHORABLE_FLOOR: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
 	UNANCHORABLE_WALL:  {"walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
+	ANCHOR_CACHE: {"walkable": true, "merge_rank": 4, "blocks_fold": false, "blocks_anchor": false,
+		"on_enter": "anchors", "grant": 2},
 }
 
 ## Safe defaults for an unregistered type: not walkable, lowest rank, non-blocking.
@@ -99,6 +109,11 @@ static func blocks_anchor(type: int) -> bool:
 ## Name of the reaction fired when the player enters a tile of this type ("" = none).
 static func on_enter_kind(type: int) -> String:
 	return get_def(type).get("on_enter", "")
+
+
+## Anchors this type grants when entered (0 = none). See `AnchorStock`.
+static func anchor_grant(type: int) -> int:
+	return int(get_def(type).get("grant", 0))
 
 
 ## Resolve a stack of co-surface piece types to the dominant one. Returns EMPTY for

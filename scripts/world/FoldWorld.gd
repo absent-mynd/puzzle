@@ -25,6 +25,15 @@ extends Node2D
 ##     fold folded, interior state and all. Unfold blocking is uniform:
 ##     newer folds crossing a seam block it, interior folds crossing a glue
 ##     block the outer fold from either side.
+##   - ANCHORS ARE A CARRIED, CONSERVED RESOURCE (`AnchorStock`). A standing
+##     fold is holding two of yours, so the budget is how many folds may stand
+##     at once, not how many you may ever make; unfolding refunds them because
+##     the fold leaves the list. Anchor caches raise the ceiling permanently.
+##
+## ONE KEY drives all of it. Tap = push anchors in (pin, pin, commit); hold =
+## pull them back out (retrieve a pending anchor, unfold the fold you point at,
+## or exit a subspace by its glue anchor). There is no remote unfold: to get the
+## anchors out of a fold you must go back to its seam.
 ##
 ## Known limits: no nested pinch (you cannot fold yourself deeper while inside),
 ## fold extent is infinite-crease (a fold here guts a structure over there — the
@@ -39,6 +48,9 @@ const CS := WorldCore.CELL
 ## direction. What you can fold is exactly what you can stand next to.
 const ANCHOR_REACH := 1
 const ANIM_TIME := 0.24
+## How long the fold key must be held before it reads as "pull back" rather than
+## "push in". Long enough that a committing tap never trips it by accident.
+const HOLD_TIME := 0.35
 const TYPE_COLORS := {
 	TileTypes.EMPTY: Color(0.13, 0.14, 0.20),   # faint: the "paper" exists
 	TileTypes.WALL: Color(0.55, 0.60, 0.70),
@@ -48,6 +60,7 @@ const TYPE_COLORS := {
 	TileTypes.PIN: Color(0.90, 0.30, 0.28),             # fold-proof: reads as "solid fact"
 	TileTypes.UNANCHORABLE_FLOOR: Color(0.20, 0.22, 0.26),
 	TileTypes.UNANCHORABLE_WALL: Color(0.42, 0.44, 0.50),
+	TileTypes.ANCHOR_CACHE: Color(1.0, 0.62, 0.36),   # the colour of anchor 1: "this is yours"
 }
 const SUB_TINT := Color(0.72, 0.62, 0.95)  # subspace pieces shift hue
 
@@ -55,7 +68,7 @@ const SUB_TINT := Color(0.72, 0.62, 0.95)  # subspace pieces shift hue
 var world_data: WorldData
 
 # --- Regions ---
-## region id -> {"base", "folds", "seam_segs", "interiors", "spawn"}
+## region id -> {"base", "folds", "seam_segs", "interiors", "spawn", "collected"}
 var regions: Dictionary = {}
 var region_id := ""
 ## Doors: id -> {"region", "cell", "bid", "bp", "pair"}. Points, not tiles.
@@ -68,6 +81,8 @@ var folds: Array[Fold] = []
 var seam_segs: Dictionary = {}
 ## fold_id -> Array[Fold]: a fold's interior folds, persistent while it lives.
 var interiors: Dictionary = {}
+## base_id -> grant: anchor caches already taken in this region.
+var collected: Dictionary = {}
 var _spawn := Vector2.ZERO
 
 var next_fold_id := 0
@@ -83,9 +98,18 @@ var context: Array[Fold] = []
 
 ## Pending anchors: null or {"bid": int, "bp": Vector2} — a base-frame point.
 ## Frame-independent: rides folds, survives subspace exit; inert (unresolvable)
-## outside its region.
+## outside its region. A pinned anchor is CHARGED: it left your pocket the moment
+## you pinned it, and comes back only when you pull it out again.
 var pending_a = null
 var pending_b = null
+
+## Anchors the world hands you at the start, before any cache (`WorldData`).
+var _base_capacity := 4
+
+# --- Fold-key hold tracking (tap = push in, hold = pull back) ---
+var _hold_active := false
+var _hold_fired := false
+var _hold_elapsed := 0.0
 
 var current_pieces: Array[FoldedPiece] = []
 var pieces_by_pos: Dictionary = {}
@@ -158,6 +182,7 @@ func _setup_all() -> void:
 	if world_data == null:
 		push_error("FoldWorld: could not load %s" % WORLD_PATH)
 		return
+	_base_capacity = world_data.anchor_capacity
 
 	# Each region is its own sheet: a BaseGrid plus its persistent fold state. A region's
 	# authored folds are applied here, before the player spawns — a pre-placed fold ships
@@ -174,8 +199,11 @@ func _setup_all() -> void:
 			rsegs[f.fold_id] = WorldCore.seam_segment(f, dropped, CS)
 			rfolds.append(f)
 			pieces = FoldReplay.apply_one_fold(pieces, f, CS)
+		# "collected": base_id -> grant, for anchor caches already taken. Per-region
+		# persistent runtime state, like the fold list — keyed by BASE id so it
+		# survives folding, unfolding and leaving the region.
 		regions[id] = {"base": rbase, "folds": rfolds, "seam_segs": rsegs,
-			"interiors": {}, "spawn": world_data.spawn_px(id)}
+			"interiors": {}, "spawn": world_data.spawn_px(id), "collected": {}}
 
 	# Doors are warp POINTS at base-tile centers: they ride folds with their tile, so a
 	# door's current location is resolved from its base identity, never stored.
@@ -212,6 +240,7 @@ func _load_region(id: String) -> void:
 	seam_segs = r["seam_segs"]
 	interiors = r["interiors"]
 	_spawn = r["spawn"]
+	collected = r["collected"]
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +263,7 @@ func rebuild_world() -> void:
 	for piece in current_pieces:
 		var vis := Polygon2D.new()
 		vis.polygon = piece.polygon
-		vis.color = TYPE_COLORS.get(piece.type, Color.MAGENTA)
+		vis.color = _piece_color(piece)
 		world_geo.add_child(vis)
 		# Solidity comes from the registry, not a type check: a new blocking tile
 		# collides correctly without touching this loop.
@@ -271,7 +300,7 @@ func rebuild_sub() -> void:
 		for piece in sub_pieces:
 			var vis := Polygon2D.new()
 			vis.polygon = piece.polygon
-			var c: Color = TYPE_COLORS.get(piece.type, Color.MAGENTA)
+			var c: Color = _piece_color(piece)
 			vis.color = c.lerp(SUB_TINT, 0.35) if piece.type != TileTypes.EMPTY else c
 			copy.add_child(vis)
 			if not TileTypes.is_walkable(piece.type) and solid != null:
@@ -374,6 +403,15 @@ func _apply_context() -> void:
 	rebuild_sub()
 
 
+## A collected cache stays in the world as a spent husk rather than vanishing: the
+## place you took anchors from should still be legible when you come back.
+func _piece_color(piece) -> Color:
+	var c: Color = TYPE_COLORS.get(piece.type, Color.MAGENTA)
+	if piece.type == TileTypes.ANCHOR_CACHE and collected.has(piece.base_id):
+		return c.darkened(0.72)
+	return c
+
+
 func _frame_pieces() -> Array:
 	return sub_pieces if mode == Mode.SUBSPACE else current_pieces
 
@@ -390,27 +428,53 @@ func animating() -> bool:
 # Input
 # ---------------------------------------------------------------------------
 
+## One key for the whole verb. TAP pushes an anchor in (pin, pin, then commit);
+## HOLD pulls one back out (your last anchor, or the fold you are pointing at).
+## The two directions of a conserved resource are the two ways to press one key.
+##
+## The tap fires on RELEASE, so a press that grows into a hold never also commits.
 func _unhandled_input(event: InputEvent) -> void:
-	if animating():
+	if not (event is InputEventKey) or event.echo:
 		return
-	if event is InputEventKey and event.pressed and not event.echo:
-		match event.physical_keycode:
-			KEY_Q:
-				place_pending(0, player.point_dir())
-			KEY_E:
-				place_pending(1, player.point_dir())
-			KEY_F:
-				commit_or_unfold(player.point_dir())
-			KEY_U:
-				if mode == Mode.SUBSPACE:
-					try_exit()
-				else:
-					pop_fold()
-			KEY_ESCAPE:
-				pending_a = null
-				pending_b = null
-			KEY_R:
-				_reset()
+	if event.physical_keycode == KEY_R:
+		if event.pressed:
+			_reset()
+		return
+	if event.physical_keycode != KEY_F:
+		return
+	if event.pressed:
+		if animating():
+			return
+		_hold_active = true
+		_hold_fired = false
+		_hold_elapsed = 0.0
+		return
+	var tapped := _hold_active and not _hold_fired
+	_hold_active = false
+	_hold_fired = false
+	if tapped and not animating():
+		tap_action(player.point_dir())
+
+
+## How far through the hold the key currently is (0 = not holding / already fired).
+## Drawn as a filling ring by the overlay so the two gestures are distinguishable
+## before either of them lands.
+func hold_progress() -> float:
+	if not _hold_active or _hold_fired:
+		return 0.0
+	return clampf(_hold_elapsed / HOLD_TIME, 0.0, 1.0)
+
+
+func _tick_hold(delta: float) -> void:
+	if not _hold_active or _hold_fired:
+		return
+	if animating():
+		_hold_active = false
+		return
+	_hold_elapsed += delta
+	if _hold_elapsed >= HOLD_TIME:
+		_hold_fired = true
+		hold_action(player.point_dir())
 
 
 func player_cell() -> Vector2i:
@@ -434,6 +498,17 @@ func pending_cell(slot: int):
 	return Vector2i((Vector2(wp) / CS).floor())
 
 
+func pending_slot(slot: int):
+	return pending_a if slot == 0 else pending_b
+
+
+func _set_pending(slot: int, entry) -> void:
+	if slot == 0:
+		pending_a = entry
+	else:
+		pending_b = entry
+
+
 func place_pending(slot: int, dir: Vector2i) -> void:
 	if animating():
 		return
@@ -446,11 +521,19 @@ func place_pending(slot: int, dir: Vector2i) -> void:
 	if not WorldCore.can_anchor_at(_frame_index(), cand):
 		_show_flash("Nothing to grip there.")
 		return
-	var entry := {"bid": piece.base_id, "bp": center - piece.src_offset}
-	if slot == 0:
-		pending_a = null if pending_cell(0) != null and pending_cell(0) == cand else entry
-	else:
-		pending_b = null if pending_cell(1) != null and pending_cell(1) == cand else entry
+	# Checked at PLACEMENT, not at commit: with one key the next tap is the commit,
+	# so an un-committable pair has to be refused while you can still see why.
+	# (Skipped when the other anchor is inert — pinned in a frame we cannot resolve.)
+	var other = pending_cell(1 - slot)
+	if other != null and not WorldCore.anchors_valid(other, cand):
+		_show_flash("Too close to your other anchor — 2 tiles apart, minimum.")
+		return
+	# An anchor is an object. Pinning takes it out of your pocket right now; only
+	# re-siting one you already placed is free.
+	if pending_slot(slot) == null and not can_pin_anchor():
+		_show_flash("No anchors left — hold to pull one back out of a fold.")
+		return
+	_set_pending(slot, {"bid": piece.base_id, "bp": center - piece.src_offset})
 
 
 func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
@@ -475,9 +558,34 @@ func aiming_at_glue(dir: Vector2i = Vector2i.ZERO) -> bool:
 	return false
 
 
-func commit_or_unfold(dir: Vector2i) -> void:
+## TAP: pin the first anchor, then the second, then commit the pair.
+func tap_action(dir: Vector2i) -> void:
 	if animating():
 		return
+	if pending_a == null:
+		place_pending(0, dir)
+	elif pending_b == null:
+		place_pending(1, dir)
+	else:
+		commit_pending()
+
+
+## HOLD: pull back whatever you are pointing at. Your own pending anchor comes
+## back to hand; a seam anchor is a fold coming apart (and inside a subspace, the
+## glue anchor is the way out). Pointing at nothing pulls back your last anchor.
+##
+## There is no remote unfold. The anchors in a fold are where you left them: to get
+## them back you walk to the seam.
+func hold_action(dir: Vector2i) -> void:
+	if animating():
+		return
+	var cand := candidate_anchor(dir)
+	# Newest slot first, so pointing at two anchors stacked on one cell is still
+	# a last-in-first-out retrieval.
+	for slot in [1, 0]:
+		if pending_slot(slot) != null and pending_cell(slot) == cand:
+			_retrieve_pending(slot)
+			return
 	if aiming_at_glue(dir):
 		try_exit()
 		return
@@ -485,8 +593,23 @@ func commit_or_unfold(dir: Vector2i) -> void:
 	if aimed != null:
 		unfold_level_fold(aimed)
 		return
+	if pending_b != null:
+		_retrieve_pending(1)
+	elif pending_a != null:
+		_retrieve_pending(0)
+	else:
+		_show_flash("Nothing here to pull back.")
+
+
+func _retrieve_pending(slot: int) -> void:
+	_set_pending(slot, null)
+	_show_flash("Anchor back in hand — %d free." % anchors_free())
+
+
+func commit_pending() -> void:
+	if animating():
+		return
 	if pending_a == null or pending_b == null:
-		_show_flash("Pin both anchors first (Q and E).")
 		return
 	var ca = pending_cell(0)
 	var cb = pending_cell(1)
@@ -498,16 +621,70 @@ func commit_or_unfold(dir: Vector2i) -> void:
 		return
 	var committed := do_sub_fold(ca, cb) if mode == Mode.SUBSPACE else do_fold(ca, cb)
 	if committed:
+		# The fold now holds the same two anchors that were pinned, so the free
+		# count does not move: they were charged when you pinned them.
 		pending_a = null
 		pending_b = null
+
+
+# ---------------------------------------------------------------------------
+# The anchor ledger (see AnchorStock)
+# ---------------------------------------------------------------------------
+# Nothing is stored. `held` is summed from the live fold lists and `pending` from
+# the two slots, so unfolding refunds without any bookkeeping — the fold leaves the
+# list and stops being counted.
+
+## Every live fold list in the world: each region's, plus every fold's interiors.
+## The working `folds` / `interiors` vars are references INTO `regions`, so walking
+## the regions counts the current one exactly once.
+func _all_fold_lists() -> Array:
+	var out: Array = []
+	for id in regions:
+		var r: Dictionary = regions[id]
+		out.append(r["folds"])
+		var ints: Dictionary = r["interiors"]
+		for fid in ints:
+			out.append(ints[fid])
+	return out
+
+
+## The world's authored start plus every cache collected anywhere.
+func anchor_capacity() -> int:
+	var grants: Array = []
+	for id in regions:
+		var taken: Dictionary = regions[id]["collected"]
+		for bid in taken:
+			grants.append(taken[bid])
+	return AnchorStock.capacity_with(_base_capacity, grants)
+
+
+func anchors_held() -> int:
+	return AnchorStock.held_in(_all_fold_lists())
+
+
+func anchors_pending() -> int:
+	return (1 if pending_a != null else 0) + (1 if pending_b != null else 0)
+
+
+func anchors_free() -> int:
+	return AnchorStock.available(anchor_capacity(), anchors_held(), anchors_pending())
+
+
+func can_pin_anchor() -> bool:
+	return AnchorStock.can_pin(anchor_capacity(), anchors_held(), anchors_pending())
 
 
 # ---------------------------------------------------------------------------
 # Folding
 # ---------------------------------------------------------------------------
 
+## Commit a fold at world level. The fold takes custody of two of the player's
+## anchors — the same two `commit_pending` had pinned — and gives them back only when
+## it is unfolded. (Authored pre-folds and trigger folds are anchored by the world and
+## hold none: `Fold.held_anchors` defaults to zero.)
 func do_fold(a1: Vector2i, a2: Vector2i) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS)
+	fold.held_anchors = AnchorStock.COST_PER_FOLD
 	var dropped := WorldCore.capture_strip(current_pieces, fold, CS)
 	if dropped.is_empty():
 		_show_flash("Nothing there to fold.")
@@ -556,8 +733,12 @@ func do_fold(a1: Vector2i, a2: Vector2i) -> bool:
 	return true
 
 
+## Commit a fold INSIDE a subspace. Interior folds hold anchors exactly like world
+## folds do — and they persist into the world when you exit, so the anchors stay
+## committed across the boundary.
 func do_sub_fold(a1: Vector2i, a2: Vector2i) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS)
+	fold.held_anchors = AnchorStock.COST_PER_FOLD
 	var dropped := WorldCore.capture_strip(sub_pieces, fold, CS)
 	if dropped.is_empty():
 		_show_flash("Nothing there to fold.")
@@ -674,24 +855,21 @@ func unfold_level_fold(fold: Fold) -> void:
 
 	var was_newest := idx == list.size() - kids.size()
 	var in_sub := mode == Mode.SUBSPACE
+	# Refunded implicitly — the fold is out of the list, so its anchors stop counting.
+	var regained: int = fold.held_anchors
 	var finalize := func() -> void:
 		if in_sub:
 			rebuild_sub()
 		else:
 			rebuild_world()
 		player.teleport(landed)
+		if regained > 0:
+			_show_flash("Unfolded — %d anchors back, %d free." % [regained, anchors_free()])
 	if was_newest and kids.is_empty():
 		_play_transition(new_pieces, fold, false, true,
 			player.global_position, landed, in_sub, finalize)
 	else:
 		finalize.call()
-
-
-func pop_fold() -> void:
-	if folds.is_empty():
-		_show_flash("Nothing to unfold.")
-		return
-	unfold_level_fold(folds.back())
 
 
 ## Interior fold crossing the glue that locks the exit, or null.
@@ -868,7 +1046,7 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 	var shift_b := fold.shift_b_px(CS)
 	for piece in pre_pieces:
 		var res := CollisionCore.fold_polygons([piece.polygon], fold, CS)
-		var color: Color = TYPE_COLORS.get(piece.type, Color.MAGENTA)
+		var color: Color = _piece_color(piece)
 		if sub_tint and piece.type != BaseTile.TYPE_EMPTY:
 			color = color.lerp(SUB_TINT, 0.35)
 		for poly in res["a"]:
@@ -897,6 +1075,7 @@ func _make_frag(layer: Node2D, poly: PackedVector2Array, color: Color, kind: Str
 
 
 func _process(delta: float) -> void:
+	_tick_hold(delta)
 	if _anim.is_empty():
 		return
 	_anim["progress"] = minf(_anim["progress"] + delta / ANIM_TIME, 1.0)
@@ -956,6 +1135,7 @@ func _physics_process(delta: float) -> void:
 			player.teleport(_spawn, false)
 			_show_flash("You fell out of the world — respawned.")
 	_check_goal()
+	_check_caches()
 	_check_triggers()
 	_check_doors()
 
@@ -1034,6 +1214,32 @@ func _check_triggers() -> void:
 	_show_flash("The ground answers — space folds around you.")
 
 
+## Anchor caches: walk onto one and its anchors are yours for good. Because anchors are
+## conserved rather than spent, granting anchors and raising the ceiling are the same
+## act — a cache is permanently one more fold you may leave standing.
+##
+## Works at world level AND inside a subspace: a cache that got folded away is not lost,
+## it is in there with everything else the strip took, and picking it up in there counts.
+func _check_caches() -> void:
+	if base == null:
+		return
+	var here = BaseFrame.piece_containing(_frame_index(), player.global_position, CS)
+	if here == null:
+		return
+	var tile := base.tile_by_id(here.base_id)
+	if tile == null or TileTypes.on_enter_kind(tile.type) != "anchors":
+		return
+	if collected.has(here.base_id):
+		return
+	collected[here.base_id] = TileTypes.anchor_grant(tile.type)
+	if mode == Mode.SUBSPACE:
+		rebuild_sub()
+	else:
+		rebuild_world()
+	_show_flash("+%d anchors — %d folds can stand at once." \
+		% [collected[here.base_id], anchor_capacity() / AnchorStock.COST_PER_FOLD])
+
+
 func _check_goal() -> void:
 	var polys: Array = sub_goal_polys if mode == Mode.SUBSPACE else goal_polys
 	var touching := false
@@ -1052,6 +1258,8 @@ func _reset() -> void:
 		layer.queue_free()
 		_anim = {}
 		player.frozen = false
+	_hold_active = false
+	_hold_fired = false
 	context.clear()
 	_setup_all()
 	_show_flash("Reset.")
@@ -1080,10 +1288,11 @@ func _build_hud() -> void:
 	var help := Label.new()
 	help.text = "Move: A/D or arrows   Jump: Space\n" \
 		+ "Point: hold Up/W or Down/S — otherwise you point where you face\n" \
-		+ "Q / E: pin anchor 1 / anchor 2 on the cell you point at\n" \
-		+ "F: commit the fold — or, aimed at a seam anchor, unfold that fold\n" \
-		+ "   (inside a fold, the white diamond on the glue is its seam anchor)\n" \
-		+ "Esc: clear anchors   U: unfold newest / exit fold   R: reset\n" \
+		+ "TAP F: pin anchor 1, then anchor 2, then commit the fold\n" \
+		+ "HOLD F: pull back — your last anchor, or the fold you point at\n" \
+		+ "   (on a seam diamond it unfolds; on a fold's white glue diamond you exit)\n" \
+		+ "Anchors are finite and a standing fold holds two. Orange tiles are\n" \
+		+ "caches: walk into one to carry more. R: reset\n" \
 		+ "Green rings are DOORS — walk into one to warp. A folded-away door\n" \
 		+ "leads INSIDE the fold. Doors exit folds without unfolding them."
 	help.position = Vector2(12, 8)
@@ -1107,11 +1316,16 @@ func _build_hud() -> void:
 func _update_status() -> void:
 	if _status == null:
 		return
+	var stock := "Anchors: %d/%d free (%d in folds)" \
+		% [anchors_free(), anchor_capacity(), anchors_held()]
+	if anchors_pending() > 0:
+		stock += "   %d pinned, uncommitted" % anchors_pending()
 	if mode == Mode.WORLD:
-		_status.text = "Region: %s   Folds: %d   Mode: WORLD" % [region_id, folds.size()]
+		_status.text = "Region: %s   Folds: %d   Mode: WORLD\n%s" \
+			% [region_id, folds.size(), stock]
 	else:
-		_status.text = "Region: %s   Folds: %d   Mode: INSIDE FOLD x%d (%d inner)" \
-			% [region_id, folds.size(), context.size(), level_folds().size()]
+		_status.text = "Region: %s   Folds: %d   Mode: INSIDE FOLD x%d (%d inner)\n%s" \
+			% [region_id, folds.size(), context.size(), level_folds().size(), stock]
 
 
 func _show_flash(text: String) -> void:

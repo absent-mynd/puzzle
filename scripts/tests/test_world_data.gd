@@ -15,6 +15,7 @@ func _sample() -> WorldData:
 	wd.world_name = "Test World"
 	wd.cell_size = 64.0
 	wd.start_region = "a"
+	wd.anchor_capacity = 6
 	wd.regions = {
 		"a": {
 			"rows": ["....", "####"],
@@ -33,6 +34,7 @@ func test_round_trip_through_dict():
 	copy.from_dict(wd.to_dict())
 	assert_eq(copy.world_id, "t", "id survives")
 	assert_eq(copy.start_region, "a", "start region survives")
+	assert_eq(copy.anchor_capacity, 6, "the anchor allowance survives")
 	assert_almost_eq(copy.cell_size, 64.0, 0.001, "cell size survives")
 	assert_eq((copy.regions["a"]["rows"] as Array).size(), 2, "rows survive")
 	assert_eq(copy.regions["a"]["spawn"], Vector2(1.5, 0.5), "spawn survives as a Vector2")
@@ -98,6 +100,40 @@ func test_shipped_world_loads():
 	assert_not_null(wd, "worlds/overworld.json parses")
 	assert_true(wd.has_region(wd.start_region), "the start region exists")
 	assert_eq(wd.regions.size(), 2, "two regions ship")
+
+
+func test_shipped_world_starts_you_with_whole_folds():
+	var wd := WorldData.load_from(WORLD_PATH)
+	assert_gt(wd.anchor_capacity, 0, "the world hands the player a starting allowance")
+	assert_eq(wd.anchor_capacity % AnchorStock.COST_PER_FOLD, 0,
+		"an odd allowance would leave a permanently unusable anchor")
+
+
+func test_shipped_world_places_anchor_caches():
+	# Caches are the only way the ceiling ever rises, so a world with none is a
+	# world where the starting allowance is the whole game.
+	var wd := WorldData.load_from(WORLD_PATH)
+	var caches := 0
+	for id in wd.regions:
+		for t in wd.build_base(id).tiles:
+			if t.type == TileTypes.ANCHOR_CACHE:
+				caches += 1
+	assert_gt(caches, 0, "the shipped world places at least one anchor cache")
+
+
+func test_shipped_caches_stand_on_ground():
+	# A cache in mid-air is a cache you cannot walk into. Every one must have
+	# something solid directly beneath it.
+	var wd := WorldData.load_from(WORLD_PATH)
+	for id in wd.regions:
+		var base := wd.build_base(id)
+		for t in base.tiles:
+			if t.type != TileTypes.ANCHOR_CACHE:
+				continue
+			var below := base.tile_at(t.grid_position + Vector2i(0, 1))
+			assert_not_null(below, "cache at %s in %s is not at the map edge" % [t.grid_position, id])
+			assert_false(TileTypes.is_walkable(below.type),
+				"cache at %s in %s stands on solid ground" % [t.grid_position, id])
 
 
 func test_shipped_world_regions_build():

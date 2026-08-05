@@ -176,7 +176,7 @@ func test_anchors_valid_rules() -> void:
 # ---------------------------------------------------------------------------
 
 func test_parse_map_reads_every_authoring_character() -> void:
-	var bg := WorldCore.parse_map(["#G~P_XT."], CS)
+	var bg := WorldCore.parse_map(["#G~P_XTA."], CS)
 	assert_eq(bg.tile_at(Vector2i(0, 0)).type, TileTypes.WALL, "# is wall")
 	assert_eq(bg.tile_at(Vector2i(1, 0)).type, TileTypes.GOAL, "G is goal")
 	assert_eq(bg.tile_at(Vector2i(2, 0)).type, TileTypes.WATER, "~ is water")
@@ -184,7 +184,8 @@ func test_parse_map_reads_every_authoring_character() -> void:
 	assert_eq(bg.tile_at(Vector2i(4, 0)).type, TileTypes.UNANCHORABLE_FLOOR, "_ is unanchorable floor")
 	assert_eq(bg.tile_at(Vector2i(5, 0)).type, TileTypes.UNANCHORABLE_WALL, "X is unanchorable wall")
 	assert_eq(bg.tile_at(Vector2i(6, 0)).type, TileTypes.TRIGGER_FOLD, "T is a fold trigger")
-	assert_eq(bg.tile_at(Vector2i(7, 0)).type, TileTypes.EMPTY, ". is air")
+	assert_eq(bg.tile_at(Vector2i(7, 0)).type, TileTypes.ANCHOR_CACHE, "A is an anchor cache")
+	assert_eq(bg.tile_at(Vector2i(8, 0)).type, TileTypes.EMPTY, ". is air")
 
 
 func test_parse_map_attaches_per_tile_data() -> void:

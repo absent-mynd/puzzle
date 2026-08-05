@@ -3,8 +3,9 @@ extends GutTest
 ## Integration tests for the gravity-prototype scene (FoldWorld): exact
 ## base-frame riding through fold/unfold, pinch-into-subspace (applied for
 ## real), folding inside a subspace with persistence on exit, glue-crossing
-## exit blocking, seam-aimed unfolding, and anchor transport. Runs the real
-## scene with animation disabled; assertions are synchronous.
+## exit blocking, the one-key tap/hold verb, anchor transport, and the carried
+## anchor economy. Runs the real scene with animation disabled; assertions are
+## synchronous.
 
 const SCENE := "res://scenes/world/World.tscn"
 const CS := 64.0
@@ -32,7 +33,7 @@ func test_player_rides_a_side_flap_and_unfold_returns() -> void:
 	assert_almost_eq(world.player.global_position.x, start.x + 4 * CS, 130.0,
 		"A-side rides shift_a (4 cells right, +/- depenetration slack)")
 
-	world.pop_fold()
+	world.unfold_level_fold(world.folds[0])
 	assert_eq(world.folds.size(), 0, "Unfold removes the fold")
 	assert_almost_eq(world.player.global_position.x, start.x, 130.0,
 		"Unfold carries the player back exactly")
@@ -54,42 +55,49 @@ func test_pinch_applies_fold_for_real_and_exit_restores() -> void:
 		"Moving inside the fold moved you in the world")
 
 
-func test_two_slot_placement_then_commit_pinches() -> void:
+func test_one_key_pins_pins_then_commits() -> void:
 	# Player spawns in cell (4,12); reach is the adjacent cell, facing right.
-	world.place_pending(0, Vector2i(1, 0))
-	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Q pins anchor 1 on the aimed cell")
-	world.place_pending(0, Vector2i(1, 0))
-	assert_eq(world.pending_cell(0), null, "Re-pinning the same spot clears the slot")
+	world.tap_action(Vector2i(1, 0))
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "First tap pins anchor 1 on the aimed cell")
+	assert_eq(world.pending_cell(1), null, "...and only anchor 1")
 
-	world.place_pending(0, Vector2i(1, 0))          # (5,12) again
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.place_pending(1, Vector2i(1, 0))          # (9,12)
-	assert_eq(world.pending_cell(1), Vector2i(9, 12), "E pins anchor 2 independently")
+	world.tap_action(Vector2i(1, 0))
+	assert_eq(world.pending_cell(1), Vector2i(9, 12), "Second tap pins anchor 2")
 	assert_eq(world.folds.size(), 0, "Placement alone never commits")
 
-	world.commit_or_unfold(Vector2i(0, -1))         # aim up: no seam there
+	world.tap_action(Vector2i(0, -1))
 	assert_eq(world.mode, world.Mode.SUBSPACE,
-		"F with the player inside the band folds them in")
+		"The third tap commits, and the player inside the band is folded in")
 	assert_eq(world.pending_a, null, "Pendings clear on commit")
 
 
-func test_commit_requires_both_anchors_and_min_gap() -> void:
-	world.commit_or_unfold(Vector2i(1, 0))
-	assert_eq(world.folds.size(), 0, "No anchors pinned: nothing commits")
+func test_a_too_close_second_anchor_is_refused_at_placement() -> void:
+	# With one key the next tap IS the commit, so an un-committable pair has to be
+	# refused while the player can still see which anchor caused it.
+	world.tap_action(Vector2i(1, 0))                # (5,12)
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor 1 pinned")
 
-	world.place_pending(0, Vector2i(1, 0))          # (5,12)
-	world.place_pending(1, Vector2i(0, 1))          # (4,13): dist sqrt(2)
-	world.commit_or_unfold(Vector2i(0, -1))
-	assert_eq(world.folds.size(), 0, "Too-close pair is rejected at commit")
-	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Pendings kept for adjustment")
+	world.tap_action(Vector2i(0, 1))                # (4,13): dist sqrt(2)
+	assert_eq(world.pending_cell(1), null, "The too-close second anchor never lands")
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor 1 is kept for adjustment")
+	assert_eq(world.folds.size(), 0, "And nothing commits")
 
 
-func test_interact_aimed_at_seam_unfolds_that_fold() -> void:
+func test_holding_at_a_seam_anchor_unfolds_that_fold() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))  # seam anchor at (24,12)
 	assert_eq(world.folds.size(), 1, "Fold active")
 	world.player.teleport(Vector2(23.5 * CS, 12.5 * CS), false)
-	world.commit_or_unfold(Vector2i(1, 0))          # aiming at the seam diamond
-	assert_eq(world.folds.size(), 0, "F aimed at the seam anchor unfolds it")
+
+	world.tap_action(Vector2i(1, 0))                # aimed at the seam diamond
+	assert_eq(world.folds.size(), 1, "A TAP at a seam does not unfold — tap only ever pins")
+	assert_eq(world.pending_cell(0), Vector2i(24, 12), "...it pinned an anchor there")
+	world.hold_action(Vector2i(1, 0))
+	assert_eq(world.pending_cell(0), null,
+		"A hold aimed at your own anchor takes that one back first")
+
+	world.hold_action(Vector2i(1, 0))
+	assert_eq(world.folds.size(), 0, "With the cell clear, the hold unfolds the seam under it")
 
 
 func test_unfold_blocked_by_newer_crossing_fold() -> void:
@@ -108,10 +116,10 @@ func test_unfold_blocked_by_newer_crossing_fold() -> void:
 
 
 func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
-	world.place_pending(0, Vector2i(1, 0))          # (5,12)
+	world.tap_action(Vector2i(1, 0))                # (5,12)
 	world.player.teleport(Vector2(7.5 * CS, 10.5 * CS), false)
-	world.place_pending(1, Vector2i(1, 0))          # (8,10): off-axis, dist ~3.6
-	world.commit_or_unfold(Vector2i(0, -1))
+	world.tap_action(Vector2i(1, 0))                # (8,10): off-axis, dist ~3.6
+	world.tap_action(Vector2i(0, -1))
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Off-axis pinch folds the player in")
 	assert_eq(world.sub_fold.orientation, "diagonal", "The committed fold is diagonal")
 
@@ -154,7 +162,7 @@ func test_exit_blocked_by_glue_crossing_interior_fold() -> void:
 
 func test_pending_anchors_survive_subspace_exit() -> void:
 	_pinch_over_pit()
-	world.place_pending(0, Vector2i(1, 0))          # pinned INSIDE the fold, cell (14,12)
+	world.tap_action(Vector2i(1, 0))                # pinned INSIDE the fold, cell (14,12)
 	assert_eq(world.pending_cell(0), Vector2i(14, 12), "Anchor pinned inside the subspace")
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Exited")
@@ -273,7 +281,7 @@ func test_split_door_point_is_dormant() -> void:
 
 
 func test_pending_anchor_inert_across_regions() -> void:
-	world.place_pending(0, Vector2i(1, 0))
+	world.tap_action(Vector2i(1, 0))
 	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor pinned in west")
 	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
 	world._check_doors()
@@ -290,8 +298,8 @@ func _enter_east() -> void:
 	assert_eq(world.mode, world.Mode.WORLD, "...in normal space")
 
 
-## Where an east base cell currently sits, or null if it is folded away.
-func _east_point(cell: Vector2i):
+## Where a base cell of the CURRENT region sits right now, or null if it is folded away.
+func _plane_point(cell: Vector2i):
 	var tile: BaseTile = world.base.tile_at(cell)
 	return BaseFrame.world_point_from_base(
 		world.current_pieces, tile.base_id, (Vector2(cell) + Vector2(0.5, 0.5)) * CS)
@@ -299,7 +307,7 @@ func _east_point(cell: Vector2i):
 
 func test_pinned_pillar_refuses_a_fold_that_spans_it() -> void:
 	_enter_east()
-	var pin = _east_point(Vector2i(21, 9))
+	var pin = _plane_point(Vector2i(21, 9))
 	assert_not_null(pin, "The pinned pillar stands in normal space")
 	var cell := Vector2i((Vector2(pin) / CS).floor())
 
@@ -314,22 +322,22 @@ func test_pinned_pillar_refuses_a_fold_that_spans_it() -> void:
 
 func test_pressure_plate_folds_the_wall_away() -> void:
 	_enter_east()
-	assert_not_null(_east_point(Vector2i(27, 9)), "The wall stands before the plate is pressed")
-	var plate = _east_point(Vector2i(25, 9))
+	assert_not_null(_plane_point(Vector2i(27, 9)), "The wall stands before the plate is pressed")
+	var plate = _plane_point(Vector2i(25, 9))
 	assert_not_null(plate, "The plate is reachable in normal space")
 
 	var before: int = world.folds.size()
 	world.player.teleport(Vector2(plate), false)
 	world._check_triggers()
 	assert_eq(world.folds.size(), before + 1, "Standing on the plate fires one fold")
-	assert_null(_east_point(Vector2i(27, 9)), "...which folds the wall away")
-	assert_not_null(_east_point(Vector2i(29, 9)), "The reward behind it survives")
-	assert_not_null(_east_point(Vector2i(21, 9)), "And so does the pinned pillar")
+	assert_null(_plane_point(Vector2i(27, 9)), "...which folds the wall away")
+	assert_not_null(_plane_point(Vector2i(29, 9)), "The reward behind it survives")
+	assert_not_null(_plane_point(Vector2i(21, 9)), "And so does the pinned pillar")
 
 
 func test_pressure_plate_does_not_re_fire() -> void:
 	_enter_east()
-	world.player.teleport(Vector2(_east_point(Vector2i(25, 9))), false)
+	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
 	world._check_triggers()
 	var after_first: int = world.folds.size()
 
@@ -340,7 +348,7 @@ func test_pressure_plate_does_not_re_fire() -> void:
 	# Step off and back on: the channel is already taken, so still nothing.
 	world.player.teleport(Vector2(5.5 * CS, 9.5 * CS), false)
 	world._check_triggers()
-	world.player.teleport(Vector2(_east_point(Vector2i(25, 9))), false)
+	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
 	world._check_triggers()
 	assert_eq(world.folds.size(), after_first,
 		"Re-entering the plate spawns no duplicate for a channel that already folded")
@@ -348,14 +356,14 @@ func test_pressure_plate_does_not_re_fire() -> void:
 
 func test_triggered_fold_persists_across_leaving_the_region() -> void:
 	_enter_east()
-	world.player.teleport(Vector2(_east_point(Vector2i(25, 9))), false)
+	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
 	world._check_triggers()
 	var east_folds: int = world.regions["east"]["folds"].size()
 	assert_gt(east_folds, 1, "The plate's fold joined east's persistent fold list")
 
 	# Door E2 RODE the triggered fold with its flap, so it is no longer where it was —
 	# resolve its current point rather than assuming.
-	var e2 = _east_point(Vector2i(2, 9))
+	var e2 = _plane_point(Vector2i(2, 9))
 	assert_not_null(e2, "E2 survived the triggered fold")
 	assert_ne(e2, Vector2(2.5 * CS, 9.5 * CS), "...and moved with the flap that carried it")
 
@@ -367,6 +375,146 @@ func test_triggered_fold_persists_across_leaving_the_region() -> void:
 	assert_eq(world.region_id, "west", "Back in west")
 	assert_eq(world.regions["east"]["folds"].size(), east_folds,
 		"East keeps the triggered fold while you are away")
+
+
+# ---------------------------------------------------------------------------
+# Anchors as a carried, conserved resource
+# ---------------------------------------------------------------------------
+# An anchor is an object, and a standing fold is holding two of yours. So the
+# budget is how many folds may stand AT ONCE, not how many you may ever make —
+# and every accounting path below has to conserve, never create or destroy.
+
+func test_pinning_charges_an_anchor_and_a_hold_refunds_it() -> void:
+	var cap: int = world.anchor_capacity()
+	assert_eq(world.anchors_free(), cap, "You start carrying the world's whole allowance")
+
+	world.tap_action(Vector2i(1, 0))
+	assert_eq(world.anchors_free(), cap - 1, "Pinning takes an anchor out of your pocket")
+	assert_eq(world.anchors_pending(), 1, "...where the ledger can see it")
+
+	world.hold_action(Vector2i(1, 0))
+	assert_eq(world.pending_cell(0), null, "Holding on your own anchor pulls it back")
+	assert_eq(world.anchors_free(), cap, "...and refunds it in full")
+
+
+func test_a_standing_fold_holds_two_anchors_and_unfolding_returns_them() -> void:
+	var cap: int = world.anchor_capacity()
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_eq(world.folds[0].held_anchors, 2, "A committed fold holds two of your anchors")
+	assert_eq(world.anchors_free(), cap - 2, "...which are unavailable while it stands")
+
+	world.unfold_level_fold(world.folds[0])
+	assert_eq(world.anchors_free(), cap, "Unfolding gives them back in full")
+
+
+func test_committing_moves_the_charge_from_hand_to_fold() -> void:
+	# Anchors are charged when pinned, so the commit must not charge them again.
+	var cap: int = world.anchor_capacity()
+	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                        # (9,12)
+	assert_eq(world.anchors_free(), cap - 2, "Both pinned anchors are charged")
+
+	world.tap_action(Vector2i(0, -1))                       # commit
+	assert_eq(world.anchors_free(), cap - 2,
+		"Commit hands the SAME two anchors to the fold — the free count does not move")
+	assert_eq(world.anchors_pending(), 0, "They belong to the fold now, not to the slots")
+	assert_eq(world.anchors_held(), 2, "...which is where the ledger finds them")
+
+
+func test_running_out_refuses_the_next_pin_until_something_unfolds() -> void:
+	assert_eq(world.anchor_capacity(), 4,
+		"The shipped world starts you with two folds' worth (this test assumes it)")
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	world.do_fold(Vector2i(34, 4), Vector2i(38, 4))
+	assert_eq(world.folds.size(), 2, "Both folds committed")
+	assert_eq(world.anchors_free(), 0, "Two standing folds hold every anchor you have")
+	assert_false(world.can_pin_anchor(), "Nothing left to pin with")
+
+	world.tap_action(Vector2i(1, 0))
+	assert_eq(world.pending_cell(0), null, "A tap with an empty pocket pins nothing")
+
+	world.unfold_level_fold(world.folds[1])
+	assert_eq(world.anchors_free(), 2, "Unfolding puts that fold's anchors back in your pocket")
+	world.tap_action(Vector2i(1, 0))
+	assert_ne(world.pending_cell(0), null, "...and you can pin again")
+
+
+func test_world_made_folds_cost_the_player_nothing() -> void:
+	# Authored pre-folds and trigger folds are anchored by the world, not out of
+	# your pocket: a region that ships folded does not arrive with you in debt.
+	var cap: int = world.anchor_capacity()
+	assert_eq(world.regions["east"]["folds"].size(), 1, "East ships one pre-placed fold")
+	assert_eq(world.regions["east"]["folds"][0].held_anchors, 0,
+		"...which holds none of the player's anchors")
+	assert_eq(world.anchors_free(), cap, "So you start with everything")
+
+	_enter_east()
+	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
+	world._check_triggers()
+	assert_gt(world.folds.size(), 1, "The plate fired its fold")
+	assert_eq(world.anchors_free(), world.anchor_capacity(),
+		"A trigger fold charges the player nothing either")
+
+
+func test_an_interior_fold_holds_anchors_across_the_subspace_boundary() -> void:
+	var cap: int = world.anchor_capacity()
+	_pinch_over_pit()
+	assert_eq(world.anchors_free(), cap - 2, "The pinch fold holds two, like any other")
+
+	world.player.teleport(Vector2(11.2 * CS, 12.5 * CS), false)
+	assert_true(world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8)), "Interior fold commits")
+	assert_eq(world.anchors_free(), cap - 4, "An interior fold holds two more")
+
+	world.try_exit()
+	assert_eq(world.mode, world.Mode.WORLD, "Exited")
+	assert_eq(world.anchors_free(), cap - 2,
+		"The outer fold refunded; the interior one persisted into the world still holding")
+
+
+# ---------------------------------------------------------------------------
+# Anchor caches
+# ---------------------------------------------------------------------------
+
+func test_an_anchor_cache_raises_the_ceiling_permanently() -> void:
+	var cap: int = world.anchor_capacity()
+	var cache = _plane_point(Vector2i(24, 6))
+	assert_not_null(cache, "The pillar-top cache stands in normal space")
+
+	world.player.teleport(Vector2(cache), false)
+	world._check_caches()
+	assert_eq(world.anchor_capacity(), cap + 2, "Walking into a cache raises your capacity")
+	assert_eq(world.anchors_free(), cap + 2, "...and the anchors are yours to spend")
+
+	world._check_caches()
+	assert_eq(world.anchor_capacity(), cap + 2, "A spent cache grants nothing a second time")
+
+
+func test_a_collected_cache_stays_collected_across_regions() -> void:
+	var cap: int = world.anchor_capacity()
+	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
+	world._check_caches()
+	assert_eq(world.anchor_capacity(), cap + 2, "Collected in west")
+
+	_enter_east()
+	assert_eq(world.anchor_capacity(), cap + 2,
+		"Capacity is carried by the player, not held by the region that granted it")
+	assert_null(_plane_point(Vector2i(14, 9)),
+		"East's own cache is folded away, so it is not standing here to be taken")
+
+
+func test_a_cache_folded_away_is_collectable_inside_the_fold() -> void:
+	# East's shipped pre-fold excised the cache at (14,9) along with door E1. A cache
+	# inside a fold is not lost — the strip is a real place, and taking it in there counts.
+	var cap: int = world.anchor_capacity()
+	world.player.teleport(Vector2(1.5 * CS, 13.5 * CS), false)
+	world._check_doors()
+	assert_eq(world.mode, world.Mode.SUBSPACE, "Through W1, inside the shipped fold")
+
+	world.player.teleport(Vector2(14.5 * CS, 9.5 * CS), false)
+	world._check_caches()
+	assert_eq(world.anchor_capacity(), cap + 2,
+		"The cache the fold swallowed is collectable from inside it")
 
 
 func test_no_hud_control_swallows_mouse_input() -> void:

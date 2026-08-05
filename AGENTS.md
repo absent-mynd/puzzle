@@ -23,6 +23,12 @@ Three things make it a metroidvania rather than a puzzle game:
 - **Progression is knowledge and configuration**, not keys. A door folded shut is a
   door you jammed; unfolding is the key you already had.
 
+**Anchors are finite and conserved.** You carry a countable number of them, and a
+fold standing in the world is holding two — so the budget is how many folds may
+stand *at once*, not how many you may ever make. Unfolding refunds in full. This is
+what makes "configuration" a real currency: you cannot take your bridge with you.
+See §"The anchor economy".
+
 ---
 
 ## ⚠️ Read this first: the 2026-08-04 consolidation
@@ -111,6 +117,7 @@ instead.
 | Derived fragments / queryable state | `scripts/model/FoldedPiece.gd`, `FoldedState.gd` |
 | **Base ↔ derived point transport** | `scripts/model/BaseFrame.gd` |
 | What a tile IS and DOES (the registry) | `scripts/model/TileTypes.gd` |
+| **The anchor ledger** (conservation arithmetic) | `scripts/model/AnchorStock.gd` |
 | Entities that ride tiles through folds | `scripts/model/Occupants.gd` |
 | Fold-on-enter cascade | `scripts/model/TriggerResolver.gd` |
 | Authored world (regions, doors, folds) | `scripts/model/WorldData.gd` |
@@ -150,6 +157,46 @@ rule, applied at every level — world, strip, interior.
 ### 5. Never compare floats with `==`
 Use `GeometryCore.EPSILON`.
 
+### 6. The anchor ledger is derived, never stored
+`AnchorStock` computes; it does not remember. Free anchors are
+`capacity - held-by-live-folds - pinned-but-uncommitted`, with `held` summed from
+`Fold.held_anchors` across every live fold list. That is why unfolding refunds with
+no bookkeeping: the fold leaves the list and stops being counted. **Never add a
+"spent anchors" counter** — it would be a second source of truth that can drift
+from the fold list, which is the same mistake as caching derived fold state.
+
+Capacity is the one accumulating part: authored start (`WorldData.anchor_capacity`)
+plus every collected cache's grant. Player folds hold `COST_PER_FOLD`; folds the
+*world* makes — authored pre-folds and trigger folds — hold zero.
+
+---
+
+## The anchor economy
+
+| Where an anchor can be | How it gets there | How it comes back |
+|---|---|---|
+| Your pocket | start of the world; an anchor cache | — |
+| A pending slot | tap F pointing at a cell (charged immediately) | hold F |
+| A standing fold | committing tap (takes the two pending ones) | hold F at its seam |
+
+**One key, two directions.** Tap = push an anchor in (pin, pin, commit). Hold =
+pull one back out (your own anchor, the fold under a seam diamond, or a subspace's
+glue diamond). The input mirrors the economy on purpose.
+
+Consequences worth keeping in mind when designing:
+
+- **Traversal is nearly free; configuration is not.** Fold a pit shut, walk across
+  the seam, unfold behind you — you keep the anchors and you are across. What costs
+  you is a fold you must *leave standing*: a wall folded away, a chamber you are
+  inside, a door jammed shut.
+- **There is no remote unfold** — `hold` requires you to be at the seam. This was a
+  deliberate choice over a recall key, and it means **you can strand yourself**:
+  last anchors spent, seam unreachable, `R` the only way out. Save points are the
+  real answer and do not exist yet. Do not paper over it with a recall key without
+  a design conversation.
+- **A cache folded away is not lost.** It is inside the fold, and collecting it in
+  there counts — `_check_caches` runs at world level and in subspaces alike.
+
 ---
 
 ## Open design questions
@@ -164,6 +211,12 @@ These are live, not settled. Do not close them silently in a refactor.
   splice folds into an interior list mid-cascade; the resolver does not model that.
 - **Unfold animation** plays only for newest-fold unfolds at world level; mid-stack
   unfolds are instant.
+- **Anchor scarcity is not yet tuned.** The shipped allowance (4 = two standing
+  folds) and the cache grant (2) are first guesses; the west beats were authored
+  before anchors were finite. Whether scarcity makes the world feel considered or
+  merely fussy is a playtesting question, not an editing one.
+- **Cache collection is state outside `(base, folds)`** — `regions[id].collected`,
+  per-region runtime only. It is the first thing that will need the save system.
 
 ---
 
@@ -196,7 +249,8 @@ Work on `claude/*` feature branches; PRs merge into `main`.
 ## The five things that matter most
 
 1. **Read `STATUS.md`** — what is done and what is next.
-2. **State is `(base, folds)`; everything else is derived.** Re-derive, don't mutate.
+2. **State is `(base, folds)`; everything else is derived** — including the anchor
+   ledger. Re-derive, don't mutate.
 3. **`BaseFrame` is how anything survives a fold.** Not crease math.
 4. **Ask `TileTypes`, don't switch on type ints.**
 5. **Write the test first** — the suite is the spec.
