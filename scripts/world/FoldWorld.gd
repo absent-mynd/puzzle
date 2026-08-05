@@ -105,20 +105,28 @@ var mode: Mode = Mode.WORLD
 ## Path of entered folds (outermost first). Empty = region world.
 var context: Array[Fold] = []
 
-## Pending anchors: null or {"bid": int, "bp": Vector2} — a base-frame point.
-## Frame-independent: rides folds, survives subspace exit; inert (unresolvable)
-## outside its region. A pinned anchor is CHARGED: it left your pocket the moment
-## you pinned it, and comes back only when you pull it out again.
+## Pending anchors: null or {"bid": int, "bp": Vector2, "hand": int} — a base-frame
+## point plus the KIND of hand pinned there. Frame-independent: rides folds, survives
+## subspace exit; inert (unresolvable) outside its region. A pinned anchor is a hand
+## that has LEFT you — it is out of its slot from the moment you place it, and comes
+## back only when you pull it out again.
 var pending_a = null
 var pending_b = null
 
-## Anchors the world hands you at the start, before any cache (`WorldData`).
-var _base_capacity := 4
+## The hands you are carrying: one entry per slot, a `HandTypes` id or null.
+## See `AnchorStock` — this array is the whole of your possession.
+var hands: Array = []
 
-# --- Fold-key hold tracking (tap = push in, hold = pull back) ---
+# --- Fold-key hold tracking (tap = place a hand, hold = pull one back) ---
 var _hold_active := false
 var _hold_fired := false
 var _hold_elapsed := 0.0
+
+# --- The fuse: a completed pair commits itself ---
+## Seconds left before the pinned pair folds, and what it started at (for the pulse).
+## Zero total = no fuse running.
+var _fuse_left := 0.0
+var _fuse_total := 0.0
 
 var current_pieces: Array[FoldedPiece] = []
 var pieces_by_pos: Dictionary = {}
@@ -145,6 +153,7 @@ var anim_enabled := true
 var _anim: Dictionary = {}
 
 var player: PlayerBody
+var hand_orbit: HandOrbit
 var world_geo: Node2D
 var world_solid: StaticBody2D
 var sub_geo: Node2D
@@ -183,6 +192,10 @@ func _ready() -> void:
 	overlay.world = self
 	overlay.z_index = 50
 	pixel_view.add_child(overlay)
+
+	hand_orbit = HandOrbit.new()
+	hand_orbit.z_index = 45   # over the terrain, under nothing that matters
+	pixel_view.add_child(hand_orbit)
 
 	player = PlayerBody.new()
 	player.z_index = 40
@@ -234,12 +247,13 @@ func _setup_all() -> void:
 	_door_latch = {}
 	pending_a = null
 	pending_b = null
+	_cancel_fuse()
 
 	world_data = WorldData.load_from(WORLD_PATH)
 	if world_data == null:
 		push_error("FoldWorld: could not load %s" % WORLD_PATH)
 		return
-	_base_capacity = world_data.anchor_capacity
+	hands = world_data.starting_hand_slots()
 
 	# Each region is its own sheet: a BaseGrid plus its persistent fold state. A region's
 	# authored folds are applied here, before the player spawns — a pre-placed fold ships
@@ -363,12 +377,15 @@ func _make_tile(piece, poly: PackedVector2Array, in_sub: bool) -> Polygon2D:
 		vis.color = Color.WHITE
 	else:
 		vis.color = TileAtlas.base_color(piece.type)
-	# A collected anchor cache stays in the world as a spent husk rather than
-	# vanishing: the place you took anchors from should still be legible when you
-	# come back. Modulating the tile rather than swapping its art keeps it
-	# recognisably the same object, just used up.
-	if piece.type == TileTypes.ANCHOR_CACHE and collected.has(piece.base_id):
-		vis.color = vis.color.darkened(0.6)
+	# A cache is painted neutral in the atlas and TINTED by the kind of hand it
+	# holds, so one tile row covers every variant and the colour on the ground is
+	# the same colour the hand will be. Once taken it stays as a spent husk rather
+	# than vanishing — modulating keeps it recognisably the same object, used up.
+	if piece.type == TileTypes.ANCHOR_CACHE:
+		var hand := cache_hand_type(base.tile_by_id(piece.base_id) if base != null else null)
+		vis.color = vis.color * HandTypes.color(hand)
+		if collected.has(piece.base_id):
+			vis.color = vis.color.darkened(0.72)
 	if light_rig != null:
 		var mat := light_rig.material_for(piece.type, in_sub)
 		if mat != null:
@@ -678,12 +695,22 @@ func place_pending(slot: int, dir: Vector2i) -> void:
 	if other != null and not WorldCore.anchors_valid(other, cand):
 		_show_flash("Too close to your other anchor.")
 		return
-	# An anchor is an object. Pinning takes it out of your pocket right now; only
-	# re-siting one you already placed is free.
-	if pending_slot(slot) == null and not can_pin_anchor():
-		_show_flash("No anchors left.")
-		return
-	_set_pending(slot, {"bid": piece.base_id, "bp": center - piece.src_offset})
+	# Placing puts a HAND down: it leaves your slot now, and its kind travels with
+	# the anchor because the fold will need to know what it was pinned with. Re-siting
+	# an anchor you already placed reuses the hand already in it.
+	var kind: int = HandTypes.PLAIN
+	var existing = pending_slot(slot)
+	if existing != null:
+		kind = int(existing["hand"])
+	else:
+		var from_slot := AnchorStock.first_held(hands)
+		if from_slot < 0:
+			_show_flash("No hand to place.")
+			return
+		kind = int(hands[from_slot])
+		hands[from_slot] = null
+	_set_pending(slot, {"bid": piece.base_id, "bp": center - piece.src_offset, "hand": kind})
+	_refresh_fuse()
 
 
 ## The fold that F should unfold from where you are standing / aiming. Several
@@ -724,7 +751,10 @@ func aiming_at_glue(dir: Vector2i = Vector2i.ZERO) -> bool:
 	return false
 
 
-## TAP: pin the first anchor, then the second, then commit the pair.
+## TAP: put a hand down. The first fills anchor 1, the second anchor 2 — and the
+## second also lights the fuse, because a completed pair commits ITSELF (see
+## `_refresh_fuse`). There is no committing press: what you do is place hands, and
+## what the fold does is go off.
 func tap_action(dir: Vector2i) -> void:
 	if animating():
 		return
@@ -733,7 +763,7 @@ func tap_action(dir: Vector2i) -> void:
 	elif pending_b == null:
 		place_pending(1, dir)
 	else:
-		commit_pending()
+		_show_flash("Both hands are down — it is about to fold.")
 
 
 ## HOLD: pull back whatever you are pointing at. Your own pending anchor comes
@@ -767,11 +797,26 @@ func hold_action(dir: Vector2i) -> void:
 		_show_flash("Nothing here to pull back.")
 
 
+## Take a placed hand back. Always possible: the slot it came from was emptied by
+## placing it, so there is room for it by construction — which is also why pulling
+## back is the reliable way out of a fuse you did not mean to light.
 func _retrieve_pending(slot: int) -> void:
+	var entry = pending_slot(slot)
+	if entry == null:
+		return
 	_set_pending(slot, null)
-	_show_flash("Anchor back in hand — %d free." % anchors_free())
+	var into := AnchorStock.first_empty(hands)
+	if into >= 0:
+		hands[into] = int(entry["hand"])
+	_cancel_fuse()
+	_show_flash("Hand back.")
 
 
+## Fire the pinned pair. Called by the fuse, never by a keypress.
+##
+## On failure the second hand comes BACK rather than staying pinned: a pair that
+## cannot fold would otherwise sit there with a dead fuse, and the player would have
+## to guess that pulling one back is what unsticks it.
 func commit_pending() -> void:
 	if animating():
 		return
@@ -781,16 +826,23 @@ func commit_pending() -> void:
 	var cb = pending_cell(1)
 	if ca == null or cb == null:
 		_show_flash("An anchor lies beyond this fold.")
+		_retrieve_pending(1)
 		return
 	if not WorldCore.anchors_valid(ca, cb):
 		_show_flash("Anchors must be at least 2 tiles apart.")
+		_retrieve_pending(1)
 		return
-	var committed := do_sub_fold(ca, cb) if mode == Mode.SUBSPACE else do_fold(ca, cb)
+	var pinned: Array[int] = [int(pending_a["hand"]), int(pending_b["hand"])]
+	var committed := do_sub_fold(ca, cb, pinned) if mode == Mode.SUBSPACE \
+		else do_fold(ca, cb, pinned)
 	if committed:
-		# The fold now holds the same two anchors that were pinned, so the free
-		# count does not move: they were charged when you pinned them.
+		# The fold is holding the SAME two hands that were pinned — they went from
+		# your slots to the anchors to the fold without ever being duplicated.
 		pending_a = null
 		pending_b = null
+		_cancel_fuse()
+	else:
+		_retrieve_pending(1)
 
 
 # ---------------------------------------------------------------------------
@@ -814,43 +866,126 @@ func _all_fold_lists() -> Array:
 	return out
 
 
-## The world's authored start plus every cache collected anywhere.
-func anchor_capacity() -> int:
-	var grants: Array = []
-	for id in collected_caches:
-		var taken: Dictionary = collected_caches[id]
-		for bid in taken:
-			grants.append(taken[bid])
-	return AnchorStock.capacity_with(_base_capacity, grants)
+## Hands in your slots right now.
+func hands_held() -> int:
+	return AnchorStock.held_count(hands)
 
 
-func anchors_held() -> int:
+## Empty slots — how many hands you could be given, and so whether a fold's two can
+## come home.
+func hands_free_slots() -> int:
+	return AnchorStock.free_slots(hands)
+
+
+## Hands committed to standing folds, everywhere in the world.
+func hands_in_folds() -> int:
 	return AnchorStock.held_in(_all_fold_lists())
 
 
-func anchors_pending() -> int:
+func hands_pending() -> int:
 	return (1 if pending_a != null else 0) + (1 if pending_b != null else 0)
 
 
-func anchors_free() -> int:
-	return AnchorStock.available(anchor_capacity(), anchors_held(), anchors_pending())
+func can_place_hand() -> bool:
+	return AnchorStock.has_hand(hands)
 
 
-func can_pin_anchor() -> bool:
-	return AnchorStock.can_pin(anchor_capacity(), anchors_held(), anchors_pending())
+## The kind of hand the next tap would put down, or -1 if you have none. Drives the
+## aim ring's colour: what you are about to spend is visible before you spend it.
+func next_hand_type() -> int:
+	var i := AnchorStock.first_held(hands)
+	return -1 if i < 0 else int(hands[i])
+
+
+## Every hand that exists. Only picking one up may change this; placing, committing
+## and unfolding must all leave it alone.
+func hands_total() -> int:
+	return AnchorStock.total(hands, hands_pending(), _all_fold_lists())
+
+
+# ---------------------------------------------------------------------------
+# The fuse: a completed pair folds itself
+# ---------------------------------------------------------------------------
+
+## Light, re-time or drop the fuse to match the pending pair. Called whenever an
+## anchor lands: two down starts it, anything less means there is nothing to count
+## down. Re-siting an anchor restarts it from full, so adjusting a pair always buys
+## back the whole delay rather than folding under your hands.
+func _refresh_fuse() -> void:
+	if pending_a == null or pending_b == null:
+		_cancel_fuse()
+		return
+	_fuse_total = HandTypes.fuse_for(int(pending_a["hand"]), int(pending_b["hand"]))
+	_fuse_left = _fuse_total
+
+
+func _cancel_fuse() -> void:
+	_fuse_left = 0.0
+	_fuse_total = 0.0
+
+
+func fuse_running() -> bool:
+	return _fuse_total > 0.0
+
+
+## How far through the fuse we are, 0 (just lit) to 1 (folding now). The overlay
+## pulses the pending rings on this.
+func fuse_progress() -> float:
+	if _fuse_total <= 0.0:
+		return 0.0
+	return clampf(1.0 - _fuse_left / _fuse_total, 0.0, 1.0)
+
+
+## Run the fuse down. PAUSED while either anchor is unresolvable in the frame we are
+## looking at — walk through a door mid-count and the fold waits for you rather than
+## firing somewhere you cannot see, or failing on an anchor that is merely elsewhere.
+func _tick_fuse(delta: float) -> void:
+	if not fuse_running() or animating():
+		return
+	if pending_cell(0) == null or pending_cell(1) == null:
+		return
+	_fuse_left = maxf(_fuse_left - delta, 0.0)
+	if _fuse_left <= 0.0:
+		commit_pending()
 
 
 # ---------------------------------------------------------------------------
 # Folding
 # ---------------------------------------------------------------------------
 
-## Commit a fold at world level. The fold takes custody of two of the player's
-## anchors — the same two `commit_pending` had pinned — and gives them back only when
-## it is unfolded. (Authored pre-folds and trigger folds are anchored by the world and
-## hold none: `Fold.held_anchors` defaults to zero.)
-func do_fold(a1: Vector2i, a2: Vector2i) -> bool:
+## What a committed fold takes custody of.
+##
+## `commit_pending` passes the two hands that were actually pinned — they left your
+## slots when you placed them, so they are already accounted for. Any other caller
+## (`do_fold` as a bare primitive: tests, debug) is folding without having placed
+## anything, so the hands come STRAIGHT OUT OF YOUR SLOTS here.
+##
+## If your hands are empty the fold holds nothing, exactly like a fold the world made.
+## Inventing hands instead would be the one thing this whole ledger exists to prevent:
+## a fold holding anchors nobody paid for, which unfolding would then hand you.
+##
+## CALL THIS LATE — at the point of no return, after every refusal has been checked.
+## It empties slots, and a fold that gets rejected for a pin in its span or nowhere to
+## land must not have cost you the hands it never took.
+func _hands_for_fold(pinned: Array[int]) -> Array[int]:
+	if pinned.size() == AnchorStock.HANDS_PER_FOLD:
+		return pinned.duplicate()
+	var out: Array[int] = []
+	for _i in range(AnchorStock.HANDS_PER_FOLD):
+		var from_slot := AnchorStock.first_held(hands)
+		if from_slot < 0:
+			break
+		out.append(int(hands[from_slot]))
+		hands[from_slot] = null
+	return out
+
+
+## Commit a fold at world level. The fold takes custody of the two hands that were
+## pinned — kinds and all — and gives those same two back when it is unfolded.
+## (Authored pre-folds and trigger folds are anchored by the world and hold none:
+## `Fold.held_hands` defaults to empty.)
+func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS)
-	fold.held_anchors = AnchorStock.COST_PER_FOLD
 	var dropped := WorldCore.capture_strip(current_pieces, fold, CS)
 	if dropped.is_empty():
 		_show_flash("Nothing there to fold.")
@@ -875,6 +1010,7 @@ func do_fold(a1: Vector2i, a2: Vector2i) -> bool:
 	if dest == null:
 		# PINCH — the fold swallows the player. Applied to the world for real.
 		next_fold_id += 1
+		fold.held_hands = _hands_for_fold(pinned)
 		seam_segs[fold.fold_id] = WorldCore.seam_segment(fold, dropped, CS)
 		folds.append(fold)
 		var p := player.global_position
@@ -890,6 +1026,7 @@ func do_fold(a1: Vector2i, a2: Vector2i) -> bool:
 		_show_flash("Fold blocked — nowhere for you to land.")
 		return false
 	next_fold_id += 1
+	fold.held_hands = _hands_for_fold(pinned)
 	seam_segs[fold.fold_id] = WorldCore.seam_segment(fold, dropped, CS)
 	folds.append(fold)
 	var finalize_ride := func() -> void:
@@ -899,12 +1036,11 @@ func do_fold(a1: Vector2i, a2: Vector2i) -> bool:
 	return true
 
 
-## Commit a fold INSIDE a subspace. Interior folds hold anchors exactly like world
-## folds do — and they persist into the world when you exit, so the anchors stay
+## Commit a fold INSIDE a subspace. Interior folds hold hands exactly like world
+## folds do — and they persist into the world when you exit, so the hands stay
 ## committed across the boundary.
-func do_sub_fold(a1: Vector2i, a2: Vector2i) -> bool:
+func do_sub_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS)
-	fold.held_anchors = AnchorStock.COST_PER_FOLD
 	var dropped := WorldCore.capture_strip(sub_pieces, fold, CS)
 	if dropped.is_empty():
 		_show_flash("Nothing there to fold.")
@@ -930,6 +1066,7 @@ func do_sub_fold(a1: Vector2i, a2: Vector2i) -> bool:
 		return false
 
 	next_fold_id += 1
+	fold.held_hands = _hands_for_fold(pinned)
 	seam_segs[fold.fold_id] = WorldCore.seam_segment(fold, dropped, CS)
 	level_folds().append(fold)
 	var finalize := func() -> void:
@@ -988,6 +1125,26 @@ func _interior_glue_blocker(fold: Fold, lvl_base: Array, list: Array, idx: int) 
 	return null
 
 
+## Is there somewhere for this fold's hands to go? A fold gives back everything it
+## was holding at once, and you can only hold `AnchorStock.SLOTS`. Carrying a spare
+## hand you picked up therefore blocks reclaiming a fold until you put it down —
+## which is a real constraint, not an oversight: hands are objects and there are only
+## so many of you to hold them.
+func _has_room_for(fold: Fold) -> bool:
+	return AnchorStock.can_receive(hands, fold.held_hands.size())
+
+
+## Move a fold's hands back into your slots. Call BEFORE the fold leaves the list, so
+## the hands are never in two places at once.
+func _take_back(fold: Fold) -> void:
+	for kind in fold.held_hands:
+		var into := AnchorStock.first_empty(hands)
+		if into < 0:
+			break      # guarded by `_has_room_for`; a lost hand is better than a duplicated one
+		hands[into] = int(kind)
+	fold.held_hands = [] as Array[int]
+
+
 ## Unfold a fold of the CURRENT level. Its interior folds (if any) splice
 ## into this level at its index — they were made in exactly this frame.
 func unfold_level_fold(fold: Fold) -> void:
@@ -997,6 +1154,9 @@ func unfold_level_fold(fold: Fold) -> void:
 		return
 	if not can_unfold_fold(fold):
 		_show_flash("Blocked — a newer fold crosses this seam.")
+		return
+	if not _has_room_for(fold):
+		_show_flash("No room — put a hand down first.")
 		return
 	var lvl_base := _level_base_pieces()
 	if _interior_glue_blocker(fold, lvl_base, list, idx) != null:
@@ -1033,8 +1193,8 @@ func unfold_level_fold(fold: Fold) -> void:
 
 	var was_newest := idx == list.size() - kids.size()
 	var in_sub := mode == Mode.SUBSPACE
-	# Refunded implicitly — the fold is out of the list, so its anchors stop counting.
-	var regained: int = fold.held_anchors
+	var regained: int = fold.held_hands.size()
+	_take_back(fold)
 	var finalize := func() -> void:
 		if in_sub:
 			rebuild_sub()
@@ -1042,7 +1202,7 @@ func unfold_level_fold(fold: Fold) -> void:
 			rebuild_world()
 		player.teleport(landed)
 		if regained > 0:
-			_show_flash("Unfolded — %d anchors back, %d free." % [regained, anchors_free()])
+			_show_flash("Unfolded — %d hands back." % regained)
 	if was_newest and kids.is_empty():
 		_play_transition(new_pieces, fold, false, true,
 			player.global_position, landed, in_sub, finalize)
@@ -1067,6 +1227,9 @@ func try_exit() -> void:
 		return
 	if exit_blocker() != null:
 		_show_flash("Blocked — an inner fold crosses the outer seam.")
+		return
+	if not _has_room_for(sub_fold):
+		_show_flash("No room — put a hand down first.")
 		return
 	var outer := sub_fold
 	var parent_path := context.slice(0, context.size() - 1)
@@ -1105,6 +1268,7 @@ func try_exit() -> void:
 		landed = Vector2(dest)
 
 	context = parent_path
+	_take_back(outer)
 	var kept := not kids.is_empty()
 	var to_world := context.is_empty()
 	var finalize := func() -> void:
@@ -1258,6 +1422,8 @@ func _make_frag(layer: Node2D, piece, poly: PackedVector2Array, in_sub: bool,
 
 func _process(delta: float) -> void:
 	_tick_hold(delta)
+	if hand_orbit != null and player != null:
+		hand_orbit.follow(hands, player.global_position, player.velocity, player.facing, delta)
 	# Before the early-out: the lens has to keep working while a fold plays.
 	_update_camera()
 	if _anim.is_empty():
@@ -1416,6 +1582,7 @@ func _physics_process(delta: float) -> void:
 		if player.global_position.y > (base.grid_size.y + 6) * CS:
 			player.teleport(_spawn, false)
 			_show_flash("You fell out of the world — respawned.")
+	_tick_fuse(delta)
 	_check_goal()
 	_check_caches()
 	_check_triggers()
@@ -1496,12 +1663,19 @@ func _check_triggers() -> void:
 	_show_flash("The ground answers — space folds around you.")
 
 
-## Anchor caches: walk onto one and its anchors are yours for good. Because anchors are
-## conserved rather than spent, granting anchors and raising the ceiling are the same
-## act — a cache is permanently one more fold you may leave standing.
+## Hand caches: walk onto one and it gives you A HAND — one, into one free slot.
+##
+## It only takes if you have a slot free, and a slot is free because you PUT A HAND
+## DOWN. So a cache is not a stockpile you raid on the way past; it is the second half
+## of a fold you have already started. Place a hand, walk to a cache, take a different
+## kind, place that — and the fold you finish is not the fold you would have made with
+## the pair you set out with.
+##
+## The kind it gives is authored per tile (`data.hand`, a `HandTypes` key), which is
+## what the colour on the tile is telling you.
 ##
 ## Works at world level AND inside a subspace: a cache that got folded away is not lost,
-## it is in there with everything else the strip took, and picking it up in there counts.
+## it is in there with everything else the strip took, and taking it in there counts.
 func _check_caches() -> void:
 	if base == null:
 		return
@@ -1513,12 +1687,26 @@ func _check_caches() -> void:
 		return
 	if collected.has(here.base_id):
 		return
-	collected[here.base_id] = TileTypes.anchor_grant(tile.type)
+	# Full hands walk straight over it — and it stays for when they are not.
+	var into := AnchorStock.first_empty(hands)
+	if into < 0:
+		return
+	var kind := cache_hand_type(tile)
+	hands[into] = kind
+	collected[here.base_id] = kind
 	if mode == Mode.SUBSPACE:
 		rebuild_sub()
 	else:
 		rebuild_world()
-	_show_flash("+%d anchors." % collected[here.base_id])
+	_show_flash("Picked up a %s hand." % HandTypes.type_name(kind))
+
+
+## Which kind of hand a cache tile holds. Authored in the tile's own data, so two
+## caches of different colours are two ordinary tiles rather than two tile types.
+func cache_hand_type(tile) -> int:
+	if tile == null:
+		return HandTypes.PLAIN
+	return HandTypes.from_name(str(tile.data.get("hand", "plain")))
 
 
 func _check_goal() -> void:
@@ -1533,14 +1721,17 @@ func _check_goal() -> void:
 	_on_goal = touching
 
 
-## Put the WORLD back, not the player. Folds, position and pending anchors go;
-## collected caches stay, because reset is also the only way out of stranding
-## yourself with no anchors and no reachable seam. An escape hatch that confiscates
-## what you have found is a punishment for using it — and since unfolding every
-## fold refunds every anchor, a reset already hands your whole stock back.
+## Put everything back — the world AND your hands.
 ##
-## `collected_caches` lives outside `regions` precisely so `_setup_all` cannot
-## clear it. If you ever add more player progression, put it there too.
+## Caches respawn with the world. That is not the same call as when a cache was a
+## permanent capacity upgrade: the number of hands you can hold no longer grows, so
+## there is no progression left for a reset to confiscate. What a pickup gives you is
+## another hand for an empty slot, and hands are exactly what a reset restores — so
+## leaving the caches spent would strand you at fewer hands than you started with,
+## which is the opposite of what an escape hatch is for.
+##
+## This is also why reset remains the answer to stranding yourself: every fold drops,
+## and your starting pair is back in your hands.
 func _reset() -> void:
 	if not _anim.is_empty():
 		var layer: Node2D = _anim["layer"]
@@ -1551,8 +1742,9 @@ func _reset() -> void:
 	_hold_active = false
 	_hold_fired = false
 	context.clear()
+	collected_caches = {}
 	_setup_all()
-	_show_flash("Reset — %d anchors, all free." % anchor_capacity())
+	_show_flash("Reset.")
 
 
 # ---------------------------------------------------------------------------
@@ -1580,7 +1772,7 @@ func _build_hud() -> void:
 	# anchor readout all say their piece in place, and a wall of text on top of
 	# them explains away the thing the player is meant to work out.
 	var help := Label.new()
-	help.text = "A/D move   Space jump   W/S aim   F tap: anchor · hold: pull back   R reset"
+	help.text = "A/D move   Space jump   W/S aim   F tap: place hand · hold: pull back   R reset"
 	help.position = Vector2(12, 8)
 	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
 	hud.add_child(help)
@@ -1602,10 +1794,11 @@ func _build_hud() -> void:
 func _update_status() -> void:
 	if _status == null:
 		return
-	var stock := "Anchors: %d/%d free (%d in folds)" \
-		% [anchors_free(), anchor_capacity(), anchors_held()]
-	if anchors_pending() > 0:
-		stock += "   %d pinned, uncommitted" % anchors_pending()
+	var kinds: Array = []
+	for h in hands:
+		kinds.append("—" if h == null else HandTypes.type_name(int(h)))
+	var stock := "Hands: %s   (%d down, %d in folds)" \
+		% [" ".join(kinds), hands_pending(), hands_in_folds()]
 	if mode == Mode.WORLD:
 		_status.text = "Region: %s   Folds: %d   Mode: WORLD\n%s" \
 			% [region_id, folds.size(), stock]

@@ -159,6 +159,54 @@ func test_segment_intersects_band() -> void:
 		Vector2(160, 0), Vector2(160, 100), fold), "Segment ON a crease grazes, no block")
 
 
+# ---------------------------------------------------------------------------
+# The spring the carried hands float on
+# ---------------------------------------------------------------------------
+
+func test_spring_step_moves_toward_the_target() -> void:
+	var step := WorldCore.spring_step(
+		Vector2.ZERO, Vector2.ZERO, Vector2(100, 0), 120.0, 11.0, 1.0 / 60.0)
+	assert_gt(Vector2(step["pos"]).x, 0.0, "One step leans toward the target")
+	assert_lt(Vector2(step["pos"]).x, 100.0, "...without arriving — it lags, which is the point")
+
+
+func test_spring_settles_rather_than_running_away() -> void:
+	# Stability is the whole requirement: nothing reads these positions, but a hand
+	# flung off the map is very visible.
+	var pos := Vector2.ZERO
+	var vel := Vector2.ZERO
+	var target := Vector2(100, -40)
+	for _i in range(400):
+		var step := WorldCore.spring_step(pos, vel, target, 120.0, 11.0, 1.0 / 60.0)
+		pos = step["pos"]
+		vel = step["vel"]
+	assert_almost_eq(pos.distance_to(target), 0.0, 2.0, "It comes to rest on the target")
+	assert_almost_eq(vel.length(), 0.0, 5.0, "...and stops, rather than orbiting forever")
+
+
+func test_spring_clamps_a_long_frame() -> void:
+	# A rebuild or a breakpoint hands us a huge delta; integrated whole it would
+	# fling the hand across the map.
+	var step := WorldCore.spring_step(
+		Vector2.ZERO, Vector2.ZERO, Vector2(100, 0), 120.0, 11.0, 5.0)
+	assert_lt(Vector2(step["pos"]).length(), 200.0, "A five-second frame does not launch it")
+
+
+func test_hand_orbit_offsets_are_distinct_and_near_the_body() -> void:
+	var a := WorldCore.hand_orbit_offset(0, 2, 1, Vector2.ZERO, 34.0)
+	var b := WorldCore.hand_orbit_offset(1, 2, 1, Vector2.ZERO, 34.0)
+	assert_gt(a.distance_to(b), 1.0, "Two hands do not sit on top of each other")
+	for off in [a, b]:
+		assert_lt(off.length(), 60.0, "A hand orbits close to the body")
+		assert_lt(off.y, 0.0, "...and rides above it, clear of the ground")
+
+
+func test_hand_orbit_trails_the_motion() -> void:
+	var still := WorldCore.hand_orbit_offset(0, 1, 1, Vector2.ZERO, 34.0)
+	var running := WorldCore.hand_orbit_offset(0, 1, 1, Vector2(320, 0), 34.0)
+	assert_lt(running.x, still.x, "Running right strings the hand out behind you")
+
+
 func test_anchors_valid_rules() -> void:
 	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(6, 3)), "Same row, gap>=2")
 	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(2, 8)), "Same column, gap>=2")

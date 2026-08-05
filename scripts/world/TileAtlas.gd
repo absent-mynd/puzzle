@@ -48,7 +48,7 @@ const K_PIN := 6
 const K_UFLOOR := 7
 const K_UWALL := 8
 const K_LAMP := 9           ## the glyph drawn at a light source
-const K_CACHE := 10         ## an anchor cache: two spare anchors, there for the taking
+const K_CACHE := 10         ## a hand cache: one spare hand, there for the taking
 const KINDS := 11
 
 # --- Palette -----------------------------------------------------------------
@@ -72,8 +72,10 @@ const _PALETTE := {
 	K_UFLOOR: [Color(0.20, 0.22, 0.26), Color(0.13, 0.14, 0.18), Color(0.30, 0.33, 0.39)],
 	K_UWALL: [Color(0.42, 0.44, 0.50), Color(0.26, 0.28, 0.33), Color(0.56, 0.59, 0.67)],
 	K_LAMP: [Color(1.00, 0.82, 0.50), Color(0.24, 0.18, 0.12), Color(1.00, 0.97, 0.86)],
-	# The orange of pending anchor 1, so a cache reads as "this is yours" on sight.
-	K_CACHE: [Color(1.00, 0.62, 0.36), Color(0.62, 0.32, 0.15), Color(1.00, 0.86, 0.68)],
+	# NEUTRAL on purpose: a cache is tinted at draw time by the kind of hand it holds
+	# (`HandTypes.color`), so one row covers every variant and the colour on the ground
+	# is the same colour the hand will be. Painted near-white so the tint carries.
+	K_CACHE: [Color(0.92, 0.92, 0.94), Color(0.55, 0.55, 0.60), Color(1.00, 1.00, 1.00)],
 }
 
 ## type -> kind, for types that do not depend on their surroundings.
@@ -218,13 +220,13 @@ static func _paint(img: Image, kind: int, v: int, o: Vector2i) -> void:
 			_paint_cache(img, o, v)
 
 
-## An anchor cache: a pair of anchor pegs stood upright on the floor of the cell,
-## because two is exactly what it grants and exactly what a fold costs. Drawn as
-## a pair rather than a blob so the pickup states its denomination.
+## A hand cache: ONE peg stood upright on the floor of the cell, because one hand is
+## exactly what it gives you. (It was a pair when a cache granted two anchors at once;
+## the art says the denomination, so it changed when the denomination did.)
 static func _paint_cache(img: Image, o: Vector2i, v: int) -> void:
 	_paint_paper(img, o, v)
 	var pal: Array = _PALETTE[K_CACHE]
-	for peg in [5, 10]:
+	for peg in [7]:
 		for y in range(5, 14):
 			for x in range(peg - 1, peg + 1):
 				var c: Color = pal[0]

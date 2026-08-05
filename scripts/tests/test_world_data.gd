@@ -15,7 +15,7 @@ func _sample() -> WorldData:
 	wd.world_name = "Test World"
 	wd.cell_size = 64.0
 	wd.start_region = "a"
-	wd.anchor_capacity = 6
+	wd.starting_hands = ["swift", "patient"]
 	wd.regions = {
 		"a": {
 			"rows": ["....", "####"],
@@ -34,7 +34,7 @@ func test_round_trip_through_dict():
 	copy.from_dict(wd.to_dict())
 	assert_eq(copy.world_id, "t", "id survives")
 	assert_eq(copy.start_region, "a", "start region survives")
-	assert_eq(copy.anchor_capacity, 6, "the anchor allowance survives")
+	assert_eq(copy.starting_hands, ["swift", "patient"], "the starting hands survive")
 	assert_almost_eq(copy.cell_size, 64.0, 0.001, "cell size survives")
 	assert_eq((copy.regions["a"]["rows"] as Array).size(), 2, "rows survive")
 	assert_eq(copy.regions["a"]["spawn"], Vector2(1.5, 0.5), "spawn survives as a Vector2")
@@ -102,11 +102,47 @@ func test_shipped_world_loads():
 	assert_eq(wd.regions.size(), 2, "two regions ship")
 
 
-func test_shipped_world_starts_you_with_whole_folds():
+func test_shipped_world_starts_you_with_a_full_pair():
 	var wd := WorldData.load_from(WORLD_PATH)
-	assert_gt(wd.anchor_capacity, 0, "the world hands the player a starting allowance")
-	assert_eq(wd.anchor_capacity % AnchorStock.COST_PER_FOLD, 0,
-		"an odd allowance would leave a permanently unusable anchor")
+	var slots := wd.starting_hand_slots()
+	assert_eq(slots.size(), AnchorStock.SLOTS, "one entry per slot, always")
+	assert_eq(AnchorStock.held_count(slots), AnchorStock.SLOTS,
+		"the shipped world starts you able to make exactly one fold")
+
+
+func test_starting_hand_slots_pads_and_truncates():
+	var wd := WorldData.new()
+	wd.starting_hands = []
+	assert_eq(wd.starting_hand_slots(), [null, null], "an empty list starts you empty-handed")
+	wd.starting_hands = ["swift"]
+	assert_eq(wd.starting_hand_slots(), [HandTypes.SWIFT, null], "a short list leaves slots empty")
+	wd.starting_hands = ["plain", "plain", "plain", "plain"]
+	assert_eq(wd.starting_hand_slots().size(), AnchorStock.SLOTS,
+		"hands you could not hold are dropped rather than overflowing")
+
+
+func test_starting_hand_keys_resolve_and_typos_fall_back():
+	var wd := WorldData.new()
+	wd.starting_hands = ["patient", "nonsense"]
+	assert_eq(wd.starting_hand_slots(),
+		[HandTypes.PATIENT, HandTypes.PLAIN],
+		"a typo yields an ordinary hand rather than a broken one")
+
+
+func test_shipped_caches_name_a_real_hand_kind():
+	var wd := WorldData.load_from(WORLD_PATH)
+	var named := 0
+	for id in wd.regions:
+		var base := wd.build_base(id)
+		for t in base.tiles:
+			if t.type != TileTypes.ANCHOR_CACHE:
+				continue
+			var key := str(t.data.get("hand", ""))
+			assert_ne(key, "", "cache at %s in %s says which hand it holds" % [t.grid_position, id])
+			assert_true(HandTypes.is_registered(HandTypes.from_name(key)),
+				"cache at %s names a real kind (%s)" % [t.grid_position, key])
+			named += 1
+	assert_gt(named, 0, "at least one cache ships")
 
 
 func test_shipped_world_places_anchor_caches():

@@ -23,11 +23,12 @@ Three things make it a metroidvania rather than a puzzle game:
 - **Progression is knowledge and configuration**, not keys. A door folded shut is a
   door you jammed; unfolding is the key you already had.
 
-**Anchors are finite and conserved.** You carry a countable number of them, and a
-fold standing in the world is holding two — so the budget is how many folds may
-stand *at once*, not how many you may ever make. Unfolding refunds in full. This is
-what makes "configuration" a real currency: you cannot take your bridge with you.
-See §"The anchor economy".
+**You fold with HANDS, and you have two.** A hand is an object you carry, not an
+ability you have; a fold standing in the world is holding the two hands you pinned it
+with, and unfolding gives those same two back. Two slots, never more — so the budget
+is how many folds may stand *at once*, and that is one until you find another hand.
+This is what makes "configuration" a real currency: you cannot take your bridge with
+you. See §"The hand economy".
 
 ---
 
@@ -117,7 +118,8 @@ instead.
 | Derived fragments / queryable state | `scripts/model/FoldedPiece.gd`, `FoldedState.gd` |
 | **Base ↔ derived point transport** | `scripts/model/BaseFrame.gd` |
 | What a tile IS and DOES (the registry) | `scripts/model/TileTypes.gd` |
-| **The anchor ledger** (conservation arithmetic) | `scripts/model/AnchorStock.gd` |
+| **The hand registry** (one file per kind) | `scripts/model/HandTypes.gd` |
+| **The slot ledger** (conservation arithmetic) | `scripts/model/AnchorStock.gd` |
 | Entities that ride tiles through folds | `scripts/model/Occupants.gd` |
 | Fold-on-enter cascade | `scripts/model/TriggerResolver.gd` |
 | Authored world (regions, doors, folds) | `scripts/model/WorldData.gd` |
@@ -127,7 +129,8 @@ instead.
 | **The game**: regions, subspaces, doors, input | `scripts/world/FoldWorld.gd` |
 | Pure world logic (maps, seams, depenetration) | `scripts/world/WorldCore.gd` |
 | Player physics body | `scripts/world/PlayerBody.gd` |
-| Anchors, previews, seam markers | `scripts/world/WorldOverlay.gd` |
+| Anchors, previews, seam markers, the fuse pulse | `scripts/world/WorldOverlay.gd` |
+| The hands that float beside you (style only) | `scripts/world/HandOrbit.gd` |
 | How big an art pixel is | `scripts/world/PixelArt.gd` |
 | The tileset: kinds, variants, base-space UVs | `scripts/world/TileAtlas.gd` |
 | Lit materials, light uniforms, lamp glyphs | `scripts/world/LightRig.gd` |
@@ -162,18 +165,22 @@ rule, applied at every level — world, strip, interior.
 ### 5. Never compare floats with `==`
 Use `GeometryCore.EPSILON`.
 
-### 6. The anchor ledger is derived, never stored
-`AnchorStock` computes; it does not remember. Free anchors are
-`capacity - held-by-live-folds - pinned-but-uncommitted`, with `held` summed from
-`Fold.held_anchors` across every live fold list. That is why unfolding refunds with
-no bookkeeping: the fold leaves the list and stops being counted. **Never add a
-"spent anchors" counter** — it would be a second source of truth that can drift
-from the fold list, which is the same mistake as caching derived fold state.
+### 6. The hand ledger is derived, never stored
+`AnchorStock` computes; it does not remember. A hand is only ever in one of three
+places — your slots (`FoldWorld.hands`), pinned but uncommitted (the two pending
+anchors), or held by a standing fold (`Fold.held_hands`) — and every number is summed
+from where the hands actually are. That is why unfolding gives them back with no
+bookkeeping: the fold leaves the list and stops being counted. **Never add a "hands
+spent" counter** — it would be a second source of truth that can drift from the fold
+list, which is the same mistake as caching derived fold state.
 
-Capacity is the one accumulating part: authored start (`WorldData.anchor_capacity`)
-plus every collected cache's grant. Player folds hold `COST_PER_FOLD`; folds the
-*world* makes — authored pre-folds and trigger folds — hold zero.
+A fold stores the KINDS it took, not just how many, because unfolding has to return
+the same two hands that went in. Player folds hold two; folds the *world* makes —
+authored pre-folds and trigger folds — hold none.
 
+`_hands_for_fold` is the one place hands leave your slots, and it must be called
+**late**, at the point of no return: a fold refused for a pin in its span must not
+have cost you the hands it never took.
 
 ### 7. Anything in the world is an occupant, resolved through `BaseFrame`
 Doors and lights have no world position. They store a base identity plus a point
@@ -185,35 +192,43 @@ world position and try to keep it up to date through folds.
 
 ---
 
-## The anchor economy
+## The hand economy
 
-| Where an anchor can be | How it gets there | How it comes back |
+| Where a hand can be | How it gets there | How it comes back |
 |---|---|---|
-| Your pocket | start of the world; an anchor cache | — |
-| A pending slot | tap F pointing at a cell (charged immediately) | hold F |
-| A standing fold | committing tap (takes the two pending ones) | hold F at its seam |
+| One of your two slots | the world's `starting_hands`; a cache, if a slot is free | — |
+| Pinned as an anchor | tap F pointing at a cell (leaves the slot at once) | hold F |
+| Held by a standing fold | the fuse going off | hold F at its seam |
 
-**One key, two directions.** Tap = push an anchor in (pin, pin, commit). Hold =
-pull one back out (your own anchor, the fold under a seam diamond, or a subspace's
-glue diamond). The input mirrors the economy on purpose.
+**One key, two directions.** Tap puts a hand down; hold takes one back. There is no
+committing press — the second hand lights a **fuse** and the pair folds itself. The
+input mirrors the economy on purpose.
 
 Consequences worth keeping in mind when designing:
 
+- **Two slots, and that never grows.** A cache does not raise a capacity; it hands
+  you *another hand* for a slot you emptied by placing one. So a cache is the second
+  half of a fold already in progress, and the natural way to use one is to finish a
+  fold with a kind you did not set out with.
 - **Traversal is nearly free; configuration is not.** Fold a pit shut, walk across
-  the seam, unfold behind you — you keep the anchors and you are across. What costs
-  you is a fold you must *leave standing*: a wall folded away, a chamber you are
-  inside, a door jammed shut.
-- **There is no remote unfold** — `hold` requires you to be at the seam. This was a
-  deliberate choice over a recall key, and it means **you can strand yourself**:
-  last anchors spent, seam unreachable, `R` the only way out. `R` is built to be
-  usable for that — it drops every fold (so every anchor comes back) and **keeps
-  your collected caches**, because an escape hatch that confiscates what you found
-  is a punishment for using it. It still costs you your position and your fold
-  configuration; save points are the real answer and do not exist yet. Do not paper
-  over any of this with a recall key without a design conversation.
-- **A cache folded away is not lost.** It is inside the fold, and collecting it in
-  there counts — `_check_caches` runs at world level and in subspaces alike.
-
+  the seam, unfold behind you — you keep the hands and you are across. What costs you
+  is a fold you must *leave standing*.
+- **Unfolding can be refused for want of room.** A fold returns both hands at once,
+  so a spare you are carrying blocks reclaiming it until you put one down. This is a
+  real constraint, not an oversight. The richer alternative — dropping the overflow
+  into the world as a fresh pickup — was left unbuilt deliberately.
+- **A kind only changes the fuse.** Colour is identity, `HandTypes.fuse` is the whole
+  of the behaviour, and a mixed pair fuses at the MEAN of its two. If you give kinds a
+  second behaviour, that is a design change; do it in `HandTypes` and nowhere else.
+- **There is no remote unfold** — `hold` requires you to be at the seam. It means
+  **you can strand yourself**: both hands in a fold, seam unreachable, and short of a
+  cache, `R` the only way out. `R` drops every fold and restores your starting pair,
+  which is exactly why caches respawn with it: hands are what a reset gives back, so
+  leaving the caches spent would strand you *shorter* than you began. Save points are
+  the real answer and do not exist yet. Do not paper over any of this with a recall
+  key without a design conversation.
+- **The floating hands are style.** `HandOrbit` springs them beside the body and
+  nothing reads their positions back. Do not make them load-bearing without saying so.
 
 ---
 
@@ -268,14 +283,16 @@ These are live, not settled. Do not close them silently in a refactor.
   splice folds into an interior list mid-cascade; the resolver does not model that.
 - **Unfold animation** plays only for newest-fold unfolds at world level; mid-stack
   unfolds are instant.
-- **Anchor scarcity is not yet tuned.** The shipped allowance (4 = two standing
-  folds) and the cache grant (2) are first guesses; the west beats were authored
-  before anchors were finite. Whether scarcity makes the world feel considered or
-  merely fussy is a playtesting question, not an editing one.
+- **Hand scarcity and the fuse lengths are not yet tuned.** Two slots, and fuses of
+  0.65 / 1.6 / 3.2 seconds, are first guesses; the west beats were authored when
+  folding was free and instant. Whether the fuse reads as deliberate pacing or as the
+  game taking the decision away from you is a playtesting question.
+- **A kind changes only the fuse.** Whether that is enough to make picking up a
+  colour feel like a choice, or whether kinds want a second axis, is open.
 - **Cache collection is state outside `(base, folds)`** — `FoldWorld.collected_caches`,
-  region id -> {base_id: grant}. It is PLAYER progression, not world state, which is
-  why it lives outside `regions` and survives `_setup_all` (and therefore `R`). It is
-  the first thing that will need the save system to outlive a session.
+  region id -> {base_id: kind}. It lives outside `regions` so a region rebuild cannot
+  silently clear it, and `_reset` clears it deliberately. It is the first thing that
+  will need the save system to outlive a session.
 - **Lights do not cast shadows.** Occluders would have to be re-derived per fold,
   and they would want to soften the seam — which is the one thing the art is
   currently committed to keeping hard.

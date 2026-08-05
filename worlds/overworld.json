@@ -3,7 +3,6 @@
 	"world_name": "Overworld",
 	"cell_size": 64.0,
 	"start_region": "west",
-	"anchor_capacity": 4,
 	"regions": {
 		"west": {
 			"rows": [
@@ -30,7 +29,14 @@
 				"x": 4.5,
 				"y": 12.5
 			},
-			"tile_data": {},
+			"tile_data": {
+				"24,6": {
+					"hand": "swift"
+				},
+				"34,13": {
+					"hand": "patient"
+				}
+			},
 			"folds": [],
 			"lights": [
 				{
@@ -102,6 +108,9 @@
 							9
 						]
 					]
+				},
+				"14,9": {
+					"hand": "swift"
 				}
 			},
 			"folds": [
@@ -177,6 +186,10 @@
 		}
 	},
 	"metadata": {
-		"note": "West carries the four authored fold beats. East's right wing (base x>=20) teaches pins and fold triggers. Anchor caches ('A') sit behind beats, never in front of them: the pillar top (24,6) pays for the vertical climb fold, the sealed chamber (33,13) pays its way back out after the diagonal bite, and (14,9) in east sits INSIDE the shipped pre-fold, reachable only through door W1."
-	}
+		"note": "West carries the four authored fold beats. East's right wing (base x>=20) teaches pins and fold triggers. Hand caches ('A') sit behind beats, never in front of them: the pillar top (24,6) is a SWIFT hand, the sealed chamber (34,13) a PATIENT one, and (14,9) in east sits INSIDE the shipped pre-fold, reachable only through door W1. A cache gives ONE hand into an empty slot, so it is the second half of a fold you have already started."
+	},
+	"starting_hands": [
+		"plain",
+		"plain"
+	]
 }

@@ -30,11 +30,14 @@ extends Resource
 ## Region id the player spawns in.
 @export var start_region: String = ""
 
-## Anchors the player starts the world carrying (see `AnchorStock`). A standing fold
-## holds two, so this is the number of folds that may be left standing before any cache
-## is found. NOT the old per-level fold budget: it is carried, world-wide, and refunded
-## in full by unfolding.
-@export var anchor_capacity: int = 4
+## The hands the player starts the world holding, as `HandTypes` authoring keys —
+## e.g. `["plain", "plain"]`. One entry per filled slot; fewer than `AnchorStock.SLOTS`
+## entries starts you short-handed, which is a legitimate thing for a world to do.
+## Entries beyond `SLOTS` are ignored, since you cannot hold them.
+##
+## This is not a capacity: the number you can hold is fixed (`AnchorStock.SLOTS`).
+## What a world chooses here is which KINDS you set out with.
+@export var starting_hands: Array = ["plain", "plain"]
 
 ## region id -> {
 ##   "rows":      Array[String],  ASCII terrain (see WorldCore.CHARS)
@@ -80,7 +83,7 @@ func to_dict() -> Dictionary:
 		"world_name": world_name,
 		"cell_size": cell_size,
 		"start_region": start_region,
-		"anchor_capacity": anchor_capacity,
+		"starting_hands": starting_hands.duplicate(),
 		"regions": out_regions,
 		"doors": out_doors,
 		"metadata": metadata,
@@ -92,7 +95,9 @@ func from_dict(dict: Dictionary) -> void:
 	world_name = dict.get("world_name", "")
 	cell_size = float(dict.get("cell_size", 64.0))
 	start_region = dict.get("start_region", "")
-	anchor_capacity = int(dict.get("anchor_capacity", 4))
+	starting_hands = []
+	for key in dict.get("starting_hands", ["plain", "plain"]):
+		starting_hands.append(String(key))
 	metadata = dict.get("metadata", {})
 
 	regions = {}
@@ -190,6 +195,16 @@ func fold_pairs(id: String) -> Array:
 			Vector2i(int(a.get("x", 0)), int(a.get("y", 0))),
 			Vector2i(int(b.get("x", 0)), int(b.get("y", 0))),
 		])
+	return out
+
+
+## The starting hands as a slot array: `HandTypes` ids, one entry per slot, `null`
+## where the world starts you empty-handed. Always exactly `AnchorStock.SLOTS` long,
+## so callers never have to think about a short or over-long authored list.
+func starting_hand_slots() -> Array:
+	var out: Array = AnchorStock.empty_slots()
+	for i in range(mini(starting_hands.size(), out.size())):
+		out[i] = HandTypes.from_name(String(starting_hands[i]))
 	return out
 
 

@@ -28,11 +28,14 @@ class_name Fold extends Resource
 ## Symbolic tag for trigger-created folds (F3); "" for ordinary player folds.
 @export var channel: String = ""
 
-## How many of the PLAYER'S anchors this fold is holding (see `AnchorStock`). Two for
-## a fold the player committed, zero for folds the world made — authored pre-folds and
-## trigger folds are anchored by the world, not out of your pocket. Unfolding refunds
-## this implicitly: the fold leaves the list and its anchors stop being counted.
-@export var held_anchors: int = 0
+## The PLAYER'S hands this fold is holding, as `HandTypes` ids (see `AnchorStock`).
+## Two for a fold the player pinned, EMPTY for folds the world made — authored
+## pre-folds and trigger folds are anchored by the world, not out of your hands.
+##
+## Their kinds are kept, not just their number, because unfolding must give back the
+## same two hands that went in: a fold pinned with a swift and a patient hand returns
+## one of each, not two anonymous ones.
+@export var held_hands: Array[int] = []
 
 @export var anchor_a: Vector2i = Vector2i.ZERO   # ordered: lexicographic min (y,x)
 @export var anchor_b: Vector2i = Vector2i.ZERO

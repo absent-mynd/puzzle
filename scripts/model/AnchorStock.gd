@@ -2,43 +2,93 @@ class_name AnchorStock extends RefCounted
 
 ## AnchorStock
 ##
-## Pure accounting for the anchors the player carries.
+## The ledger of HANDS — where each one is, and whether there is room for another.
 ##
-## An anchor is an OBJECT, not an ability. You carry a finite number of them, and a
-## fold that is standing in the world is holding two of yours — the seam diamond is
-## where they went. So the budget is not "how many folds may you ever make" but
-## **how many folds may stand at once**: you cannot take your bridge with you.
+## A hand is an object you carry (see `HandTypes`). You have exactly `SLOTS` of them,
+## and a hand is only ever in one of three places:
 ##
-## The quantity is CONSERVED. Anchors are never destroyed, only committed:
+##     your slots  ←→  pinned but uncommitted  ←→  held by a standing fold
 ##
-##     free = capacity - held-by-live-folds - pinned-but-uncommitted
+## Nothing here is stored as a balance. Slot contents live on the world as an array,
+## committed hands are read off `Fold.held_hands`, and the pending pair is read off the
+## two anchor slots — so unfolding gives hands back by simply removing the fold, with
+## no bookkeeping of its own. A separate "hands spent" counter would be a second source
+## of truth that could drift from the fold list.
 ##
-## Nothing here is stored. `held` is summed from the live fold lists and `pending`
-## from the two anchor slots, so the ledger is derived from `(base, folds)` +
-## the pending pair exactly like every other piece of state in this project.
-## Unfolding refunds automatically, because the fold leaves the list.
+## The number you can hold never grows. This is not a capacity you upgrade: pickups in
+## the world hand you *another hand* for a slot you have emptied, and what a pickup
+## changes is which KINDS you are carrying, not how many. That is why unfolding can be
+## refused — two hands are coming back and there may not be room for them.
 ##
-## CAPACITY is the only part that accumulates: a world's authored starting capacity
-## plus the grant of every anchor cache collected so far. Since anchors are never
-## spent-to-nothing, "granting anchors" and "raising capacity" are the same act — a
-## cache is permanently one more fold you may leave standing.
-##
-## Kernel: no world/view references. `held_in` takes plain arrays of Folds.
+## Kernel: no world/view references. A "hands" array is plain data — one entry per
+## slot, either a `HandTypes` id or `null` for empty.
 
-## Anchors a committed fold holds. Two, because a fold is two pinned points; a fold
-## is never partially paid for.
-const COST_PER_FOLD := 2
+## How many hands you can hold at once. Two, because a fold is two pinned points: you
+## can always assemble exactly one fold from a full pair, and never bank a spare one.
+const SLOTS := 2
+
+## Hands a fold takes. A fold is two pinned points and is never partially paid for.
+const HANDS_PER_FOLD := 2
 
 
-## Anchors held by one fold list.
+## An empty pair of slots, for starting a world.
+static func empty_slots() -> Array:
+	var out: Array = []
+	for _i in range(SLOTS):
+		out.append(null)
+	return out
+
+
+## How many slots have a hand in them.
+static func held_count(hands: Array) -> int:
+	var n := 0
+	for h in hands:
+		if h != null:
+			n += 1
+	return n
+
+
+## How many slots are empty — how many hands you could still be given.
+static func free_slots(hands: Array) -> int:
+	return maxi(hands.size() - held_count(hands), 0)
+
+
+## Are you carrying anything to pin with?
+static func has_hand(hands: Array) -> bool:
+	return held_count(hands) > 0
+
+
+## Index of the first empty slot, or -1. Where an incoming hand goes.
+static func first_empty(hands: Array) -> int:
+	for i in range(hands.size()):
+		if hands[i] == null:
+			return i
+	return -1
+
+
+## Index of the first slot holding a hand, or -1. Which hand you pin with next.
+static func first_held(hands: Array) -> int:
+	for i in range(hands.size()):
+		if hands[i] != null:
+			return i
+	return -1
+
+
+## Is there room for `n` hands coming back at once? Gates unfolding: a fold returns
+## `HANDS_PER_FOLD` hands, and hands that will not fit have nowhere to go.
+static func can_receive(hands: Array, n: int) -> bool:
+	return free_slots(hands) >= n
+
+
+## Hands held by one fold list.
 static func held_by(folds: Array) -> int:
 	var total := 0
 	for f in folds:
-		total += f.held_anchors
+		total += f.held_hands.size()
 	return total
 
 
-## Anchors held across several fold lists (regions, and each fold's interiors).
+## Hands held across several fold lists (regions, and each fold's interiors).
 static func held_in(fold_lists: Array) -> int:
 	var total := 0
 	for list in fold_lists:
@@ -46,22 +96,8 @@ static func held_in(fold_lists: Array) -> int:
 	return total
 
 
-## Anchors in hand. Clamped at zero: a fold list may be seeded with more held
-## anchors than the capacity accounts for (authored state, tests driving `do_fold`
-## directly), and a negative count in hand is not a thing the player can have.
-## (Named `available` rather than `free` — `free` is `Object.free()`.)
-static func available(capacity: int, held: int, pending: int) -> int:
-	return maxi(capacity - held - pending, 0)
-
-
-## Can one more anchor be pinned?
-static func can_pin(capacity: int, held: int, pending: int) -> bool:
-	return available(capacity, held, pending) >= 1
-
-
-## Starting capacity plus every collected cache's grant.
-static func capacity_with(base_capacity: int, grants: Array) -> int:
-	var total := base_capacity
-	for g in grants:
-		total += int(g)
-	return maxi(total, 0)
+## Every hand that exists, wherever it is. Conservation is stated here rather than
+## enforced: placing, committing and unfolding must all leave this unchanged, and only
+## picking one up may raise it.
+static func total(hands: Array, pending: int, fold_lists: Array) -> int:
+	return held_count(hands) + pending + held_in(fold_lists)

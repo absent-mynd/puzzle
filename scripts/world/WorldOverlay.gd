@@ -60,6 +60,21 @@ func _copy_offsets() -> Array:
 ## stacking two markers there would draw the buried fold's refusal over the free
 ## fold's invitation. `world.seam_markers()` resolves the cell the same way F
 ## does. See FoldWorld.aimed_fold.
+## The fuse, as a 0..1 throb. Frequency ramps with how far through the fuse we are,
+## so the pair beats slowly when it is just lit and flutters when it is about to go.
+## Returns 0 when no fuse is running, which switches the pulse off entirely rather
+## than leaving the rings breathing at rest.
+func _fuse_pulse() -> float:
+	if not world.fuse_running():
+		return 0.0
+	var p: float = world.fuse_progress()
+	var hz: float = lerpf(2.2, 11.0, p * p)
+	var wave := 0.5 - 0.5 * cos(Time.get_ticks_msec() / 1000.0 * hz * TAU)
+	# Deepen the swing as well as quickening it: late pulses read as urgent, not
+	# merely fast.
+	return wave * lerpf(0.55, 1.0, p)
+
+
 func _draw_seam_markers() -> void:
 	var cs: float = world.base.cell_size
 	var markers: Dictionary = world.seam_markers()
@@ -123,10 +138,14 @@ func _draw_anchor_and_preview(offsets: Array) -> void:
 	if aimed != null:
 		aimed_center = (Vector2(aimed.meeting_pos) + Vector2(0.5, 0.5)) * cs
 
-	# The aim ring reddens when you have no anchor left to pin — the limit is
-	# visible on the cell you are pointing at, before you press anything.
-	var out_of_anchors: bool = not world.can_pin_anchor() and world.pending_b == null
-	var aim_col := Color("e06a6a", 0.55) if out_of_anchors else Color(1, 1, 1, 0.30)
+	# The aim ring takes the colour of the hand you would put down, so you can see
+	# what kind of fold you are about to start before you start it — and reddens when
+	# you have no hand to place at all.
+	var next_hand: int = world.next_hand_type()
+	var aim_col := Color("e06a6a", 0.55)
+	if next_hand >= 0:
+		aim_col = HandTypes.color(next_hand)
+		aim_col.a = 0.45
 	# A hold in progress fills a ring: the two gestures are distinguishable while
 	# the key is still down, so a hold never lands as a surprise.
 	var hold: float = world.hold_progress()
@@ -139,28 +158,38 @@ func _draw_anchor_and_preview(offsets: Array) -> void:
 			draw_arc(cand_center + off, 23.0, -PI / 2.0, -PI / 2.0 + TAU * hold, 32,
 				Color("ffd27f"), STROKE)
 
-	# The two pending anchor slots (first tap orange, second blue), with soft axis
-	# guides — folds may be diagonal; guides just help line up straight ones.
-	var colors: Array = [Color("ff9d5c"), Color("5cc8ff")]
+	# The placed hands, each drawn in its OWN kind's colour — a mixed pair is legible
+	# as a mixed pair — with soft axis guides (folds may be diagonal; the guides just
+	# help line up straight ones).
+	#
+	# Once both are down they PULSE, and the pulse is the fuse: it starts as a slow
+	# breath and winds up to a flutter as the fold comes due. Nothing tells you the
+	# number of seconds, because the thing worth reading is "how long have I got",
+	# and a quickening beat says that better than a countdown does.
 	var centers: Array = [null, null]
+	var pulse := _fuse_pulse()
 	for i in range(2):
 		var cell = world.pending_cell(i)
 		if cell == null:
 			continue
+		var entry = world.pending_slot(i)
+		var col: Color = HandTypes.color(int(entry["hand"])) if entry != null else Color.WHITE
 		var c: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
 		centers[i] = c
 		var guide := Color(1, 1, 1, 0.08)
 		draw_line(Vector2(0, c.y), Vector2(world_px.x, c.y), guide, HAIR)
 		draw_line(Vector2(c.x, 0), Vector2(c.x, world_px.y), guide, HAIR)
 		for off in offsets:
-			draw_arc(c + off, 16.0, 0, TAU, 24, colors[i], STROKE)
+			draw_arc(c + off, 16.0 + pulse * 5.0, 0, TAU, 24, col, STROKE)
+			if pulse > 0.0:
+				draw_circle(c + off, 3.0 + pulse * 2.5, col)
 
 	if centers[0] == null or centers[1] == null:
 		return
 	if not WorldCore.anchors_valid(world.pending_cell(0), world.pending_cell(1)):
 		return
 	# Translucent band between the two crease lines: a parallelogram spanning
-	# well past the view, at whatever angle the anchor pair implies. F commits.
+	# well past the view, at whatever angle the anchor pair implies. It folds itself.
 	var a_center: Vector2 = centers[0]
 	var b_center: Vector2 = centers[1]
 	var band := Color(0.95, 0.25, 0.3, 0.22)

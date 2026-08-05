@@ -24,53 +24,78 @@ and `WorldCore.CHARS` for the terrain characters.
 | A/D or ←/→ | move (also sets your facing) |
 | Space | jump |
 | hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
-| **tap F** | pin **anchor 1** (orange), then **anchor 2** (blue), then **commit** the pair as a fold |
-| **hold F** | **pull back**: your own anchor if you point at it, the fold under a seam diamond, the subspace's white glue diamond (exit) — or, pointing at nothing, your last anchor |
+| **tap F** | put a **hand** down on the cell you point at — the second one lights the fuse |
+| **hold F** | **pull back**: your own hand if you point at it, the fold under a seam diamond, the subspace's white glue diamond (exit) — or, pointing at nothing, the last hand you placed |
 | R | reset |
 
-One key, two directions. **Tap pushes an anchor in; hold pulls one back out.**
-That is the whole verb, and it is the whole economy too — see below. A filling
-amber ring around the cell you point at shows a hold building, so the two
-gestures are never ambiguous while the key is still down.
+One key, two directions. **Tap puts a hand down; hold takes one back.** There is
+no committing press: put both hands down and the fold goes off by itself.
 
-Anchor placement is **embodied**: both anchors must be pinned from somewhere
-you can stand (or jump — mid-air placement works), so folding is gated by
-reachability. Placement and commitment are separate acts: pin both anchors,
-then choose where to be standing before the committing tap — inside the red
-band to be folded in, outside it to ride a flap. Anchors must be 2+ tiles
-apart in any direction (off-axis pairs make diagonal creases); a second anchor
-placed too close to the first is refused *when you place it*, because the next
-tap would otherwise be a commit that cannot fire.
+Anchor placement is **embodied**: both hands must be placed from somewhere you
+can stand (or jump — mid-air placement works), so folding is gated by
+reachability. Where you are standing when the fuse runs out is what decides
+your fate — inside the red band to be folded in, outside it to ride a flap.
+Hands must be 2+ tiles apart in any direction (off-axis pairs make diagonal
+creases); a second hand placed too close to the first is refused *when you
+place it*.
 
-There is **no remote unfold**. The anchors in a fold are exactly where you left
+There is **no remote unfold**. The hands in a fold are exactly where you left
 them, so getting them back means walking to its seam diamond and holding.
 
-## Anchors are a resource
+## Hands
 
-An anchor is an **object you carry**, not an ability you have. A fold standing
-in the world is holding two of yours — the seam diamond is where they went.
+A hand is an **object you carry**, not an ability you have. You have **two
+slots**, and that never grows. A fold standing in the world is holding the two
+hands you pinned it with — the seam diamond is where they went.
 
-- Your allowance is `anchor_capacity` in `worlds/overworld.json` (4 = two folds).
-- Pinning charges one **immediately**; the HUD count drops as you place.
-- Committing charges nothing more — the fold takes the same two anchors you
-  already pinned.
-- **Unfolding refunds in full.** Nothing is ever destroyed, only committed.
-- Out of anchors? The aim ring turns red and taps stop pinning.
+They float beside you as small circles, springing and trailing as you move.
+That is style, not a mechanic: nothing reads their positions. What they tell
+you is how many you have and what **kind** they are.
 
-So the budget is not *how many folds may you ever make* but **how many folds
-may stand at once**. Crossing a pit costs nothing permanent: fold it, walk
-across the seam, unfold behind you, keep your anchors. What costs you is a fold
-you must **leave standing** — a wall folded away, a chamber you are inside, a
-door jammed shut. You cannot take your bridge with you.
+- Placing a hand takes it out of its slot **immediately**.
+- Placing the second lights the **fuse**. Both hands pulse, slowly at first and
+  faster as the fold comes due, then it folds. No press commits it.
+- **Pulling a hand back defuses the pair** and returns it to a slot.
+- **Unfolding gives back the same two hands that went in** — kinds and all.
+- Unfolding is **refused if there is no room**: a fold returns two hands at
+  once, so a spare you are carrying has to go down first.
 
-**Anchor caches** (`A`, orange tiles) raise the ceiling permanently by 2 —
-one more fold left standing, for good. Because anchors are conserved rather
-than spent, granting anchors and raising capacity are the same act. A cache
-that got folded away is not lost: it is inside the fold, and collecting it in
-there counts. Collected caches stay in the world as dimmed husks.
+So the budget is not how many folds you may ever make but **how many folds may
+stand at once** — and with two slots, that is one, until you find more hands.
+Crossing a pit still costs nothing permanent: fold it, walk across the seam,
+unfold behind you, keep your hands.
 
-`AnchorStock` owns the arithmetic and stores nothing: held anchors are summed
-from the live fold lists, so unfolding refunds simply by removing the fold.
+### Kinds
+
+Hands come in kinds, told apart by **colour**, and a kind changes the **fuse**
+of the fold it makes:
+
+| Kind | Colour | Fuse |
+|---|---|---|
+| `plain` | orange | 1.6s |
+| `swift` | cyan | 0.65s |
+| `patient` | violet | 3.2s |
+
+A fold may be pinned with **two different kinds**, and its fuse is the mean of
+the two — so a mixed pair lands genuinely between its parents rather than being
+decided by one of them. That is what makes mixing a decision.
+
+### Caches
+
+**Hand caches** (`A`) give you **one hand**, into one free slot, and the tile is
+tinted the colour of the kind it holds. A slot is free because you *put a hand
+down* — so a cache is not a stockpile you raid on the way past, it is the second
+half of a fold you have already started:
+
+> place a hand → walk to a cache → take a different kind → place that → the fold
+> you finish is not the fold you would have made with the pair you set out with.
+
+Walk over a cache with both hands full and it stays where it is, waiting. A
+cache folded away is not lost: it is inside the fold, and taking it in there
+counts. Spent caches stay as dimmed husks.
+
+`AnchorStock` owns the arithmetic and stores nothing: committed hands are read
+off the folds themselves, so unfolding gives them back by removing the fold.
 
 Two folds can **meet in the same cell**, and then one diamond stands for both.
 F there acts on the newest fold that can actually come out — not the first in
@@ -176,9 +201,11 @@ pinned and resolve again when you return.
 ## What to try (the beats)
 
 1. **Ride a fold.** Cross the wide pit by folding it away: tap F on one rim, then
-   on the other, then once more to commit. You ride your flap; the seam diamond
-   marks the meeting line. Walk over it, hold F, and you ride the unfold back —
-   and get both anchors back, because you no longer need the pit closed. Also try a
+   on the other. The pair starts pulsing and folds itself — so where you are
+   standing when it goes off is a decision, not a keypress. You ride your flap;
+   the seam diamond marks the meeting line. Walk over it, hold F, and you ride the
+   unfold back — and get both hands back, because you no longer need the pit
+   closed. Also try a
    *vertical* fold (same column): fold the sky down / the floor up to climb —
    this is the gravity-specific verb.
 2. **Get folded in.** Stand *inside* the red preview band and commit the fold:
@@ -200,12 +227,14 @@ pinned and resolve again when you return.
    slanted band across the chamber's corner and bite it off. One of the two
    anchors has to be pinned mid-jump. (Note the fold stays active: unfold it
    from inside and you've sealed yourself in.) This is the beat where the
-   economy bites: being in there means **leaving that fold standing**, so two
-   of your anchors stay in its seam the whole time you are inside. The cache
-   next to the goal pays them back.
-5. **Pay for the climb.** The vertical fold onto the pillar top (beat 1) has a
-   cache waiting at the summit. Folds that open new ground are how you afford
-   the next fold.
+   economy bites: being in there means **leaving that fold standing**, so both
+   your hands are in its seam the whole time you are inside — and the patient
+   hand by the goal is the only one you will have in there.
+5. **Finish a fold with a hand you did not set out with.** Put one hand down, then
+   walk to a cache with the slot it freed: the pillar top has a **swift** hand, the
+   sealed chamber a **patient** one. The pair you finish with fuses at the mean of
+   the two, so the same two cells fold at a different pace depending on what you
+   went and fetched. This is what the colours are for.
 6. **Meet a fold you cannot make, and one you don't have to.** Through door W2,
    in the east region — see the next section.
 7. **Find a cache inside a fold.** Through door W1: you arrive inside east's
@@ -346,21 +375,26 @@ do not want yet.
   splice folds into an interior list mid-cascade, which the resolver does not model.
 - Unanchorable tiles (`_`, `X`) and occupants are supported by the format and covered
   by tests, but the shipped world does not place any yet.
-- **You can strand yourself.** Spend your last anchors on a fold, walk somewhere
-  its seam cannot be reached from, and there is no way back to them but `R` —
-  which drops every fold, hands every anchor back, and keeps the caches you have
-  found. The accepted cost of having no remote unfold; save points are the real
-  answer and do not exist yet.
-- Anchor caches are collected into runtime state (`FoldWorld.collected_caches`) — the
-  one thing tracked that is not `(base, folds)`. `R` keeps them; the session does not.
+- **You can strand yourself.** Put both hands into a fold, walk somewhere its seam
+  cannot be reached from, and short of finding a cache there is no way back to them
+  but `R` — which drops every fold and puts your starting pair back in your hands.
+  The accepted cost of having no remote unfold; save points are the real answer and
+  do not exist yet.
+- Hand caches are tracked in runtime state (`FoldWorld.collected_caches`) — the one
+  thing tracked that is not `(base, folds)`. `R` respawns them along with the world,
+  because your hands are reset too and leaving them spent would strand you short.
 - Lights do not cast shadows, and the seam is not lit specially — see *Art & light*.
 - The player and the overlay markers are drawn unlit, so they never disappear
   into an unlit corner.
 
 ## Files
 
-- `AnchorStock.gd` (kernel) — the anchor ledger: conservation arithmetic, nothing
+- `HandTypes.gd` (kernel) — the hand registry: one file per kind (colour, fuse).
+  Covered by `scripts/tests/test_hand_types.gd`.
+- `AnchorStock.gd` (kernel) — the slot ledger: conservation arithmetic, nothing
   stored. Covered by `scripts/tests/test_anchor_stock.gd`.
+- `HandOrbit.gd` — the circles that float beside you. Presentation only; the spring
+  itself is `WorldCore.spring_step`.
 - `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
   and glue segments, depenetration, anchor/fold eligibility, camera zoom and
   lookahead). Covered by `scripts/tests/test_world_core.gd`.

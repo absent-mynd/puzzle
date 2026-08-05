@@ -245,6 +245,43 @@ static func depenetrate(center: Vector2, radius: float, solids: Array) -> Vector
 # constraints are a minimum Euclidean gap (so the strip is substantial) and the
 # registry's per-type anchor/fold eligibility.
 
+# ---------------------------------------------------------------------------
+# Spring follow (the hands that float beside you)
+# ---------------------------------------------------------------------------
+
+## One step of a critically-damped-ish spring toward `target`. Returns
+## {"pos": Vector2, "vel": Vector2}.
+##
+## Used for the hands orbiting the player: they lag, overshoot and settle, which is
+## the whole point of them — they are style, not a mechanic, and nothing reads them
+## back. Semi-implicit Euler (velocity first, then position) because it stays stable
+## at the stiffnesses that look lively; explicit Euler visibly gains energy there.
+##
+## `delta` is clamped: a long frame (a fold's rebuild, a breakpoint) must not fling a
+## hand across the map, and a spring integrated in one huge step does exactly that.
+static func spring_step(pos: Vector2, vel: Vector2, target: Vector2,
+		stiffness: float, damping: float, delta: float) -> Dictionary:
+	var dt := clampf(delta, 0.0, 1.0 / 30.0)
+	var next_vel := vel + (target - pos) * stiffness * dt
+	next_vel -= next_vel * clampf(damping * dt, 0.0, 1.0)
+	return {"pos": pos + next_vel * dt, "vel": next_vel}
+
+
+## Where a hand in slot `index` of `count` wants to sit relative to the body.
+##
+## Hands ride slightly above and to either side, and TRAIL the motion: the offset is
+## pushed back against `motion`, so running left leaves them strung out to the right.
+## That is what makes them read as carried objects rather than pinned decorations.
+static func hand_orbit_offset(index: int, count: int, facing: int, motion: Vector2,
+		radius: float) -> Vector2:
+	var span := maxi(count, 1)
+	# Spread the slots over an arc centred above the body: one hand sits dead
+	# overhead, two straddle it.
+	var t := (float(index) - float(span - 1) * 0.5)
+	var angle := -PI * 0.5 + t * 0.72 * (1.0 if facing >= 0 else -1.0)
+	return Vector2(cos(angle), sin(angle)) * radius - motion * 0.06
+
+
 static func anchors_valid(a: Vector2i, b: Vector2i) -> bool:
 	if a == b:
 		return false

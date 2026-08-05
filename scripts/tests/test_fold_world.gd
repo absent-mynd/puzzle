@@ -55,21 +55,22 @@ func test_pinch_applies_fold_for_real_and_exit_restores() -> void:
 		"Moving inside the fold moved you in the world")
 
 
-func test_one_key_pins_pins_then_commits() -> void:
+func test_one_key_places_both_hands_and_the_fuse_does_the_rest() -> void:
 	# Player spawns in cell (4,12); reach is the adjacent cell, facing right.
 	world.tap_action(Vector2i(1, 0))
-	assert_eq(world.pending_cell(0), Vector2i(5, 12), "First tap pins anchor 1 on the aimed cell")
-	assert_eq(world.pending_cell(1), null, "...and only anchor 1")
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "First tap puts a hand on the aimed cell")
+	assert_eq(world.pending_cell(1), null, "...and only the one")
 
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))
-	assert_eq(world.pending_cell(1), Vector2i(9, 12), "Second tap pins anchor 2")
-	assert_eq(world.folds.size(), 0, "Placement alone never commits")
+	assert_eq(world.pending_cell(1), Vector2i(9, 12), "Second tap puts the other one down")
+	assert_eq(world.folds.size(), 0, "Placing does not fold")
+	assert_true(world.fuse_running(), "...it lights the fuse")
 
-	world.tap_action(Vector2i(0, -1))
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	assert_eq(world.mode, world.Mode.SUBSPACE,
-		"The third tap commits, and the player inside the band is folded in")
-	assert_eq(world.pending_a, null, "Pendings clear on commit")
+		"The fuse folds it, and the player inside the band is folded in")
+	assert_eq(world.pending_a, null, "The hands went from the anchors into the fold")
 
 
 func test_a_too_close_second_anchor_is_refused_at_placement() -> void:
@@ -88,16 +89,24 @@ func test_holding_at_a_seam_anchor_unfolds_that_fold() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))  # seam anchor at (24,12)
 	assert_eq(world.folds.size(), 1, "Fold active")
 	world.player.teleport(Vector2(23.5 * CS, 12.5 * CS), false)
+	world.hands[0] = HandTypes.PLAIN                # as if picked up from a cache
 
 	world.tap_action(Vector2i(1, 0))                # aimed at the seam diamond
-	assert_eq(world.folds.size(), 1, "A TAP at a seam does not unfold — tap only ever pins")
-	assert_eq(world.pending_cell(0), Vector2i(24, 12), "...it pinned an anchor there")
+	assert_eq(world.folds.size(), 1, "A TAP at a seam does not unfold — tap only ever places")
+	assert_eq(world.pending_cell(0), Vector2i(24, 12), "...it put a hand there")
 	world.hold_action(Vector2i(1, 0))
 	assert_eq(world.pending_cell(0), null,
-		"A hold aimed at your own anchor takes that one back first")
+		"A hold aimed at your own hand takes that one back first")
 
+	# Now carrying that spare, there is only one free slot and the fold wants to
+	# give back two — so the seam under the same cell will not come out yet.
 	world.hold_action(Vector2i(1, 0))
-	assert_eq(world.folds.size(), 0, "With the cell clear, the hold unfolds the seam under it")
+	assert_eq(world.folds.size(), 1, "Holding a spare leaves no room for the fold's pair")
+
+	world.hands[0] = null                           # as if the spare were placed elsewhere
+	world.hold_action(Vector2i(1, 0))
+	assert_eq(world.folds.size(), 0, "With hands free, the hold unfolds the seam under the cell")
+	assert_eq(world.hands_held(), 2, "...and both of its hands come home")
 
 
 func test_unfold_blocked_by_newer_crossing_fold() -> void:
@@ -167,7 +176,7 @@ func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
 	world.tap_action(Vector2i(1, 0))                # (5,12)
 	world.player.teleport(Vector2(7.5 * CS, 10.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                # (8,10): off-axis, dist ~3.6
-	world.tap_action(Vector2i(0, -1))
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Off-axis pinch folds the player in")
 	assert_eq(world.sub_fold.orientation, "diagonal", "The committed fold is diagonal")
 
@@ -210,7 +219,8 @@ func test_exit_blocked_by_glue_crossing_interior_fold() -> void:
 
 func test_pending_anchors_survive_subspace_exit() -> void:
 	_pinch_over_pit()
-	world.tap_action(Vector2i(1, 0))                # pinned INSIDE the fold, cell (14,12)
+	world.hands[0] = HandTypes.PLAIN                # as if picked up in there
+	world.tap_action(Vector2i(1, 0))                # placed INSIDE the fold, cell (14,12)
 	assert_eq(world.pending_cell(0), Vector2i(14, 12), "Anchor pinned inside the subspace")
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Exited")
@@ -426,176 +436,278 @@ func test_triggered_fold_persists_across_leaving_the_region() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Anchors as a carried, conserved resource
+# Hands: two slots, typed, conserved
 # ---------------------------------------------------------------------------
-# An anchor is an object, and a standing fold is holding two of yours. So the
-# budget is how many folds may stand AT ONCE, not how many you may ever make —
-# and every accounting path below has to conserve, never create or destroy.
+# A hand is an object with a kind. You hold two; a standing fold holds the two you
+# pinned it with; unfolding gives back those same two. Every path below has to
+# conserve — the only thing that may raise the total is picking one up.
 
-func test_pinning_charges_an_anchor_and_a_hold_refunds_it() -> void:
-	var cap: int = world.anchor_capacity()
-	assert_eq(world.anchors_free(), cap, "You start carrying the world's whole allowance")
+func _total() -> int:
+	return world.hands_total()
 
+
+func test_you_start_with_a_full_pair_and_nothing_else() -> void:
+	assert_eq(world.hands.size(), AnchorStock.SLOTS, "One entry per slot")
+	assert_eq(world.hands_held(), 2, "Both slots full at the start")
+	assert_eq(world.hands_in_folds(), 0, "Nothing committed yet")
+	assert_eq(_total(), 2, "Two hands exist")
+
+
+func test_placing_a_hand_takes_it_out_of_its_slot() -> void:
 	world.tap_action(Vector2i(1, 0))
-	assert_eq(world.anchors_free(), cap - 1, "Pinning takes an anchor out of your pocket")
-	assert_eq(world.anchors_pending(), 1, "...where the ledger can see it")
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "The tap put a hand down")
+	assert_eq(world.hands_held(), 1, "...which left your slots")
+	assert_eq(world.hands_free_slots(), 1, "...freeing the slot it came from")
+	assert_eq(_total(), 2, "and nothing was created or destroyed")
 
+
+func test_holding_takes_a_placed_hand_back() -> void:
+	world.tap_action(Vector2i(1, 0))
 	world.hold_action(Vector2i(1, 0))
-	assert_eq(world.pending_cell(0), null, "Holding on your own anchor pulls it back")
-	assert_eq(world.anchors_free(), cap, "...and refunds it in full")
+	assert_eq(world.pending_cell(0), null, "Holding on your own hand pulls it back")
+	assert_eq(world.hands_held(), 2, "...into a slot")
+	assert_eq(_total(), 2, "Conserved")
 
 
-func test_a_standing_fold_holds_two_anchors_and_unfolding_returns_them() -> void:
-	var cap: int = world.anchor_capacity()
-	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
-	assert_eq(world.folds[0].held_anchors, 2, "A committed fold holds two of your anchors")
-	assert_eq(world.anchors_free(), cap - 2, "...which are unavailable while it stands")
-
-	world.unfold_level_fold(world.folds[0])
-	assert_eq(world.anchors_free(), cap, "Unfolding gives them back in full")
-
-
-func test_committing_moves_the_charge_from_hand_to_fold() -> void:
-	# Anchors are charged when pinned, so the commit must not charge them again.
-	var cap: int = world.anchor_capacity()
+func test_a_second_hand_lights_the_fuse_and_it_folds_itself() -> void:
 	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	assert_false(world.fuse_running(), "One hand down is not a fold")
+
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                        # (9,12)
-	assert_eq(world.anchors_free(), cap - 2, "Both pinned anchors are charged")
+	assert_true(world.fuse_running(), "The second hand lights the fuse")
+	assert_eq(world.folds.size(), 0, "...which has not gone off yet")
+	assert_eq(world.hands_held(), 0, "Both hands are down")
 
-	world.tap_action(Vector2i(0, -1))                       # commit
-	assert_eq(world.anchors_free(), cap - 2,
-		"Commit hands the SAME two anchors to the fold — the free count does not move")
-	assert_eq(world.anchors_pending(), 0, "They belong to the fold now, not to the slots")
-	assert_eq(world.anchors_held(), 2, "...which is where the ledger finds them")
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.mode, world.Mode.SUBSPACE,
+		"The fuse committed the fold with nobody pressing anything")
+	assert_false(world.fuse_running(), "And the fuse is spent")
+	assert_eq(_total(), 2, "Still two hands, now inside the fold")
 
 
-func test_running_out_refuses_the_next_pin_until_something_unfolds() -> void:
-	assert_eq(world.anchor_capacity(), 4,
-		"The shipped world starts you with two folds' worth (this test assumes it)")
+func test_the_fuse_ticks_down_rather_than_firing_at_once() -> void:
+	world.tap_action(Vector2i(1, 0))
+	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))
+
+	world._tick_fuse(HandTypes.BASE_FUSE * 0.5)
+	assert_eq(world.folds.size(), 0, "Half way through, nothing has folded")
+	assert_almost_eq(world.fuse_progress(), 0.5, 0.02, "...and the pulse knows how far along it is")
+	world._tick_fuse(HandTypes.BASE_FUSE * 0.5 + 0.01)
+	assert_eq(world.folds.size(), 1, "It fires when the fuse runs out, not before")
+
+
+func test_pulling_a_hand_back_defuses_the_pair() -> void:
+	world.tap_action(Vector2i(1, 0))
+	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))
+	assert_true(world.fuse_running(), "Lit")
+
+	world.hold_action(Vector2i(1, 0))
+	assert_false(world.fuse_running(), "Taking a hand back puts it out")
+	assert_eq(world.folds.size(), 0, "Nothing folded")
+	world._tick_fuse(10.0)
+	assert_eq(world.folds.size(), 0, "...and it stays out")
+
+
+func test_the_fuse_waits_while_an_anchor_is_out_of_frame() -> void:
+	# Walk through a door mid-count and the fold should wait for you, not fire
+	# somewhere you cannot see or fail on an anchor that is merely elsewhere.
+	world.tap_action(Vector2i(1, 0))
+	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))
+	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
+	world._check_doors()
+	assert_eq(world.region_id, "east", "Left the region with a fuse burning")
+
+	world._tick_fuse(10.0)
+	assert_eq(world.folds.size(), 1, "East's own pre-fold only — the pair did not fire here")
+	assert_true(world.fuse_running(), "The fuse is paused, not cancelled")
+
+
+func test_a_standing_fold_holds_the_hands_and_unfolding_returns_them() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
-	world.do_fold(Vector2i(34, 4), Vector2i(38, 4))
-	assert_eq(world.folds.size(), 2, "Both folds committed")
-	assert_eq(world.anchors_free(), 0, "Two standing folds hold every anchor you have")
-	assert_false(world.can_pin_anchor(), "Nothing left to pin with")
+	assert_eq(world.folds[0].held_hands.size(), 2, "The fold took both hands")
+	assert_eq(world.hands_held(), 0, "...so you are holding none")
+	assert_eq(_total(), 2, "Conserved")
+
+	world.unfold_level_fold(world.folds[0])
+	assert_eq(world.hands_held(), 2, "Unfolding gave them back")
+	assert_eq(_total(), 2, "Still conserved")
+
+
+func test_a_fold_gives_back_the_same_kinds_it_took() -> void:
+	# The reason kinds are stored on the fold rather than counted: a mixed pair
+	# must come back mixed.
+	world.hands[0] = HandTypes.SWIFT
+	world.hands[1] = HandTypes.PATIENT
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_eq(world.folds[0].held_hands, [HandTypes.SWIFT, HandTypes.PATIENT] as Array[int],
+		"The fold is holding a swift and a patient hand")
+
+	world.unfold_level_fold(world.folds[0])
+	var back: Array = world.hands.duplicate()
+	back.sort()
+	assert_eq(back, [HandTypes.SWIFT, HandTypes.PATIENT], "Both kinds came home")
+
+
+func test_with_no_hands_a_tap_places_nothing() -> void:
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_eq(world.hands_held(), 0, "The fold has both hands")
+	assert_false(world.can_place_hand(), "Nothing to place")
+	assert_eq(world.next_hand_type(), -1, "...and the aim ring knows it")
 
 	world.tap_action(Vector2i(1, 0))
-	assert_eq(world.pending_cell(0), null, "A tap with an empty pocket pins nothing")
-
-	world.unfold_level_fold(world.folds[1])
-	assert_eq(world.anchors_free(), 2, "Unfolding puts that fold's anchors back in your pocket")
-	world.tap_action(Vector2i(1, 0))
-	assert_ne(world.pending_cell(0), null, "...and you can pin again")
+	assert_eq(world.pending_cell(0), null, "A tap with empty hands puts nothing down")
 
 
-func test_world_made_folds_cost_the_player_nothing() -> void:
-	# Authored pre-folds and trigger folds are anchored by the world, not out of
-	# your pocket: a region that ships folded does not arrive with you in debt.
-	var cap: int = world.anchor_capacity()
-	assert_eq(world.regions["east"]["folds"].size(), 1, "East ships one pre-placed fold")
-	assert_eq(world.regions["east"]["folds"][0].held_anchors, 0,
-		"...which holds none of the player's anchors")
-	assert_eq(world.anchors_free(), cap, "So you start with everything")
+func test_a_refused_fold_does_not_eat_your_hands() -> void:
+	# A fold rejected for its span must cost nothing: the hands never went in.
+	_enter_east()
+	var pin = _plane_point(Vector2i(21, 9))
+	var cell := Vector2i((Vector2(pin) / CS).floor())
+	var before: int = world.folds.size()
+
+	world.do_fold(cell - Vector2i(2, 0), cell + Vector2i(2, 0))
+	assert_eq(world.folds.size(), before, "The pinned pillar refused the fold")
+	assert_eq(world.hands_held(), 2, "...and you still have both hands")
+
+
+func test_world_made_folds_hold_none_of_your_hands() -> void:
+	# Authored pre-folds and trigger folds are anchored by the world, not by you.
+	assert_eq(world.regions["east"]["folds"][0].held_hands.size(), 0,
+		"East's shipped pre-fold holds none of the player's hands")
+	assert_eq(world.hands_held(), 2, "So you start with both")
 
 	_enter_east()
 	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
 	world._check_triggers()
 	assert_gt(world.folds.size(), 1, "The plate fired its fold")
-	assert_eq(world.anchors_free(), world.anchor_capacity(),
-		"A trigger fold charges the player nothing either")
+	assert_eq(world.hands_held(), 2, "A trigger fold costs you nothing either")
 
 
-func test_an_interior_fold_holds_anchors_across_the_subspace_boundary() -> void:
-	var cap: int = world.anchor_capacity()
+func test_unfolding_is_refused_when_there_is_no_room_for_the_hands() -> void:
+	# A fold gives back both at once. Carrying a spare picked-up hand leaves nowhere
+	# for the second one to go, so the fold stays folded until you put one down.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_eq(world.hands_held(), 0, "Both hands committed")
+	world.hands[0] = HandTypes.SWIFT                        # as if picked up from a cache
+	assert_eq(world.hands_free_slots(), 1, "One slot free, two hands coming back")
+
+	world.unfold_level_fold(world.folds[0])
+	assert_eq(world.folds.size(), 1, "Refused — there is nowhere to put them")
+
+	world.tap_action(Vector2i(1, 0))                        # put the spare down
+	assert_eq(world.hands_free_slots(), 2, "Now there is room")
+	world.unfold_level_fold(world.folds[0])
+	assert_eq(world.folds.size(), 0, "...and the fold comes apart")
+	assert_eq(world.hands_held(), 2, "Both hands are back")
+
+
+func test_an_interior_fold_holds_hands_across_the_subspace_boundary() -> void:
 	_pinch_over_pit()
-	assert_eq(world.anchors_free(), cap - 2, "The pinch fold holds two, like any other")
+	assert_eq(world.hands_held(), 0, "The pinch fold took both hands")
 
+	world.hands[0] = HandTypes.SWIFT
+	world.hands[1] = HandTypes.SWIFT
 	world.player.teleport(Vector2(11.2 * CS, 12.5 * CS), false)
 	assert_true(world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8)), "Interior fold commits")
-	assert_eq(world.anchors_free(), cap - 4, "An interior fold holds two more")
+	assert_eq(world.hands_held(), 0, "It took the pair too")
+	assert_eq(_total(), 4, "Four hands exist: two picked up, all four committed")
 
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Exited")
-	assert_eq(world.anchors_free(), cap - 2,
-		"The outer fold refunded; the interior one persisted into the world still holding")
+	assert_eq(world.hands_held(), 2, "The outer fold returned its pair")
+	assert_eq(world.hands_in_folds(), 2,
+		"The interior fold persisted into the world, still holding its own")
 
 
 # ---------------------------------------------------------------------------
-# Anchor caches
+# Hand caches
 # ---------------------------------------------------------------------------
 
-func test_an_anchor_cache_raises_the_ceiling_permanently() -> void:
-	var cap: int = world.anchor_capacity()
+func test_a_cache_gives_one_hand_into_one_free_slot() -> void:
+	# Full hands walk straight over a cache: it is the second half of a fold you
+	# have already started, not a stockpile you raid on the way past.
 	var cache = _plane_point(Vector2i(24, 6))
 	assert_not_null(cache, "The pillar-top cache stands in normal space")
-
 	world.player.teleport(Vector2(cache), false)
 	world._check_caches()
-	assert_eq(world.anchor_capacity(), cap + 2, "Walking into a cache raises your capacity")
-	assert_eq(world.anchors_free(), cap + 2, "...and the anchors are yours to spend")
+	assert_eq(world.hands_held(), 2, "With both hands full it gives nothing")
+	assert_eq(_total(), 2, "...and nothing was created")
 
+	world.tap_action(Vector2i(1, 0))                        # put one down to free a slot
+	assert_eq(world.hands_held(), 1, "One slot free now")
+	world.player.teleport(Vector2(cache), false)
 	world._check_caches()
-	assert_eq(world.anchor_capacity(), cap + 2, "A spent cache grants nothing a second time")
+	assert_eq(world.hands_held(), 2, "The cache filled it")
+	assert_eq(_total(), 3, "A third hand now exists — picking up is the only thing that adds one")
 
 
-func test_a_collected_cache_stays_collected_across_regions() -> void:
-	var cap: int = world.anchor_capacity()
+func test_a_cache_gives_the_kind_its_tile_names() -> void:
+	world.tap_action(Vector2i(1, 0))                        # free a slot
 	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
 	world._check_caches()
-	assert_eq(world.anchor_capacity(), cap + 2, "Collected in west")
+	var got: Array = []
+	for h in world.hands:
+		if h != null:
+			got.append(h)
+	assert_true(got.has(HandTypes.SWIFT),
+		"The pillar-top cache is authored swift, and a swift hand is what it gave")
 
-	_enter_east()
-	assert_eq(world.anchor_capacity(), cap + 2,
-		"Capacity is carried by the player, not held by the region that granted it")
-	assert_null(_plane_point(Vector2i(14, 9)),
-		"East's own cache is folded away, so it is not standing here to be taken")
 
-
-func test_reset_keeps_your_caches_but_takes_the_world_back() -> void:
-	# Reset is the only way out of stranding yourself with no anchors and no
-	# reachable seam. An escape hatch that confiscates what you have found is a
-	# punishment for using it, so caches are player progression and outlive it —
-	# while the folds, which hold anchors, do not.
-	var cap: int = world.anchor_capacity()
-	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
+func test_a_spent_cache_gives_nothing_twice() -> void:
+	world.tap_action(Vector2i(1, 0))
+	var cache = _plane_point(Vector2i(24, 6))
+	world.player.teleport(Vector2(cache), false)
 	world._check_caches()
-	assert_eq(world.anchor_capacity(), cap + 2, "Cache collected")
+	assert_eq(_total(), 3, "Taken once")
 
-	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
-	assert_eq(world.anchors_free(), cap, "A standing fold is holding two of them")
-
-	world._reset()
-	assert_eq(world.folds.size(), 0, "Reset takes the world back to its authored folds")
-	assert_eq(world.anchor_capacity(), cap + 2, "...but the cache you found is still yours")
-	assert_eq(world.anchors_free(), cap + 2,
-		"...and every anchor is back in hand, because no fold is holding any")
-
-
-func test_reset_does_not_re_grant_a_cache_you_already_took() -> void:
-	# The husk has to stay spent across a reset too, or reset becomes a way to
-	# farm the same cache for capacity.
-	var cap: int = world.anchor_capacity()
-	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
+	world.tap_action(Vector2i(1, 0))                        # free the slot again
+	world.player.teleport(Vector2(cache), false)
 	world._check_caches()
-	world._reset()
+	assert_eq(_total(), 3, "A spent cache is a husk")
 
-	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
-	world._check_caches()
-	assert_eq(world.anchor_capacity(), cap + 2, "Standing on it again grants nothing")
+
+func test_mixed_hands_make_a_fold_whose_fuse_is_between_them() -> void:
+	# What allowing a mixed pair is FOR: the fold it makes is neither parent's.
+	var plain := HandTypes.fuse_for(HandTypes.PLAIN, HandTypes.PLAIN)
+	var swift := HandTypes.fuse_for(HandTypes.SWIFT, HandTypes.SWIFT)
+	var mixed := HandTypes.fuse_for(HandTypes.PLAIN, HandTypes.SWIFT)
+	assert_lt(mixed, plain, "A swift hand hurries a plain pair along")
+	assert_gt(mixed, swift, "...but not all the way to a swift pair")
 
 
 func test_a_cache_folded_away_is_collectable_inside_the_fold() -> void:
 	# East's shipped pre-fold excised the cache at (14,9) along with door E1. A cache
 	# inside a fold is not lost — the strip is a real place, and taking it in there counts.
-	var cap: int = world.anchor_capacity()
+	world.tap_action(Vector2i(1, 0))                        # free a slot first
+	var before: int = _total()
 	world.player.teleport(Vector2(1.5 * CS, 13.5 * CS), false)
 	world._check_doors()
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Through W1, inside the shipped fold")
 
 	world.player.teleport(Vector2(14.5 * CS, 9.5 * CS), false)
 	world._check_caches()
-	assert_eq(world.anchor_capacity(), cap + 2,
+	assert_eq(_total(), before + 1,
 		"The cache the fold swallowed is collectable from inside it")
+
+
+func test_reset_puts_both_the_world_and_your_hands_back() -> void:
+	# Capacity no longer grows, so there is no progression for a reset to
+	# confiscate — and hands are exactly what it must restore, or the escape hatch
+	# leaves you worse off than you started.
+	world.tap_action(Vector2i(1, 0))
+	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
+	world._check_caches()
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+
+	world._reset()
+	assert_eq(world.folds.size(), 0, "The world is back to its authored folds")
+	assert_eq(world.hands_held(), 2, "You have your starting pair again")
+	assert_eq(world.hands_in_folds(), 0, "Nothing is holding anything")
+	assert_eq(_total(), 2, "And the caches respawned with the world")
 
 
 func test_no_hud_control_swallows_mouse_input() -> void:

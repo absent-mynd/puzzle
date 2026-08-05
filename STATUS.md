@@ -5,7 +5,7 @@
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **360 passing** / 360 (0 failing, 0 risky), 19 scripts, ~8s.
+**Tests:** **388 passing** / 388 (0 failing, 0 risky), 20 scripts, ~9.3s.
 
 ---
 
@@ -26,9 +26,11 @@ What exists and works today:
 | Regions + doors (recursive partner resolution) | ✅ Playable |
 | Tile registry (pins, unanchorable, water, triggers, caches) | ✅ Wired, tested, **in the world** |
 | Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
-| Anchors as a conserved resource (`AnchorStock`) | ✅ Playable, **in the world** |
-| Anchor caches (`A`) — the capacity upgrade | ✅ Three placed, ⚙️ untuned |
-| One-key fold verb (tap = pin/commit, hold = pull back) | ✅ Playable |
+| Hands: two slots, typed, conserved (`AnchorStock`/`HandTypes`) | ✅ Playable, **in the world** |
+| Hand caches (`A`) — one hand, colour-coded by kind | ✅ Three placed, ⚙️ untuned |
+| One-key verb (tap = place a hand, hold = pull one back) | ✅ Playable |
+| Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
+| Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
@@ -43,15 +45,15 @@ What exists and works today:
 
 ## Test suite
 
-360 passing across 19 scripts. Composition:
+388 passing across 20 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 59 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the anchor economy |
+| `test_fold_world` | 68 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy and the fuse |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
-| `test_world_core` | 36 | Map parsing, seams, anchor/fold eligibility, camera framing + lookahead |
+| `test_world_core` | 41 | Map parsing, seams, anchor/fold eligibility, camera framing + lookahead, the hand spring |
+| `test_world_data` | 31 | World format + the shipped world's content, incl. lights, hands and caches |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
-| `test_world_data` | 28 | World format + the shipped world's content, incl. lights and caches |
 | `test_tile_types` | 20 | The registry |
 | `test_tile_atlas` | 17 | Tileset kinds/variants, base-space UVs, the generated sheet |
 | `test_light_source` | 15 | Lights as occupants: fold-away, ride, split, serialization |
@@ -61,7 +63,8 @@ What exists and works today:
 | `test_occupants` | 11 | Split-on-unfold, footprints, carried geometry |
 | `test_folded_state` | 11 | Per-position stacks, dominant type |
 | `test_fold_replay` | 11 | The derivation engine |
-| `test_anchor_stock` | 10 | Anchor conservation: pocket ↔ pending ↔ fold |
+| `test_anchor_stock` | 11 | Hand conservation: slots ↔ pinned ↔ fold |
+| `test_hand_types` | 10 | The kind registry: colours, fuses, mixed pairs |
 | `test_player_body` | 10 | Look/point keys, velocity-as-fraction, motion scalar |
 | `test_base_grid` | 9 | Immutable base model |
 | `test_base_frame` | 9 | Base ↔ derived transport |
@@ -77,6 +80,41 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — Anchors become HANDS: two of them, typed, and they fold themselves
+
+The counting model became typed objects. An anchor was an anonymous unit drawn from a
+growing capacity; a hand is a thing with a kind, you have exactly two, and a fold
+holds the two you pinned it with.
+
+- **Two slots, and that never grows.** `AnchorStock` went from capacity arithmetic to
+  slot arithmetic (`SLOTS = 2`); `WorldData.anchor_capacity` became `starting_hands`,
+  a list of kinds. `Fold.held_anchors: int` became `Fold.held_hands: Array[int]`, so
+  unfolding returns the same two hands — kinds and all — that went in.
+- **New `HandTypes`** (kernel): one file per kind, carrying its colour and its fuse.
+  Three ship — `plain` (1.6s), `swift` (0.65s), `patient` (3.2s) — and the fuse is the
+  ONLY behavioural difference, which is the restraint the registry exists to prove.
+- **A cache gives ONE hand, into one free slot.** Since a slot is free because you put
+  a hand down, a cache is the second half of a fold already in progress: place a hand,
+  walk to a cache, take a different kind, finish the fold with a pair you did not set
+  out with. Full hands walk straight over one and it waits. Which kind is authored per
+  tile (`data.hand`); the tile is painted neutral and tinted by that kind, so one
+  atlas row covers every colour.
+- **The commit press is gone.** Placing the second hand lights a fuse — the mean of
+  the two kinds' fuses, so a mixed pair lands genuinely between its parents — and the
+  pair folds itself. Both hands pulse while it burns, slower at first, quickening as
+  it comes due. Pulling a hand back defuses it, and the fuse PAUSES while an anchor is
+  out of frame, so walking through a door mid-count makes the fold wait rather than
+  fire somewhere you cannot see.
+- **Unfolding can now be refused for want of room.** A fold gives back both hands at
+  once, so a spare you picked up has to go down first.
+- **Hands float beside you** (`HandOrbit`): small circles on a spring, trailing your
+  motion. Style only — nothing reads their positions. The integrator is
+  `WorldCore.spring_step`, pure and tested; the node is just the drawing.
+- **Reset restores hands and respawns caches**, reversing yesterday's call *because
+  the model changed under it*: capacity no longer grows, so there is no progression
+  left for a reset to confiscate — and hands are exactly what a reset gives back, so
+  leaving caches spent would strand you shorter than you started.
 
 ### 2026-08-05 — Reset stops confiscating your caches; the HUD stops lecturing
 
