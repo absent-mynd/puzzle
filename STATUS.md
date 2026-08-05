@@ -1,9 +1,9 @@
 # Project Status — Space Folding
 
-**Last Updated:** 2026-08-04
+**Last Updated:** 2026-08-05
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation.
-**Tests:** **226 passing** / 226 (0 failing, 0 risky), 14 scripts, ~2.7s.
+**Tests:** **228 passing** / 228 (0 failing, 0 risky), 14 scripts, ~2.5s.
 
 ---
 
@@ -35,13 +35,13 @@ What exists and works today:
 
 ## Test suite
 
-226 passing across 14 scripts. Composition:
+228 passing across 14 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
-| `test_fold_world` | 21 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates |
+| `test_fold_world` | 23 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates |
 | `test_world_data` | 19 | World format + the shipped world's content |
 | `test_world_core` | 19 | Map parsing, seams, anchor/fold eligibility |
 | `test_tile_types` | 16 | The registry |
@@ -63,6 +63,21 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — The inside of a fold reads as one cylinder
+
+- **The player is drawn in every visible copy of the strip.** `rebuild_sub` gives
+  each wrap band a twin of the blob (`sub_player_ghosts`), updated with the body
+  each frame. One lone body made the repeated strip read as separate worlds.
+- **Crossing a glue line is seamless.** The wrap now displaces body *and* camera
+  by the same band width (`PlayerBody.shift_camera`) instead of snapping the
+  camera to the body — the snap threw away the smoothing lag (~40px at a full
+  run) and jolted the view every crossing.
+- `PlayerBody` owns its camera smoothing (Camera2D exposes no way to move its
+  smoothed centre, only `reset_smoothing()`), and `FoldWorld` now runs its
+  per-frame world logic *after* the body has moved (`process_physics_priority`).
+- `WorldOverlay` grew `_copy_offsets()`; the aim ring and pending-anchor rings
+  repeat with the copies like doors and seam diamonds already did.
 
 ### 2026-08-04 — Consolidation onto the gravity direction
 

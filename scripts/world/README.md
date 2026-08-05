@@ -84,8 +84,12 @@ pinned and resolve again when you return.
    this is the gravity-specific verb.
 2. **Get folded in.** Stand *inside* the red preview band and commit the fold:
    instead of blocking, the fold swallows you. You're inside the excised strip,
-   rendered repeating across the glue lines (cyan) — walk "through" one and
-   you wrap around the cylinder seamlessly.
+   rendered repeating across the glue lines (cyan) — **and so are you.** Every
+   visible copy of the strip shows you at the same place in its own band,
+   because they are all the same band: the strip is a cylinder and you are one
+   point on it. Walking "through" a glue line slides body and camera together
+   by exactly one band width, so the frame does not change and the crossing is
+   invisible — there is no seam to cross, only a lap to finish.
 3. **Dive-traverse.** While inside, walk somewhere else along the strip, then
    press U. The fold springs open and you emerge **where you walked to** —
    fold, dive, surface: movement through the inside of a fold.
@@ -156,6 +160,9 @@ Placing them in west is a playtesting job, not an editing one.
 - `FoldWorld.gd` — scene driver: derived geometry → Polygon2D + colliders,
   fold/unfold with player riding, subspace enter/wrap/exit, regions, doors,
   triggers.
-- `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, squash).
+- `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, squash) and
+  the camera, whose smoothing is driven here so the wrap can displace it by a
+  whole band width without losing its lag.
 - `WorldOverlay.gd` — anchors, strip preview band, seam markers, glue lines.
+  Everything point-like repeats across the wrap copies (`_copy_offsets`).
 - Scene flows in `scripts/tests/test_fold_world.gd`.
