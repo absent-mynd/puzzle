@@ -2,7 +2,7 @@
 
 **START HERE.** Essential context for anyone (human or agent) working on this project.
 
-**Last Updated:** 2026-08-04
+**Last Updated:** 2026-08-05
 **Engine:** Godot 4.3 · **Language:** GDScript · **Approach:** TDD
 
 ---
@@ -90,7 +90,7 @@ halves meet at a common line. The seam sits at `anchor_a + shift_a_grid`.
 | Layer | Files | May depend on |
 |---|---|---|
 | **Kernel** (pure, headless) | `scripts/model/` + `scripts/utils/` | nothing above it |
-| **World** (view, physics, input) | `scripts/world/` | kernel |
+| **World** (view, physics, input, rendering) | `scripts/world/` | kernel |
 | **UI / systems** | `scripts/ui/`, `scripts/systems/` | kernel |
 
 **The kernel must never reference the world.** This is why `BaseFrame` exists as
@@ -116,10 +116,15 @@ instead.
 | Authored world (regions, doors, folds) | `scripts/model/WorldData.gd` |
 | Polygon clipping under folds | `scripts/utils/CollisionCore.gd` |
 | Sutherland-Hodgman, epsilon, area | `scripts/utils/GeometryCore.gd` |
+| Lights as occupants of the sheet | `scripts/model/LightSource.gd` |
 | **The game**: regions, subspaces, doors, input | `scripts/world/FoldWorld.gd` |
 | Pure world logic (maps, seams, depenetration) | `scripts/world/WorldCore.gd` |
 | Player physics body | `scripts/world/PlayerBody.gd` |
 | Anchors, previews, seam markers | `scripts/world/WorldOverlay.gd` |
+| How big an art pixel is | `scripts/world/PixelArt.gd` |
+| The tileset: kinds, variants, base-space UVs | `scripts/world/TileAtlas.gd` |
+| Lit materials, light uniforms, lamp glyphs | `scripts/world/LightRig.gd` |
+| The lighting shader | `assets/shaders/pixel_lit.gdshader` |
 
 See `scripts/world/README.md` for controls and the design beats.
 
@@ -150,6 +155,53 @@ rule, applied at every level — world, strip, interior.
 ### 5. Never compare floats with `==`
 Use `GeometryCore.EPSILON`.
 
+### 6. Anything in the world is an occupant, resolved through `BaseFrame`
+Doors and lights have no world position. They store a base identity plus a point
+inside that tile, and where they *are* is a question asked of the current
+fragment list. That is why a light folded away leaves the overworld and lights
+the fold's interior instead — nobody wrote that; it falls out of asking. When you
+add a new thing that lives in the world, store it that way. Do not cache a
+world position and try to keep it up to date through folds.
+
+---
+
+## Rendering, in one page
+
+The world is **pixel art**, and that is a rendering decision only — no physics
+constant, cell size or coordinate changed. See `scripts/world/README.md`
+§"Art & light" for the player-facing version.
+
+```
+world (unchanged: CELL = 64 world units)
+        │
+        ▼
+  SubViewport, RESIZED per zoom  ← 1 art pixel = 4 world units = WORLD_PER_PIXEL
+        │  320x180 at 1:1          the LENS never moves; the target grows instead
+        ├── tiles: Polygon2D + tileset texture + base-space UVs (TileAtlas)
+		│            uv = (polygon - src_offset) mapped into the tile's atlas cell
+		└── lit by pixel_lit.gdshader (ambient + snapped, quantized, dithered lights)
+		│
+		▼
+  TextureRect, nearest             HUD renders OUTSIDE this, at window resolution
+```
+
+Three rules worth keeping:
+
+- **The camera's zoom is fixed; the render target resizes.** Inside a render
+  target the size of an art pixel is purely a function of zoom, so moving the lens
+  would resample the tileset and soften everything. The camera IS dynamic
+  (`WorldCore.camera_zoom_for`) — that is a *logical* zoom, which sizes the target
+  via `PixelArt.target_size`. Never set `_cam.zoom` from gameplay code.
+- **Appearance is a base-space fact.** Variant, edge kind and UVs all come from
+  the base grid, so a tile looks the same however it has been folded, ridden or
+  cut. Do not key art off the folded neighbourhood.
+- **The seam is a hard line.** The art is cut by the crease exactly as the
+  geometry is, and nothing blends across it. Deliberate — do not soften it
+  without a design conversation.
+- **Lighting is style, not a mechanic.** Ambient stays high enough that unlit
+  ground is navigable; the player and the overlay markers are drawn unlit so
+  they never disappear into a dark corner.
+
 ---
 
 ## Open design questions
@@ -164,6 +216,9 @@ These are live, not settled. Do not close them silently in a refactor.
   splice folds into an interior list mid-cascade; the resolver does not model that.
 - **Unfold animation** plays only for newest-fold unfolds at world level; mid-stack
   unfolds are instant.
+- **Lights do not cast shadows.** Occluders would have to be re-derived per fold,
+  and they would want to soften the seam — which is the one thing the art is
+  currently committed to keeping hard.
 
 ---
 

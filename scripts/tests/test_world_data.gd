@@ -280,3 +280,85 @@ func test_shipped_preplaced_folds_are_applicable():
 			pieces = FoldReplay.apply_one_fold(pieces, f, wd.cell_size)
 			applied += 1
 	assert_gt(applied, 0, "the shipped world uses at least one pre-placed fold")
+
+
+# ---------------------------------------------------------------------------
+# Lights
+# ---------------------------------------------------------------------------
+
+func _with_light() -> WorldData:
+	var wd := _sample()
+	var light := LightSource.new()
+	light.id = "lamp"
+	light.cell = Vector2i(2, 0)
+	light.color = Color("#ffcc88")
+	light.radius_cells = 4.0
+	light.flicker = 0.2
+	wd.regions["a"]["lights"] = [light]
+	return wd
+
+
+func test_lights_round_trip_through_dict():
+	var copy := WorldData.new()
+	copy.from_dict(_with_light().to_dict())
+	var lights: Array = copy.regions["a"]["lights"]
+	assert_eq(lights.size(), 1, "the region's light survives the round trip")
+	assert_eq(lights[0].id, "lamp", "with its id")
+	assert_eq(lights[0].cell, Vector2i(2, 0), "and its cell")
+	assert_almost_eq(lights[0].radius_cells, 4.0, 0.001, "and its radius")
+	assert_eq(lights[0].region, "a", "a decoded light knows which region it belongs to")
+
+
+func test_lights_round_trip_is_json_safe():
+	var parsed = JSON.parse_string(JSON.stringify(_with_light().to_dict()))
+	assert_true(parsed is Dictionary, "lights encode to JSON")
+	var copy := WorldData.new()
+	copy.from_dict(parsed)
+	assert_eq((copy.regions["a"]["lights"] as Array).size(), 1, "and decode back")
+
+
+func test_lights_of_hands_out_copies():
+	# Binding writes base_id/bp into a light; the authored world must not be
+	# edited by the act of loading it, so a reset can re-bind from scratch.
+	var wd := _with_light()
+	var taken: Array = wd.lights_of("a")
+	assert_eq(taken.size(), 1, "the region's light comes back")
+	taken[0].bind(wd.build_base("a"))
+	assert_true(taken[0].is_bound(), "the copy binds")
+	assert_false((wd.regions["a"]["lights"][0] as LightSource).is_bound(),
+		"and the authored light is untouched")
+
+
+func test_regions_without_lights_are_fine():
+	assert_eq(_sample().lights_of("a").size(), 0, "lights are optional in a region")
+	assert_eq(_sample().lights_of("nope").size(), 0, "and a missing region yields none")
+
+
+func test_shipped_world_places_lights_in_both_regions():
+	var wd := WorldData.load_from(WORLD_PATH)
+	for id in wd.regions:
+		var lights: Array = wd.lights_of(id)
+		assert_gt(lights.size(), 0, "region %s is lit" % id)
+		var base := wd.build_base(id)
+		for light in lights:
+			assert_true(light.bind(base),
+				"light %s in %s sits on a real base tile" % [light.id, id])
+			assert_gt(light.radius_cells, 0.0, "light %s has a radius" % light.id)
+
+
+func test_shipped_east_hides_a_lamp_inside_its_preplaced_fold():
+	# The teaching case: east ships folded, and the lamp inside that fold is not
+	# in the region at all until you get in there.
+	var wd := WorldData.load_from(WORLD_PATH)
+	var base := wd.build_base("east")
+	var pieces: Array = FoldReplay.identity_pieces(base)
+	for pair in wd.fold_pairs("east"):
+		pieces = FoldReplay.apply_one_fold(
+			pieces, Fold.create(0, pair[0], pair[1], wd.cell_size), wd.cell_size)
+	var resolved: Array = []
+	for light in wd.lights_of("east"):
+		light.bind(base)
+		if light.position_in(pieces) != null:
+			resolved.append(light.id)
+	assert_true(resolved.has("e_reward"), "the lamp over the reward is in the region")
+	assert_false(resolved.has("e_vault"), "the vault's lamp is folded away with the vault")

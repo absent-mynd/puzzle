@@ -431,6 +431,131 @@ func test_no_hud_control_swallows_mouse_input() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Pixel rendering & dynamic lights
+# ---------------------------------------------------------------------------
+
+func _light_ids() -> Array:
+	var ids: Array = []
+	for entry in world.lights_here():
+		if not ids.has(entry["id"]):
+			ids.append(entry["id"])
+	ids.sort()
+	return ids
+
+
+func _light_pos(id: String):
+	for entry in world.lights_here():
+		if entry["id"] == id:
+			return Vector2(entry["pos"])
+	return null
+
+
+func test_the_world_draws_through_the_pixel_viewport() -> void:
+	assert_not_null(world.pixel_view, "there is a low-resolution render target")
+	# Sized for the CURRENT zoom, not fixed: the frame opens by giving the target
+	# more art pixels rather than by moving the lens. See PixelArt.target_size.
+	assert_eq(world.pixel_view.size,
+		PixelArt.target_size(world.get_viewport_rect().size, world.player.camera_zoom()),
+		"sized in art pixels, for the zoom in force")
+	# Everything that is part of the WORLD renders inside it; the HUD does not,
+	# which is what keeps text legible over chunky tiles.
+	for node in [world.world_geo, world.sub_geo, world.player, world.overlay, world.light_rig]:
+		assert_eq(node.get_parent(), world.pixel_view,
+			"%s draws at art-pixel resolution" % node.name)
+
+
+func test_opening_the_frame_grows_the_target_and_never_moves_the_lens() -> void:
+	# Where the pixel pass and the dynamic camera meet. The lens must NOT move —
+	# inside a render target, zoom is what sets the size of an art pixel, so a
+	# moving lens would resample the 16px tileset and soften the world. Showing
+	# more world is answered with more pixels instead.
+	var lens: Vector2 = world.player._cam.zoom
+	var small: Vector2i = world.pixel_view.size
+
+	world.player.velocity = Vector2(PlayerBody.RUN_SPEED, PlayerBody.MAX_FALL)
+	world._update_camera()
+	world.player.snap_camera()
+	world._size_pixel_view()
+
+	assert_lt(world.player.camera_zoom(), WorldCore.ZOOM_RESTING, "The frame opened")
+	assert_eq(world.player._cam.zoom, lens, "...and the lens did not move a hair")
+	assert_gt(world.pixel_view.size.x, small.x, "The target grew instead")
+
+	# The invariant that makes the art crisp: one art pixel is still exactly
+	# WORLD_PER_PIXEL world units, so a cell still covers a whole 16px tile.
+	var seen: Vector2 = world.get_viewport_rect().size / world.player.camera_zoom()
+	var per_px: float = seen.x / float(world.pixel_view.size.x)
+	assert_almost_eq(per_px, PixelArt.WORLD_PER_PIXEL, 0.05,
+		"An art pixel is the same size wide open as at rest — the tile is not resampled")
+
+
+func test_tiles_are_drawn_from_the_tileset_and_lit() -> void:
+	var textured := 0
+	for child in world.world_geo.get_children():
+		if not (child is Polygon2D):
+			continue
+		var vis: Polygon2D = child
+		assert_not_null(vis.texture, "every drawn fragment samples the tileset")
+		assert_eq(vis.uv.size(), vis.polygon.size(), "with one UV per vertex")
+		assert_not_null(vis.material, "and is drawn with a lit material")
+		textured += 1
+	assert_gt(textured, 0, "the world drew some tiles")
+
+
+func test_lights_are_placed_in_the_world() -> void:
+	assert_eq(_light_ids(), ["w_chamber", "w_pit", "w_spawn"],
+		"west's three lamps are all burning at the start")
+
+
+func test_folding_a_lamp_away_removes_it_from_the_overworld() -> void:
+	# Fold the pit shut from outside it: the player rides a flap, and the lamp
+	# standing over the pit goes into the excised strip with everything else.
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
+	assert_eq(world.mode, world.Mode.WORLD, "the player rode a flap rather than being pinched")
+	assert_eq(_light_ids(), ["w_chamber", "w_spawn"],
+		"the folded-away lamp is not in the world at all — it casts nothing here")
+
+	world.pop_fold()
+	assert_eq(_light_ids(), ["w_chamber", "w_pit", "w_spawn"],
+		"unfolding re-derives it back into the world")
+
+
+func test_a_lamp_rides_the_flap_that_carries_its_tile() -> void:
+	var before = _light_pos("w_spawn")
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
+	var after = _light_pos("w_spawn")
+	assert_not_null(after, "the spawn lamp is outside the band and survives")
+	assert_almost_eq(Vector2(after).x, Vector2(before).x + 4 * CS, 0.001,
+		"it moved by exactly its flap's shift — a light is an occupant, not an overlay")
+
+
+func test_a_lamp_folded_in_with_you_lights_the_inside() -> void:
+	_pinch_over_pit()
+	assert_eq(world.mode, world.Mode.SUBSPACE, "the fold swallowed the player")
+	assert_eq(_light_ids(), ["w_pit"],
+		"the lamp that was over the pit is in here with you, and the ones outside are not")
+	# The strip repeats across the glue, so its lights repeat with it — walking
+	# through the cylinder must not walk into a dark copy of a lit room.
+	var copies: int = 2 * world.SUB_LIGHT_COPIES + 1
+	assert_eq(world.lights_here().size(), copies, "one lamp per wrap copy")
+
+
+func test_the_vault_lamp_is_dark_from_the_overworld() -> void:
+	_enter_east()
+	assert_eq(_light_ids(), ["e_reward"],
+		"east ships pre-folded: the vault's lamp is inside that fold, not in the region")
+
+
+func test_walking_into_the_folded_vault_finds_its_lamp_burning() -> void:
+	# W1's partner is folded away, so the door delivers you INSIDE the fold.
+	world._traverse("W1")
+	assert_eq(world.region_id, "east", "the door crossed regions")
+	assert_eq(world.mode, world.Mode.SUBSPACE, "...and landed inside the pre-placed fold")
+	assert_true(_light_ids().has("e_vault"),
+		"the lamp that is invisible from the overworld is what lights the vault")
+
+
+# ---------------------------------------------------------------------------
 # Dynamic camera framing
 # ---------------------------------------------------------------------------
 
@@ -483,6 +608,23 @@ func test_inside_a_fold_the_band_is_framed_glue_to_glue() -> void:
 		seen[snappedf(Vector2(p).dot(n), 0.01)] = true
 	assert_true(seen.has(snappedf(near, 0.01)), "The near glue line is held in frame")
 	assert_true(seen.has(snappedf(far, 0.01)), "...and so is the far one: the band is the room")
+
+
+func test_the_fold_animation_draws_where_the_world_draws() -> void:
+	# The transition replaces the world's geometry for a moment, so it has to be
+	# drawn by the same camera through the same render target. Parented outside
+	# `pixel_view` it renders in raw window space with no camera transform, which
+	# reads as the map flying off to the origin and snapping back when the real
+	# geometry returns.
+	world.anim_enabled = true
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_true(world.animating(), "The fold is playing")
+
+	var layer: Node2D = world._anim["layer"]
+	assert_eq(layer.get_parent(), world.pixel_view,
+		"The animation layer draws inside the pixel viewport, like world_geo does")
+	assert_eq(layer.get_viewport(), world.world_geo.get_viewport(),
+		"...which is to say: the same viewport the geometry it replaces was in")
 
 
 func test_a_fold_transition_steps_the_camera_back() -> void:

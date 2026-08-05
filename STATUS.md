@@ -2,8 +2,10 @@
 
 **Last Updated:** 2026-08-05
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
-vertical slice: two regions, doors, real subspaces, fold/unfold with animation.
-**Tests:** **270 passing** / 270 (0 failing, 0 risky), 15 scripts, ~2.3s.
+vertical slice: two regions, doors, real subspaces, fold/unfold with animation —
+rendered as pixel art with fold-aware dynamic lighting, framed by a camera that
+zooms and leads with the moment.
+**Tests:** **331 passing** / 331 (0 failing, 0 risky), 18 scripts, ~3.5s.
 
 ---
 
@@ -27,6 +29,9 @@ What exists and works today:
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
+| Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
+| Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
+| Hand-drawn tilesheet | ⚙️ Layout + drop-in path done; sheet is generated in code |
 | Audio | ⚙️ `AudioManager` + `Settings` carried over; no assets |
 | Save / progression | ❌ Not started |
 | Entities (items, enemies, save points) | ❌ Not started |
@@ -35,16 +40,19 @@ What exists and works today:
 
 ## Test suite
 
-270 passing across 15 scripts. Composition:
+331 passing across 18 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
+| `test_fold_world` | 47 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
-| `test_fold_world` | 38 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, camera |
 | `test_world_core` | 36 | Map parsing, seams, anchor/fold eligibility, camera framing + lookahead |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
-| `test_world_data` | 19 | World format + the shipped world's content |
+| `test_world_data` | 25 | World format + the shipped world's content, incl. lights |
+| `test_tile_atlas` | 17 | Tileset kinds/variants, base-space UVs, the generated sheet |
 | `test_tile_types` | 16 | The registry |
+| `test_light_source` | 15 | Lights as occupants: fold-away, ride, split, serialization |
+| `test_pixel_art` | 14 | The art-pixel quantum; the target that resizes so zoom stays crisp |
 | `test_collision_core` | 13 | Polygon clipping under folds |
 | `test_trigger_cascade` | 12 | Firing, idempotence, pin veto, cascade cap |
 | `test_occupants` | 11 | Split-on-unfold, footprints, carried geometry |
@@ -55,8 +63,9 @@ What exists and works today:
 | `test_base_frame` | 9 | Base ↔ derived transport |
 | `test_fold_unfold_inverse` | 4 | Unfold-as-drop-and-re-derive |
 
-> The count fell from 525 because ~340 tests covered code the consolidation
-> deleted. Kernel coverage is intact; every ported subsystem shipped with tests.
+> The consolidation dropped the count from 525 to 226 because ~340 tests covered
+> code it deleted. Kernel coverage is intact; every ported subsystem — and every
+> subsystem added since — shipped with tests.
 
 `test_fold_world` is the one that matters most for confidence: it drives the real
 scene and exercises the beats end to end.
@@ -64,6 +73,58 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — Pixel art meets the dynamic camera
+
+The pixel pass and the dynamic camera were built in parallel and are, on their
+face, incompatible: the pass wanted the lens pinned at 1/4 so a 64-unit cell
+covers exactly 16 art pixels, and the camera wanted to open from 0.80 to 0.55.
+
+- **Resolved by resizing the render target instead of moving the lens.** Inside a
+  render target the size of an art pixel is purely a function of camera zoom — so
+  the lens now *never* moves (`PixelArt.CAMERA_ZOOM`), and "show more world" is
+  answered with more pixels: `PixelArt.target_size` gives the resolution a given
+  logical zoom needs and `FoldWorld._size_pixel_view` applies it as the zoom eases.
+  World-per-art-pixel holds at 4.0 across the whole zoom range, so the tileset is
+  never resampled.
+- `PlayerBody.zoom_target` / `camera_zoom()` are therefore **logical** zoom: they
+  size the buffer. The pixel snap moved into `_cam.offset`, leaving
+  `global_position` the unsnapped truth — quantizing the smoothing state itself
+  would let a slow pan stall inside a pixel.
+- Verified in the real scene: opening the frame from 0.80 to 0.55 grows the target
+  400x225 → 582x327 with the lens fixed at 0.250 and a cell steady at ~16 art px.
+
+### 2026-08-05 — Pixel art + dynamic lighting
+
+- **Pixel render pass.** The world draws into a low-resolution `SubViewport` scaled
+  up with nearest filtering; one art pixel is 4 world units and a cell is 16 art
+  pixels. No physics constant, cell size or coordinate changed. `PixelArt` is the
+  one place that says how big an art pixel is. The HUD stays outside the pixel
+  viewport at window resolution. (The target is sized from the camera's logical
+  zoom — see the entry above.)
+- **A real tileset** (`TileAtlas`): 16px tiles, one row per kind, one column per
+  variant, generated procedurally so it ships as readable code and headless tests
+  never touch the import pipeline. Drop a sheet at `assets/sprites/tiles.png` and it
+  is used instead — see `assets/sprites/README.md`.
+- **Base-space UVs.** Fold fragments are arbitrary polygons, so tiles cannot be
+  blitted on a grid. `TileAtlas.uv_for` sends each vertex back through `src_offset`
+  to its base tile, so a fragment carries the patch of art it was cut from and the
+  crease cuts the art exactly as it cuts the geometry. **The seam stays a hard
+  line** — deliberately, for now.
+- **Lights are occupants** (`LightSource`, kernel): a base identity plus a point in
+  the tile, resolved through `BaseFrame` against whatever configuration is on
+  screen. Fold a lamp away and it leaves the overworld and lights that fold's
+  *interior*; fold something else and it rides the flap. Nothing special-cases
+  this — it is the door machinery applied to light. Five lamps placed in the
+  shipped world, including one sealed inside east's pre-placed fold.
+- **Pixel-level lighting** (`assets/shaders/pixel_lit.gdshader`, `LightRig`):
+  shaded point and light position are snapped to the art-pixel grid, intensity is
+  quantized into bands, and band edges are ordered-dithered with a 4x4 Bayer
+  threshold — light arrives in chunky rings, not a smooth glow. Ambient is
+  deliberately generous: **lighting is style, not fog of war**, and the player and
+  overlay markers are drawn unlit so they never vanish into a dark corner.
+- Foreground and background answer light differently (the registry's walkability
+  picks which), which is the only depth cue the flat world has.
 
 ### 2026-08-05 — The frame leads where you are going
 
@@ -168,6 +229,8 @@ gravity prototype it drives were built between 2025-11 and 2026-07. See
 
 Roughly in priority order — nothing here is committed to yet:
 
+0. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
+   and drop-in path are done, so this is now an art job, not an engineering one.
 1. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
    now placed (east's right wing); `Occupants` and `UNANCHORABLE_*` still are not.
    Placing them is also how their design gets pressure-tested.
@@ -189,6 +252,11 @@ Roughly in priority order — nothing here is committed to yet:
 - No audio assets ship; `AudioManager` is wired but silent.
 - Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
   the world yet. Pins and triggers now are — see east's right wing.
+- Lights do not cast shadows: they pass through walls. Occluders would have to be
+  re-derived per fold and would want to soften the seam, which the art is currently
+  committed to keeping hard.
+- The tilesheet is generated in code, so the world looks systematic rather than
+  authored. The layout is fixed and a drawn sheet drops in without code changes.
 - The pin/trigger wing lives in **east**, not west, and is reached through a door.
   West's four authored beats depend on its exact geometry and infinite creases make
   a pin a global veto on a band of folds, so nothing was placed there without

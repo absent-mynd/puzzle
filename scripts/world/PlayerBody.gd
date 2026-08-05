@@ -35,11 +35,19 @@ var _cam: Camera2D
 ## Last horizontal input: -1 left, +1 right. Default faces right.
 var facing := 1
 
-## How much world the frame should be showing, as a Camera2D zoom (smaller sees
+## How much world the frame should be showing, as a LOGICAL zoom (smaller sees
 ## more). Written each frame by `FoldWorld._update_camera` — the body knows its
-## own speed but not what the moment is about; the camera eases toward whatever
-## is here. See `WorldCore.camera_zoom_for`.
+## own speed but not what the moment is about; this eases toward whatever is
+## here. See `WorldCore.camera_zoom_for`.
+##
+## "Logical" because the Camera2D's own zoom is pinned to `PixelArt.CAMERA_ZOOM`
+## and never moves: that is what makes one art pixel exactly WORLD_PER_PIXEL
+## world units. Showing more world means giving the render target more pixels,
+## not changing the lens. `FoldWorld` resizes it from `camera_zoom()`.
 var zoom_target := WorldCore.ZOOM_RESTING
+
+## The eased logical zoom — what the target is actually sized from right now.
+var _zoom := WorldCore.ZOOM_RESTING
 
 ## Where the frame should sit relative to the body — the lead. Written each frame
 ## by `FoldWorld._update_camera` alongside `zoom_target`; the camera eases toward
@@ -81,9 +89,15 @@ func _ready() -> void:
 	_cam = Camera2D.new()
 	_cam.position_smoothing_enabled = false
 	_cam.top_level = true
+	# The camera's zoom is FIXED, and it is what keeps the art crisp: one art
+	# pixel must cover exactly PixelArt.WORLD_PER_PIXEL world units, and inside a
+	# render target that is purely a function of zoom. How much world is on
+	# screen is set by RESIZING the target instead — see `PixelArt.target_size`
+	# and `FoldWorld._update_camera`. So `zoom_target` below is a LOGICAL zoom: it
+	# sizes the target, it does not touch the lens.
+	_cam.zoom = PixelArt.CAMERA_ZOOM
 	add_child(_cam)
 	_cam.global_position = global_position
-	_cam.zoom = Vector2.ONE * zoom_target
 	_cam.make_current()
 
 
@@ -95,8 +109,17 @@ func _process(delta: float) -> void:
 		lookahead_target, 1.0 - exp(-CAM_LOOKAHEAD_SMOOTHING * delta))
 	_cam.global_position = _cam.global_position.lerp(
 		global_position + _lookahead, 1.0 - exp(-CAM_SMOOTHING * delta))
-	var z := lerpf(_cam.zoom.x, zoom_target, 1.0 - exp(-CAM_ZOOM_SMOOTHING * delta))
-	_cam.zoom = Vector2(z, z)
+	_zoom = lerpf(_zoom, zoom_target, 1.0 - exp(-CAM_ZOOM_SMOOTHING * delta))
+	_apply_pixel_snap()
+
+
+## Pixel-snap the view. A camera resting between art pixels makes every edge in
+## the world crawl as it slides, so the rendered centre is rounded to a whole art
+## pixel. The snap lives in `offset`, leaving `global_position` the unsnapped
+## truth: quantizing the smoothing state itself would let a slow pan stall
+## whenever a frame's step landed inside the pixel it started in.
+func _apply_pixel_snap() -> void:
+	_cam.offset = PixelArt.snap_round(_cam.global_position) - _cam.global_position
 
 
 func _physics_process(delta: float) -> void:
@@ -191,9 +214,11 @@ func motion_intensity() -> float:
 	return clampf(0.45 * absf(f.x) + 0.75 * maxf(f.y, 0.0) + 0.25 * maxf(-f.y, 0.0), 0.0, 1.0)
 
 
-## The zoom the camera is actually at, easing and all.
+## The LOGICAL zoom in force right now, easing and all — how much world the frame
+## is showing. `FoldWorld` sizes the pixel target from this; the lens itself never
+## moves (see `zoom_target`).
 func camera_zoom() -> float:
-	return _cam.zoom.x if _cam != null else zoom_target
+	return _zoom
 
 
 ## The lead the camera is currently applying, easing and all.
@@ -202,15 +227,16 @@ func camera_lookahead() -> Vector2:
 
 
 ## Cut the camera to the body with no pan. For hard relocations — respawn,
-## doors, region changes, being turned back by the fold. The lens and the lead cut
-## with it: easing a zoom across a warp would read as the new room inflating, and
-## easing the lead would drift the frame sideways as you arrive, which reads as the
-## camera having lost you.
+## doors, region changes, being turned back by the fold. The framing and the lead
+## cut with it: easing the zoom across a warp would read as the new room
+## inflating, and easing the lead would drift the frame sideways as you arrive,
+## which reads as the camera having lost you.
 func snap_camera() -> void:
 	if _cam != null:
 		_lookahead = lookahead_target
+		_zoom = zoom_target
 		_cam.global_position = global_position + _lookahead
-		_cam.zoom = Vector2.ONE * zoom_target
+		_apply_pixel_snap()
 
 
 ## Carry the camera through a wrap teleport. Inside a fold the strip repeats
@@ -221,6 +247,7 @@ func snap_camera() -> void:
 func shift_camera(offset: Vector2) -> void:
 	if _cam != null:
 		_cam.global_position += offset
+		_apply_pixel_snap()
 
 
 ## Where the camera actually is, lag and all.

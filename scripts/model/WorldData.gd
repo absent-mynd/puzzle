@@ -35,6 +35,7 @@ extends Resource
 ##   "spawn":     Vector2,        spawn point, in CELL units (0.5 = cell center)
 ##   "tile_data": Dictionary,     "x,y" -> per-tile params
 ##   "folds":     Array,          pre-placed folds, [{anchor1:{x,y}, anchor2:{x,y}}, ...]
+##   "lights":    Array[LightSource], lights placed on base cells (see LightSource)
 ## }
 @export var regions: Dictionary = {}
 
@@ -52,11 +53,15 @@ func to_dict() -> Dictionary:
 	var out_regions: Dictionary = {}
 	for id in regions:
 		var r: Dictionary = regions[id]
+		var out_lights: Array = []
+		for light in r.get("lights", []):
+			out_lights.append(light.to_dict())
 		out_regions[id] = {
 			"rows": (r.get("rows", []) as Array).duplicate(),
 			"spawn": {"x": r.get("spawn", Vector2.ZERO).x, "y": r.get("spawn", Vector2.ZERO).y},
 			"tile_data": (r.get("tile_data", {}) as Dictionary).duplicate(true),
 			"folds": (r.get("folds", []) as Array).duplicate(true),
+			"lights": out_lights,
 		}
 	var out_doors: Dictionary = {}
 	for id in doors:
@@ -89,11 +94,17 @@ func from_dict(dict: Dictionary) -> void:
 		for row in r.get("rows", []):
 			rows.append(String(row))
 		var sp: Dictionary = r.get("spawn", {})
+		var lights: Array = []
+		for entry in r.get("lights", []):
+			var light := LightSource.from_dict(entry)
+			light.region = id
+			lights.append(light)
 		regions[id] = {
 			"rows": rows,
 			"spawn": Vector2(float(sp.get("x", 0.0)), float(sp.get("y", 0.0))),
 			"tile_data": r.get("tile_data", {}),
 			"folds": r.get("folds", []),
+			"lights": lights,
 		}
 
 	doors = {}
@@ -171,6 +182,18 @@ func fold_pairs(id: String) -> Array:
 			Vector2i(int(a.get("x", 0)), int(a.get("y", 0))),
 			Vector2i(int(b.get("x", 0)), int(b.get("y", 0))),
 		])
+	return out
+
+
+## A region's authored lights, as fresh unbound `LightSource` copies. Copies,
+## because binding writes `base_id`/`bp` into them and the authored world must
+## stay the authored world (a reset re-binds from scratch).
+func lights_of(id: String) -> Array:
+	var out: Array = []
+	if not regions.has(id):
+		return out
+	for light in regions[id].get("lights", []):
+		out.append(light.duplicate_light())
 	return out
 
 

@@ -6,6 +6,19 @@ class_name WorldOverlay extends Node2D
 ## preview, seam-anchor diamonds (with unfoldability tint), the glue lines and
 ## outer seam anchor inside a subspace. Reads everything from its owning
 ## FoldWorld each frame.
+##
+## The overlay draws INSIDE the pixel render target, so every stroke is measured
+## in art pixels: a 1-unit line would be a quarter of a pixel and would flicker
+## in and out of existence as it moved. Widths are multiples of `HAIR`, and
+## marker centres are snapped, so the markers stay crisp and stationary.
+##
+## It is also drawn UNLIT, on purpose. Lighting is style; the markers you
+## navigate and fold by must read the same in a dark corner as under a lamp.
+
+## One art pixel.
+const HAIR := PixelArt.WORLD_PER_PIXEL
+## Two art pixels — for anything that has to be found at a glance.
+const STROKE := HAIR * 2.0
 
 var world  # FoldWorld; untyped to avoid a load-order cycle
 
@@ -52,7 +65,7 @@ func _draw_seam_markers() -> void:
 	var markers: Dictionary = world.seam_markers()
 	for cell in markers:
 		var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
-		_draw_diamond(center, 10.0,
+		_draw_diamond(center, 12.0,
 			Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
 
 
@@ -66,8 +79,8 @@ func _draw_doors(offsets: Array) -> void:
 			continue
 		for off in offsets:
 			var p: Vector2 = Vector2(wp) + off
-			draw_arc(p, 11.0, 0, TAU, 20, Color("7ce07c"), 3.0)
-			draw_circle(p, 4.0, Color("7ce07c", 0.9))
+			draw_arc(p, 12.0, 0, TAU, 20, Color("7ce07c"), STROKE)
+			draw_circle(p, HAIR, Color("7ce07c", 0.9))
 
 
 ## Inside the subspace: seam anchors of interior folds (every wrap copy), and
@@ -85,10 +98,10 @@ func _draw_subspace_markers(offsets: Array) -> void:
 		var glue_col := Color(1, 1, 1, 0.95) if exit_ok else Color("e06a6a", 0.95)
 		_draw_diamond(outer.crease_point1 + off, 12.0, glue_col)
 		if aimed_glue:
-			draw_arc(outer.crease_point1 + off, 18.0, 0, TAU, 24, glue_col, 3.0)
+			draw_arc(outer.crease_point1 + off, 20.0, 0, TAU, 24, glue_col, STROKE)
 		for cell in markers:
 			var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs + off
-			_draw_diamond(center, 10.0,
+			_draw_diamond(center, 12.0,
 				Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
 
 
@@ -111,9 +124,9 @@ func _draw_anchor_and_preview(offsets: Array) -> void:
 		aimed_center = (Vector2(aimed.meeting_pos) + Vector2(0.5, 0.5)) * cs
 
 	for off in offsets:
-		draw_arc(cand_center + off, 14.0, 0, TAU, 24, Color(1, 1, 1, 0.30), 2.0)
+		draw_arc(cand_center + off, 16.0, 0, TAU, 24, Color(1, 1, 1, 0.30), HAIR)
 		if aimed != null:
-			draw_arc(aimed_center + off, 17.0, 0, TAU, 24, Color("59e0d0"), 3.0)
+			draw_arc(aimed_center + off, 20.0, 0, TAU, 24, Color("59e0d0"), STROKE)
 
 	# The two pending anchor slots (Q = orange, E = blue), with soft axis
 	# guides — folds may be diagonal; guides just help line up straight ones.
@@ -126,10 +139,10 @@ func _draw_anchor_and_preview(offsets: Array) -> void:
 		var c: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
 		centers[i] = c
 		var guide := Color(1, 1, 1, 0.08)
-		draw_line(Vector2(0, c.y), Vector2(world_px.x, c.y), guide, 1.0)
-		draw_line(Vector2(c.x, 0), Vector2(c.x, world_px.y), guide, 1.0)
+		draw_line(Vector2(0, c.y), Vector2(world_px.x, c.y), guide, HAIR)
+		draw_line(Vector2(c.x, 0), Vector2(c.x, world_px.y), guide, HAIR)
 		for off in offsets:
-			draw_arc(c + off, 14.0, 0, TAU, 24, colors[i], 3.0)
+			draw_arc(c + off, 16.0, 0, TAU, 24, colors[i], STROKE)
 
 	if centers[0] == null or centers[1] == null:
 		return
@@ -162,12 +175,16 @@ func _draw_subspace_glue(offsets: Array) -> void:
 	var lo: float = world.sub_extent["min"] - 2.0 * world.base.cell_size
 	var hi: float = world.sub_extent["max"] + 2.0 * world.base.cell_size
 	for off in offsets:
-		draw_line(n * c1 + t * lo + off, n * c1 + t * hi + off, Color("59e0d0", 0.55), 2.0)
+		draw_line(n * c1 + t * lo + off, n * c1 + t * hi + off, Color("59e0d0", 0.55), HAIR)
 
 
+## Marker diamonds are snapped to the art-pixel grid: a diamond is only three
+## pixels across, and half a pixel of drift is the difference between a shape
+## and a smear.
 func _draw_diamond(center: Vector2, r: float, col: Color) -> void:
+	var c := PixelArt.snap_round(center)
 	var pts := PackedVector2Array([
-		center + Vector2(0, -r), center + Vector2(r, 0),
-		center + Vector2(0, r), center + Vector2(-r, 0),
+		c + Vector2(0, -r), c + Vector2(r, 0),
+		c + Vector2(0, r), c + Vector2(-r, 0),
 	])
 	draw_colored_polygon(pts, col)

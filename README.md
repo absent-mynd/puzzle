@@ -21,6 +21,8 @@ What makes it a metroidvania rather than a puzzle game:
 - **Doors are warp points that ride folds.** Fold a door away and its partner
   delivers you *inside* that fold. Fold something over a door and you have jammed it
   shut until you unfold.
+- **Lamps are occupants too.** Fold one away and it leaves the overworld entirely —
+  and lights the folded-away place instead, for whoever ends up in there.
 
 Run it: open the project in Godot and press play (`scenes/world/World.tscn`), or
 
@@ -39,13 +41,25 @@ Controls and the design beats are in
 scripts/
 ├── model/     # kernel: base grid, folds, derivation, transport, tile registry
 ├── utils/     # kernel: geometry and collision math
-├── world/     # the game: FoldWorld, WorldCore, PlayerBody, WorldOverlay
+├── world/     # the game: FoldWorld, WorldCore, PlayerBody, WorldOverlay,
+│           #   and the render pass: PixelArt, TileAtlas, LightRig
 ├── systems/   # AudioManager
 ├── ui/        # PauseMenu, Settings
 └── tests/     # GUT suite — the behavioral spec
-worlds/        # authored worlds (regions, doors, pre-placed folds)
+worlds/        # authored worlds (regions, doors, pre-placed folds, lights)
 scenes/world/  # World.tscn — the main scene
+assets/        # the lighting shader; the tileset layout (assets/sprites/README.md)
 ```
+
+The art is **pixel art with dynamic lighting**: the world renders into a
+low-resolution target scaled up with nearest filtering (320x180 at 1:1), tiles
+come from a 16px tileset, and lights are evaluated per art pixel. The camera
+zooms and leads with the moment; because the lens must stay fixed to keep an art
+pixel exactly 4 world units, opening the frame **resizes the render target**
+rather than moving the lens. It is style only — world coordinates, physics and
+reachability are unchanged, and unlit ground is exactly as navigable as lit
+ground. See [scripts/world/README.md](scripts/world/README.md) §"Art & light"
+and §"The camera".
 
 The kernel is pure and headless; it must never reference `scripts/world/`.
 

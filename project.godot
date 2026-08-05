@@ -44,5 +44,12 @@ interact={
 [rendering]
 
 renderer/rendering_method="forward_plus"
+; Pixel art: nearest filtering everywhere, no texture repeat, no 2D antialiasing
+; (MSAA would soften exactly the hard edges the style is made of), and canvas
+; items snapped to whole pixels of whichever viewport draws them — inside the
+; world's SubViewport that means whole ART pixels. See scripts/world/PixelArt.gd.
 textures/canvas_textures/default_texture_filter=0
-anti_aliasing/quality/msaa_2d=2
+textures/canvas_textures/default_texture_repeat=0
+anti_aliasing/quality/msaa_2d=0
+2d/snap/snap_2d_transforms_to_pixel=true
+2d/snap/snap_2d_vertices_to_pixel=true

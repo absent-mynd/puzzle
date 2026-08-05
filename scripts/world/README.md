@@ -111,6 +111,11 @@ moves the camera and the zoom's focus distances are measured from where the
 camera ends up. The other way round, a hard lead would quietly crop the very
 things the focus set exists to keep on screen.
 
+**Zoom here is a *logical* zoom, and the Camera2D's own zoom never changes.**
+Opening the frame resizes the pixel render target instead of moving the lens —
+otherwise the tileset would be resampled and the pixel art would go soft. See
+*Art & light → The pixel pass* for why, before changing anything about zoom.
+
 ## Regions & doors
 
 The world is now **two regions** (west and east), each its own sheet with its
@@ -196,6 +201,92 @@ it, at any height. West carries the four authored beats and its geometry is load
 bearing for all of them, so pins went in east, where there is room to be wrong.
 Placing them in west is a playtesting job, not an editing one.
 
+## Art & light
+
+The world is drawn as **pixel art with dynamic lighting**. Both are style, not
+mechanics: nothing about folding, collision or reachability changed, and an
+unlit corner is exactly as navigable as a lit one.
+
+### The pixel pass
+
+Everything in the world renders into a **low-resolution SubViewport** that is
+scaled up with nearest filtering (`PixelArt`). World coordinates did not change —
+a cell is still 64 units and every physics constant is untouched — so one art
+pixel is 4 world units and a cell is 16 art pixels. At 1:1 the target is 320×180.
+
+**The camera's lens never moves, even though the zoom is dynamic.** These are the
+two facts that have to coexist, and the way they do is worth knowing before you
+touch either: inside a render target, the size of an art pixel is purely a
+function of camera zoom. Move the lens and a 16px tile stops covering 16 target
+pixels — the atlas gets resampled and the world goes soft, which is the one thing
+this pass exists to prevent.
+
+So "the frame opens" is answered with **more pixels, not a wider lens**:
+`PixelArt.target_size` gives the resolution a given logical zoom needs, and
+`FoldWorld._size_pixel_view` resizes the target as the zoom eases. World-per-art-
+pixel stays 4.0 at every zoom, so a cell always spans a whole tile. The camera's
+`zoom_target` is therefore a *logical* zoom — it sizes the buffer; `_cam.zoom`
+stays pinned at `PixelArt.CAMERA_ZOOM` forever.
+
+- **Tiles come from a 16px tileset** (`TileAtlas`, and `assets/sprites/README.md`
+  for the layout). Fragments are textured through **base-space UVs**: a fragment
+  is sent back to its base tile by subtracting `src_offset`, so it carries the
+  patch of art it was cut from. A tile's variant is hashed from its `base_id`,
+  and the "open sky above" edge tile is read from the base grid — so a tile's
+  look never changes because it was folded, ridden or cut.
+- **The seam stays a hard line.** Because the art is cut by the crease exactly
+  as the geometry is, two flaps meeting at a seam show two tiles cut mid-pattern
+  against each other. Nothing blends, blurs or fades across it. That is
+  deliberate for now.
+- **The HUD is outside the pixel viewport**, at window resolution, so text stays
+  legible over chunky tiles. So are the overlay's markers — they are drawn
+  unlit, because what you navigate by must never dim.
+
+### Lights
+
+A light is an **occupant of the sheet**, stored the way a door is: a base tile
+identity plus a point inside it (`LightSource`). It has no world position; where
+it burns is a question asked of the current fragment list. Everything follows
+from that:
+
+- Fold a lamp's tile away and it is **gone from the overworld** — no glyph, no
+  light — and the same lamp is what **lights the fold's interior** when you get
+  in there.
+- Fold something else and the lamp **rides its flap**, like any other occupant.
+- Split its tile with a crease and it keeps burning on whichever half it landed
+  on. (A door in that position goes dormant; a light has no ambiguity to resolve.)
+
+Lighting is evaluated **per art pixel**: the shaded point and the light position
+are both snapped to the pixel grid, the accumulated intensity is quantized into
+bands, and the band edges are ordered-dithered — so light arrives in chunky
+rings rather than as a smooth glow. Ambient is generous on purpose.
+
+Where the shipped lights are, and what each is for:
+
+| Light | Region | Shows you |
+|---|---|---|
+| `w_spawn` | west | the ordinary case — and it rides the flap when you fold the pit |
+| `w_pit` | west | fold the pit shut and it leaves the world with the pit; get pinched in and it is in there with you |
+| `w_chamber` | west | the sealed chamber glows through its own shell — there is something in there |
+| `e_vault` | east | inside east's pre-placed fold: invisible from the overworld, and the only thing lighting the vault when you arrive through door W1 |
+| `e_reward` | east | over the reward the pressure plate opens |
+
+Authoring, per region in `worlds/overworld.json`:
+
+```json
+"lights": [
+  {"id": "w_spawn", "cell": {"x": 3, "y": 13}, "color": "#ffd08a",
+   "radius": 5.0, "energy": 1.0, "flicker": 0.12}
+]
+```
+
+`radius` is in **cells**; `offset` (cell units, default centre) places the lamp
+within its tile; `flicker` is the idle amplitude, 0 for a steady lamp.
+
+**No occlusion.** Lights pass through walls. Shadow casters would have to be
+re-derived per fold and would want to soften the seam, which is exactly what we
+do not want yet.
+
 ## Current limits (deliberate)
 
 - No nested pinch: you cannot fold yourself deeper while already inside a
@@ -210,22 +301,29 @@ Placing them in west is a playtesting job, not an editing one.
   splice folds into an interior list mid-cascade, which the resolver does not model.
 - Unanchorable tiles (`_`, `X`) and occupants are supported by the format and covered
   by tests, but the shipped world does not place any yet.
+- Lights do not cast shadows, and the seam is not lit specially — see *Art & light*.
+- The player and the overlay markers are drawn unlit, so they never disappear
+  into an unlit corner.
 
 ## Files
 
 - `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
   and glue segments, depenetration, anchor/fold eligibility, camera zoom and
   lookahead). Covered by `scripts/tests/test_world_core.gd`.
-- `FoldWorld.gd` — scene driver: derived geometry → Polygon2D + colliders,
+- `FoldWorld.gd` — scene driver: derived geometry → textured Polygon2D + colliders,
   fold/unfold with player riding, subspace enter/wrap/exit, regions, doors,
-  triggers.
+  triggers, and the pixel render target (which it resizes as the zoom changes).
 - `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, squash) and
-  the camera, whose smoothing is driven here so the wrap can displace it by a
-  whole band width without losing its lag. Its camera-facing readings
-  (`look_dir`, `motion_fraction`, `motion_intensity`) are covered by
+  the pixel-snapped camera, whose smoothing is driven here so the wrap can
+  displace it by a whole band width without losing its lag. Its camera-facing
+  readings (`look_dir`, `motion_fraction`, `motion_intensity`) are covered by
   `scripts/tests/test_player_body.gd`.
 - `WorldOverlay.gd` — anchors, strip preview band, seam markers, glue lines.
   Everything point-like repeats across the wrap copies (`_copy_offsets`); seam
   diamonds are one per meeting CELL, since folds can share one
-  (`FoldWorld.seam_markers`).
+  (`FoldWorld.seam_markers`). Stroke widths are multiples of one art pixel.
+- `PixelArt.gd` — how big an art pixel is; the one place that says so, including
+  the target size a given zoom needs (`target_size`).
+- `TileAtlas.gd` — the tileset: kinds, variants, and base-space UVs for fragments.
+- `LightRig.gd` — lit materials, per-frame light uniforms, lamp glyphs.
 - Scene flows in `scripts/tests/test_fold_world.gd`.
