@@ -196,7 +196,7 @@ func _setup_all() -> void:
 	context.clear()
 	_apply_context()
 	player.teleport(_spawn, false)
-	player.snap_camera()
+	_cut_camera()
 
 
 func _take_fold_id() -> int:
@@ -259,7 +259,11 @@ func rebuild_sub() -> void:
 		child.queue_free()
 	sub_player_ghosts = []
 	var gap := sub_fold.gap_distance()
-	sub_copies = clampi(int(ceil(1400.0 / gap)), 1, 24)
+	# Enough copies to fill the WIDEST frame the camera can pull out to, not the
+	# current one: the count is fixed when the subspace is built, and a visible
+	# end to the repetition would break the cylinder the moment the lens opened.
+	var reach := WorldCore.camera_view_radius(get_viewport_rect().size, WorldCore.ZOOM_WIDEST)
+	sub_copies = clampi(int(ceil(reach / gap)), 1, 24)
 	for k in range(-sub_copies, sub_copies + 1):
 		var copy := Node2D.new()
 		copy.position = sub_fold.crease_normal * (k * gap)
@@ -843,7 +847,7 @@ func _traverse(id: String) -> void:
 		context.append(f)
 	_apply_context()
 	player.teleport(landed)
-	player.snap_camera()
+	_cut_camera()
 	_show_flash("You emerge INSIDE a fold." if into_fold else "You step through the door.")
 
 
@@ -897,6 +901,8 @@ func _make_frag(layer: Node2D, poly: PackedVector2Array, color: Color, kind: Str
 
 
 func _process(delta: float) -> void:
+	# Before the early-out: the lens has to keep working while a fold plays.
+	_update_camera()
 	if _anim.is_empty():
 		return
 	_anim["progress"] = minf(_anim["progress"] + delta / ANIM_TIME, 1.0)
@@ -934,6 +940,61 @@ func _apply_anim_frame() -> void:
 						out.append(Vector2(v) + n * ((meet_d - d) * t))
 					frag["node"].polygon = out
 	player.global_position = Vector2(_anim["p_from"]).lerp(Vector2(_anim["p_to"]), eased)
+
+
+# ---------------------------------------------------------------------------
+# Camera framing
+# ---------------------------------------------------------------------------
+# The player owns the camera (see PlayerBody); this decides what it should be
+# SHOWING. The body supplies motion — it knows its own limits — and the world
+# supplies the focus set, because only the world knows what the moment is about.
+
+## `center` overrides where the camera is taken to be — the cut path needs the
+## framing of where the body is going, not of where the lens still is.
+func _update_camera(center: Vector2 = Vector2.INF) -> void:
+	if player == null:
+		return
+	player.zoom_target = WorldCore.camera_zoom_for({
+		"viewport": get_viewport_rect().size,
+		"center": player.camera_position() if center == Vector2.INF else center,
+		"motion": player.motion_intensity(),
+		# A fold rearranging the world is its own reason to step back and watch.
+		"widen": 1.0 if animating() else 0.0,
+		"focus": _camera_focus(),
+	})
+
+
+## Cut the camera — position AND lens — to where the body now is. For hard
+## relocations (spawn, doors, being turned back by the fold): the destination's
+## framing is computed first, because easing into it would read as the new room
+## inflating around you.
+func _cut_camera() -> void:
+	_update_camera(player.global_position)
+	player.snap_camera()
+
+
+## World points that would be a mistake to leave off screen right now.
+func _camera_focus() -> PackedVector2Array:
+	var pts := PackedVector2Array([player.global_position])
+	# A pinned anchor is one half of a fold you are still composing. Walk away
+	# from it and the frame opens to keep the span you are judging in view — the
+	# camera showing you how big the fold has got.
+	for slot in [0, 1]:
+		var cell = pending_cell(slot)
+		if cell != null:
+			pts.append((Vector2(cell) + Vector2(0.5, 0.5)) * CS)
+	# Inside a fold the band IS the room: frame it glue to glue, so a wide strip
+	# reads as the cylinder it is rather than a corridor with no visible walls.
+	if mode == Mode.SUBSPACE and sub_fold != null:
+		var n := sub_fold.crease_normal
+		var d := (player.global_position - sub_fold.crease_point1).dot(n)
+		pts.append(player.global_position - n * d)
+		pts.append(player.global_position + n * (sub_fold.gap_distance() - d))
+	# A fold ride can carry you further than a frame's width. Hold both ends.
+	if animating():
+		pts.append(_anim["p_from"])
+		pts.append(_anim["p_to"])
+	return pts
 
 
 # ---------------------------------------------------------------------------
@@ -985,7 +1046,7 @@ func _subspace_wrap_and_turnback() -> void:
 		var back := sub_fold.crease_point1 + n * (gap * 0.5)
 		var landed := WorldCore.depenetrate(back, PlayerBody.RADIUS, sub_wall_polys)
 		player.teleport(back if landed == Vector2.INF else landed, false)
-		player.snap_camera()
+		_cut_camera()
 		_show_flash("The fold turns back on itself here.")
 
 

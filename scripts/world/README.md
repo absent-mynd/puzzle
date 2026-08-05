@@ -52,6 +52,31 @@ riding** (each fragment knows its base identity and offset), not approximate
 crease math. Folds and unfolds animate: flaps slide, the strip collapses
 onto — or springs from — the seam.
 
+## The camera
+
+The frame is not a fixed lens — it opens and closes with what the moment is
+about, and it only ever opens (resting is the tightest it sits, so it never
+closes in on you unasked):
+
+- **Speed.** Running widens it a little, falling hard widens it a lot. A long
+  drop is the one move where the frame you have is certainly not the frame you
+  need.
+- **The fold you are composing.** Pin an anchor and walk away, and the view
+  opens to keep it on screen. The camera is showing you how big the fold has
+  got — that span *is* the decision you are about to make.
+- **The band you are inside.** In a subspace the strip is framed glue to glue,
+  so a wide band reads as the cylinder it is rather than a corridor with no
+  visible walls.
+- **A fold rearranging the world.** The transition steps the camera back so you
+  watch the space move, then settles.
+
+Zoom eases much more slowly than the follow does — a frame that resizes as
+briskly as it pans reads as breathing rather than attention. `PlayerBody` owns
+the camera, `WorldCore.camera_zoom_for` decides the target, and
+`FoldWorld._camera_focus` is the list of things it would be a mistake to leave
+off screen. Hard relocations (respawn, doors) cut the zoom along with the
+position — easing it would read as the new room inflating.
+
 ## Regions & doors
 
 The world is now **two regions** (west and east), each its own sheet with its

@@ -235,3 +235,90 @@ func test_ordinary_walls_do_not_block_folds() -> void:
 	var f := Fold.create(0, Vector2i(1, 0), Vector2i(5, 0), CS)
 	assert_false(WorldCore.fold_blocked_by_tile(pieces, f, CS),
 		"only blocks_fold types stop a fold — walls fold away normally")
+
+
+# ---------------------------------------------------------------------------
+# Camera framing
+# ---------------------------------------------------------------------------
+
+const VIEW := Vector2(1280, 720)
+
+
+func _zoom(ctx: Dictionary) -> float:
+	var full := {"viewport": VIEW, "center": Vector2.ZERO}
+	full.merge(ctx, true)
+	return WorldCore.camera_zoom_for(full)
+
+
+func test_camera_rests_wider_than_one_to_one() -> void:
+	var z := _zoom({})
+	assert_eq(z, WorldCore.ZOOM_RESTING, "Nothing happening: the camera sits at its resting zoom")
+	assert_lt(z, 1.0, "Resting shows MORE than the raw design scale")
+
+
+func test_camera_widens_with_motion() -> void:
+	var still := _zoom({"motion": 0.0})
+	var running := _zoom({"motion": 0.45})
+	var falling := _zoom({"motion": 1.0})
+	assert_lt(running, still, "Moving pulls the frame out")
+	assert_lt(falling, running, "All-out motion pulls it out further")
+	assert_gt(falling, WorldCore.ZOOM_WIDEST * 0.999, "Motion alone never blows past the floor")
+
+
+func test_camera_ignores_focus_points_that_already_fit() -> void:
+	# A couple of cells away is well inside the resting frame; the camera should
+	# not twitch for every anchor pinned at arm's length.
+	var near := _zoom({"focus": PackedVector2Array([Vector2(2.0 * CS, 0)])})
+	assert_eq(near, WorldCore.ZOOM_RESTING, "A point already on screen changes nothing")
+
+
+func test_camera_widens_to_keep_a_far_focus_point_on_screen() -> void:
+	var far := Vector2(13.0 * CS, 0)
+	var z := _zoom({"focus": PackedVector2Array([far])})
+	assert_lt(z, WorldCore.ZOOM_RESTING, "A distant anchor pulls the frame out")
+	assert_lt(far.x + WorldCore.ZOOM_FOCUS_MARGIN, VIEW.x * 0.5 / z + 0.01,
+		"...far enough out that the point is actually in frame, with its margin")
+
+
+func test_camera_framing_is_governed_by_the_tightest_axis() -> void:
+	# The window is wider than it is tall, so the same offset in y binds harder
+	# than it does in x.
+	var o := 7.0 * CS
+	var wide := _zoom({"focus": PackedVector2Array([Vector2(o, 0)])})
+	var tall := _zoom({"focus": PackedVector2Array([Vector2(0, o)])})
+	assert_lt(tall, wide, "Height is the binding constraint at 16:9")
+	assert_eq(_zoom({"focus": PackedVector2Array([Vector2(o, o)])}), tall,
+		"Both at once is governed by whichever axis is tightest")
+
+
+func test_camera_measures_focus_from_the_camera_not_the_span() -> void:
+	# The camera sits at `center`, not at the middle of the focus set: two points
+	# 5 cells apart but both well off to one side must be framed by their
+	# DISTANCE, not by the 5-cell span between them.
+	var pair := PackedVector2Array([Vector2(8.0 * CS, 0), Vector2(13.0 * CS, 0)])
+	var offset := _zoom({"center": Vector2.ZERO, "focus": pair})
+	var centred := _zoom({"center": Vector2(10.5 * CS, 0), "focus": pair})
+	assert_lt(offset, centred, "Points far from the camera need a wider frame than a tight span")
+
+
+func test_camera_never_leaves_its_bounds() -> void:
+	var absurd := _zoom({"motion": 1.0, "widen": 1.0,
+		"focus": PackedVector2Array([Vector2(400.0 * CS, 400.0 * CS)])})
+	assert_eq(absurd, WorldCore.ZOOM_WIDEST, "A region-spanning fold clamps at the floor")
+	assert_eq(_zoom({"motion": -5.0, "widen": -5.0}), WorldCore.ZOOM_RESTING,
+		"Nothing can pull the frame TIGHTER than resting")
+
+
+func test_camera_widen_pulls_out_during_a_fold() -> void:
+	assert_lt(_zoom({"widen": 1.0}), _zoom({"widen": 0.0}),
+		"The world rearranging is its own reason to step back")
+
+
+func test_camera_view_radius_covers_the_frame_corner() -> void:
+	# Everything drawn must reach the corner of the frame, or the repeated bands
+	# inside a fold would visibly run out.
+	var r := WorldCore.camera_view_radius(VIEW, 0.5)
+	assert_almost_eq(r, Vector2(1280.0, 720.0).length(), 0.01,
+		"At half zoom the visible half-diagonal is the full-scale diagonal")
+	assert_gt(WorldCore.camera_view_radius(VIEW, 0.5), WorldCore.camera_view_radius(VIEW, 1.0),
+		"Zooming out sees further")

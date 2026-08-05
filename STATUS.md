@@ -3,7 +3,7 @@
 **Last Updated:** 2026-08-05
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation.
-**Tests:** **228 passing** / 228 (0 failing, 0 risky), 14 scripts, ~2.5s.
+**Tests:** **243 passing** / 243 (0 failing, 0 risky), 14 scripts, ~3.0s.
 
 ---
 
@@ -35,15 +35,15 @@ What exists and works today:
 
 ## Test suite
 
-228 passing across 14 scripts. Composition:
+243 passing across 14 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
-| `test_fold_world` | 23 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates |
+| `test_fold_world` | 29 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, camera |
 | `test_world_data` | 19 | World format + the shipped world's content |
-| `test_world_core` | 19 | Map parsing, seams, anchor/fold eligibility |
+| `test_world_core` | 28 | Map parsing, seams, anchor/fold eligibility, camera framing |
 | `test_tile_types` | 16 | The registry |
 | `test_collision_core` | 13 | Polygon clipping under folds |
 | `test_trigger_cascade` | 12 | Firing, idempotence, pin veto, cascade cap |
@@ -63,6 +63,25 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — The camera frames the moment, not a fixed lens
+
+- **Zoom is dynamic.** The frame rested at 1:1 — about twenty cells across — which
+  read tight for a game whose subject is the shape of the space. It now rests at
+  `WorldCore.ZOOM_RESTING` (0.80) and *opens* from there, never closes:
+  - **speed** — running widens a little, falling hard widens a lot;
+  - **the fold you are composing** — pin an anchor, walk away, and the view opens
+    to keep it on screen; the span you can see IS the decision you are making;
+  - **the band you are inside** — a subspace is framed glue to glue, so a wide
+    strip reads as a cylinder rather than a corridor with no visible walls;
+  - **a fold rearranging the world** — the transition steps the camera back.
+- **`WorldCore.camera_zoom_for` is the pure decision** (a motion scalar, a widen
+  scalar, and a focus set of points that must stay on screen); `FoldWorld` supplies
+  the context, `PlayerBody` supplies motion from its own limits and eases the lens
+  (much lazier than the follow — a frame that resizes as fast as it pans breathes).
+  Hard relocations cut the zoom with the position.
+- **Subspace wrap copies now derive from the widest frame** rather than a hardcoded
+  1400px, so the repeating strip has no visible end when the lens opens.
 
 ### 2026-08-05 — The inside of a fold reads as one cylinder
 

@@ -268,3 +268,65 @@ static func can_anchor_at(pieces_by_pos: Dictionary, cell: Vector2i) -> bool:
 ## next to the derivation (see `FoldReplay.blocked_by_tile`).
 static func fold_blocked_by_tile(pieces: Array, fold: Fold, cell_size: float) -> bool:
 	return FoldReplay.blocked_by_tile(pieces, fold, cell_size)
+
+
+# ---------------------------------------------------------------------------
+# Camera framing
+# ---------------------------------------------------------------------------
+# The lens is not fixed. A tight frame reads the BODY and a wide one reads the
+# SPACE — and this is a game about the shape of the space, so how much to show
+# is a question about what the moment is: how hard you are moving, and what
+# would be a mistake to leave off screen (an anchor pinned twenty cells back,
+# the band you are folded inside, the two ends of a fold ride).
+#
+# Every term can only WIDEN the frame. Resting is the tightest it ever sits, so
+# the camera never closes in on you unasked.
+
+## Zoom with nothing happening: standing still, nothing pinned. Camera2D zoom
+## semantics — below 1.0 sees more world than the design scale.
+const ZOOM_RESTING := 0.80
+## The widest the frame may go. A fold can span a whole region; without a floor,
+## pinning its far anchor would shrink the world to a postage stamp.
+const ZOOM_WIDEST := 0.55
+## How much of the frame all-out motion pulls out.
+const ZOOM_MOTION_PULL := 0.28
+## ...and how much a fold transition does, on top.
+const ZOOM_CONTEXT_PULL := 0.10
+## Framed points are kept at least this far inside the window edge, so a thing
+## that matters never sits half-cropped against the border.
+const ZOOM_FOCUS_MARGIN := 2.5 * CELL
+
+
+## Target zoom for the moment described by `ctx`:
+##   `viewport` (Vector2) window size in pixels
+##   `center`   (Vector2) where the camera is — focus distances measure from here
+##   `motion`   (float 0..1) how hard the body is moving; see PlayerBody.motion_intensity
+##   `widen`    (float 0..1) extra context pull (a fold rearranging the world)
+##   `focus`    (PackedVector2Array) world points that must stay on screen
+static func camera_zoom_for(ctx: Dictionary) -> float:
+	var motion := clampf(float(ctx.get("motion", 0.0)), 0.0, 1.0)
+	var widen := clampf(float(ctx.get("widen", 0.0)), 0.0, 1.0)
+	var zoom := ZOOM_RESTING * (1.0 - ZOOM_MOTION_PULL * motion - ZOOM_CONTEXT_PULL * widen)
+
+	var focus: PackedVector2Array = ctx.get("focus", PackedVector2Array())
+	if not focus.is_empty():
+		var viewport: Vector2 = ctx.get("viewport", Vector2(1280, 720))
+		var center: Vector2 = ctx.get("center", Vector2.ZERO)
+		# The camera sits at `center`, not at the middle of the focus set, so what
+		# has to fit is the largest distance OUT to a focus point — not the span
+		# between them. Two anchors close together but far to one side still need
+		# a wide frame.
+		var reach := Vector2(ZOOM_FOCUS_MARGIN, ZOOM_FOCUS_MARGIN)
+		for p in focus:
+			var d := (Vector2(p) - center).abs()
+			reach.x = maxf(reach.x, d.x + ZOOM_FOCUS_MARGIN)
+			reach.y = maxf(reach.y, d.y + ZOOM_FOCUS_MARGIN)
+		zoom = minf(zoom, minf(viewport.x * 0.5 / reach.x, viewport.y * 0.5 / reach.y))
+	return clampf(zoom, ZOOM_WIDEST, ZOOM_RESTING)
+
+
+## Half-diagonal of the world rectangle a viewport shows at `zoom`: how far from
+## the camera something can sit and still be drawn. Used to decide how many copies
+## of a repeating strip to build — a visible end to the repetition breaks it.
+static func camera_view_radius(viewport: Vector2, zoom: float) -> float:
+	return (viewport / maxf(zoom, 0.01)).length() * 0.5

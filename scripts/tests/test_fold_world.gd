@@ -380,3 +380,88 @@ func test_no_hud_control_swallows_mouse_input() -> void:
 			assert_ne(node.mouse_filter, Control.MOUSE_FILTER_STOP,
 				"%s must not stop mouse events" % node.get_path())
 		stack.append_array(node.get_children())
+
+
+# ---------------------------------------------------------------------------
+# Dynamic camera framing
+# ---------------------------------------------------------------------------
+
+func test_camera_starts_at_the_resting_zoom() -> void:
+	assert_almost_eq(world.player.camera_zoom(), WorldCore.ZOOM_RESTING, 0.001,
+		"A fresh world snaps the lens to resting, it does not ease in from 1:1")
+
+
+func test_running_pulls_the_frame_out() -> void:
+	world._update_camera()
+	var still: float = world.player.zoom_target
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	var running: float = world.player.zoom_target
+	assert_lt(running, still, "At a full run the camera shows more ground")
+
+	world.player.velocity.y = PlayerBody.MAX_FALL
+	world._update_camera()
+	assert_lt(world.player.zoom_target, running, "Falling hard pulls it out further still")
+
+
+func test_a_far_pinned_anchor_stays_in_frame() -> void:
+	world._update_camera()
+	var before: float = world.player.zoom_target
+	world.place_pending(0, Vector2i(1, 0))              # anchor 1 at (5,12)
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor pinned")
+
+	# Walk 20 cells away: the fold being composed is now wider than the frame.
+	world.player.teleport(Vector2(25.5 * CS, 12.5 * CS), false)
+	world.player.snap_camera()
+	world._update_camera()
+	assert_lt(world.player.zoom_target, before,
+		"The far half of the fold you are building drags the frame open")
+
+	world.pending_a = null
+	world._update_camera()
+	assert_almost_eq(world.player.zoom_target, before, 0.001,
+		"Clearing the anchor lets the frame settle back")
+
+
+func test_inside_a_fold_the_band_is_framed_glue_to_glue() -> void:
+	_pinch_over_pit()
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	var focus: PackedVector2Array = world._camera_focus()
+	var n: Vector2 = world.sub_fold.crease_normal
+	var near: float = world.sub_fold.crease_point1.dot(n)
+	var far: float = near + world.sub_fold.gap_distance()
+	var seen := {}
+	for p in focus:
+		seen[snappedf(Vector2(p).dot(n), 0.01)] = true
+	assert_true(seen.has(snappedf(near, 0.01)), "The near glue line is held in frame")
+	assert_true(seen.has(snappedf(far, 0.01)), "...and so is the far one: the band is the room")
+
+
+func test_a_fold_transition_steps_the_camera_back() -> void:
+	world.anim_enabled = true
+	world._update_camera()
+	var before: float = world.player.zoom_target
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_true(world.animating(), "The fold is playing")
+	world._update_camera()
+	assert_lt(world.player.zoom_target, before, "The world rearranging pulls the lens back")
+
+	world._process(world.ANIM_TIME)                     # play the transition out
+	assert_false(world.animating(), "The fold settled")
+	world._update_camera()
+	assert_almost_eq(world.player.zoom_target, before, 0.001,
+		"...and the frame settles back once it has")
+
+
+func test_a_hard_relocation_cuts_the_lens_as_well_as_the_position() -> void:
+	# Falling wide, then warped. Easing into the destination's framing would read
+	# as the new room inflating around you, so the cut takes the lens with it.
+	world.player.velocity.y = PlayerBody.MAX_FALL
+	world._update_camera()
+	assert_lt(world.player.zoom_target, WorldCore.ZOOM_RESTING, "The fall opened the frame")
+
+	world.player.velocity = Vector2.ZERO
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+	world._cut_camera()
+	assert_almost_eq(world.player.camera_zoom(), WorldCore.ZOOM_RESTING, 0.001,
+		"The cut lands on the destination's own framing, with nothing left to ease")
