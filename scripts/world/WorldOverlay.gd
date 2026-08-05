@@ -43,12 +43,17 @@ func _copy_offsets() -> Array:
 	return out
 
 
+## One diamond per meeting CELL, not per fold: folds can share a seam cell, and
+## stacking two markers there would draw the buried fold's refusal over the free
+## fold's invitation. `world.seam_markers()` resolves the cell the same way F
+## does. See FoldWorld.aimed_fold.
 func _draw_seam_markers() -> void:
 	var cs: float = world.base.cell_size
-	for fold in world.folds:
-		var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs
-		var ok: bool = world.can_unfold_fold(fold)
-		_draw_diamond(center, 10.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
+	var markers: Dictionary = world.seam_markers()
+	for cell in markers:
+		var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
+		_draw_diamond(center, 10.0,
+			Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
 
 
 ## Doors are warp POINTS riding tile centers: drawn only where the point
@@ -75,15 +80,16 @@ func _draw_subspace_markers(offsets: Array) -> void:
 		return
 	var exit_ok: bool = world.exit_blocker() == null
 	var aimed_glue: bool = world.aiming_at_glue()
+	var markers: Dictionary = world.seam_markers()
 	for off in offsets:
 		var glue_col := Color(1, 1, 1, 0.95) if exit_ok else Color("e06a6a", 0.95)
 		_draw_diamond(outer.crease_point1 + off, 12.0, glue_col)
 		if aimed_glue:
 			draw_arc(outer.crease_point1 + off, 18.0, 0, TAU, 24, glue_col, 3.0)
-		for fold in world.level_folds():
-			var center: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs + off
-			var ok: bool = world.can_unfold_fold(fold)
-			_draw_diamond(center, 10.0, Color("59e0d0") if ok else Color("e06a6a", 0.9))
+		for cell in markers:
+			var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs + off
+			_draw_diamond(center, 10.0,
+				Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
 
 
 ## Point markers here repeat across the wrap copies, so a player copy is never

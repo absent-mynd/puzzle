@@ -457,13 +457,29 @@ func place_pending(slot: int, dir: Vector2i) -> void:
 		pending_b = null if pending_cell(1) != null and pending_cell(1) == cand else entry
 
 
+## The fold that F should unfold from where you are standing / aiming. Several
+## folds can meet in the SAME cell — a horizontal pair and a vertical pair whose
+## halves happen to join at one spot — and then one diamond stands for all of
+## them. Search NEWEST FIRST and prefer one that can actually come out, because
+## the older of a stacked pair is exactly the one the newer is blocking: taking
+## the first match in fold order would offer you nothing but the refusal.
+##
+## Falls back to the newest match when none is unfoldable, so the message you get
+## is still about the fold you were pointing at.
 func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
 	var cand := candidate_anchor(dir)
 	var here := player_cell()
-	for fold in level_folds():
-		if fold.meeting_pos == cand or fold.meeting_pos == here:
+	var list: Array = level_folds()
+	var blocked: Fold = null
+	for i in range(list.size() - 1, -1, -1):
+		var fold: Fold = list[i]
+		if fold.meeting_pos != cand and fold.meeting_pos != here:
+			continue
+		if can_unfold_fold(fold):
 			return fold
-	return null
+		if blocked == null:
+			blocked = fold
+	return blocked
 
 
 ## Inside a subspace, is the player aiming at (or standing on) the outer
@@ -613,6 +629,18 @@ func can_unfold_fold(fold: Fold) -> bool:
 		if WorldCore.segment_intersects_band(seg[0], seg[1], list[j]):
 			return false
 	return true
+
+
+## The seam diamonds to draw: meeting cell -> can anything there come out.
+## Several folds can meet in one cell, so the marker is one diamond for all of
+## them and reads unblocked when F there would DO something — the same choice
+## `aimed_fold` makes, so the colour never promises what the act refuses.
+func seam_markers() -> Dictionary:
+	var out: Dictionary = {}
+	for fold in level_folds():
+		var cell: Vector2i = fold.meeting_pos
+		out[cell] = bool(out.get(cell, false)) or can_unfold_fold(fold)
+	return out
 
 
 ## An interior fold of `fold` whose band crosses `fold`'s glue blocks
@@ -946,17 +974,34 @@ func _apply_anim_frame() -> void:
 # Camera framing
 # ---------------------------------------------------------------------------
 # The player owns the camera (see PlayerBody); this decides what it should be
-# SHOWING. The body supplies motion — it knows its own limits — and the world
-# supplies the focus set, because only the world knows what the moment is about.
+# SHOWING — how much (zoom) and from where (lookahead). The body supplies motion
+# and the look keys, because it knows its own limits and its own input; the world
+# supplies the focus set and the flat axis, because only the world knows what the
+# moment is about.
 
-## `center` overrides where the camera is taken to be — the cut path needs the
-## framing of where the body is going, not of where the lens still is.
+## `center` overrides where the BODY is taken to be — the cut path needs the
+## framing of where it is going, not of where the lens still is.
 func _update_camera(center: Vector2 = Vector2.INF) -> void:
 	if player == null:
 		return
+	var body: Vector2 = player.global_position if center == Vector2.INF else center
+	# The lead first: it moves the camera, and the zoom's focus distances are
+	# measured from where the camera ends up. Decided in the other order, a hard
+	# lead would quietly crop the very things the focus set exists to keep on screen.
+	player.lookahead_target = WorldCore.camera_lookahead_for({
+		"velocity": player.motion_fraction(),
+		"look": player.look_dir(),
+		# Inside a fold the strip repeats along the crease normal, so the frame
+		# already shows every band there is that way: leading along it would slide
+		# the view across identical copies for nothing.
+		"flat_axis": sub_fold.crease_normal if _in_subspace() else Vector2.ZERO,
+		"frozen": animating(),
+	})
+	var eye := (player.camera_position() if center == Vector2.INF
+		else body + player.lookahead_target)
 	player.zoom_target = WorldCore.camera_zoom_for({
 		"viewport": get_viewport_rect().size,
-		"center": player.camera_position() if center == Vector2.INF else center,
+		"center": eye,
 		"motion": player.motion_intensity(),
 		# A fold rearranging the world is its own reason to step back and watch.
 		"widen": 1.0 if animating() else 0.0,
@@ -964,13 +1009,17 @@ func _update_camera(center: Vector2 = Vector2.INF) -> void:
 	})
 
 
-## Cut the camera — position AND lens — to where the body now is. For hard
+## Cut the camera — position, lens AND lead — to where the body now is. For hard
 ## relocations (spawn, doors, being turned back by the fold): the destination's
 ## framing is computed first, because easing into it would read as the new room
 ## inflating around you.
 func _cut_camera() -> void:
 	_update_camera(player.global_position)
 	player.snap_camera()
+
+
+func _in_subspace() -> bool:
+	return mode == Mode.SUBSPACE and sub_fold != null
 
 
 ## World points that would be a mistake to leave off screen right now.
@@ -985,7 +1034,7 @@ func _camera_focus() -> PackedVector2Array:
 			pts.append((Vector2(cell) + Vector2(0.5, 0.5)) * CS)
 	# Inside a fold the band IS the room: frame it glue to glue, so a wide strip
 	# reads as the cylinder it is rather than a corridor with no visible walls.
-	if mode == Mode.SUBSPACE and sub_fold != null:
+	if _in_subspace():
 		var n := sub_fold.crease_normal
 		var d := (player.global_position - sub_fold.crease_point1).dot(n)
 		pts.append(player.global_position - n * d)

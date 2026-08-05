@@ -21,6 +21,11 @@ const CAM_SMOOTHING := 8.0
 ## ...and of the zoom toward its target. Much lazier than the follow: a frame
 ## that resizes as briskly as it pans reads as breathing, not as attention.
 const CAM_ZOOM_SMOOTHING := 2.5
+## ...and of the LEAD toward its target. Also lazy, for a different reason: the
+## lead flips sign the instant you turn around, and a lead that tracked that at
+## the follow's rate would whip the frame across the body on every direction
+## change. Eased, a reversal reads as the view swinging round to your new heading.
+const CAM_LOOKAHEAD_SMOOTHING := 3.0
 
 var _coyote := 0.0
 var _buffer := 0.0
@@ -35,6 +40,16 @@ var facing := 1
 ## own speed but not what the moment is about; the camera eases toward whatever
 ## is here. See `WorldCore.camera_zoom_for`.
 var zoom_target := WorldCore.ZOOM_RESTING
+
+## Where the frame should sit relative to the body — the lead. Written each frame
+## by `FoldWorld._update_camera` alongside `zoom_target`; the camera eases toward
+## it. See `WorldCore.camera_lookahead_for`.
+var lookahead_target := Vector2.ZERO
+
+## The lead the camera is currently applying, eased. Kept apart from
+## `lookahead_target` so the follow can aim at `global_position + this` — the body
+## is what the camera chases, and the lead is an offset on top of it.
+var _lookahead := Vector2.ZERO
 
 ## Set during fold animations: physics and input are suspended while the
 ## world rearranges, and the animator drives global_position directly.
@@ -76,8 +91,10 @@ func _process(delta: float) -> void:
 	if _cam == null:
 		return
 	# Frame-rate independent exponential approach (stable for large deltas).
+	_lookahead = _lookahead.lerp(
+		lookahead_target, 1.0 - exp(-CAM_LOOKAHEAD_SMOOTHING * delta))
 	_cam.global_position = _cam.global_position.lerp(
-		global_position, 1.0 - exp(-CAM_SMOOTHING * delta))
+		global_position + _lookahead, 1.0 - exp(-CAM_SMOOTHING * delta))
 	var z := lerpf(_cam.zoom.x, zoom_target, 1.0 - exp(-CAM_ZOOM_SMOOTHING * delta))
 	_cam.zoom = Vector2(z, z)
 
@@ -127,17 +144,39 @@ func teleport(to: Vector2, keep_velocity: bool = true) -> void:
 		velocity = Vector2.ZERO
 
 
+## Held vertical intent: -1 up, +1 down, 0 neither. Up wins when both are held —
+## one reading of the keys, used both to aim an anchor and to lean the frame, so
+## pressing up to point up shows you what you are pointing at.
+func look_dir() -> float:
+	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
+		return -1.0
+	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN):
+		return 1.0
+	return 0.0
+
+
 ## 4-way pointing for anchor placement: held vertical keys win, otherwise you
 ## point where you face. Sampled at interact time.
 func point_dir() -> Vector2i:
-	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
-		return Vector2i(0, -1)
-	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN):
-		return Vector2i(0, 1)
+	var v := look_dir()
+	if v != 0.0:
+		return Vector2i(0, int(v))
 	return Vector2i(facing, 0)
 
 
-## How hard the body is moving, 0 (still) to 1 (all-out). The camera reads this:
+## Velocity as a signed per-axis fraction of the body's OWN limits: x in units of
+## run speed, y of terminal fall going down and of jump launch going up. Both the
+## lead and the zoom are expressed in these terms — "as fast as I can run" is the
+## thing they want to know, and only the body knows what that is.
+func motion_fraction() -> Vector2:
+	# Up divides by the jump launch, down by terminal fall: they are different
+	# limits, and a rise at "full speed" means the top of a fresh jump.
+	var up_down := (velocity.y / MAX_FALL if velocity.y >= 0.0
+		else velocity.y / absf(JUMP_VELOCITY))
+	return Vector2(clampf(velocity.x / RUN_SPEED, -1.0, 1.0), clampf(up_down, -1.0, 1.0))
+
+
+## How hard the body is moving, 0 (still) to 1 (all-out). The zoom reads this:
 ## speed is the cheapest signal for "the frame you have is not the frame you
 ## need". Falling weighs heaviest — a long drop is the move where you most need
 ## to see where you are going — and running least, since running is the resting
@@ -148,10 +187,8 @@ func point_dir() -> Vector2i:
 func motion_intensity() -> float:
 	if frozen:
 		return 0.0
-	var run := absf(velocity.x) / RUN_SPEED
-	var fall := maxf(velocity.y, 0.0) / MAX_FALL
-	var rise := maxf(-velocity.y, 0.0) / absf(JUMP_VELOCITY)
-	return clampf(0.45 * run + 0.75 * fall + 0.25 * rise, 0.0, 1.0)
+	var f := motion_fraction()
+	return clampf(0.45 * absf(f.x) + 0.75 * maxf(f.y, 0.0) + 0.25 * maxf(-f.y, 0.0), 0.0, 1.0)
 
 
 ## The zoom the camera is actually at, easing and all.
@@ -159,12 +196,20 @@ func camera_zoom() -> float:
 	return _cam.zoom.x if _cam != null else zoom_target
 
 
+## The lead the camera is currently applying, easing and all.
+func camera_lookahead() -> Vector2:
+	return _lookahead
+
+
 ## Cut the camera to the body with no pan. For hard relocations — respawn,
-## doors, region changes, being turned back by the fold. The lens cuts with it:
-## easing a zoom across a warp would read as the new room inflating.
+## doors, region changes, being turned back by the fold. The lens and the lead cut
+## with it: easing a zoom across a warp would read as the new room inflating, and
+## easing the lead would drift the frame sideways as you arrive, which reads as the
+## camera having lost you.
 func snap_camera() -> void:
 	if _cam != null:
-		_cam.global_position = global_position
+		_lookahead = lookahead_target
+		_cam.global_position = global_position + _lookahead
 		_cam.zoom = Vector2.ONE * zoom_target
 
 

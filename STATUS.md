@@ -3,7 +3,7 @@
 **Last Updated:** 2026-08-05
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation.
-**Tests:** **243 passing** / 243 (0 failing, 0 risky), 14 scripts, ~3.0s.
+**Tests:** **270 passing** / 270 (0 failing, 0 risky), 15 scripts, ~2.3s.
 
 ---
 
@@ -35,21 +35,22 @@ What exists and works today:
 
 ## Test suite
 
-243 passing across 14 scripts. Composition:
+270 passing across 15 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
+| `test_fold_world` | 38 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, camera |
+| `test_world_core` | 36 | Map parsing, seams, anchor/fold eligibility, camera framing + lookahead |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
-| `test_fold_world` | 29 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, camera |
 | `test_world_data` | 19 | World format + the shipped world's content |
-| `test_world_core` | 28 | Map parsing, seams, anchor/fold eligibility, camera framing |
 | `test_tile_types` | 16 | The registry |
 | `test_collision_core` | 13 | Polygon clipping under folds |
 | `test_trigger_cascade` | 12 | Firing, idempotence, pin veto, cascade cap |
 | `test_occupants` | 11 | Split-on-unfold, footprints, carried geometry |
 | `test_folded_state` | 11 | Per-position stacks, dominant type |
 | `test_fold_replay` | 11 | The derivation engine |
+| `test_player_body` | 10 | Look/point keys, velocity-as-fraction, motion scalar |
 | `test_base_grid` | 9 | Immutable base model |
 | `test_base_frame` | 9 | Base ↔ derived transport |
 | `test_fold_unfold_inverse` | 4 | Unfold-as-drop-and-re-derive |
@@ -63,6 +64,37 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — The frame leads where you are going
+
+- **Camera lookahead.** Zoom decides how *much* to show; lookahead decides *where
+  to centre it*. The body sat dead centre, which spent half the frame on ground
+  already crossed. The view now leads:
+  - **speed** — the lead is a fraction of the body's own limits, so it saturates
+    at a full run rather than tracking velocity forever;
+  - **falling much harder than rising** — a fall is committed and its landing is
+    what you need to see; the top of a jump is about to reverse, and leading hard
+    there would swing the frame back a moment later;
+  - **held look keys** — the same W/S that aim an anchor lean the frame, so
+    pressing up to point up shows you what you are pointing at;
+  - **flat along a folded band** — inside a fold the strip repeats along the
+    crease normal, so a lead that way slides the view across identical copies.
+- **`WorldCore.camera_lookahead_for` is the pure decision**; `PlayerBody` supplies
+  `motion_fraction` (velocity as a signed fraction of *its own* run / fall / jump
+  limits) and `look_dir`, and eases the lead even more lazily than the zoom —
+  the lead flips sign when you turn around, and eased that reads as the view
+  swinging round rather than whipping across the body. Capped at 6 cells; hard
+  relocations cut it along with the lens.
+- **Ordering matters and is now load-bearing**: the lead is computed *before* the
+  zoom, because the lead moves the camera and the zoom's focus distances are
+  measured from where the camera ends up. Reversed, a hard lead would quietly
+  crop the very things the focus set exists to keep on screen.
+- **Fixed: stacked seam diamonds offered you the fold you could not unfold.**
+  Two folds can meet in the same cell; `aimed_fold` took the first in fold order,
+  which is exactly the one the newer fold blocks — so F on the diamond only ever
+  reported the refusal. It now searches newest-first and prefers a fold that can
+  actually come out. The overlay draws one diamond per meeting *cell*
+  (`FoldWorld.seam_markers`) so the colour cannot promise what the act refuses.
 
 ### 2026-08-05 — The camera frames the moment, not a fixed lens
 

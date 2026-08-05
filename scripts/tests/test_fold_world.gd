@@ -107,6 +107,54 @@ func test_unfold_blocked_by_newer_crossing_fold() -> void:
 	assert_eq(world.folds.size(), 0, "X unfolds once nothing newer crosses it")
 
 
+func test_stacked_seams_unfold_the_one_that_can_actually_come_out() -> void:
+	# Two folds can meet in the SAME cell — a horizontal pair and a vertical pair
+	# whose halves happen to join at one spot. The diamond there is one marker for
+	# both, and the older of the two is blocked by the newer crossing its seam. F
+	# must act on the fold that can come out, not on the buried one.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)   # clear of both bands
+	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))           # X: seam cell (22,12)
+	world.do_fold(Vector2i(22, 10), Vector2i(22, 14))           # Y: the SAME seam cell
+	assert_eq(world.folds.size(), 2, "Both folds applied")
+	assert_eq(world.folds[0].meeting_pos, world.folds[1].meeting_pos,
+		"Their seams land on one cell — one diamond, two folds")
+	assert_false(world.can_unfold_fold(world.folds[0]), "The older one is buried by the newer")
+	assert_true(world.can_unfold_fold(world.folds[1]), "The newer one is free to come out")
+
+	world.player.teleport(Vector2(22.5 * CS, 12.5 * CS), false) # stand on the diamond
+	assert_eq(world.aimed_fold(Vector2i(1, 0)), world.folds[1],
+		"The shared diamond resolves to the fold that can actually come out")
+	world.commit_or_unfold(Vector2i(1, 0))
+	assert_eq(world.folds.size(), 1, "F on the shared diamond unfolds something")
+	assert_eq(world.folds[0].anchor1, Vector2i(20, 12),
+		"...the newest one that can come out; the buried one stays")
+
+	# With only the buried fold left, the same diamond now unfolds it: nothing
+	# crosses its seam any more.
+	world.player.teleport(Vector2(22.5 * CS, 12.5 * CS), false)
+	world.commit_or_unfold(Vector2i(1, 0))
+	assert_eq(world.folds.size(), 0, "Once nothing crosses it, the older fold unfolds too")
+
+
+func test_a_shared_seam_cell_draws_one_diamond_that_reads_unblocked() -> void:
+	# The marker has to promise what F delivers. Two folds meeting in one cell get
+	# ONE diamond, and it reads open because pressing F there does unfold something
+	# — drawing the buried fold's refusal over the free fold's invitation was the
+	# other half of the stacked-seam bug.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)
+	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))
+	world.do_fold(Vector2i(22, 10), Vector2i(22, 14))
+	var markers: Dictionary = world.seam_markers()
+	assert_eq(markers.size(), 1, "Two folds sharing a meeting cell draw one diamond")
+	assert_true(bool(markers[Vector2i(22, 12)]),
+		"It reads unblocked, because F there unfolds the newer fold")
+
+	world.player.teleport(Vector2(22.5 * CS, 12.5 * CS), false)
+	world.commit_or_unfold(Vector2i(1, 0))
+	assert_eq(world.seam_markers(), {Vector2i(22, 12): true},
+		"With one fold left the cell still has its diamond, still open")
+
+
 func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
 	world.place_pending(0, Vector2i(1, 0))          # (5,12)
 	world.player.teleport(Vector2(7.5 * CS, 10.5 * CS), false)
@@ -465,3 +513,117 @@ func test_a_hard_relocation_cuts_the_lens_as_well_as_the_position() -> void:
 	world._cut_camera()
 	assert_almost_eq(world.player.camera_zoom(), WorldCore.ZOOM_RESTING, 0.001,
 		"The cut lands on the destination's own framing, with nothing left to ease")
+
+
+# ---------------------------------------------------------------------------
+# Camera lookahead
+# ---------------------------------------------------------------------------
+
+func test_the_frame_leads_the_direction_you_run() -> void:
+	world._update_camera()
+	assert_eq(world.player.lookahead_target, Vector2.ZERO, "Standing still: no lead")
+
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	assert_almost_eq(world.player.lookahead_target.x, WorldCore.LOOKAHEAD_RUN, 0.001,
+		"A full run right leads a full run's reach right")
+
+	world.player.velocity.x = -PlayerBody.RUN_SPEED
+	world._update_camera()
+	assert_almost_eq(world.player.lookahead_target.x, -WorldCore.LOOKAHEAD_RUN, 0.001,
+		"...and the mirror of that going left")
+
+
+func test_the_camera_eases_into_a_lead_rather_than_snapping_to_it() -> void:
+	# The lead flips sign the moment you turn around. Snapping it would whip the
+	# frame across the body on every direction change.
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	world.player._process(1.0 / 60.0)
+	var partial: Vector2 = world.player.camera_lookahead()
+	assert_gt(partial.x, 0.0, "One frame in, the lead has started")
+	assert_lt(partial.x, WorldCore.LOOKAHEAD_RUN,
+		"...but is nowhere near arrived: it eases")
+
+	for _i in range(240):
+		world.player._process(1.0 / 60.0)
+	assert_almost_eq(world.player.camera_lookahead().x, WorldCore.LOOKAHEAD_RUN, 1.0,
+		"Given time it settles on the full lead")
+
+
+func test_the_camera_follows_the_led_point_not_the_body() -> void:
+	# The lead is what makes the frame show the ground ahead: the follow has to
+	# chase body+lead, or easing the lead would change nothing on screen.
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	for _i in range(240):
+		world.player._process(1.0 / 60.0)
+	var ahead: float = world.player.camera_position().x - world.player.global_position.x
+	assert_almost_eq(ahead, WorldCore.LOOKAHEAD_RUN, 2.0,
+		"The camera settles a run's reach ahead of the body, not on top of it")
+
+
+func test_a_hard_relocation_cuts_the_lead_too() -> void:
+	# Arriving somewhere new with a stale lead would drift the frame sideways as
+	# you land, which reads as the camera having lost you.
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	for _i in range(240):
+		world.player._process(1.0 / 60.0)
+	assert_gt(world.player.camera_lookahead().x, 0.0, "Leading hard right")
+
+	world.player.velocity = Vector2.ZERO
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+	world._cut_camera()
+	assert_eq(world.player.camera_lookahead(), Vector2.ZERO,
+		"The cut drops the stale lead")
+	assert_eq(world.player.camera_position(), world.player.global_position,
+		"...so the camera lands exactly on the body")
+
+
+func test_the_zoom_is_measured_from_the_led_camera_not_the_body() -> void:
+	# The lead moves the camera, and the focus reach is measured from where the
+	# camera ENDS UP — so which WAY you are leading changes what the frame has to
+	# cover. Running away from a pinned anchor must open the frame wider than
+	# running toward it at the same speed. (Same speed in both, so the motion pull
+	# is identical and the lead is the only difference.)
+	world.place_pending(0, Vector2i(1, 0))                      # anchor at (5,12)
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor pinned")
+	world.player.teleport(Vector2(16.0 * CS, 12.5 * CS), false)
+
+	world.player.velocity.x = PlayerBody.RUN_SPEED              # leading away from it
+	world._cut_camera()
+	var away: float = world.player.camera_zoom()
+
+	world.player.velocity.x = -PlayerBody.RUN_SPEED             # leading back toward it
+	world._cut_camera()
+	var toward: float = world.player.camera_zoom()
+
+	assert_lt(away, toward,
+		"Leading away from the anchor puts it further off the led frame, so the frame opens")
+	assert_gt(away, WorldCore.ZOOM_WIDEST,
+		"...and this is a real framing decision, not the floor being hit")
+
+
+func test_inside_a_fold_the_lead_is_flat_along_the_band() -> void:
+	# The strip repeats along the crease normal, so the frame already shows every
+	# band there is that way. Leading along it slides the view for nothing.
+	_pinch_over_pit()
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.player.velocity = Vector2(PlayerBody.RUN_SPEED, PlayerBody.MAX_FALL)
+	world._update_camera()
+	var n: Vector2 = world.sub_fold.crease_normal
+	assert_almost_eq(world.player.lookahead_target.dot(n), 0.0, 0.001,
+		"No lead along the repeating axis")
+	assert_gt(world.player.lookahead_target.length(), 0.0,
+		"...but the lead across the band survives")
+
+
+func test_the_lead_holds_still_while_a_fold_plays() -> void:
+	world.anim_enabled = true
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_true(world.animating(), "The fold is playing")
+	world._update_camera()
+	assert_eq(world.player.lookahead_target, Vector2.ZERO,
+		"Riding a fold: the transition frames itself from its own endpoints")

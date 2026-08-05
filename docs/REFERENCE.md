@@ -56,8 +56,8 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | Concern | File |
 |---|---|
 | **Everything that makes it a game**: regions, the context stack (subspaces), doors, input, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
-| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility, camera framing | `WorldCore.gd` |
-| Player physics body: coyote time, jump buffer, squash; owns the camera (follow + zoom easing) | `PlayerBody.gd` |
+| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
+| Player physics body: coyote time, jump buffer, squash; owns the camera (follow + zoom + lookahead easing) | `PlayerBody.gd` |
 | Anchors, fold preview band, seam diamonds, glue lines | `WorldOverlay.gd` |
 | Controls and the design beats | `README.md` |
 
@@ -77,6 +77,8 @@ understand how the pieces meet. Its header comment is the map.
 | …a door find its partner? | `FoldWorld._check_doors()`, `BaseFrame.resolve_base_point` |
 | …a trigger fire? | `FoldWorld._check_triggers()` → `TriggerResolver.resolve` |
 | …the camera decide how far to zoom? | `FoldWorld._update_camera()` / `_camera_focus()` → `WorldCore.camera_zoom_for` |
+| …the camera decide where to look ahead? | `FoldWorld._update_camera()` → `WorldCore.camera_lookahead_for` (+ `PlayerBody.motion_fraction` / `look_dir`) |
+| …F pick which fold to unfold? | `FoldWorld.aimed_fold()` — newest-first, prefers one that can actually come out |
 
 ---
 
