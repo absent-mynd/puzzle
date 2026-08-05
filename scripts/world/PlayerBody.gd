@@ -49,8 +49,23 @@ func _ready() -> void:
 	_cam = Camera2D.new()
 	_cam.position_smoothing_enabled = true
 	_cam.position_smoothing_speed = 8.0
+	# The pixel render target is PixelArt.WORLD_PER_PIXEL times coarser than
+	# world units, so zoom out by the same factor: the same amount of world
+	# stays on screen, drawn at a quarter the resolution.
+	_cam.zoom = PixelArt.CAMERA_ZOOM
 	add_child(_cam)
 	_cam.make_current()
+
+
+## Pixel-snap the view. A camera resting between art pixels makes every edge in
+## the world crawl as it slides, so the final centre is rounded to a whole art
+## pixel — smoothing still runs, it just lands on the grid.
+func _process(_delta: float) -> void:
+	if _cam == null:
+		return
+	_cam.offset = Vector2.ZERO
+	var center := _cam.get_screen_center_position()
+	_cam.offset = PixelArt.snap_round(center) - center
 
 
 func _physics_process(delta: float) -> void:
