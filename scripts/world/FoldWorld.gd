@@ -1034,7 +1034,12 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 		return
 	var layer := Node2D.new()
 	layer.z_index = 30
-	add_child(layer)
+	# Inside `pixel_view`, with the geometry it stands in for. Parented to this
+	# node instead it would be outside the render target and so outside the
+	# camera's transform, drawing world coordinates as raw window pixels: the map
+	# appears to fly off to one side for the length of the transition and snap
+	# back when the real geometry returns.
+	pixel_view.add_child(layer)
 	var frags: Array = []
 	var shift_a := fold.shift_a_px(CS)
 	var shift_b := fold.shift_b_px(CS)

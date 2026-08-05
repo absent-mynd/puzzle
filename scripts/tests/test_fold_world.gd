@@ -610,6 +610,23 @@ func test_inside_a_fold_the_band_is_framed_glue_to_glue() -> void:
 	assert_true(seen.has(snappedf(far, 0.01)), "...and so is the far one: the band is the room")
 
 
+func test_the_fold_animation_draws_where_the_world_draws() -> void:
+	# The transition replaces the world's geometry for a moment, so it has to be
+	# drawn by the same camera through the same render target. Parented outside
+	# `pixel_view` it renders in raw window space with no camera transform, which
+	# reads as the map flying off to the origin and snapping back when the real
+	# geometry returns.
+	world.anim_enabled = true
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_true(world.animating(), "The fold is playing")
+
+	var layer: Node2D = world._anim["layer"]
+	assert_eq(layer.get_parent(), world.pixel_view,
+		"The animation layer draws inside the pixel viewport, like world_geo does")
+	assert_eq(layer.get_viewport(), world.world_geo.get_viewport(),
+		"...which is to say: the same viewport the geometry it replaces was in")
+
+
 func test_a_fold_transition_steps_the_camera_back() -> void:
 	world.anim_enabled = true
 	world._update_camera()
