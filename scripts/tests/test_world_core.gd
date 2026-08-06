@@ -207,6 +207,303 @@ func test_hand_orbit_trails_the_motion() -> void:
 	assert_lt(running.x, still.x, "Running right strings the hand out behind you")
 
 
+# ---------------------------------------------------------------------------
+# The idle drift (hands never quite hold still)
+# ---------------------------------------------------------------------------
+
+func test_hand_drift_stays_near_where_the_hand_sits() -> void:
+	# The whole safety requirement: it is a wander, not a departure. A hand drawn a
+	# cell away from where it actually is would be a lie about the world.
+	for i in range(600):
+		var d := WorldCore.hand_drift(0.0, float(i) * 0.1, 8.0)
+		assert_lt(d.length(), 8.0 * 1.5, "Drift stays within its radius")
+
+
+func test_hand_drift_actually_moves() -> void:
+	var a := WorldCore.hand_drift(0.0, 0.0)
+	var b := WorldCore.hand_drift(0.0, 1.3)
+	assert_gt(a.distance_to(b), 0.5, "A second later it is somewhere else")
+
+
+func test_hand_drift_hovers_rather_than_migrating() -> void:
+	# Over a long window it averages out to where the hand sits, so the drift adds
+	# no bias — a hand left alone for a minute is still beside you, not off screen.
+	var sum := Vector2.ZERO
+	var n := 2000
+	for i in range(n):
+		sum += WorldCore.hand_drift(0.0, float(i) * 0.02)
+	assert_lt((sum / float(n)).length(), 1.0, "Its mean is the resting spot")
+
+
+func test_hand_drift_does_not_repeat_on_a_short_loop() -> void:
+	# Frequencies that share a period would give the eye a cycle to learn, and the
+	# float would read as an animation loop instead of as idleness.
+	var start := WorldCore.hand_drift(0.0, 0.0)
+	var returned := 0
+	for i in range(1, 1500):
+		if WorldCore.hand_drift(0.0, float(i) * 0.02).distance_to(start) < 0.2:
+			returned += 1
+	assert_lt(returned, 8, "It does not keep landing back on where it began")
+
+
+func test_two_hands_drift_independently() -> void:
+	# Two hands bobbing in lockstep read as one animated pair, not as two objects.
+	var apart := 0
+	for i in range(200):
+		var t := float(i) * 0.05
+		if WorldCore.hand_drift(0.0, t).distance_to(WorldCore.hand_drift(1.0, t)) > 2.0:
+			apart += 1
+	assert_gt(apart, 100, "Slot 0 and slot 1 are mostly in different places")
+
+
+# ---------------------------------------------------------------------------
+# Where a dropped hand comes to rest
+# ---------------------------------------------------------------------------
+# A hand let go of in mid-air falls to the floor and hovers just above it; a hand let
+# go of inside a wall is pushed out of it. Both are the same question — "where does
+# this actually end up" — asked once, so a burst, a scatter and a failed fold cannot
+# answer it differently.
+
+func _mini_solids() -> Array:
+	# Ground row y=3 (surface at y=192); a wall block at (2,1) and (3,1).
+	return WorldCore.solid_polys_of(FoldReplay.derive_pieces(_mini_grid(), []))
+
+
+# ---------------------------------------------------------------------------
+# The hand as a ball: it falls, it rolls, it comes to rest
+# ---------------------------------------------------------------------------
+# A loose hand is a light ball with a lot of air drag. It floats down rather than
+# dropping like a stone, lands, rolls off a slope, and settles. `hand_ball_step` is the
+# whole simulation and it is PURE — the world steps it and stores the outcome, so the
+# physics can be pinned here without a scene.
+
+## A slope: a right triangle rising to the left, so a ball on it rolls right and down.
+func _slope_solids() -> Array:
+	return [PackedVector2Array([
+		Vector2(0, 256), Vector2(256, 256), Vector2(0, 128),
+	])]
+
+
+## Step a ball to rest (or until `limit` frames), returning the final state.
+func _run_ball(pos: Vector2, vel: Vector2, solids: Array, limit := 600) -> Dictionary:
+	var ball := {"pos": pos, "vel": vel, "resting": false}
+	for _i in range(limit):
+		ball = WorldCore.hand_ball_step(ball, solids, 1.0 / 60.0)
+		if bool(ball["resting"]):
+			break
+	return ball
+
+
+func test_a_dropped_ball_accelerates_downward() -> void:
+	var ball := WorldCore.hand_ball_step(
+		{"pos": Vector2(32, 32), "vel": Vector2.ZERO, "resting": false},
+		_mini_solids(), 1.0 / 60.0)
+	assert_gt(Vector2(ball["vel"]).y, 0.0, "Gravity pulls it down")
+	assert_gt(Vector2(ball["pos"]).y, 32.0, "...and it has moved down")
+
+
+func test_a_hand_is_light_and_floats_down() -> void:
+	# The requirement is a FEEL: high drag, so it drifts down rather than dropping like
+	# a stone. Pinned as a terminal speed well under the player's own MAX_FALL.
+	var ball := {"pos": Vector2(32, 0), "vel": Vector2.ZERO, "resting": false}
+	for _i in range(240):
+		ball = WorldCore.hand_ball_step(ball, [], 1.0 / 60.0)
+	assert_lt(Vector2(ball["vel"]).y, WorldCore.HAND_TERMINAL_FALL + 1.0,
+		"It never exceeds its terminal speed")
+	assert_lt(WorldCore.HAND_TERMINAL_FALL, PlayerBody.MAX_FALL * 0.5,
+		"...which is far slower than a falling body: a hand is light")
+
+
+func test_air_drag_bleeds_off_sideways_speed() -> void:
+	var ball := {"pos": Vector2(32, 32), "vel": Vector2(400, 0), "resting": false}
+	var first := Vector2(WorldCore.hand_ball_step(ball, [], 1.0 / 60.0)["vel"]).x
+	for _i in range(60):
+		ball = WorldCore.hand_ball_step(ball, [], 1.0 / 60.0)
+	assert_lt(Vector2(ball["vel"]).x, first, "A thrown hand slows in the air")
+	assert_gt(Vector2(ball["vel"]).x, 0.0, "...without stopping dead")
+
+
+func test_a_ball_comes_to_rest_on_the_floor() -> void:
+	var ball := _run_ball(Vector2(32, 32), Vector2.ZERO, _mini_solids())
+	assert_true(bool(ball["resting"]), "It settles rather than jittering forever")
+	assert_almost_eq(Vector2(ball["pos"]).y, 192.0 - WorldCore.HAND_CLEARANCE, 3.0,
+		"...just above the floor, on its floating radius")
+
+
+func test_a_resting_ball_stays_put() -> void:
+	var ball := _run_ball(Vector2(32, 32), Vector2.ZERO, _mini_solids())
+	var settled: Vector2 = ball["pos"]
+	for _i in range(120):
+		ball = WorldCore.hand_ball_step(ball, _mini_solids(), 1.0 / 60.0)
+	assert_almost_eq(Vector2(ball["pos"]).distance_to(settled), 0.0, 0.5,
+		"A hand at rest does not creep")
+
+
+func test_a_ball_never_ends_a_step_inside_a_solid() -> void:
+	# The invariant that matters most: a hand you cannot see is a hand you cannot fetch.
+	var ball := {"pos": Vector2(32, 32), "vel": Vector2(600, 900), "resting": false}
+	var solids := _mini_solids()
+	for _i in range(300):
+		ball = WorldCore.hand_ball_step(ball, solids, 1.0 / 60.0)
+		assert_false(WorldCore.circle_overlaps_solids(Vector2(ball["pos"]), 1.0, solids),
+			"Never inside the ground at %s" % ball["pos"])
+		if bool(ball["resting"]):
+			break
+
+
+func test_a_fast_ball_does_not_tunnel_through_the_floor() -> void:
+	# Swept, not point-sampled: at terminal speed a frame is a fraction of a cell, but a
+	# ball launched hard by a fold must not pass through a one-cell floor.
+	var ball := {"pos": Vector2(32, 32), "vel": Vector2(0, 6000), "resting": false}
+	for _i in range(120):
+		ball = WorldCore.hand_ball_step(ball, _mini_solids(), 1.0 / 60.0)
+	assert_lt(Vector2(ball["pos"]).y, 192.0, "Still above the floor it was fired at")
+
+
+func test_a_ball_rolls_down_a_slope() -> void:
+	# Landing on a slope must not stick. This is the whole of "it rolls".
+	var ball := _run_ball(Vector2(100, 100), Vector2.ZERO, _slope_solids(), 400)
+	assert_gt(Vector2(ball["pos"]).x, 100.0 + 8.0, "It slid downhill, to the right")
+
+
+func test_a_ball_on_a_slope_ends_up_below_where_it_landed() -> void:
+	var ball := _run_ball(Vector2(100, 100), Vector2.ZERO, _slope_solids(), 400)
+	assert_gt(Vector2(ball["pos"]).y, 100.0, "Downhill is also downward")
+
+
+func test_a_ball_on_flat_ground_does_not_roll() -> void:
+	# Rolling comes from the slope, not from a drift baked into the step: dropped
+	# straight down onto flat floor, it lands where it was dropped.
+	var ball := _run_ball(Vector2(32, 32), Vector2.ZERO, _mini_solids())
+	assert_almost_eq(Vector2(ball["pos"]).x, 32.0, 2.0, "No sideways wander on the flat")
+
+
+func test_a_rolling_ball_eventually_settles() -> void:
+	# Friction has to actually win, or a hand rolls forever and never becomes a pickup.
+	var ball := _run_ball(Vector2(100, 100), Vector2.ZERO, _slope_solids(), 3000)
+	assert_true(bool(ball["resting"]), "It stops at the bottom rather than rolling forever")
+
+
+func test_a_ball_wedged_in_a_corner_still_comes_to_rest() -> void:
+	# REGRESSION. A ball rolling into the corner at the foot of a slope used to pin
+	# itself there forever: contact resolution left it holding a velocity every
+	# direction of which was blocked, so the speed-based rest test never fired and the
+	# position never changed either. A hand doing that is a hand that can never be
+	# collected. Rest is therefore judged on PROGRESS, not on the velocity vector.
+	var ball := _run_ball(Vector2(100, 100), Vector2.ZERO, _slope_solids(), 3000)
+	assert_true(bool(ball["resting"]), "It settles in the corner instead of buzzing in it")
+	assert_almost_eq(Vector2(ball["vel"]).length(), 0.0, 0.001,
+		"...with its velocity actually cleared")
+
+
+func test_a_ball_with_no_floor_keeps_falling_and_never_rests() -> void:
+	# Over void there is nothing to rest on. The WORLD decides what to do about that
+	# (it is the same "nowhere to land" case a drop already handles); the physics just
+	# must not invent a floor.
+	var ball := _run_ball(Vector2(32, 32), Vector2.ZERO, [], 200)
+	assert_false(bool(ball["resting"]), "Nothing to come to rest on")
+	assert_gt(Vector2(ball["pos"]).y, 32.0, "Still going down")
+
+
+func test_a_balls_velocity_is_untouched_by_a_translation() -> void:
+	# Folds are translations, so a ball folded into a subspace keeps flying exactly as
+	# it was. This is what makes transporting one through `BaseFrame` correct: only its
+	# POSITION moves, and the physics is position-independent.
+	var a := WorldCore.hand_ball_step(
+		{"pos": Vector2(32, 32), "vel": Vector2(120, -80), "resting": false}, [], 1.0 / 60.0)
+	var shift := Vector2(4096, -2048)
+	var b := WorldCore.hand_ball_step(
+		{"pos": Vector2(32, 32) + shift, "vel": Vector2(120, -80), "resting": false},
+		[], 1.0 / 60.0)
+	assert_almost_eq(Vector2(a["vel"]).distance_to(Vector2(b["vel"])), 0.0, 0.001,
+		"Same velocity wherever it is")
+	assert_almost_eq((Vector2(a["pos"]) + shift).distance_to(Vector2(b["pos"])), 0.0, 0.001,
+		"...and the same step")
+
+
+func test_support_is_lost_when_the_ground_goes_away() -> void:
+	# What a fold has to ask of every resting hand afterwards: are you still on
+	# something? The answer is what wakes it.
+	var ball := _run_ball(Vector2(32, 32), Vector2.ZERO, _mini_solids())
+	assert_true(WorldCore.hand_ball_supported(Vector2(ball["pos"]), _mini_solids()),
+		"Resting on the floor, it is supported")
+	assert_false(WorldCore.hand_ball_supported(Vector2(ball["pos"]), []),
+		"Take the floor away and it is not")
+
+
+func test_a_hand_dropped_in_midair_falls_to_the_floor() -> void:
+	var at := WorldCore.settle_hand(Vector2(32, 32), _mini_solids())
+	assert_almost_eq(at.x, 32.0, 0.01, "It falls straight down, not sideways")
+	assert_almost_eq(at.y, 192.0 - WorldCore.HAND_CLEARANCE, 1.0,
+		"It comes to rest just above the floor")
+
+
+func test_a_landed_hand_hovers_rather_than_sinking_into_the_floor() -> void:
+	# "Floating slightly above" is the whole look: a hand half-buried in the ground
+	# reads as a bug, and one resting exactly ON it reads as a decal.
+	var at := WorldCore.settle_hand(Vector2(32, 32), _mini_solids())
+	assert_lt(at.y, 192.0, "Above the surface, not in it")
+	assert_gt(WorldCore.HAND_CLEARANCE, 0.0, "...by a real gap")
+	assert_false(WorldCore.circle_overlaps_solids(at, 1.0, _mini_solids()),
+		"Nothing solid where it rests")
+
+
+func test_a_hand_dropped_inside_a_wall_is_pushed_out_of_it() -> void:
+	# The wall block at (2,1) spans x 128..192, y 64..128.
+	var solids := _mini_solids()
+	var inside := Vector2(160, 96)
+	assert_true(WorldCore.circle_overlaps_solids(inside, WorldCore.HAND_CLEARANCE, solids),
+		"The drop point really is inside the wall")
+	var at := WorldCore.settle_hand(inside, solids)
+	assert_false(WorldCore.circle_overlaps_solids(at, 1.0, solids),
+		"It ends up somewhere you can see it")
+	assert_lt(at.distance_to(inside), 3.0 * CS, "...and near where it was dropped")
+
+
+func test_a_hand_ejected_from_a_wall_comes_out_the_nearest_face() -> void:
+	# Near the top of the block, so up is much the shortest way out. A hand that
+	# squeezed out of the far side would look like a different hand.
+	var at := WorldCore.settle_hand(Vector2(160, 70), _mini_solids())
+	assert_lt(at.y, 64.0, "Out through the top it was nearly touching")
+
+
+func test_a_hand_already_at_rest_does_not_move() -> void:
+	# Idempotence matters: a hand's resting spot is stored, and re-settling it on a
+	# rebuild must not walk it a little further each time.
+	var solids := _mini_solids()
+	var once := WorldCore.settle_hand(Vector2(32, 32), solids)
+	var twice := WorldCore.settle_hand(once, solids)
+	assert_almost_eq(once.distance_to(twice), 0.0, 0.5, "Settling a settled hand is a no-op")
+
+
+func test_a_hand_over_a_long_drop_does_not_fall_forever() -> void:
+	# Bounded on purpose: over void there is no floor to find, and a hand that fell
+	# out of the world would be the one way this system loses one.
+	var at := WorldCore.settle_hand(Vector2(32, 32), [])
+	assert_almost_eq(at.y, 32.0 + WorldCore.HAND_MAX_DROP, 1.0,
+		"With no floor at all it stops at the end of its reach")
+
+
+func test_settling_finds_a_ledge_rather_than_the_ground_below_it() -> void:
+	# Dropped over the wall block, it lands on TOP of it — the first surface under
+	# the hand, not the lowest one.
+	var at := WorldCore.settle_hand(Vector2(160, 20), _mini_solids())
+	assert_almost_eq(at.y, 64.0 - WorldCore.HAND_CLEARANCE, 1.0, "It rests on the ledge")
+
+
+func test_hand_drift_seed_is_per_hand_not_per_list_position() -> void:
+	# The trap this exists to avoid: seeding by index into `loose_hands` means every
+	# remaining hand jumps to a new phase the moment a DIFFERENT one is picked up.
+	# A seed made of the tile and the point on it cannot do that.
+	var a := WorldCore.hand_drift_seed(7, Vector2(32, 32))
+	var b := WorldCore.hand_drift_seed(9, Vector2(32, 32))
+	assert_ne(a, b, "Two tiles, two phases")
+	var c := WorldCore.hand_drift_seed(7, Vector2(48, 20))
+	assert_ne(a, c, "...and two hands on ONE tile still differ")
+	assert_eq(a, WorldCore.hand_drift_seed(7, Vector2(32, 32)),
+		"The same hand always gets the same phase")
+
+
 func test_anchors_valid_rejects_only_the_degenerate_pair() -> void:
 	# There is no minimum distance any more. The only impossible pair is two anchors
 	# on one cell, which has no crease direction at all.

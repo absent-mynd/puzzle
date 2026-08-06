@@ -97,12 +97,30 @@ func _draw_doors(offsets: Array) -> void:
 
 ## Hands lying in the world — caches the world shipped and hands that popped out of a
 ## burst alike, drawn through `HandOrbit.draw_hand` so a hand on the ground is
-## pixel-identical to one riding beside you. They repeat across the wrap copies like
-## doors do, because a strip is a cylinder and so is everything on it.
+## pixel-identical to one riding beside you, idle float and all. They repeat across the
+## wrap copies like doors do, because a strip is a cylinder and so is everything on it.
+##
+## Every copy of one hand takes that hand's own drift seed, so the copies float in step:
+## they are one object seen several times, and copies bobbing out of phase would say
+## otherwise. The seed comes from the hand's base identity rather than its place in the
+## list — see `WorldCore.hand_drift_seed`.
+##
+## The float does NOT move the hand. `_check_pickups` measures from `position_in`, so a
+## hand is picked up where it lies; the drift is only ever how it is drawn, which is why
+## its radius is a fraction of the pickup range.
 func _draw_loose_hands(offsets: Array) -> void:
 	for entry in world.loose_hand_points():
+		var pickup: HandPickup = entry["pickup"]
+		var seed: float = WorldCore.hand_drift_seed(pickup.base_id, pickup.bp)
 		for off in offsets:
-			HandOrbit.draw_hand(self, Vector2(entry["pos"]) + off, entry["pickup"].kind)
+			HandOrbit.draw_hand(self, Vector2(entry["pos"]) + off, pickup.kind, seed)
+	# Hands still in the air, drawn from their own live position — the one kind of thing
+	# in the world that has one. Same glyph as a resting hand, because it is the same
+	# hand: what is different is that it is still moving.
+	for ball in world.hand_ball_points():
+		for off in offsets:
+			HandOrbit.draw_hand(
+				self, Vector2(ball["pos"]) + off, int(ball["kind"]), float(ball["seed"]))
 
 
 ## The burst: a ring that snaps out to `BURST_RADIUS` and fades. It is the only thing

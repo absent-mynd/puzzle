@@ -25,7 +25,7 @@ and `WorldCore.CHARS` for the terrain characters.
 | Space | jump — **tap for a hop, hold for full height** |
 | hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
 | **tap F** | put a **hand** down on the cell you point at — the second one lights the fuse |
-| **hold F** | **release burst**: everything of yours within about a tile comes loose at once |
+| **hold F** | **release burst**: everything of yours within about a tile and a third comes loose at once |
 | R | reset |
 
 One key, two directions. **Tap puts a hand down; hold bursts them loose.** There
@@ -80,10 +80,10 @@ That is what the fuse is *for*. It is a window in which to make a doubtful fold
 work: put both hands down while standing somewhere the fold cannot put you, then
 run clear before it goes off and ride the flap instead of being swallowed.
 
-If the fold still cannot go when the fuse runs out, **both hands drop where they
-were pinned** — not back into your slots, not at your feet. They lie on the
-spots you chose, still holding the shape of the fold you tried to make. Go and
-pick them up, or leave them and pin somewhere better.
+If the fold still cannot go when the fuse runs out, **both hands drop from where
+they were pinned** — not back into your slots, not at your feet. They fall from
+the spots you chose and land on the floor beneath them. Go and pick them up, or
+leave them and pin somewhere better.
 
 There is **no remote unfold**. The hands in a fold are exactly where you left
 them, so getting them back means walking to its seam and bursting.
@@ -101,7 +101,7 @@ behind you is a thing you can choose to do.
 ### The burst
 
 Holding F fires a small sphere of influence around your body (`BURST_RADIUS`,
-about a tile — tune it in `FoldWorld`). It is **not aimed**: where you stand is
+about a tile and a third — tune it in `FoldWorld`). It is **not aimed**: where you stand is
 the whole input. Everything of yours inside it comes loose at once —
 
 - unpaired hands you placed come back;
@@ -127,9 +127,13 @@ A hand is an **object you carry**, not an ability you have. You have **two
 slots**, and that never grows. A fold standing in the world is holding the two
 hands you pinned it with — the seam diamond is where they went.
 
-They float beside you as small circles, springing and trailing as you move.
-That is style, not a mechanic: nothing reads their positions. What they tell
-you is how many you have and what **kind** they are.
+They float beside you as small circles, springing and trailing as you move —
+and **drifting slightly even when nothing is happening**, whether they are riding
+beside you or lying on the ground waiting to be picked up. A hand is never
+perfectly still, because a hand is an object in the world rather than a marker
+drawn on it. That is style, not a mechanic: nothing reads their positions, and
+the drift is a fraction of the distance you have to be within to pick one up.
+What they tell you is how many you have and what **kind** they are.
 
 - Placing a hand takes it out of its slot **immediately**.
 - A hand pairs with the last unpaired one **you can currently see**, and the pair
@@ -142,9 +146,25 @@ you is how many you have and what **kind** they are.
 - **Bursting takes back** whatever is in reach. Reaching either half of an armed
   pair breaks the whole pair — the far hand drops where it was pinned, so
   reaching into one always costs you a hand.
-- A pair that **fails at the fuse** drops both hands where they were pinned.
+- A pair that **fails at the fuse** drops both hands from where they were pinned.
 - **Unfolding gives back the same two hands that went in** — kinds and all.
 - Hands with nowhere to go **land on the ground** rather than being refused.
+- **A loose hand is a physical object.** Let go of one and it *falls* — as a light ball
+  with a lot of air drag, so it floats down rather than dropping like a stone. It rolls
+  off slopes, pops out of walls it was let go inside, and comes to rest hovering just
+  above the ground. That holds however it came loose: a burst, an unfold, a refused fold.
+  **You can catch one out of the air**, and a hand still falling is still yours to lose —
+  nothing is destroyed mid-flight.
+
+  A fold carries a hand in flight the same way it carries you. **A hand a fold sweeps
+  into a strip keeps falling inside the strip**, and because a strip is a cylinder, a
+  hand that finds no floor in there *wraps* and goes round again. When the wrap runs
+  vertically that is a hand in **orbit**, indefinitely — you can still reach into the
+  fold and pluck it out of the air, and it lands the moment a fold puts ground in its way.
+
+  And a hand at rest is not done forever: **fold the ground out from under a hand and it
+  falls again.** A fold that only slides its tile carries it, as it always did. So a
+  cache you remember the position of may not be where you left it after you fold nearby.
 
 So the budget is not how many folds you may ever make but **how many folds may
 stand at once** — and with two slots, that is one, until you find more hands.
@@ -515,7 +535,17 @@ do not want yet.
   hands alike.
 - `HandOrbit.gd` — the circles that float beside you, and `draw_hand`, the ONE place
   a hand is drawn (the overlay draws loose ones through it, so they cannot drift
-  apart). The spring itself is `WorldCore.spring_step`.
+  apart — which is also why the idle drift lives in `draw_hand` and no caller can
+  forget it). The spring is `WorldCore.spring_step`; the passive float is
+  `WorldCore.hand_drift`, a function of wall time rather than an integration, so it
+  needs no state and a hand dropped or picked up never restarts its phase.
+- **The falling hand**: `WorldCore.hand_ball_step` is the whole simulation (light, draggy,
+  swept collision, rolls, rests) and it is pure, so it is pinned by `test_world_core`
+  without a scene. `FoldWorld.hand_balls` is the transient in-flight list;
+  `_land_ball` converts one back into a `HandPickup`, `_carry_balls_through` takes them
+  through folds, `_wake_unsupported_hands` re-drops a resting hand whose ground has gone,
+  and `WorldCore.wrap_into_strip` is why a hand can orbit inside a fold. See `AGENTS.md`
+  for why a ball may hold a live position when nothing else in the world may.
 - `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
   and glue segments, depenetration, anchor/fold eligibility, camera zoom and
   lookahead). Covered by `scripts/tests/test_world_core.gd`.
