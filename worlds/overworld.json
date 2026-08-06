@@ -65,6 +65,22 @@
 					"energy": 1.15,
 					"flicker": 0.18
 				}
+			],
+			"hands": [
+				{
+					"kind": "swift",
+					"cell": {
+						"x": 24,
+						"y": 6
+					}
+				},
+				{
+					"kind": "patient",
+					"cell": {
+						"x": 34,
+						"y": 13
+					}
+				}
 			]
 		},
 		"east": {
@@ -138,6 +154,15 @@
 					"energy": 1.0,
 					"flicker": 0.0
 				}
+			],
+			"hands": [
+				{
+					"kind": "swift",
+					"cell": {
+						"x": 14,
+						"y": 9
+					}
+				}
 			]
 		}
 	},
@@ -176,6 +201,10 @@
 		}
 	},
 	"metadata": {
-		"note": "West carries the four authored fold beats and is unchanged. East's right wing (base x>=20) teaches pins and fold triggers."
-	}
+		"note": "West carries the four authored fold beats. East's right wing (base x>=20) teaches pins and fold triggers. Loose hands sit behind beats, never in front of them: a SWIFT one on the pillar top (24,6), a PATIENT one in the sealed chamber (34,13), and a SWIFT one at (14,9) in east, INSIDE the shipped pre-fold and reachable only through door W1. A hand is taken one at a time into a free slot, so it is the second half of a fold you have already started."
+	},
+	"starting_hands": [
+		"plain",
+		"plain"
+	]
 }

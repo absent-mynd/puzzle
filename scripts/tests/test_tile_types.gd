@@ -109,3 +109,4 @@ func test_blocks_anchor_false_for_existing_types():
 
 func test_unknown_type_does_not_block_anchor():
 	assert_false(TileTypes.blocks_anchor(999), "unknown type does not block anchors by default")
+

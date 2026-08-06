@@ -2,10 +2,10 @@
 
 **Last Updated:** 2026-08-05
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
-vertical slice: two regions, doors, real subspaces, fold/unfold with animation —
-rendered as pixel art with fold-aware dynamic lighting, framed by a camera that
-zooms and leads with the moment.
-**Tests:** **331 passing** / 331 (0 failing, 0 risky), 18 scripts, ~3.5s.
+vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
+folding as a **finite carried resource** — rendered as pixel art with fold-aware
+dynamic lighting, framed by a camera that zooms and leads with the moment.
+**Tests:** **404 passing** / 404 (0 failing, 0 risky), 20 scripts, ~14.5s.
 
 ---
 
@@ -26,6 +26,11 @@ What exists and works today:
 | Regions + doors (recursive partner resolution) | ✅ Playable |
 | Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
 | Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
+| Hands: two slots, typed, conserved (`AnchorStock`/`HandTypes`) | ✅ Playable, **in the world** |
+| Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
+| One-key verb (tap = place a hand, hold = release burst) | ✅ Playable |
+| Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
+| Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
@@ -40,15 +45,15 @@ What exists and works today:
 
 ## Test suite
 
-331 passing across 18 scripts. Composition:
+404 passing across 20 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 47 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera |
+| `test_fold_world` | 87 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
-| `test_world_core` | 36 | Map parsing, seams, anchor/fold eligibility, camera framing + lookahead |
+| `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
+| `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
-| `test_world_data` | 25 | World format + the shipped world's content, incl. lights |
 | `test_tile_atlas` | 17 | Tileset kinds/variants, base-space UVs, the generated sheet |
 | `test_tile_types` | 16 | The registry |
 | `test_light_source` | 15 | Lights as occupants: fold-away, ride, split, serialization |
@@ -58,6 +63,8 @@ What exists and works today:
 | `test_occupants` | 11 | Split-on-unfold, footprints, carried geometry |
 | `test_folded_state` | 11 | Per-position stacks, dominant type |
 | `test_fold_replay` | 11 | The derivation engine |
+| `test_anchor_stock` | 11 | Hand conservation: slots ↔ pinned ↔ fold ↔ ground |
+| `test_hand_types` | 10 | The kind registry: colours, fuses, mixed pairs |
 | `test_player_body` | 10 | Look/point keys, velocity-as-fraction, motion scalar |
 | `test_base_grid` | 9 | Immutable base model |
 | `test_base_frame` | 9 | Base ↔ derived transport |
@@ -73,6 +80,203 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — A fold in flight owns the frame
+
+**Bug:** prime a fold, cross between regions, and when it went off the player was
+teleported somewhere impossible — reported as ending up stuck in a wall.
+
+Reproduced by arming a fold and standing on a door while its fuse ran out. The trace
+made the mechanism plain: the player warped to east *while the fold animation was
+still playing*, and then the fold's finalize teleported them to `(2592, 864)` — the
+landing it had computed in west, applied in an east region only 1920px wide. Off the
+map entirely; in other geometry, inside a wall.
+
+`_physics_process` checked `animating()` at the top, but `_tick_fuse` STARTS a
+transition from inside the frame, and the goal / pickup / trigger / door checks below
+it then ran anyway — against a body frozen at its pre-fold position and a fragment
+list that does not rebuild until the animation finalizes.
+
+- **`_physics_process` now returns as soon as `_tick_fuse` starts a transition.** The
+  rest of the frame belongs to the fold.
+- **`_traverse` refuses to fire while animating**, stating the invariant where it
+  would be harmed rather than only where it happens to be enforced.
+- The two regression tests are the only ones in the suite that run with animation ON,
+  because the bug exists only while a transition is in flight. Both were checked to
+  fail without the fix.
+
+This was latent from the moment committing moved into `_physics_process` with the
+fuse; before that, folds committed from `_unhandled_input`, where the next frame's
+top-of-function guard caught them.
+
+### 2026-08-05 — Any number of hands down; several folds armed at once
+
+**Bug:** place a hand in one region, cross to another, place a second — and the game
+wedged. Reported as "I can no longer place any more hands"; reproduced exactly. The
+two fixed anchor registers were the cause: the hand left behind occupied one forever,
+so every pair formed afterwards contained a partner that could not be reached, the
+fuse paused permanently, and the burst could not recover it from where you now were.
+
+Fixed by removing the limit rather than special-casing the symptom.
+
+- **`pending_a`/`pending_b` became `unpaired` + `primed`.** `unpaired` holds hands
+  waiting for a partner; `primed` holds PAIRS, each counting its own fuse. There is no
+  bound but the hands you are carrying.
+- **A hand pairs with the last unpaired anchor you can SEE.** An anchor in another
+  region — or sealed inside a fold — is not a partner a fold could be finished with,
+  so a new hand starts a fresh pair rather than being spent on one that can never
+  fire. The stranded hand waits where it is.
+- **Several folds can be armed at once, and they fire in FUSE order.** A swift pair
+  laid second goes off before a patient pair laid first. That falls out of per-pair
+  fuses rather than being arranged.
+- **An armed pair outside your region pauses**, and resumes when you come back —
+  leaving one ticking behind you is now a thing you can choose to do.
+- **A burst reaching either half of an armed pair breaks the whole pair.** You cannot
+  half-defuse a fold: what you can reach comes back, the far hand drops where it was
+  pinned, so reaching into an armed pair always costs you one.
+- **Anchors now carry their region and resolution checks it.** Base ids are per-region
+  and overlap, so a west anchor could otherwise resolve onto whatever east tile shared
+  its id — latent, and only not biting because the two regions differ in size.
+- The overlay draws every placed hand and every armed pair's band, each pulsing on its
+  own fuse, so two armed folds beat at different rates and you can see which is next.
+
+### 2026-08-05 — Validity moves to the fuse; the distance rule goes
+
+The fuse was a delay. It is now a *window*.
+
+- **Placement asks nothing of the fold.** `place_pending` checks one thing: that
+  there is sheet under the cell to pin to. That is storage rather than a rule — an
+  anchor is a base identity plus a point in a tile, and void has no tile to be a
+  point in. The degenerate pair, the surface rules (`can_anchor_at`), the span and
+  somewhere-to-land are all `commit_pending`'s question now.
+- **Which makes the fuse a window to make a doubtful fold work.** Put both hands down
+  while standing where the fold cannot put you, then run clear before it fires and
+  ride the flap instead of being swallowed. Refusing at placement would have closed
+  that window before it opened.
+- **A fold that fails at the fuse scatters.** Both hands drop WHERE THEY WERE PINNED
+  — not into your slots, not at your feet. A pending anchor already stores exactly
+  what a loose hand does, so `_scatter_pending` is a conversion, not a placement, and
+  the hands land on the spots you chose. Returning them would make a mistimed fold
+  free.
+- **The two-tile minimum is gone.** A one-cell fold excises a one-cell band and the
+  halves meet; the rule was protecting taste, not geometry. `anchors_valid` now
+  rejects only two anchors on one cell, which genuinely has no crease direction.
+
+### 2026-08-05 — Hands pop into the world; recall becomes a burst
+
+Two changes that turn out to be the same change: a hand that has nowhere to go is a
+hand on the ground, and once that is true nothing has to be refused.
+
+- **New `HandPickup`** (kernel): a hand lying in the world, stored as a base identity
+  plus a point in the tile — the same shape as `LightSource` and a door. So it rides
+  flaps, folds away with its tile, and is found again inside the fold. Authored caches
+  and hands a burst popped out are the SAME object in the SAME list, drawn by the SAME
+  function (`HandOrbit.draw_hand`), because to the player they are the same thing.
+- **The `ANCHOR_CACHE` tile type is gone**, with its `A` character and its atlas row.
+  A loose hand is an occupant of the sheet, not terrain; it is authored per region in
+  a `hands` array beside `lights`, and it draws as a hand rather than as a tile.
+- **Recall is a BURST, not an aimed act.** Holding F fires a small sphere around the
+  body (`BURST_RADIUS`, ~1.2 tiles) that takes back placed hands in reach, opens folds
+  whose seam is in reach, exits a subspace from its glue — and **drops any hand with
+  nowhere to go at your feet**. `hold_action` no longer takes a direction: where you
+  stand is the whole input. A ring confirms the reach after the fact.
+- **Nothing is refused for want of room any more.** The `_has_room_for` gate added
+  yesterday is deleted; overflow lands on the ground instead. That one clause is what
+  lets the burst be fired blind.
+- **A burst releases what was releasable when it fired**, not a cascade: a stack of
+  two folds under one diamond clears one layer per press, and the behaviour no longer
+  depends on which unfolds happen to animate.
+- **Conservation is now total.** `AnchorStock.total` counts the ground as a fourth
+  place a hand can be, so *nothing* in the game changes the number of hands — placing,
+  committing, unfolding, bursting and picking up all just move one.
+
+Two bugs the tests caught rather than review: dropping two hands with a positional fan
+picked their fragments from the fanned points, which at a seam put one either side of
+the crease — the unfold then carried them to opposite ends of the world (the fan now
+applies after the fragment is chosen); and a burst that cascaded cleared a whole stack
+in one press.
+
+### 2026-08-05 — Anchors become HANDS: two of them, typed, and they fold themselves
+
+The counting model became typed objects. An anchor was an anonymous unit drawn from a
+growing capacity; a hand is a thing with a kind, you have exactly two, and a fold
+holds the two you pinned it with.
+
+- **Two slots, and that never grows.** `AnchorStock` went from capacity arithmetic to
+  slot arithmetic (`SLOTS = 2`); `WorldData.anchor_capacity` became `starting_hands`,
+  a list of kinds. `Fold.held_anchors: int` became `Fold.held_hands: Array[int]`, so
+  unfolding returns the same two hands — kinds and all — that went in.
+- **New `HandTypes`** (kernel): one file per kind, carrying its colour and its fuse.
+  Three ship — `plain` (1.6s), `swift` (0.65s), `patient` (3.2s) — and the fuse is the
+  ONLY behavioural difference, which is the restraint the registry exists to prove.
+- **A cache gives ONE hand, into one free slot.** Since a slot is free because you put
+  a hand down, a cache is the second half of a fold already in progress: place a hand,
+  walk to a cache, take a different kind, finish the fold with a pair you did not set
+  out with. Full hands walk straight over one and it waits. Which kind is authored per
+  tile (`data.hand`); the tile is painted neutral and tinted by that kind, so one
+  atlas row covers every colour.
+- **The commit press is gone.** Placing the second hand lights a fuse — the mean of
+  the two kinds' fuses, so a mixed pair lands genuinely between its parents — and the
+  pair folds itself. Both hands pulse while it burns, slower at first, quickening as
+  it comes due. Pulling a hand back defuses it, and the fuse PAUSES while an anchor is
+  out of frame, so walking through a door mid-count makes the fold wait rather than
+  fire somewhere you cannot see.
+- **Unfolding can now be refused for want of room.** A fold gives back both hands at
+  once, so a spare you picked up has to go down first.
+- **Hands float beside you** (`HandOrbit`): small circles on a spring, trailing your
+  motion. Style only — nothing reads their positions. The integrator is
+  `WorldCore.spring_step`, pure and tested; the node is just the drawing.
+- **Reset restores hands and respawns caches**, reversing yesterday's call *because
+  the model changed under it*: capacity no longer grows, so there is no progression
+  left for a reset to confiscate — and hands are exactly what a reset gives back, so
+  leaving caches spent would strand you shorter than you started.
+
+### 2026-08-05 — Reset stops confiscating your caches; the HUD stops lecturing
+
+- **`R` keeps what you found.** Collected caches were per-region state inside
+  `regions`, so `_setup_all` wiped them on every reset — and reset is the only way
+  out of stranding yourself with no anchors and no reachable seam. Using the escape
+  hatch cost you your progression. Caches now live in `FoldWorld.collected_caches`
+  (region id -> {base_id: grant}), **outside** `regions` precisely so the rebuild
+  cannot reach them. Folds still reset, which is what makes `R` a real remedy: with
+  no fold standing, every anchor is back in hand.
+- **The on-screen help is one line of controls.** It was nine lines that explained
+  the fold verb, the economy, the caches and the doors — teaching, in text, over the
+  top of a game whose aim ring, preview band, seam diamonds and anchor readout
+  already say those things in place. Flash messages lost their instructional tails
+  too ("Folded IN. F at the seam anchor (white diamond) unfolds it." → "Folded in.").
+
+### 2026-08-05 — Anchors are a thing you carry, and one key spends them
+
+Folding was free and unlimited. It is now paid for out of a countable, **conserved**
+stock, and the whole verb collapsed onto one key.
+
+- **New `AnchorStock`** (kernel): `free = capacity - held-by-live-folds - pinned`.
+  Nothing is stored — `held` is summed from `Fold.held_anchors` across every live
+  fold list, so **unfolding refunds by simply removing the fold**. Adding a "spent"
+  counter would be a second source of truth; don't.
+- **A standing fold holds two of your anchors.** The budget is how many folds may
+  stand *at once*, not how many you may ever make. Crossing a pit still costs
+  nothing permanent (fold, walk the seam, unfold behind you); what costs is a fold
+  you must leave standing. Folds the *world* makes — authored pre-folds, trigger
+  folds — hold zero and charge you nothing.
+- **Charged at pin time**, so the count drops as you place and the commit moves the
+  same two anchors into the fold without moving the total. An un-affordable or
+  too-close anchor is refused *when placed*, because the next tap is the commit.
+- **One key (F): tap pushes in, hold pulls back.** Tap pins anchor 1, then anchor 2,
+  then commits. Hold retrieves your own anchor, unfolds the fold under a seam
+  diamond, or exits a subspace by its glue diamond. `Q`/`E`/`Esc`/`U` are gone —
+  and with `U` went the remote unfold, which had been a free escape valve.
+- **New `ANCHOR_CACHE` tile (`A`)**, registry-driven (`grant: 2`). Three placed, each
+  behind a beat rather than in front of one: the pillar top pays for the climb fold,
+  the sealed chamber pays its way back out, and one sits **inside east's shipped
+  pre-fold** — reachable only through door W1, because a cache folded away is not
+  lost. Collected caches dim in place; collection is per-region runtime state.
+- `WorldData.anchor_capacity` (4) authors the starting allowance. The old level-era
+  "fold budget" this resembles was a per-level par; this one is carried and refunded.
+- Integrated with the pixel pass: `ANCHOR_CACHE` is a tileset row (`TileAtlas.K_CACHE`,
+  a pair of upright pegs — two is what it grants and what a fold costs), and a spent
+  cache is the same tile modulated dark rather than a different one.
 
 ### 2026-08-05 — Pixel art meets the dynamic camera
 
@@ -229,18 +433,24 @@ gravity prototype it drives were built between 2025-11 and 2026-07. See
 
 Roughly in priority order — nothing here is committed to yet:
 
-0. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
+1. **Playtest the anchor economy.** The allowance (4) and cache grant (2) are first
+   guesses, and west's beats were authored when folding was free. The question to
+   answer by feel: does scarcity make the world read as *considered*, or merely
+   fussy? Tuning is a playtesting job, not an editing one.
+2. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
    and drop-in path are done, so this is now an art job, not an engineering one.
-1. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
+3. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
    now placed (east's right wing); `Occupants` and `UNANCHORABLE_*` still are not.
    Placing them is also how their design gets pressure-tested.
-2. **Settle fold extent.** Infinite-crease is the biggest open question in the
+4. **Settle fold extent.** Infinite-crease is the biggest open question in the
    direction (see `AGENTS.md` §"Open design questions"). Barrier-scoped folds are
    the leading candidate.
-3. **Save / checkpoints.** Undo is gone by design; respawn currently sends you to the
-   region spawn. Real save points are the replacement.
-4. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
-5. **Authoring tooling.** ASCII rows in JSON are workable but hand-editing region
+5. **Save / checkpoints.** Undo is gone by design; respawn currently sends you to the
+   region spawn. Real save points are the replacement — and they are now also what
+   collected caches need to outlive a session, and the answer to stranding yourself
+   with no anchors and no reachable seam.
+6. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
+7. **Authoring tooling.** ASCII rows in JSON are workable but hand-editing region
    geometry will not scale. Revisit an editor once the tile vocabulary settles.
 
 ---
@@ -252,6 +462,13 @@ Roughly in priority order — nothing here is committed to yet:
 - No audio assets ship; `AudioManager` is wired but silent.
 - Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
   the world yet. Pins and triggers now are — see east's right wing.
+- **You can strand yourself.** Spend your last anchors on a fold, walk somewhere its
+  seam cannot be reached from, and `R` is the only way back. `R` is survivable by
+  design — it refunds every anchor and keeps your caches — but it still costs your
+  position and fold configuration. Save points are the real fix.
+- Collected anchor caches are runtime-only state (`FoldWorld.collected_caches`) — the
+  first thing that is not `(base, folds)`. They survive `R` but not the session; a save
+  system is what they need next.
 - Lights do not cast shadows: they pass through walls. Occluders would have to be
   re-derived per fold and would want to soften the seam, which the art is currently
   committed to keeping hard.

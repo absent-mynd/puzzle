@@ -17,7 +17,6 @@ class_name TileTypes extends RefCounted
 ##                 water > empty reproduces the two legacy orderings exactly.
 ##   blocks_fold : does an occupant of this type block a fold that would cut/excise
 ##                 it? (Consumed by the general fold-block predicate — F5.)
-##
 ## Behavior hooks (on_enter / on_fold / on_unfold) are intentionally NOT baked in
 ## yet; they arrive with the trigger system (F3). `get_def` returns a plain
 ## Dictionary so those keys can be added without changing call sites.
@@ -99,6 +98,7 @@ static func blocks_anchor(type: int) -> bool:
 ## Name of the reaction fired when the player enters a tile of this type ("" = none).
 static func on_enter_kind(type: int) -> String:
 	return get_def(type).get("on_enter", "")
+
 
 
 ## Resolve a stack of co-surface piece types to the dominant one. Returns EMPTY for

@@ -30,12 +30,22 @@ extends Resource
 ## Region id the player spawns in.
 @export var start_region: String = ""
 
+## The hands the player starts the world holding, as `HandTypes` authoring keys —
+## e.g. `["plain", "plain"]`. One entry per filled slot; fewer than `AnchorStock.SLOTS`
+## entries starts you short-handed, which is a legitimate thing for a world to do.
+## Entries beyond `SLOTS` are ignored, since you cannot hold them.
+##
+## This is not a capacity: the number you can hold is fixed (`AnchorStock.SLOTS`).
+## What a world chooses here is which KINDS you set out with.
+@export var starting_hands: Array = ["plain", "plain"]
+
 ## region id -> {
 ##   "rows":      Array[String],  ASCII terrain (see WorldCore.CHARS)
 ##   "spawn":     Vector2,        spawn point, in CELL units (0.5 = cell center)
 ##   "tile_data": Dictionary,     "x,y" -> per-tile params
 ##   "folds":     Array,          pre-placed folds, [{anchor1:{x,y}, anchor2:{x,y}}, ...]
 ##   "lights":    Array[LightSource], lights placed on base cells (see LightSource)
+##   "hands":     Array[HandPickup], loose hands lying on base cells (see HandPickup)
 ## }
 @export var regions: Dictionary = {}
 
@@ -56,12 +66,16 @@ func to_dict() -> Dictionary:
 		var out_lights: Array = []
 		for light in r.get("lights", []):
 			out_lights.append(light.to_dict())
+		var out_hands: Array = []
+		for pickup in r.get("hands", []):
+			out_hands.append(pickup.to_dict())
 		out_regions[id] = {
 			"rows": (r.get("rows", []) as Array).duplicate(),
 			"spawn": {"x": r.get("spawn", Vector2.ZERO).x, "y": r.get("spawn", Vector2.ZERO).y},
 			"tile_data": (r.get("tile_data", {}) as Dictionary).duplicate(true),
 			"folds": (r.get("folds", []) as Array).duplicate(true),
 			"lights": out_lights,
+			"hands": out_hands,
 		}
 	var out_doors: Dictionary = {}
 	for id in doors:
@@ -74,6 +88,7 @@ func to_dict() -> Dictionary:
 		"world_name": world_name,
 		"cell_size": cell_size,
 		"start_region": start_region,
+		"starting_hands": starting_hands.duplicate(),
 		"regions": out_regions,
 		"doors": out_doors,
 		"metadata": metadata,
@@ -85,6 +100,9 @@ func from_dict(dict: Dictionary) -> void:
 	world_name = dict.get("world_name", "")
 	cell_size = float(dict.get("cell_size", 64.0))
 	start_region = dict.get("start_region", "")
+	starting_hands = []
+	for key in dict.get("starting_hands", ["plain", "plain"]):
+		starting_hands.append(String(key))
 	metadata = dict.get("metadata", {})
 
 	regions = {}
@@ -99,12 +117,18 @@ func from_dict(dict: Dictionary) -> void:
 			var light := LightSource.from_dict(entry)
 			light.region = id
 			lights.append(light)
+		var hands: Array = []
+		for entry in r.get("hands", []):
+			var pickup := HandPickup.from_dict(entry)
+			pickup.region = id
+			hands.append(pickup)
 		regions[id] = {
 			"rows": rows,
 			"spawn": Vector2(float(sp.get("x", 0.0)), float(sp.get("y", 0.0))),
 			"tile_data": r.get("tile_data", {}),
 			"folds": r.get("folds", []),
 			"lights": lights,
+			"hands": hands,
 		}
 
 	doors = {}
@@ -182,6 +206,28 @@ func fold_pairs(id: String) -> Array:
 			Vector2i(int(a.get("x", 0)), int(a.get("y", 0))),
 			Vector2i(int(b.get("x", 0)), int(b.get("y", 0))),
 		])
+	return out
+
+
+## The starting hands as a slot array: `HandTypes` ids, one entry per slot, `null`
+## where the world starts you empty-handed. Always exactly `AnchorStock.SLOTS` long,
+## so callers never have to think about a short or over-long authored list.
+func starting_hand_slots() -> Array:
+	var out: Array = AnchorStock.empty_slots()
+	for i in range(mini(starting_hands.size(), out.size())):
+		out[i] = HandTypes.from_name(String(starting_hands[i]))
+	return out
+
+
+## A region's authored loose hands, as fresh unbound copies — same reasoning as
+## `lights_of`: binding writes into them, and a reset must re-bind from the authored
+## world rather than from whatever the last session did to it.
+func hands_of(id: String) -> Array:
+	var out: Array = []
+	if not regions.has(id):
+		return out
+	for pickup in regions[id].get("hands", []):
+		out.append(pickup.duplicate_pickup())
 	return out
 
 
