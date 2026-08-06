@@ -228,7 +228,11 @@ func test_surfacing_from_a_fold_is_heard() -> void:
 # ---------------------------------------------------------------------------
 
 func test_picking_a_hand_up_is_heard() -> void:
-	# Drop one at the player's feet, then walk onto it.
+	# Drop one at the player's feet, then walk onto it. Standing ON the floor is the
+	# point of the teleport: a dropped hand FALLS now, so dropping one from the spawn
+	# point (which hangs a cell and a half up) leaves it on the ground below and out of
+	# reach — and this test is about the pickup, not about the fall.
+	world.player.teleport(Vector2(4.5 * CS, 14.0 * CS - PlayerBody.RADIUS), false)
 	world.hands[0] = null
 	world._drop_hand(HandTypes.PLAIN, world.player.global_position)
 	_listen()

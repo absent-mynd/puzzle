@@ -289,9 +289,70 @@ Consequences worth keeping in mind when designing:
   could not put you and run clear before it fires. Moving a check back to placement
   would close that window, so do not.
 - **A failed fold scatters rather than refunds.** `_scatter_pair` drops both hands
-  where they were pinned, converting each anchor straight into a `HandPickup` — they
-  are already stored as the same thing. Returning them to your slots would make a
+  from where they were pinned, converting each anchor straight into a `HandPickup` —
+  they are already stored as the same thing. Returning them to your slots would make a
   mistimed fold free.
+- **A loose hand is a BALL while it is in flight, and an occupant once it stops.** That
+  boundary is the whole design, and it is what lets a hand behave physically without
+  breaking §8.
+
+  A hand let go of anywhere becomes an entry in `FoldWorld.hand_balls` — light, high-drag,
+  simulated by `WorldCore.hand_ball_step`: it floats down rather than dropping, rolls off
+  slopes, ejects out of walls, and comes to rest. `_land_ball` then converts it back into
+  a `HandPickup`, and from that moment it has no position of its own again. Every path
+  that lets a hand go goes through `_drop_hand`/`_toss_hand`, so there is one answer to
+  "what happens when you drop a hand" everywhere.
+
+  **A ball is the one thing in the world that holds a live position, and it is
+  deliberately transient.** §8 forbids caching one on anything that persists, because the
+  fragment list is the only authority on where things are. A ball holds one for a second
+  or two and nothing outlives that. While flying it is still transported like everything
+  else: `_carry_balls_through` maps it through `BaseFrame` exactly as the player is, so a
+  fold carries a hand in flight — and a hand the fold sweeps into a strip goes on flying
+  *inside* the strip, velocity intact, because a fold is a translation and the step is
+  position-independent.
+
+  **Conservation holds mid-flight.** `hands_loose()` counts balls, so a falling hand is
+  never momentarily destroyed and re-created on landing. A ball is also catchable in the
+  air (`_check_pickups`).
+
+  **A strip is a cylinder, so a falling thing wraps** (`WorldCore.wrap_into_strip`, the
+  same rule the player crosses the glue by, as a modulo because a falling object can cross
+  more than one band in a frame). When the wrap axis has a vertical component a hand
+  **orbits indefinitely** — that is a real object in a closed space, not a leak: still
+  counted, still catchable, and it lands the moment a fold puts ground in its way. Only
+  the tangential ends are open, and a ball leaving one is returned to the player's feet.
+
+  **A resting hand wakes if a fold takes its ground away** (`_wake_unsupported_hands`,
+  called from every fold/unfold finalize). A fold that merely *moves* its tile carries it
+  and it stays put, like a door. The cost, chosen deliberately: a cache can move without
+  you touching it.
+
+  **`_take_back` must run AFTER the rebuild and the teleport.** A hand a fold cannot give
+  you is a hand it DROPS, and a hand is dropped at the player's position in the current
+  geometry — so returning hands before the unfold has moved the player launches the
+  overflow one from a stale position into the old fragment list. It was the reported
+  "one hand vanishes on unfold" bug, and `hands_total` was correct throughout, which is
+  why no conservation test caught it: the hand existed, it was just cells away from where
+  you ended up. Same trap on the subspace-exit path, worse — the ball was tagged
+  `in_sub` in a world that no longer had a subspace, so it could never be stepped, drawn
+  or reached. Pinned by the regression block in `test_fold_world`.
+
+  **`_land_ball` may never give up on a hand.** It used to warn and return when no sheet
+  was within two cells, which was the one code path in the game that could actually
+  destroy one — silent, because a `push_warning` is not a failing test. It now falls back
+  to the spawn tile, and failing that keeps the hand airborne. Relatedly, a hand that
+  falls out of the world is recovered by `_recover_lost_hand`, which lands it as a pickup
+  rather than re-dropping a ball at the player: a player standing over a pit would
+  otherwise have the recovered hand fall off again and loop forever, counted but never
+  findable.
+
+  Two consequences worth knowing before you change any of it: a refused fold no longer
+  leaves its hands on the cells you chose (the shape of the attempt is no longer legible —
+  traded for "a hand is always somewhere you can see and walk to"), and authored hands are
+  **settled at load** (`_settle_authored`) because authoring names a cell, which puts a
+  hand at that tile's centre — half a cell in the air. Without settling, the first fold
+  near a cache would drop it, since it was never really on the ground.
 - **There is no fixed number of placed anchors.** `unpaired` holds hands waiting for
   a partner and `primed` holds pairs, each with its OWN fuse. Two fixed registers is
   what wedged the game: a hand left in another region sat in one forever, so every
@@ -316,8 +377,12 @@ Consequences worth keeping in mind when designing:
   leaving the caches spent would strand you *shorter* than you began. Save points are
   the real answer and do not exist yet. Do not paper over any of this with a recall
   key without a design conversation.
-- **The floating hands are style.** `HandOrbit` springs them beside the body and
-  nothing reads their positions back. Do not make them load-bearing without saying so.
+- **The floating hands are style.** `HandOrbit` springs them beside the body, adds a
+  passive drift so no hand is ever perfectly still (carried or loose — both draw
+  through `draw_hand`), and nothing reads their positions back. In particular
+  `_check_pickups` measures from where a hand *is*, not where it is drawn, which is
+  why `WorldCore.DRIFT_RADIUS` is a fraction of the pickup range. Do not make these
+  positions load-bearing without saying so.
 
 ---
 
@@ -329,11 +394,11 @@ constant, cell size or coordinate changed. See `scripts/world/README.md`
 
 ```
 world (unchanged: CELL = 64 world units)
-        │
-        ▼
+		│
+		▼
   SubViewport, RESIZED per zoom  ← 1 art pixel = 4 world units = WORLD_PER_PIXEL
-        │  320x180 at 1:1          the LENS never moves; the target grows instead
-        ├── tiles: Polygon2D + tileset texture + base-space UVs (TileAtlas)
+		│  320x180 at 1:1          the LENS never moves; the target grows instead
+		├── tiles: Polygon2D + tileset texture + base-space UVs (TileAtlas)
 		│            uv = (polygon - src_offset) mapped into the tile's atlas cell
 		└── lit by pixel_lit.gdshader (ambient + snapped, quantized, dithered lights)
 		│
