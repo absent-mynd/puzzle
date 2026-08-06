@@ -19,6 +19,30 @@ func before_each() -> void:
 	world.anim_enabled = false
 
 
+## Run the ball simulation until every hand in flight has landed.
+##
+## A dropped hand is a falling ball for a second or two now, so any test that asks
+## "where did the hands end up" has to let them get there first. `_physics_process`
+## drives the flight in the real game; here we step it directly rather than waiting on
+## real frames, so the tests stay fast and deterministic.
+##
+## Asserts nothing about the outcome: a hand does not always land. Inside a fold whose
+## wrap axis is vertical it can stay in orbit forever, which is a real state of the world
+## — see `_step_hand_balls`. Tests that need a landing assert it themselves.
+func _step_flight(steps := 900) -> void:
+	for _i in range(steps):
+		if world.hand_balls.is_empty():
+			return
+		world._step_hand_balls(1.0 / 60.0)
+
+
+## ...and for the common case, where a landing IS the thing being relied on.
+func _let_hands_land(max_steps := 900) -> void:
+	_step_flight(max_steps)
+	assert_true(world.hand_balls.is_empty(),
+		"Hands should all have landed; %d still flying" % world.hand_balls.size())
+
+
 func _pinch_over_pit() -> void:
 	# Stand mid-air over the pit (air tiles), fold across: player is swallowed.
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
@@ -120,18 +144,45 @@ func test_a_fold_that_cannot_go_drops_both_hands_where_they_stood() -> void:
 	assert_eq(_total(), 5, "Conserved, as ever")
 
 
-func test_dropped_hands_land_on_the_cells_they_were_pinned_to() -> void:
+func test_dropped_hands_fall_from_the_cells_they_were_pinned_to() -> void:
+	# A hand nothing is holding up falls. So a failed fold's hands land on the floor
+	# BELOW where they were pinned, in the same column — not hanging at the spot you
+	# chose. That used to be the assertion here, and the trade is deliberate: a hand
+	# always ends up somewhere you can see and walk to, and "hands behave like objects"
+	# gains no exceptions. See `_release_anchor`.
 	world.tap_action(Vector2i(1, 0))                # (5,12)
 	var at = _plane_point(Vector2i(5, 12))
 	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                # (5,12) again — degenerate
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	_let_hands_land()
 
-	var near := 0
+	var below := 0
 	for entry in world.loose_hand_points():
-		if Vector2(entry["pos"]).distance_to(Vector2(at)) < 0.01:
-			near += 1
-	assert_eq(near, 2, "Both hands are lying on the cell they were pinned to")
+		var p := Vector2(entry["pos"])
+		# Within a cell of the column: the toss kicks each hand sideways a little, so
+		# "fell from here" is a column, not a plumb line.
+		if absf(p.x - Vector2(at).x) < CS and p.y > Vector2(at).y:
+			below += 1
+	assert_eq(below, 2, "Both hands fell from the cell they were pinned to")
+
+
+func test_a_failed_folds_hands_come_to_rest_where_you_can_reach_them() -> void:
+	# The point of the fall: a hand pinned into a wall face used to be stored inside the
+	# tile and drawn buried in it. Wherever a refused pair ends up, it must be somewhere
+	# a player could walk to and pick up.
+	world.player.teleport(Vector2(4.5 * CS, 14.0 * CS - PlayerBody.RADIUS), false)
+	world.tap_action(Vector2i(0, 1))                # into the floor tile below
+	world.tap_action(Vector2i(0, 1))                # same cell — must fail at the fuse
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.hands_loose(), 5, "Both are loose the instant they are unpinned")
+	_let_hands_land()
+
+	assert_eq(world.hands_loose(), 5, "...and still loose once they have landed")
+	for entry in world.loose_hand_points():
+		assert_false(
+			WorldCore.circle_overlaps_solids(Vector2(entry["pos"]), 1.0, world.wall_polys),
+			"A hand at %s is out in the open, not buried in the floor" % entry["pos"])
 
 
 func test_the_fuse_is_a_window_to_make_a_doubtful_fold_work() -> void:
@@ -844,8 +895,13 @@ func test_a_loose_hand_rides_folds_like_any_occupant() -> void:
 	# nobody wrote that; it falls out of asking the fragment list where it is.
 	var before = _loose_pos_of(HandTypes.SWIFT)
 	assert_not_null(before, "The pillar-top hand is in the world")
-	assert_almost_eq(Vector2(before).distance_to(Vector2(_plane_point(Vector2i(24, 6)))),
-		0.0, 0.01, "...lying on its authored cell")
+	# In its authored COLUMN, but resting on the ground rather than at the tile's exact
+	# centre: authoring a hand names a cell, and a hand lying in that cell is on the
+	# floor of it. See `_settle_authored`.
+	assert_almost_eq(Vector2(before).x, Vector2(_plane_point(Vector2i(24, 6))).x, 0.01,
+		"...in the column it was authored in")
+	assert_gte(Vector2(before).y, Vector2(_plane_point(Vector2i(24, 6))).y,
+		"...resting on the ground of that cell, not hovering at its centre")
 
 	# A fold clear of the player (spawn is at x=4.5c, west of the band) so nobody
 	# gets pinched: the hand is B-side and rides inward.
@@ -943,18 +999,33 @@ func test_the_burst_pops_hands_into_the_world_when_your_slots_are_full() -> void
 	world.hold_action()
 	assert_eq(world.folds.size(), 0, "The fold came apart anyway — nothing is refused for room")
 	assert_eq(world.hands_held(), 2, "Your slots are still full")
+	assert_eq(_total(), total_before, "Nothing was created or destroyed — even mid-flight")
+	_let_hands_land()
 	assert_eq(_loose_count(), loose_before + 2, "Both freed hands popped into the world")
-	assert_eq(_total(), total_before, "Nothing was created or destroyed")
+	assert_eq(_total(), total_before, "...and still nothing, once they are down")
 
 
 func test_a_popped_hand_can_be_picked_straight_back_up() -> void:
-	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	# Fired from a spot the player can really STAND: a dropped hand falls to the floor
+	# now, so a burst fired from inside solid rock (which is where this test used to
+	# stand, and where `depenetrate` cannot even rescue the player) drops its hands out
+	# of the rock and out of reach. The guarantee is about a hand you can walk back
+	# over, and that only means anything from somewhere you could be walking.
+	world.do_fold(Vector2i(4, 13), Vector2i(8, 13))         # seam at (6,13)
 	world.hands[0] = HandTypes.SWIFT
 	world.hands[1] = HandTypes.SWIFT
-	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+	world.player.teleport(Vector2(6.5 * CS, 14.0 * CS - PlayerBody.RADIUS), false)
 	world.hold_action()
+	_let_hands_land()
 
-	world.tap_action(Vector2i(1, 0))                        # free a slot
+	# Free a slot WITHOUT moving: `tap_action` pins a hand at arm's length, and the
+	# placement is not what this test is about — walking back over a hand you dropped is.
+	# One slot freed means one hand back; `_check_pickups` takes a single hand per call.
+	world.hands[0] = null
+	assert_eq(world.hands_held(), 1, "A slot is open")
+	# Stand on one of the hands that just landed.
+	var landed = world.loose_hand_points()[world.loose_hand_points().size() - 1]
+	world.player.teleport(Vector2(landed["pos"]), false)
 	world._check_pickups()
 	assert_eq(world.hands_held(), 2, "A hand you dropped is a hand you can take again")
 
@@ -967,15 +1038,363 @@ func test_a_popped_hand_keeps_its_kind() -> void:
 	world.hands[1] = HandTypes.SWIFT
 	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
 	world.hold_action()
+	_let_hands_land()
 
-	var near := 0
+	# A kind survives the flight: what falls is the hand you put in, not a generic one.
+	var patient := 0
 	for entry in world.loose_hand_points():
-		if entry["pickup"].kind == HandTypes.PATIENT \
-				and Vector2(entry["pos"]).distance_to(world.player.global_position) < 2.0 * CS:
-			near += 1
-	assert_eq(near, 2, "Both patient hands are on the ground at your feet, still patient")
+		if entry["pickup"].kind == HandTypes.PATIENT:
+			patient += 1
+	assert_gte(patient, 2, "Both patient hands are on the ground, still patient")
 
 
+func test_a_hand_burst_loose_in_midair_falls_to_the_floor() -> void:
+	# A hand is an object, so letting go of one over a drop drops it. The burst that
+	# frees a hand is usually fired mid-jump at a seam, so this is the common case, not
+	# the exotic one.
+	world.do_fold(Vector2i(4, 13), Vector2i(8, 13))
+	world.hands[0] = HandTypes.SWIFT
+	world.hands[1] = HandTypes.SWIFT
+	# Well above the floor (surface y = 14*CS), seam still within burst reach.
+	var from := Vector2(6.5 * CS, 13.2 * CS)
+	world.player.teleport(from, false)
+	world.hold_action()
+	_let_hands_land()
+
+	var landed := 0
+	for entry in world.loose_hand_points():
+		var p := Vector2(entry["pos"])
+		if p.distance_to(from) > 3.0 * CS:
+			continue                    # one of the authored caches, elsewhere entirely
+		landed += 1
+		assert_gt(p.y, from.y, "The freed hand ended up BELOW where it was let go")
+		assert_almost_eq(p.y, 14.0 * CS - WorldCore.HAND_CLEARANCE, 3.0,
+			"...resting just above the floor")
+	assert_eq(landed, 2, "Both freed hands are down there")
+
+
+func test_a_hand_never_comes_to_rest_inside_a_wall() -> void:
+	# The invariant that matters for every drop, however it happened: a hand you cannot
+	# see is a hand you cannot go and fetch, and this system's one job is never to lose
+	# one. Checked over every loose hand in the world at once.
+	world.do_fold(Vector2i(4, 13), Vector2i(8, 13))
+	world.hands[0] = HandTypes.SWIFT
+	world.hands[1] = HandTypes.SWIFT
+	world.player.teleport(Vector2(6.5 * CS, 13.2 * CS), false)
+	world.hold_action()
+
+	for entry in world.loose_hand_points():
+		assert_false(
+			WorldCore.circle_overlaps_solids(Vector2(entry["pos"]), 1.0, world.wall_polys),
+			"A hand at %s is out in the open" % entry["pos"])
+
+
+func test_falling_to_the_floor_still_conserves_the_hand() -> void:
+	# The fall moves a hand; it must never lose one. `_drop_hand` binds to the fragment
+	# under where it LANDED, so a landing over void would silently drop it from the
+	# world — the one failure mode this whole path has.
+	world.do_fold(Vector2i(4, 13), Vector2i(8, 13))
+	world.hands[0] = HandTypes.SWIFT
+	world.hands[1] = HandTypes.SWIFT
+	var before: int = _total()
+	var loose_before: int = _loose_count()
+
+	world.player.teleport(Vector2(6.5 * CS, 13.2 * CS), false)
+	world.hold_action()
+	assert_eq(_total(), before, "Conserved in mid-air, while both are still falling")
+	_let_hands_land()
+	assert_eq(_loose_count(), loose_before + 2, "Both hands reached the ground")
+	assert_eq(_total(), before, "Nothing created, nothing destroyed")
+
+
+func test_a_burst_leaves_its_hands_within_reach() -> void:
+	# The toss kick is bounded by this: bursting where you stand must hand you a pair you
+	# can pick up, not one you have to walk after. A two-unit miss here reads as the key
+	# not working, so the number in `TOSS_SPEED` is answerable to this test.
+	world.do_fold(Vector2i(4, 13), Vector2i(8, 13))
+	world.hands[0] = HandTypes.SWIFT
+	world.hands[1] = HandTypes.SWIFT
+	# Stand ON the floor: a burst fired in mid-air quite rightly drops its hands to the
+	# ground below you, which is a different guarantee (see the midair test).
+	world.player.teleport(Vector2(6.5 * CS, 14.0 * CS - PlayerBody.RADIUS), false)
+	world.hold_action()
+	_let_hands_land()
+
+	# Measured from where the burst LEAVES you, not from where you fired it: this burst
+	# opens a fold, and an unfold rides you back along the flap. The hands are let go at
+	# your feet after that move (see `unfold_level_fold`), which is the whole point of the
+	# fix — measuring from the pre-burst spot is what a stale coordinate looks like.
+	var stand: Vector2 = world.player.global_position
+	var reach := PlayerBody.RADIUS + 8.0
+	var in_reach := 0
+	for entry in world.loose_hand_points():
+		if Vector2(entry["pos"]).distance_to(stand) <= reach:
+			in_reach += 1
+	assert_eq(in_reach, 2, "Both hands landed inside pickup range of where the burst left you")
+
+
+func test_a_hand_in_flight_can_be_caught() -> void:
+	# A hand still in the air is a hand you can take. Being able to collect one the
+	# instant it stops but not a moment earlier, when it is right in front of you, would
+	# be a strange rule to have to learn.
+	world.hands[0] = null
+	world.hands[1] = null
+	world._drop_hand(HandTypes.PLAIN, world.player.global_position)
+	assert_eq(world.hand_balls.size(), 1, "It is in flight")
+
+	world._check_pickups()
+	assert_eq(world.hands_held(), 1, "Caught in mid-air")
+	assert_eq(world.hand_balls.size(), 0, "...and no longer flying")
+
+
+func test_a_hand_in_flight_is_still_conserved() -> void:
+	# The whole reason `hands_loose` counts balls. A hand mid-fall must not read as
+	# destroyed and then created again on landing.
+	# Move a hand out of a slot and into the air, the way a real drop does — the total
+	# must not budge at any point.
+	var before: int = _total()
+	world.hands[0] = null                                   # out of the slot...
+	world._drop_hand(HandTypes.PLAIN, world.player.global_position)   # ...and into flight
+	assert_eq(_total(), before, "Conserved while it is still falling")
+	_let_hands_land()
+	assert_eq(_total(), before, "...and conserved once it has landed")
+
+
+func test_a_hand_in_flight_rides_a_fold() -> void:
+	# A ball is transported like everything else in the world. It is over the A-side
+	# flap, so the fold carries it the same way it carries the player.
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+	world.hands[0] = null
+	world._drop_hand(HandTypes.PLAIN, Vector2(4.5 * CS, 12.5 * CS))
+	var before: Vector2 = world.hand_balls[0]["pos"]
+
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_eq(world.hand_balls.size(), 1, "Still in flight, and still in the world")
+	assert_almost_eq(Vector2(world.hand_balls[0]["pos"]).x, before.x + 4.0 * CS, 1.0,
+		"It rode the flap's shift, exactly as the player did")
+
+
+func test_a_hand_in_flight_folded_into_a_subspace_keeps_flying_in_there() -> void:
+	# The user's case: a body in flight folded into a space maintains that flight inside
+	# the space it moved into. The hand is over the pit the fold excises, so it has no
+	# home in the new configuration — it is inside the strip, still falling.
+	world.hands[0] = null
+	world._drop_hand(HandTypes.PLAIN, Vector2(13.5 * CS, 12.2 * CS))
+	var vel_before: Vector2 = world.hand_balls[0]["vel"]
+
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))       # pinch: player and hand go in
+	assert_eq(world.mode, world.Mode.SUBSPACE, "The fold swallowed us")
+	assert_eq(world.hand_balls.size(), 1, "The hand came too")
+	assert_true(bool(world.hand_balls[0]["in_sub"]), "...and it is flying INSIDE the fold")
+	assert_almost_eq(Vector2(world.hand_balls[0]["vel"]).distance_to(vel_before), 0.0, 0.001,
+		"Its flight is undisturbed: a fold is a translation")
+
+
+func test_a_fold_that_takes_the_ground_away_wakes_the_hand_on_it() -> void:
+	# The user's decision: a resting hand is not done forever. A fold that MOVES its tile
+	# carries it (it is an occupant, like a door), but a fold that removes the ground
+	# under it leaves it hanging — so it wakes and falls again.
+	#
+	# The pillar-top cache at (24,6) sits on ground a fold across that column excises.
+	var spot = _plane_point(Vector2i(24, 6))
+	assert_not_null(spot, "The pillar-top hand starts in normal space")
+	assert_eq(world.hand_balls.size(), 0, "Nothing is falling yet")
+	var before: int = _total()
+
+	# Fold away the pillar the cache is standing on.
+	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+	world.do_fold(Vector2i(24, 7), Vector2i(24, 11))
+	assert_eq(_total(), before, "Conserved across the fold, whatever it did to the hand")
+
+
+func test_a_hand_whose_flap_merely_moves_rides_it_and_stays_put() -> void:
+	# The other half of the rule, and the one that keeps §8 true: a hand on ground that a
+	# fold SLIDES is still supported, so it rides its tile and does not re-drop. Nothing
+	# should be in flight after a fold that only translated the sheet under it.
+	var before: int = _total()
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_eq(world.hand_balls.size(), 0, "No hand was shaken loose by a fold that only slid the ground")
+	assert_eq(_total(), before, "Conserved")
+
+
+func test_a_hand_falling_inside_a_fold_stays_inside_the_fold() -> void:
+	# A strip is a CYLINDER. A hand that finds no floor in there does not leak out and is
+	# not quietly rescued — it wraps across the glue and goes on falling, exactly as the
+	# player does when they walk through one. This particular fold is horizontal, so the
+	# wrap axis is vertical and the hand orbits indefinitely.
+	world.hands[0] = null
+	world._drop_hand(HandTypes.PLAIN, Vector2(13.5 * CS, 12.2 * CS))
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
+	var before: int = _total()
+	_step_flight(1200)
+
+	assert_eq(world.hand_balls.size(), 1, "Still in there, still going")
+	assert_eq(_total(), before, "Conserved for as long as it falls")
+	assert_true(bool(world.hand_balls[0]["in_sub"]), "It never left the fold")
+
+
+func test_a_hand_in_orbit_stays_within_the_band_it_orbits() -> void:
+	# The wrap has to actually bound it. Un-wrapped, a falling hand would run off to
+	# y = +millions and every distance test in the game would be measuring nonsense.
+	world.hands[0] = null
+	world._drop_hand(HandTypes.PLAIN, Vector2(13.5 * CS, 12.2 * CS))
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
+	var n: Vector2 = world.sub_fold.crease_normal
+	var c1: float = world.sub_fold.crease_point1.dot(n)
+	var gap: float = world.sub_fold.gap_distance()
+
+	for _i in range(1200):
+		world._step_hand_balls(1.0 / 60.0)
+		if world.hand_balls.is_empty():
+			break
+		var d: float = Vector2(world.hand_balls[0]["pos"]).dot(n) - c1
+		assert_between(d, -1.0, gap + 1.0, "Stays in the fundamental band")
+
+
+func test_a_hand_in_orbit_can_still_be_caught() -> void:
+	# It is a real object in a real place, so it is collectable like any other. This is
+	# what makes an orbiting hand a feature rather than a hand you have lost.
+	world.hands[0] = null
+	world._drop_hand(HandTypes.PLAIN, Vector2(13.5 * CS, 12.2 * CS))
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
+	_step_flight(30)
+	assert_eq(world.hand_balls.size(), 1, "In flight inside the fold")
+
+	# Stand where it is and take it out of the air.
+	world.player.teleport(Vector2(world.hand_balls[0]["pos"]), false)
+	world._check_pickups()
+	assert_eq(world.hand_balls.size(), 0, "Plucked out of its orbit")
+	assert_eq(world.hands_held(), 1, "...and it is yours")
+
+
+# ---------------------------------------------------------------------------
+# REGRESSION: the hand that vanished on unfold
+# ---------------------------------------------------------------------------
+# Reported as: holding one anchor, release a folded anchor, one returned hand can be
+# picked up at once and the other cannot be found anywhere.
+#
+# Two independent bugs, neither caught by the conservation tests:
+#
+#   1. `_take_back` ran BEFORE the unfold rebuilt the geometry and teleported the player,
+#      so the overflow hand was let go at the pre-unfold position and into the old
+#      fragment list. `hands_total` was right the whole time; the hand was simply cells
+#      away from where you ended up. Same bug on the subspace-exit path, worse: the ball
+#      was tagged as flying inside a strip that no longer existed.
+#   2. `_land_ball` warned and RETURNED when it found no sheet within two cells — the one
+#      place in the game that could actually destroy a hand, and silent because a warning
+#      is not a failing test.
+
+## Distance from the player to the nearest loose hand, INF if there are none.
+func _nearest_hand_distance() -> float:
+	var best := INF
+	for entry in world.loose_hand_points():
+		best = minf(best, Vector2(entry["pos"]).distance_to(world.player.global_position))
+	return best
+
+
+func test_unfolding_while_holding_one_leaves_the_spare_at_your_feet() -> void:
+	# The exact report. The fold holds two, you have one slot free, so one hand fills it
+	# and the other is dropped — at YOUR feet, which after an unfold means where the
+	# unfold put you.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	world.hands[0] = HandTypes.SWIFT
+	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+	var total_before: int = world.hands_total()
+
+	world.unfold_level_fold(world.folds[0])
+	assert_eq(world.hands_held(), 2, "One of the two filled your free slot")
+	assert_eq(world.hands_total(), total_before, "Nothing created or destroyed")
+	_step_flight()
+
+	assert_lt(_nearest_hand_distance(), 1.5 * CS,
+		"The spare is on the ground next to you — not stranded where you used to stand")
+
+
+func test_the_spare_hand_can_actually_be_picked_up_afterwards() -> void:
+	# The player-facing version of the same thing: walk-over range is small, so "near you"
+	# has to mean near enough to collect by standing there.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	world.hands[0] = HandTypes.SWIFT
+	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+	world.unfold_level_fold(world.folds[0])
+	_step_flight()
+
+	var spare = null
+	for entry in world.loose_hand_points():
+		if Vector2(entry["pos"]).distance_to(world.player.global_position) < 1.5 * CS:
+			spare = entry
+	assert_not_null(spare, "There is a hand within reach of where the unfold left us")
+
+	world.hands[0] = null                       # free a slot
+	world.player.teleport(Vector2(spare["pos"]), false)
+	world._check_pickups()
+	assert_eq(world.hands_held(), 2, "...and it goes back into your hand")
+
+
+func test_the_spare_lands_on_ground_that_still_exists() -> void:
+	# The mechanism, stated directly: the hand must not be left over the band the unfold
+	# moved away, and must not end up inside the geometry either.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	world.hands[0] = HandTypes.SWIFT
+	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+	world.unfold_level_fold(world.folds[0])
+	_step_flight()
+
+	for entry in world.loose_hand_points():
+		assert_false(
+			WorldCore.circle_overlaps_solids(Vector2(entry["pos"]), 1.0, world.wall_polys),
+			"A hand at %s is out in the open" % entry["pos"])
+
+
+func test_bursting_a_fold_while_holding_one_does_the_same() -> void:
+	# `hold_action` is the way this is actually reached in play — "release a folded
+	# anchor" is hold-F, not a direct call to unfold.
+	world.do_fold(Vector2i(4, 13), Vector2i(8, 13))
+	world.hands[0] = HandTypes.SWIFT
+	world.player.teleport(Vector2(6.5 * CS, 14.0 * CS - PlayerBody.RADIUS), false)
+	var total_before: int = world.hands_total()
+
+	world.hold_action()
+	assert_eq(world.hands_total(), total_before, "Conserved as the burst fires")
+	_step_flight()
+	assert_eq(world.hands_total(), total_before, "...and once everything has landed")
+	assert_eq(world.hands_held(), 2, "One filled the slot")
+	assert_lt(_nearest_hand_distance(), 1.5 * CS, "...and the other is at your feet")
+
+
+func test_leaving_a_subspace_while_holding_one_keeps_the_spare_reachable() -> void:
+	# The same ordering bug lived on the exit path, where it was worse: the ball was
+	# launched before `_apply_context`, so it was tagged as flying INSIDE a strip that no
+	# longer existed — never stepped, never drawn, never collectable.
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))       # pinched in; fold holds two
+	assert_eq(world.mode, world.Mode.SUBSPACE, "Inside the fold")
+	world.hands[0] = HandTypes.SWIFT                        # and you hold one
+	var total_before: int = world.hands_total()
+
+	world.player.teleport(Vector2(10.5 * CS, 12.5 * CS), false)   # to the glue
+	world.try_exit()
+	assert_eq(world.mode, world.Mode.WORLD, "Back out in the world")
+	assert_eq(world.hands_total(), total_before, "Conserved across the exit")
+
+	_step_flight()
+	assert_eq(world.hands_total(), total_before, "...and after the spare lands")
+	for ball in world.hand_balls:
+		assert_false(bool(ball["in_sub"]),
+			"No hand is left flying inside a subspace we have left")
+	# You surface standing over the pit the fold was excised from, so the spare falls past
+	# you to the nearest real ground rather than landing at your feet. What matters is
+	# that it is DOWN, out here, and on something — not that it is within arm's reach.
+	assert_eq(world.hand_balls.size(), 0, "It came to rest rather than falling forever")
+	assert_lt(_nearest_hand_distance(), 8.0 * CS, "...somewhere out here we can walk to")
+	for entry in world.loose_hand_points():
+		assert_false(
+			WorldCore.circle_overlaps_solids(Vector2(entry["pos"]), 1.0, world.wall_polys),
+			"...and in the open, not inside the geometry")
 func test_the_burst_exits_a_subspace_from_the_glue() -> void:
 	_pinch_over_pit()
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Pinched in")

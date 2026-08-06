@@ -74,9 +74,12 @@ const ANIM_TIME := 0.24
 ## How long the fold key must be held before it reads as "pull back" rather than
 ## "push in". Long enough that a committing tap never trips it by accident.
 const HOLD_TIME := 0.35
-## Reach of the release burst, in world units. About a tile — the burst is a thing you
-## do to the space you are standing in, not a thing you aim.
-const BURST_RADIUS := 1.2 * CS
+## Reach of the release burst, in world units. About a tile and a third — the burst is a
+## thing you do to the space you are standing in, not a thing you aim, so its reach wants
+## to be forgiving enough that standing *near* a seam clears it. Tuned up from 1.2: at a
+## tile the burst kept missing seams that looked well within it, which reads as the key
+## not working rather than as a reach you misjudged.
+const BURST_RADIUS := 1.3 * CS
 ## How long the burst ring stays drawn.
 const BURST_FLASH := 0.35
 ## How far out the lamps of a repeating space are copied. The space repeats
@@ -94,6 +97,20 @@ const MAX_WRAP_COPIES := 121
 const STRIP_TILE_REACH := 48.0 * CS
 ## ...and the ceiling on that, for the same reason `MAX_WRAP_COPIES` exists.
 const MAX_STRIP_TILES := 49
+## Sideways kick given to a hand thrown loose, in world units/s. Enough that two hands
+## out of one fold visibly separate; small enough that neither sails away, since the
+## ball's air drag eats it within a few tenths of a second.
+##
+## Bounded by something concrete: a burst fired standing still must leave its hands
+## inside `PlayerBody.RADIUS + 8` of you, or bursting at your feet hands you a pair you
+## then have to walk after — which reads as the game taking them away. At 90 they landed
+## 30 units out against a 28-unit reach, which is exactly the sort of two-unit miss that
+## feels like a bug rather than a distance. `test_a_burst_leaves_its_hands_within_reach`
+## is what holds this honest if the physics is ever retuned.
+const TOSS_SPEED := 55.0
+## ...and the upward part of that kick. A hand that pops UP before it falls reads as
+## released; one that only slides sideways reads as dropped.
+const TOSS_LIFT := 110.0
 
 ## The authored world (regions, doors, pre-placed folds).
 var world_data: WorldData
@@ -157,6 +174,30 @@ var primed: Array = []
 ## The hands you are carrying: one entry per slot, a `HandTypes` id or null.
 ## See `AnchorStock` — this array is the whole of your possession.
 var hands: Array = []
+
+## Hands currently IN FLIGHT: light balls falling, rolling and settling.
+##
+## Each is `{"kind": int, "pos": Vector2, "vel": Vector2, "resting": bool,
+## "region": String, "in_sub": bool, "seed": float}`. Stepped by
+## `WorldCore.hand_ball_step`; the moment one comes to rest it leaves this list and
+## becomes a `HandPickup` occupant (`_land_ball`).
+##
+## This is the ONE place in the game where something in the world holds a position of
+## its own, and it is deliberately transient. `AGENTS.md` §8 forbids caching a world
+## position on a thing that lives in the world, because the fragment list is the only
+## authority on where anything is — and that rule is what makes a hand ride flaps and
+## fold away into subspaces. A ball keeps a position for a second or two of flight and
+## nothing persists it, so nothing that outlives the flight has one.
+##
+## A ball is still transported by folds like everything else: `_carry_balls_through`
+## maps each through `BaseFrame` exactly as the player is, so a hand in flight that a
+## fold sweeps into a subspace goes on flying INSIDE that subspace with its velocity
+## intact. Folds are translations, so its flight is unaffected by the move.
+##
+## `in_sub` tags which view a ball is flying in, for the same reason anchors carry
+## their region: the overworld and a strip interior are different spaces, and a ball
+## must only be stepped, drawn and collided against the one it is actually in.
+var hand_balls: Array = []
 
 # --- Fold-key hold tracking (tap = place a hand, hold = pull one back) ---
 var _hold_active := false
@@ -318,6 +359,8 @@ func _setup_all() -> void:
 	unpaired = []
 	primed = []
 	hand_pickups = {}
+	# A hand in flight is a hand mid-event. A reset ends the event.
+	hand_balls = []
 
 	world_data = WorldData.load_from(WORLD_PATH)
 	if world_data == null:
@@ -345,9 +388,17 @@ func _setup_all() -> void:
 
 		# Authored loose hands bind exactly as lights do — a hand on the ground has no
 		# world position either, only a base identity the configuration is asked about.
+		#
+		# Then they are SETTLED. A hand is authored by naming a cell, which puts it at
+		# that tile's centre — half a cell up in the air. That was invisible when a
+		# resting hand was wherever it was stored, but now that a hand can be woken by a
+		# fold taking its ground away, "resting" has to mean the same thing for an
+		# authored cache as for one that fell there: otherwise the first fold anywhere
+		# near a cache drops it, because it was never really on the ground to begin with.
 		var region_hands: Array = []
 		for pickup in world_data.hands_of(id):
 			if pickup.bind(rbase):
+				_settle_authored(pickup, pieces)
 				region_hands.append(pickup)
 			else:
 				push_error("FoldWorld: hand pickup in %s sits outside the region" % id)
@@ -400,6 +451,28 @@ func _load_region(id: String) -> void:
 	interiors = r["interiors"]
 	_spawn = r["spawn"]
 	loose_hands = _ensure_pickups(id)
+
+
+## Drop an authored hand onto the ground under the cell it was authored in.
+##
+## An authored hand names a CELL, and the natural reading of that is "a hand lying on the
+## ground there" — not "a hand hovering at the exact centre of that tile", which is where
+## naming a cell actually puts it. Settling at load makes the two agree, so an authored
+## cache and a hand that fell where it lies are the same kind of thing in every respect.
+##
+## Rebinds the pickup to whatever fragment it came to rest on, because that is the tile it
+## is now lying on and therefore the one whose folds it must ride.
+func _settle_authored(pickup: HandPickup, pieces: Array) -> void:
+	var wp = pickup.position_in(pieces)
+	if wp == null:
+		return                  # sealed inside a pre-fold; it settles when it surfaces
+	var solids := WorldCore.solid_polys_of(pieces)
+	var rest := WorldCore.settle_hand(Vector2(wp), solids)
+	var piece = BaseFrame.piece_at(pieces, rest, CS)
+	if piece == null:
+		return                  # nothing under it; leave it authored as written
+	pickup.base_id = piece.base_id
+	pickup.bp = rest - piece.src_offset
 
 
 ## The loose hands in a region, creating the list on first ask.
@@ -840,7 +913,8 @@ func tap_action(dir: Vector2i) -> void:
 ## HOLD: a release BURST around you.
 ##
 ## Not an aimed action — a small sphere of influence centred on your body
-## (`BURST_RADIUS`, about a tile). Everything of yours inside it comes loose at once:
+## (`BURST_RADIUS`, about a tile and a third). Everything of yours inside it comes loose
+## at once:
 ##
 ##   - hands you have placed as anchors come back;
 ##   - folds whose seam is in reach come apart, if nothing newer is blocking them;
@@ -970,15 +1044,30 @@ func _prime(a, b) -> void:
 
 
 ## Put an anchor back where it belongs: into a slot if you have one free and can
-## reach it, otherwise onto the ground exactly where it was pinned.
+## reach it, otherwise it is UNPINNED and falls from where it was.
+##
+## An unpinned hand is a hand nothing is holding up any more, so it drops — the same
+## rule as every other way a hand comes loose, because there is only one kind of loose
+## hand and it would be strange for the game to have two ideas about how one behaves.
+##
+## This costs something real, and it is worth naming: a failed fold used to leave its
+## two hands exactly on the cells you chose, so the shape of the fold you tried to make
+## was still legible in the world. Now the pair falls. What is bought is that a hand is
+## always somewhere you can see and walk to — a hand pinned into a wall face used to
+## end up drawn buried inside the tile — and that "hands behave like objects" has no
+## exceptions to learn.
 func _release_anchor(entry, into_hand: bool) -> void:
 	if into_hand and AnchorStock.first_empty(hands) >= 0:
 		hands[AnchorStock.first_empty(hands)] = int(entry["hand"])
 		return
-	# Caught, and it is silent — the burst that caught it already spoke. Only a
-	# hand that reaches the GROUND makes a sound of its own, because a hand on
-	# the ground is a thing you now have to go and fetch.
-	AudioManager.play_sfx(Sounds.HAND_DROP)
+	# An anchor is stored in the BASE frame; a ball needs a point in the view it is
+	# falling through. A hand whose tile is folded away has no "here" to fall in, so it
+	# stays an occupant on the spot it was pinned to and falls whenever that tile
+	# surfaces — there is no view in which it could be dropping right now.
+	var here = anchor_point(entry)
+	if here != null:
+		_toss_hand(int(entry["hand"]), Vector2(here))
+		return
 	var p := HandPickup.new()
 	p.kind = int(entry["hand"])
 	p.region = String(entry["region"])
@@ -986,6 +1075,7 @@ func _release_anchor(entry, into_hand: bool) -> void:
 	p.base_id = int(entry["bid"])
 	p.bp = entry["bp"]
 	_ensure_pickups(p.region).append(p)
+	AudioManager.play_sfx(Sounds.HAND_DROP)
 	_refresh_pickup_visuals()
 
 
@@ -1103,9 +1193,17 @@ func next_hand_type() -> int:
 	return -1 if i < 0 else int(hands[i])
 
 
-## Hands lying on the ground, everywhere in the world.
+## Hands lying on the ground, everywhere in the world — INCLUDING the ones still in the
+## air on their way there.
+##
+## A ball counts as loose because "loose" means "not yours and not in a fold", and a hand
+## mid-fall is exactly that. Counting it anywhere else, or nowhere, would make a hand
+## appear destroyed for the second or two it is falling and then created again when it
+## landed — and conservation is the one property of this system that must never wobble,
+## including mid-flight. `AnchorStock.total` is what states it and `test_anchor_stock`
+## what pins it.
 func hands_loose() -> int:
-	var n := 0
+	var n := hand_balls.size()
 	for id in hand_pickups:
 		n += (hand_pickups[id] as Array).size()
 	return n
@@ -1244,6 +1342,9 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 		# PINCH. The fold is applied for real, and you are inside what it took.
 		_commit_fold(fold, dropped, pinned)
 		var p := player.global_position
+		# The player is going INTO the strip, so every ball still flying out here goes
+		# with them: the fold is closing around all of it at once.
+		_carry_balls_through(new_pieces, true)
 		var finalize_pinch := func() -> void:
 			context.append(fold)
 			_apply_context()
@@ -1259,9 +1360,15 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 		_show_flash("Fold blocked — nowhere for you to land.")
 		return false
 	_commit_fold(fold, dropped, pinned)
+	# Called with the OLD frame still current, because that is what a ball's position is
+	# expressed in: it maps through `BaseFrame` from the fragment it is over now to the
+	# same spot of sheet in the new configuration, exactly as the player does. A ball
+	# over ground the fold excised has no home out here and flies on inside the strip.
+	_carry_balls_through(new_pieces, false)
 	var finalize_ride := func() -> void:
 		rebuild()
 		player.teleport(landed)
+		_wake_unsupported_hands()
 	AudioManager.play_sfx(Sounds.FOLD)
 	_play_transition(pre, fold, true, true, player.global_position, landed, finalize_ride)
 	return true
@@ -1347,20 +1454,159 @@ func _give_hand(kind: int) -> void:
 	if into >= 0:
 		hands[into] = kind
 		return
-	_drop_hand(kind, player.global_position)
+	_toss_hand(kind, player.global_position)
 
 
-## Put a hand on the ground at a world point. It binds to whatever fragment is under
-## that point, so from then on it rides folds like any other occupant. If the point is
-## over void there is no sheet to lie on, so we search outward a little before giving
-## up — a dropped hand landing nowhere would be the one way this system loses one.
-func _drop_hand(kind: int, at: Vector2) -> void:
-	# Fan successive drops apart a little, so two hands out of one fold read as two.
-	# The fan is applied AFTER the fragment is chosen, never before: a burst usually
-	# happens standing on a seam, and picking the fragment from a fanned point would
-	# put one hand either side of the crease — which the unfold then carries to
-	# opposite ends of the world. Same base tile, different spot on it.
-	var fan := Vector2((loose_hands.size() % 3) - 1, 0) * (0.28 * CS)
+## Let a hand go at a world point: it becomes a BALL and falls.
+##
+## Every way a hand reaches the ground comes through here, so there is one answer to
+## "what happens when you let go of a hand" and it is the physical one. What lands is
+## decided by `WorldCore.hand_ball_step` over the following second or two, not here —
+## this only launches it. `_land_ball` is where a ball stops being a ball.
+##
+## `nudge` is an initial velocity. A burst throws its hands a little, so two hands out of
+## one fold visibly separate instead of stacking; the old code did this by displacing the
+## drop POINT, which had to be done carefully to avoid putting one hand either side of a
+## crease. As a velocity it cannot do that — the ball starts exactly where the hand was
+## let go and the physics takes it from there.
+func _drop_hand(kind: int, at: Vector2, nudge: Vector2 = Vector2.ZERO) -> void:
+	hand_balls.append({
+		"kind": kind,
+		"pos": at,
+		"vel": nudge,
+		"resting": false,
+		"region": region_id,
+		"in_sub": mode == Mode.SUBSPACE,
+		# A ball's drift phase, so two hands in flight together do not bob in lockstep.
+		# Derived from the launch point, which is stable for the whole flight.
+		"seed": WorldCore.hand_drift_seed(hand_balls.size(), at),
+	})
+	AudioManager.play_sfx(Sounds.HAND_DROP)
+
+
+## Throw a hand loose with a little sideways kick, so several out of one fold scatter
+## rather than stacking. The kick alternates side, which is what makes a pair read as a
+## pair.
+func _toss_hand(kind: int, at: Vector2) -> void:
+	var side := 1.0 if hand_balls.size() % 2 == 0 else -1.0
+	_drop_hand(kind, at, Vector2(side * TOSS_SPEED, -TOSS_LIFT))
+
+
+## Step every ball in flight, and convert the ones that have come to rest.
+##
+## Only balls in the CURRENT view are stepped: the overworld and a strip interior are
+## different spaces with different ground, and a ball must not fall through the other
+## one's floor. A ball in the view you are not in simply waits — which is right, because
+## the fold it is inside is not a place where time is passing for you either.
+func _step_hand_balls(delta: float) -> void:
+	if hand_balls.is_empty():
+		return
+	var solids := wall_polys
+	var here := mode == Mode.SUBSPACE
+	for i in range(hand_balls.size() - 1, -1, -1):
+		var ball: Dictionary = hand_balls[i]
+		if bool(ball["in_sub"]) != here or String(ball["region"]) != region_id:
+			continue
+		var next := WorldCore.hand_ball_step(ball, solids, delta)
+		ball["pos"] = next["pos"]
+		ball["vel"] = next["vel"]
+		if bool(next["resting"]):
+			hand_balls.remove_at(i)
+			_land_ball(ball)
+		elif here:
+			# In a repeating space, a falling thing WRAPS — the same rule the player
+			# crosses a glue line by, asked of the same lattice, so it holds at any
+			# depth and on a torus it wraps both ways at once. When a wrap axis has a
+			# vertical component that is a hand in orbit, indefinitely, and it is a real
+			# object in a real place rather than a leak: it is still counted, still
+			# catchable, and it still lands the moment a fold puts ground in its way.
+			ball["pos"] = lattice.wrap(Vector2(ball["pos"]))
+			# The one direction a space may NOT repeat in is the one direction a thing
+			# can genuinely leave by. Turn it back the way the fold turns the player
+			# back — and on a torus there is no such direction, so nothing to do.
+			var free := lattice.free_axis()
+			if free != Vector2.ZERO and not free_extent.is_empty():
+				var tproj := Vector2(ball["pos"]).dot(free)
+				if tproj < float(free_extent["min"]) - 4.0 * CS \
+						or tproj > float(free_extent["max"]) + 4.0 * CS:
+					hand_balls.remove_at(i)
+					_recover_lost_hand(int(ball["kind"]))
+		elif Vector2(ball["pos"]).y > (base.grid_size.y + 8) * CS:
+			# At world level there is a bottom to fall off. Rather than lose the hand —
+			# the one thing this system must never do — put it back somewhere findable.
+			hand_balls.remove_at(i)
+			_recover_lost_hand(int(ball["kind"]))
+	# The overlay draws in-flight balls, so it has to redraw while any is moving.
+	_refresh_pickup_visuals()
+
+
+## Wake any resting hand whose ground has gone.
+##
+## Called after a fold or unfold has rebuilt the view. A hand is an occupant, so a fold
+## that MOVES the tile it lies on carries it and it stays put — that is the rule for
+## doors and lamps and it is right here too. But a fold that takes the tile out from
+## under it leaves a hand hanging in the air, and a hand hanging in the air is the thing
+## the physics exists to prevent. So it becomes a ball again and falls.
+##
+## The cost, worth stating: a hand can now move without you touching it. A cache you
+## remember the position of may be somewhere lower after you fold nearby. That was the
+## explicit choice — physical behaviour with no exceptions, over "a hand is where you
+## left it".
+func _wake_unsupported_hands() -> void:
+	if loose_hands.is_empty():
+		return
+	var solids := wall_polys
+	var pieces := current_pieces
+	for i in range(loose_hands.size() - 1, -1, -1):
+		var pickup: HandPickup = loose_hands[i]
+		var wp = pickup.position_in(pieces)
+		if wp == null:
+			continue                # folded away — not in this view to fall in
+		if WorldCore.hand_ball_supported(Vector2(wp), solids):
+			continue                # still on something; it rode its flap and is fine
+		loose_hands.remove_at(i)
+		hand_balls.append({
+			"kind": pickup.kind,
+			"pos": Vector2(wp),
+			"vel": Vector2.ZERO,
+			"resting": false,
+			"region": region_id,
+			"in_sub": mode == Mode.SUBSPACE,
+			"seed": WorldCore.hand_drift_seed(pickup.base_id, pickup.bp),
+		})
+	_refresh_pickup_visuals()
+
+
+## A hand that fell out of the sheet, put back somewhere it can be found.
+##
+## It becomes a PICKUP directly rather than another ball, and that is the point: dropping
+## it as a ball at the player's position is what caused the bug this exists to prevent.
+## A player standing over a pit — on a seam, on the glue, mid-jump across a gap — would
+## have the recovered hand fall straight off the world again, be recovered again, and
+## loop. The ledger stayed correct the whole time (it was always counted as loose), so
+## nothing detected it; the hand simply never came to rest and so could never be found.
+##
+## Binding it to the fragment under the player's feet is what makes it real: if there is
+## no sheet there either, `_land_ball`'s outward search finds the nearest that has some.
+func _recover_lost_hand(kind: int) -> void:
+	var landing := WorldCore.settle_hand(player.global_position, wall_polys)
+	_land_ball({
+		"kind": kind,
+		"pos": landing,
+		"region": region_id,
+	})
+	AudioManager.play_sfx(Sounds.HAND_DROP)
+
+
+## A ball has stopped: it stops being a ball and becomes an occupant of the sheet again.
+##
+## This is the boundary that keeps §8 true. From here on the hand has no position of its
+## own — where it lies is a question asked of the fragment list, so it rides flaps and
+## folds away exactly like a door or a lamp. If there is no sheet under where it landed
+## (it came to rest over void) we search outward a little, because a hand that bound to
+## nothing would vanish from the world.
+func _land_ball(ball: Dictionary) -> void:
+	var rest: Vector2 = ball["pos"]
 	var offsets: Array[Vector2] = [Vector2.ZERO]
 	for step in range(1, 5):
 		offsets.append(Vector2(0, -0.5 * CS * step))
@@ -1368,14 +1614,68 @@ func _drop_hand(kind: int, at: Vector2) -> void:
 		offsets.append(Vector2(0.5 * CS * step, 0))
 		offsets.append(Vector2(0, 0.5 * CS * step))
 	for off in offsets:
-		var piece = BaseFrame.piece_containing(pieces_by_pos, at + off, CS)
+		var piece = BaseFrame.piece_containing(pieces_by_pos, rest + off, CS)
 		if piece != null:
-			loose_hands.append(
-				HandPickup.dropped_at(kind, piece, at + off + fan, region_id))
+			_ensure_pickups(String(ball["region"])).append(
+				HandPickup.dropped_at(
+					int(ball["kind"]), piece, rest + off, String(ball["region"])))
 			_refresh_pickup_visuals()
-			AudioManager.play_sfx(Sounds.HAND_DROP)
 			return
-	push_warning("FoldWorld: nowhere to drop a hand near %s" % at)
+	# No sheet within reach of where it stopped. This used to warn and RETURN, which
+	# destroyed the hand — the only place in the game that could, and invisible because a
+	# warning is not a failing test. Fall back to the spawn tile, which always exists:
+	# a hand waiting somewhere odd is recoverable, a hand deleted is not.
+	var fallback = BaseFrame.piece_containing(pieces_by_pos, _spawn, CS)
+	if fallback != null:
+		_ensure_pickups(String(ball["region"])).append(
+			HandPickup.dropped_at(
+				int(ball["kind"]), fallback, _spawn, String(ball["region"])))
+		_refresh_pickup_visuals()
+		push_warning("FoldWorld: a hand came to rest on nothing at %s; returned to spawn"
+			% rest)
+		return
+	# Nothing anywhere — a world with no sheet under its own spawn. Keep the hand in the
+	# air rather than deleting it: an orbiting hand is still countable and catchable.
+	hand_balls.append({
+		"kind": int(ball["kind"]),
+		"pos": rest,
+		"vel": Vector2.ZERO,
+		"resting": false,
+		"region": String(ball["region"]),
+		"in_sub": mode == Mode.SUBSPACE,
+		"seed": WorldCore.hand_drift_seed(0, rest),
+	})
+	push_error("FoldWorld: nowhere at all to land a hand near %s" % rest)
+
+
+## Carry every in-flight ball through a fold, exactly as the player is carried.
+##
+## A ball is transported by `BaseFrame` like anything else in the world, so a hand in
+## flight that a fold sweeps into a subspace goes on flying INSIDE the subspace. Its
+## velocity is untouched: a fold is a translation, so the flight it was on is still the
+## flight it is on.
+##
+## `into_sub` says the fold swallowed this view into a strip, so surviving balls belong
+## to the interior from now on. A ball the fold leaves nowhere — its tile excised while
+## the view stays put — is one the strip captured, and it flies on in there.
+func _carry_balls_through(new_pieces: Array, into_sub: bool) -> void:
+	var here := mode == Mode.SUBSPACE
+	for ball in hand_balls:
+		if bool(ball["in_sub"]) != here or String(ball["region"]) != region_id:
+			continue
+		var from = BaseFrame.piece_containing(pieces_by_pos, Vector2(ball["pos"]), CS)
+		var dest = null
+		if from != null:
+			dest = BaseFrame.world_point_from_base(
+				new_pieces, from.base_id, Vector2(ball["pos"]) - from.src_offset)
+		if dest != null:
+			ball["pos"] = Vector2(dest)
+			if into_sub:
+				ball["in_sub"] = true
+			continue
+		# No home in the new configuration: the fold excised the ground it was over. It
+		# is inside the strip now, which is a real place — so it keeps flying, in there.
+		ball["in_sub"] = true
 
 
 ## Move a fold's hands back to the player. Call BEFORE the fold leaves the list, so
@@ -1431,13 +1731,28 @@ func unfold_level_fold(fold: Fold) -> void:
 
 	var was_newest := idx == list.size() - kids.size()
 	var regained: int = fold.held_hands.size()
+	# An unfold moves the sheet too, so anything ALREADY flying over it moves with the
+	# ground it is over — the same mapping, in the other direction.
+	_carry_balls_through(new_pieces, false)
 	# Before `_take_back`, which can drop a hand it cannot give you — this
 	# should be the sound underneath that, not the other way round.
 	AudioManager.play_sfx(Sounds.UNFOLD)
-	_take_back(fold)
 	var finalize := func() -> void:
 		rebuild()
 		player.teleport(landed)
+		# `_take_back` goes HERE, after the rebuild and the teleport, because a hand it
+		# cannot hand you is a hand it DROPS — and a hand is dropped at the player's
+		# position, in the current geometry. Called before the rebuild (where it used to
+		# be) the ball spawned at the player's PRE-unfold position and into the old
+		# fragment list, so an unfold that moved you left the overflow hand several cells
+		# behind, on ground that had since slid away. It was still counted, which is why
+		# conservation never caught it; it simply was not where you were.
+		#
+		# `_carry_balls_through` above cannot fix that: it runs before these balls exist.
+		# Creating them after the move is what makes them correct, rather than creating
+		# them wrong and then transporting them.
+		_take_back(fold)
+		_wake_unsupported_hands()
 		if regained > 0:
 			_show_flash("Released — %d hands." % regained)
 	if was_newest and kids.is_empty():
@@ -1513,12 +1828,19 @@ func try_exit() -> void:
 	# and coming out are one gesture heard from its two sides. `_apply_context`
 	# swaps the music back in the finalize below.
 	AudioManager.play_sfx(Sounds.SURFACE)
-	_take_back(outer)
 	var kept := not kids.is_empty()
 	var surfaced := context.is_empty()
 	var finalize := func() -> void:
 		_apply_context()
 		player.teleport(landed)
+		# After the view swap and the teleport, for the same reason as in
+		# `unfold_level_fold`: a hand this cannot hand you is DROPPED, and it must be
+		# dropped where you are now, in the space you are now in. Called before
+		# `_apply_context` it launched the ball into the strip interior you were just
+		# leaving — tagged `in_sub` in a world that no longer had a subspace, so it could
+		# never be stepped, drawn or reached.
+		_take_back(outer)
+		_wake_unsupported_hands()
 		if kept:
 			_show_flash("Unfolded — your inner folds came out with you.")
 		elif surfaced:
@@ -1851,6 +2173,9 @@ func _physics_process(delta: float) -> void:
 	# region they had just left — on top of it, which is how you ended up in a wall.
 	if animating():
 		return
+	# Before the pickup check: a ball that lands this frame should be collectable this
+	# frame, and one still in flight is caught in the air by `_check_pickups` itself.
+	_step_hand_balls(delta)
 	_check_goal()
 	_check_pickups()
 	_check_triggers()
@@ -1937,6 +2262,7 @@ func _check_triggers() -> void:
 	var landed := WorldCore.depenetrate(
 		settled["player_pos"], PlayerBody.RADIUS, WorldCore.solid_polys_of(current_pieces))
 	player.teleport(settled["player_pos"] if landed == Vector2.INF else landed)
+	_wake_unsupported_hands()
 	AudioManager.play_sfx(Sounds.TRIGGER)
 	_show_flash("The ground answers — space folds around you.")
 
@@ -1951,10 +2277,26 @@ func _check_triggers() -> void:
 ## Works at world level AND inside a subspace: a hand the fold swallowed is lying in
 ## there with everything else, and taking it in there counts.
 func _check_pickups() -> void:
-	if loose_hands.is_empty():
-		return
 	if AnchorStock.first_empty(hands) < 0:
 		return                      # full hands walk over it, and it waits
+	# A hand still in the air is a hand you can catch. It would be strange to be able to
+	# collect one the instant it stopped moving but not a moment earlier, when it is
+	# right in front of you — and catching one out of a burst is a good feeling.
+	for i in range(hand_balls.size() - 1, -1, -1):
+		var ball: Dictionary = hand_balls[i]
+		if bool(ball["in_sub"]) != (mode == Mode.SUBSPACE) \
+				or String(ball["region"]) != region_id:
+			continue
+		if player.global_position.distance_to(Vector2(ball["pos"])) > PlayerBody.RADIUS + 8.0:
+			continue
+		hands[AnchorStock.first_empty(hands)] = int(ball["kind"])
+		hand_balls.remove_at(i)
+		_refresh_pickup_visuals()
+		AudioManager.play_sfx(Sounds.HAND_PICKUP)
+		_show_flash("Caught a %s hand." % HandTypes.type_name(int(ball["kind"])))
+		return
+	if loose_hands.is_empty():
+		return
 	for i in range(loose_hands.size()):
 		var pickup: HandPickup = loose_hands[i]
 		var wp = pickup.position_in(current_pieces)
@@ -1975,6 +2317,26 @@ func _check_pickups() -> void:
 ## to nothing and is simply not in the list.
 func loose_hand_points() -> Array:
 	return HandPickup.resolve_all(current_pieces, loose_hands)
+
+
+## Hands in flight in the CURRENT view, as `[{"kind", "pos", "seed"}, ...]`.
+##
+## Separate from `loose_hand_points` because these are the ones that DO have a position
+## of their own — that is the whole difference between a ball and a pickup, and the
+## overlay draws them from their own position rather than by resolving a base point.
+## Balls flying in the other view are not here: they are not in this space.
+func hand_ball_points() -> Array:
+	var out: Array = []
+	var here := mode == Mode.SUBSPACE
+	for ball in hand_balls:
+		if bool(ball["in_sub"]) != here or String(ball["region"]) != region_id:
+			continue
+		out.append({
+			"kind": int(ball["kind"]),
+			"pos": Vector2(ball["pos"]),
+			"seed": float(ball["seed"]),
+		})
+	return out
 
 
 ## Loose hands are drawn by the overlay, which redraws itself every frame, so there is

@@ -75,18 +75,40 @@ func follow(hands: Array, body: Vector2, motion: Vector2, facing: int, delta: fl
 
 
 func paint() -> void:
-	for slot in _slots:
+	for i in range(_slots.size()):
+		var slot: Dictionary = _slots[i]
 		if slot["held"]:
-			draw_hand(self, slot["pos"], int(slot["type"]))
+			# The slot index IS the identity of a carried hand — slots persist, so this
+			# is stable for as long as you hold it.
+			draw_hand(self, slot["pos"], int(slot["type"]),
+				WorldCore.hand_drift_seed(i, Vector2.ZERO))
 
 
 ## How a hand looks, wherever it is. STATIC and shared on purpose: a hand carried
 ## beside you, a cache the world shipped and a hand that popped out of a burst are the
 ## same object to the player, so they must not be drawn by two different pieces of
 ## code that could drift apart. `WorldOverlay` draws loose ones through here.
-static func draw_hand(on: CanvasItem, at: Vector2, kind: int, scale: float = 1.0) -> void:
+##
+## The idle drift lives HERE rather than at the call sites for the same reason: a hand
+## floats because it is a hand, so no caller can forget to make one float. `seed` is
+## that hand's own phase (see `WorldCore.hand_drift_seed`); hands sharing a seed bob in
+## lockstep, which is only ever right for the wrap copies of one hand.
+static func draw_hand(on: CanvasItem, at: Vector2, kind: int, seed: float = 0.0,
+		scale: float = 1.0) -> void:
 	var c: Color = HandTypes.color(kind)
 	var r: float = HAND_RADIUS * scale
+	var p := at + WorldCore.hand_drift(seed, drift_time())
 	# A darker rim so a hand stays legible against ground of its own colour.
-	on.draw_circle(at, r + 1.5, Color(c.r * 0.25, c.g * 0.25, c.b * 0.25, 0.85))
-	on.draw_circle(at, r, c)
+	on.draw_circle(p, r + 1.5, Color(c.r * 0.25, c.g * 0.25, c.b * 0.25, 0.85))
+	on.draw_circle(p, r, c)
+
+
+## The one clock every hand drifts on.
+##
+## Wall time, not accumulated delta: the drift is a function of absolute time rather
+## than an integration, so there is no state to keep and nothing to keep in sync. A
+## hand you drop, a hand that pops out of a burst and a hand still in your slots are
+## all read off the same clock, so none of them restarts its float at zero — which is
+## what would give away that the world had just handed you a different object.
+static func drift_time() -> float:
+	return float(Time.get_ticks_msec()) / 1000.0
