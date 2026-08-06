@@ -183,7 +183,23 @@ authored pre-folds and trigger folds — hold none.
 **late**, at the point of no return: a fold refused for a pin in its span must not
 have cost you the hands it never took.
 
-### 7. Anything in the world is an occupant, resolved through `BaseFrame`
+### 7. A fold in flight owns the frame
+`_play_transition` freezes the body at where it started and does not rebuild the
+geometry until it finalizes, so for the length of a fold animation BOTH the player's
+position and the fragment list are halfway between two states. Anything that reads
+either one during that window is reading a world that does not exist.
+
+`_physics_process` therefore returns the moment `_tick_fuse` starts a transition. It
+is not enough to check `animating()` at the top: the fuse fires from inside the frame,
+and the checks below it used to run anyway. That let a door fire while the player was
+still standing where the fold had not yet moved them from — warping them to another
+region, whereupon the fold's finalize applied a landing position computed in the
+region they had just left. Stuck in a wall, or off the map.
+
+If you add anything to that tail, ask whether it can start a transition; if it can,
+the same guard has to follow it.
+
+### 8. Anything in the world is an occupant, resolved through `BaseFrame`
 Doors and lights have no world position. They store a base identity plus a point
 inside that tile, and where they *are* is a question asked of the current
 fragment list. That is why a light folded away leaves the overworld and lights

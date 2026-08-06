@@ -1531,6 +1531,11 @@ func _check_doors() -> void:
 
 
 func _traverse(id: String) -> void:
+	# Never mid-transition. A fold in flight owns the player's position until it
+	# finalizes, and a door that moved them in the meantime would have its work
+	# undone by that finalize — in the wrong region's coordinates.
+	if animating():
+		return
 	var pair_id: String = doors[id]["pair"]
 	var res = resolve_door(pair_id)
 	if res == null:
@@ -1772,6 +1777,15 @@ func _physics_process(delta: float) -> void:
 			player.teleport(_spawn, false)
 			_show_flash("You fell out of the world — respawned.")
 	_tick_fuse(delta)
+	# A fuse that just fired has started a fold TRANSITION, and the rest of this
+	# frame belongs to it. Everything below reads the player's position and the
+	# current fragment list, and during a transition both are mid-flight: the body
+	# is frozen at where it started and the geometry does not rebuild until the
+	# animation finalizes. Letting a door fire from that state teleported the player
+	# to another region and then finalized the fold's landing — computed in the
+	# region they had just left — on top of it, which is how you ended up in a wall.
+	if animating():
+		return
 	_check_goal()
 	_check_pickups()
 	_check_triggers()

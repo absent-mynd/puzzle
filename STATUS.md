@@ -5,7 +5,7 @@
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **402 passing** / 402 (0 failing, 0 risky), 20 scripts, ~14.0s.
+**Tests:** **404 passing** / 404 (0 failing, 0 risky), 20 scripts, ~14.5s.
 
 ---
 
@@ -45,11 +45,11 @@ What exists and works today:
 
 ## Test suite
 
-402 passing across 20 scripts. Composition:
+404 passing across 20 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 85 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
+| `test_fold_world` | 87 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
 | `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
@@ -80,6 +80,34 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — A fold in flight owns the frame
+
+**Bug:** prime a fold, cross between regions, and when it went off the player was
+teleported somewhere impossible — reported as ending up stuck in a wall.
+
+Reproduced by arming a fold and standing on a door while its fuse ran out. The trace
+made the mechanism plain: the player warped to east *while the fold animation was
+still playing*, and then the fold's finalize teleported them to `(2592, 864)` — the
+landing it had computed in west, applied in an east region only 1920px wide. Off the
+map entirely; in other geometry, inside a wall.
+
+`_physics_process` checked `animating()` at the top, but `_tick_fuse` STARTS a
+transition from inside the frame, and the goal / pickup / trigger / door checks below
+it then ran anyway — against a body frozen at its pre-fold position and a fragment
+list that does not rebuild until the animation finalizes.
+
+- **`_physics_process` now returns as soon as `_tick_fuse` starts a transition.** The
+  rest of the frame belongs to the fold.
+- **`_traverse` refuses to fire while animating**, stating the invariant where it
+  would be harmed rather than only where it happens to be enforced.
+- The two regression tests are the only ones in the suite that run with animation ON,
+  because the bug exists only while a transition is in flight. Both were checked to
+  fail without the fix.
+
+This was latent from the moment committing moved into `_physics_process` with the
+fuse; before that, folds committed from `_unhandled_input`, where the next frame's
+top-of-function guard caught them.
 
 ### 2026-08-05 — Any number of hands down; several folds armed at once
 

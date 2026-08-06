@@ -994,6 +994,71 @@ func test_the_burst_reports_the_seams_it_would_reach() -> void:
 	assert_eq(world.seams_within_burst().size(), 1, "Standing on it, the seam is in reach")
 
 
+# ---------------------------------------------------------------------------
+# A fold in flight owns the frame
+# ---------------------------------------------------------------------------
+# These are the only tests here that run with animation ON, because the bug they
+# pin only exists while a transition is in flight: the body is frozen at where it
+# started and the geometry has not rebuilt yet, so anything that reads either one
+# mid-transition is reading a world that is halfway between two states.
+
+func test_a_fold_firing_under_you_does_not_let_a_door_fire_too() -> void:
+	# The wall-stuck bug. A fuse firing starts a transition from inside
+	# `_physics_process`; the door check below it then ran anyway, saw the player
+	# still standing on the door it had not yet been moved off, and warped them to
+	# the other region — whereupon the fold's finalize teleported them to a landing
+	# spot computed in the region they had just left. You ended up in a wall, or as
+	# here, off the map entirely.
+	world.anim_enabled = true
+	world.tap_action(Vector2i(1, 0))
+	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))
+	assert_true(world.fuse_running(), "A fold is armed")
+
+	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)   # standing on door W2
+	world._door_latch["W2"] = false
+	world._physics_process(HandTypes.BASE_FUSE + 0.01)            # the fuse fires here
+	assert_true(world.animating(), "The fold is playing")
+	assert_eq(world.region_id, "west", "The door did NOT fire mid-transition")
+
+	for _i in range(40):
+		world._process(0.05)
+	assert_false(world.animating(), "The transition finished")
+	assert_eq(world.region_id, "west", "...still in the region the fold happened in")
+	assert_eq(world.folds.size(), 1, "...and the fold went ahead")
+
+	var span := Vector2(world.base.grid_size) * CS
+	assert_between(world.player.global_position.x, 0.0, span.x,
+		"The player is inside this region, not at a position meant for another one")
+	assert_false(WorldCore.circle_overlaps_solids(world.player.global_position,
+		PlayerBody.RADIUS, WorldCore.solid_polys_of(world.current_pieces)),
+		"...and not embedded in a wall")
+
+
+func test_the_door_still_fires_once_the_fold_has_landed() -> void:
+	# The guard defers the door, it does not swallow it: standing on one after the
+	# transition settles still takes you through.
+	world.anim_enabled = true
+	world.tap_action(Vector2i(1, 0))
+	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))
+	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
+	world._door_latch["W2"] = false
+	world._physics_process(HandTypes.BASE_FUSE + 0.01)
+	for _i in range(40):
+		world._process(0.05)
+	assert_false(world.animating(), "Settled")
+
+	# The fold rode door W2 two cells left with its flap, so ask where it IS rather
+	# than assuming — which is the whole point of a door being a base-frame point.
+	var w2 = world.door_point_here("W2")
+	assert_not_null(w2, "W2 survived the fold")
+	world.player.teleport(Vector2(w2), false)
+	world._door_latch["W2"] = false
+	world._physics_process(0.016)
+	assert_eq(world.region_id, "east", "With nothing in flight, the door works normally")
+
+
 func test_no_hud_control_swallows_mouse_input() -> void:
 	# Anchor placement relies on _unhandled_input receiving input; any Control
 	# with MOUSE_FILTER_STOP covering the screen consumes mouse events first
