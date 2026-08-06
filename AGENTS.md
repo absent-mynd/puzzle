@@ -40,6 +40,10 @@ referring to `GridManager`, `Cell`, `CellPiece`, `FoldController`, `FoldSystem`,
 `FoldEngine`, `StepReplay`, `HistoryManager`, `LevelData`, `ProgressManager`,
 `LevelEditor`, or a level campaign — that is pre-consolidation and no longer exists.
 
+(The editor that exists NOW is `WorldEditor` — `scripts/editor/`, added
+2026-08-06. Different thing, different name on purpose: there are no levels to
+edit. See `docs/features/WORLD_EDITOR.md`.)
+
 The pre-consolidation tree is tagged **`topdown-archive`** (commit `8bf8193`).
 The tag is local-only — the remote refuses tag pushes from this session — so
 `git checkout 8bf8193` is the reliable way back.
@@ -48,7 +52,9 @@ The tag is local-only — the remote refuses tag pushes from this session — so
 
 - **There is no undo.** A continuous physics world has no discrete move to reverse.
   Unfold is the in-world inverse of fold; respawn handles mistakes. Do not
-  reintroduce a step log without a design conversation.
+  reintroduce a step log without a design conversation. (The world EDITOR has undo,
+  and that is not a contradiction: it edits a file, not play state. `EditorDoc`
+  snapshots `WorldData`; the two stacks never meet.)
 - **There are no levels.** One world, many regions. `worlds/overworld.json`.
 - **The player does not ride a tile.** It is a `CharacterBody2D` at a continuous
   position, transported through folds by exact base-frame mapping (`BaseFrame`).
@@ -118,6 +124,7 @@ instead.
 | Derived fragments / queryable state | `scripts/model/FoldedPiece.gd`, `FoldedState.gd` |
 | **Base ↔ derived point transport** | `scripts/model/BaseFrame.gd` |
 | What a tile IS and DOES (the registry) | `scripts/model/TileTypes.gd` |
+| What a tile's per-instance params MEAN | `scripts/model/TileParams.gd` |
 | **The hand registry** (one file per kind) | `scripts/model/HandTypes.gd` |
 | A hand lying in the world (an occupant) | `scripts/model/HandPickup.gd` |
 | **The slot ledger** (conservation arithmetic) | `scripts/model/AnchorStock.gd` |
@@ -138,8 +145,13 @@ instead.
 | The lighting shader | `assets/shaders/pixel_lit.gdshader` |
 | **The sound registry** (vocabulary + the whole mix) | `scripts/systems/Sounds.gd` |
 | Buses, voices, fades, volume persistence | `scripts/systems/AudioManager.gd` (autoload) |
+| **The world editor**: every mutation + undo | `scripts/editor/EditorDoc.gd` |
+| Editor: palette, raster ops, fold guides (pure) | `scripts/editor/EditorTools.gd` |
+| Editor: the board, the cards, the overlays | `scripts/editor/EditorBoard.gd` |
+| Editor: mouse, camera, tools | `scripts/editor/WorldEditor.gd` |
 
-See `scripts/world/README.md` for controls and the design beats.
+See `scripts/world/README.md` for controls and the design beats, and
+`docs/features/WORLD_EDITOR.md` for the editor (`./run_editor.sh`).
 
 ---
 
@@ -151,9 +163,17 @@ and re-derive. Never edit a `FoldedPiece` in place and expect it to persist.
 
 ### 2. The registry owns per-type behavior
 `TileTypes` is the single authority for walkable / merge rank / `blocks_fold` /
-`blocks_anchor` / `on_enter`. Adding a tile type should mean editing **one** file.
-If you are about to write `if piece.type == TileTypes.WALL`, ask whether you want
-`TileTypes.is_walkable(piece.type)` instead — almost always yes.
+`blocks_anchor` / `on_enter` / `name` / `params`. Adding a tile type should mean
+editing **one** file. If you are about to write `if piece.type == TileTypes.WALL`,
+ask whether you want `TileTypes.is_walkable(piece.type)` instead — almost always yes.
+
+`params` extends that rule to a tile's PER-INSTANCE data (`tile_data`): the
+registry declares each parameter's key, value type, default and label, and
+`TileParams` says what those declarations mean. The editor's tile inspector is
+generated from them and names no tile type, so declaring a parameter is the whole
+job — it becomes editable, validated, drawn on the board and saved with nothing
+else touched. Do not add a bespoke editor panel for a new parameter; add a row to
+the schema. See `docs/features/WORLD_EDITOR.md` §"Per-tile parameters".
 
 ### 3. Transport by base frame, not by crease math
 When something must survive a fold, map it through `BaseFrame`. Crease arithmetic
