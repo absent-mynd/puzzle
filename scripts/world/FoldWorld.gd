@@ -87,6 +87,13 @@ const LIGHT_COPY_REACH := 10.0 * CS
 ## repeats every cell and a torus squares whatever a cylinder costs, so the
 ## count the frame asks for has to be bounded somewhere.
 const MAX_WRAP_COPIES := 121
+## How far out a repeating space's content is MATERIALISED before a fold is cut
+## out of it — see `_tiled_for`. Fixed rather than read off the window, because
+## it decides what the fold actually contains: derived state must not depend on
+## how big someone's screen is.
+const STRIP_TILE_REACH := 48.0 * CS
+## ...and the ceiling on that, for the same reason `MAX_WRAP_COPIES` exists.
+const MAX_STRIP_TILES := 49
 
 ## The authored world (regions, doors, pre-placed folds).
 var world_data: WorldData
@@ -528,17 +535,68 @@ func _ensure_interiors(fid: int) -> Array:
 func _compute_level(path: Array) -> Dictionary:
 	var lvl_base: Array = FoldReplay.identity_pieces(base)
 	var lvl_folds: Array = folds
+	var lat := FoldLattice.flat()
 	for F in path:
 		var i: int = lvl_folds.find(F)
 		var prefix: Array = lvl_base.duplicate()
 		for k in range(i):
 			prefix = FoldReplay.apply_one_fold(prefix, lvl_folds[k], CS)
-		lvl_base = WorldCore.capture_strip(prefix, F, CS)
+		# Cut the strip out of the space as it REPEATS, not out of the one copy of
+		# it we happen to store. A band that reaches past a glue line reaches into
+		# the next copy of this space — which is this space — so what it finds
+		# there is the sheet again, not void.
+		lvl_base = WorldCore.capture_strip(_tiled_for(prefix, lat, F), F, CS)
+		lat = lat.push(F, CS)
 		lvl_folds = _ensure_interiors(F.fold_id)
 	var pieces: Array = lvl_base.duplicate()
 	for f in lvl_folds:
 		pieces = FoldReplay.apply_one_fold(pieces, f, CS)
 	return {"base_pieces": lvl_base, "level_folds": lvl_folds, "pieces": pieces}
+
+
+## A level's content, with the copies a fold is about to cut across materialised
+## into it.
+##
+## Only the periods that do NOT descend into the fold are tiled out: the ones that
+## do become the child's own wrap and would be drawn twice if they were baked in
+## here as well (see `FoldLattice.tiling_for`). So the ordinary perpendicular case
+## tiles nothing and this is the identity, and the two cases that used to find
+## void are the ones that grow content:
+##
+##   - **A band that straddles its own glue** — folding across the line you came
+##     in through. The far part of the band is the near part of the next copy.
+##   - **A band at an angle to the glue** — it crosses the parent's repetition
+##     over and over, so the strip you end up inside carries a whole row of
+##     sheared copies of the outer world. That is the outer tiling still being
+##     visible from two folds in, and it is content, not copies.
+##
+## A tiled fragment is a perfectly ordinary `FoldedPiece`: shifting `src_offset`
+## by the same vector as the polygon keeps `polygon == base_polygon + src_offset`,
+## so base-frame transport carries the player through it like anything else.
+func _tiled_for(pieces: Array, lat: FoldLattice, fold: Fold) -> Array:
+	var tiling := lat.tiling_for(fold, CS)
+	if tiling.is_flat():
+		return pieces
+	var offsets: Array = tiling.offsets(STRIP_TILE_REACH, MAX_STRIP_TILES)
+	if offsets.size() <= 1:
+		return pieces
+	var out: Array = []
+	for off in offsets:
+		if off == Vector2.ZERO:
+			out.append_array(pieces)
+			continue
+		for piece in pieces:
+			var copy := FoldedPiece.new(piece.base_id, piece.type,
+				CollisionCore.shift(piece.polygon, off), piece.plane_pos,
+				piece.source_fold_id)
+			copy.src_offset = piece.src_offset + off
+			out.append(copy)
+	return out
+
+
+## The current level's content, tiled out for a fold about to be cut from it.
+func tiled_pieces_for(fold: Fold) -> Array:
+	return _tiled_for(current_pieces, lattice, fold)
 
 
 ## Make the view match `context` — at any depth. The region world is the empty
@@ -1158,7 +1216,10 @@ func _hands_for_fold(pinned: Array[int]) -> Array[int]:
 func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS)
 	var pre: Array = current_pieces
-	var dropped := WorldCore.capture_strip(pre, fold, CS)
+	# What the fold takes is cut from the space AS IT REPEATS — the same content
+	# `_compute_level` will hand you when it swallows you, so the refusal here and
+	# the place you land agree.
+	var dropped := WorldCore.capture_strip(tiled_pieces_for(fold), fold, CS)
 	if dropped.is_empty():
 		_show_flash("Nothing there to fold.")
 		return false

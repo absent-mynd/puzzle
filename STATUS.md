@@ -5,7 +5,7 @@
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **498 passing** / 498 (0 failing, 0 risky), 24 scripts, ~14.5s.
+**Tests:** **509 passing** / 509 (0 failing, 0 risky), 24 scripts, ~16.5s.
 
 ---
 
@@ -49,13 +49,13 @@ What exists and works today:
 
 ## Test suite
 
-498 passing across 24 scripts. Composition:
+509 passing across 24 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
 | `test_fold_world` | 89 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
-| `test_nested_folds` | 18 | **Scene-driven**: folding yourself deeper, the torus, surfacing a layer at a time, the ledger and the renderer at depth |
-| `test_fold_lattice` | 14 | How a space repeats: descent, orthogonality, wrapping, copies, framing |
+| `test_nested_folds` | 25 | **Scene-driven**: folding yourself deeper, the torus, surfacing a layer at a time, the ledger and the renderer at depth |
+| `test_fold_lattice` | 18 | How a space repeats: descent, orthogonality, wrapping, copies, framing |
 | `test_tile_batch` | 11 | The batched sheet: grouping, UVs, baked copies, per-copy deformation |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
@@ -88,6 +88,36 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-06 — A fold reaches into every copy, and takes from every copy
+
+Three reports, one root cause: a level stores ONE copy of a repeating space, but
+a fold's band — and the preview of it — live in the space as it *repeats*.
+Anything reaching past a glue line found nothing there.
+
+- **Folding across the glue pulls in sheet, not void.** What a fold takes is now
+  cut from the space as it repeats (`FoldWorld._tiled_for`): a band running past
+  its own glue line is reaching into the next copy of this space, which is this
+  space. Only the periods the fold does NOT keep are materialised — the ones it
+  keeps become the child's own wrap and would be drawn twice otherwise — so the
+  ordinary perpendicular case tiles nothing and is byte-identical to before.
+  A tiled fragment is an ordinary `FoldedPiece`: shifting `src_offset` by the same
+  vector as the polygon keeps `polygon == base_polygon + src_offset`, so
+  base-frame transport carries the player through it like anything else.
+- **The outer tiling survives a fold at an angle.** `FoldLattice.push` used to
+  ask `P · n == 0`. The honest rule is that sliding by the whole gap is the
+  IDENTITY inside a fold, so a period whose across-the-band component is a whole
+  number of gaps still descends — **sheared** to its along-the-band part. At any
+  other angle the band spirals and the outer repetition stops being copies and
+  becomes **content**: the strip is cut out of the outer world's tiling, so it
+  carries a row of sheared copies of the room you came from.
+- **The preview band is drawn in every copy**, clipped to one
+  (`FoldLattice.domain_polygon`) so the copies tile rather than stacking their
+  alpha into a wash. What you see before the fuse burns is now what the fold will
+  actually take. Outside a fold there is no domain, nothing is clipped, and it is
+  the single band it always was.
+
+11 new tests (498 → 509).
 
 ### 2026-08-06 — Folds inside folds inside folds; one wrap for the whole view
 

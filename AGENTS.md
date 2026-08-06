@@ -398,6 +398,10 @@ These are live, not settled. Do not close them silently in a refactor.
 - **A torus has no turn-back.** Fold yourself in across the grain and the space has
   no ends at all — every direction wraps. Whether that reads as elegant or as being
   lost is a playtesting question.
+- **An outer repetition that becomes content rather than copies** — fold in at an
+  angle and the strip carries sheared copies of the room you came from. It falls
+  out of the geometry and it is almost certainly interesting; whether it is
+  *legible* is untested by play.
 - **Triggers are world-level only.** A trigger inside a subspace would have to
   splice folds into an interior list mid-cascade; the resolver does not model that.
 - **Unfold animation** plays only for newest-fold unfolds at world level; mid-stack

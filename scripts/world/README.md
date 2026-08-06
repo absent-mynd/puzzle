@@ -232,11 +232,28 @@ which way the second fold runs:
   comes back to where you started, there are no ends at all, and the frame is
   four glue lines rather than two. The status line names it.
 
-None of that is authored. Which periods survive is one line of geometry — a
-translation still identifies the space with itself exactly when it runs *along*
-the new band — and everything else (how many copies to draw, where the colliders
-go, which way the camera refuses to lead, how you wrap) is read off it. See
-`FoldLattice`.
+- **At any other angle** the inner band spirals against the outer glue: no
+  translation of it lands back on itself, so the outer repetition stops being
+  **copies** and becomes **content**. The strip is cut out of the outer world's
+  tiling, so it carries a whole row of sheared copies of it — you are on a
+  cylinder whose walls are made of the room you came from. (The middle case:
+  when the outer period sits a *whole number of gaps* across the inner band,
+  sliding by it is still the identity after gluing, and it descends **sheared**
+  to its along-the-band part. Copies again.)
+
+None of that is authored. Which periods survive is one line of geometry — measure
+the period across the new band in gaps, and it descends when that comes out whole
+— and everything else (how many copies to draw, where the colliders go, which way
+the camera refuses to lead, how you wrap) is read off it. See `FoldLattice`.
+
+**A fold reaches into every copy, and takes from every copy.** A band that runs
+past its own glue line is reaching into the next copy of this space, which is
+this space, so what it finds there is the sheet again. The content is
+materialised before the fold is cut (`FoldWorld._tiled_for`) — and only for the
+periods the fold does *not* keep, since the ones it keeps are the child's own
+wrap and would otherwise be drawn twice. The preview band says the same thing:
+it is drawn in every copy, clipped to one, so what you see before the fuse burns
+is what the fold will actually take.
 
 A hand committed to a fold three layers down is counted by the same ledger as one
 at the surface, and the four places a hand can be still sum to the same number.
@@ -536,11 +553,11 @@ do not want yet.
   *feelable*; it's the live design argument for barrier-scoped fold regions.
 - Unfold animation plays only when the unfolded fold is the newest of its level
   (the reverse transform is exact only there); mid-stack unfolds are instant.
-- **An interior fold that crosses the glue cuts the cylinder open**, but is still
-  drawn repeating at the period it had when you came in. That configuration is
-  already the one the game singles out — it blocks the exit and reddens the glue
-  diamond — and it has always been drawn this way; see `FoldLattice`
-  §"What this does NOT model".
+- **A fold's own level is not re-derived when a fold cuts across its glue.** What
+  the fold TAKES is cut from the repeating space (so you land in sheet, not void),
+  but the flaps left behind are still drawn at the period the level came in with.
+  That configuration is already the one the game singles out — it blocks the exit
+  and reddens the glue diamond.
 - Movable seams are design-agreed but not implemented.
 - Triggers only fire at world level — a trigger inside a subspace would have to
   splice folds into an interior list mid-cascade, which the resolver does not model.

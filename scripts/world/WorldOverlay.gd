@@ -12,10 +12,13 @@ class_name WorldOverlay extends WrapCanvas
 ## be a private `_copy_offsets` threaded through nine draw calls — and had to be
 ## remembered by every new marker — is now the base class's business.
 ##
-## The two things that must NOT repeat go in `paint_once`: the full-extent axis
-## guides and the translucent preview band. Repeated, they would tile the screen
-## with lines and stack their alpha into a wash, and they read fine drawn once in
-## the band you occupy.
+## The excised-band preview and the alignment guides repeat like everything else,
+## but they are the one thing that has to be CLIPPED first: both span the whole
+## world, so unclipped copies would lie on top of each other and stack their alpha
+## into a wash. Clipped to the fundamental domain
+## (`FoldLattice.domain_polygon`) each copy paints its own band and the tiling is
+## exact. In a space that does not repeat there is no domain, nothing is clipped,
+## and this is the single band it always was.
 ##
 ## The overlay draws INSIDE the pixel render target, so every stroke is measured
 ## in art pixels: a 1-unit line would be a quarter of a pixel and would flicker
@@ -40,6 +43,9 @@ var _in_reach: Array = []
 var _exit_ok := true
 var _doors: Array = []
 var _hands_down: Array = []
+## The preview band and the guides, already clipped to one copy of the space.
+var _bands: Array = []
+var _guides: Array = []
 
 
 func _process(_delta: float) -> void:
@@ -51,6 +57,8 @@ func prepare() -> void:
 	_in_reach = []
 	_doors = []
 	_hands_down = []
+	_bands = []
+	_guides = []
 	if world == null or world.animating():
 		return
 	_markers = world.seam_markers()
@@ -69,6 +77,42 @@ func prepare() -> void:
 		for entry in [pair["a"], pair["b"]]:
 			_hands_down.append({"at": world.anchor_point(entry),
 				"kind": int(entry["hand"]), "pulse": pulse})
+	_prepare_preview()
+
+
+## The band an armed pair would excise, and the guides through every placed hand —
+## clipped to one copy of the space, so painting them per copy tiles rather than
+## stacks. A pair whose halves are not both in this frame has no band to draw.
+func _prepare_preview() -> void:
+	var cs: float = world.base.cell_size
+	var world_px := Vector2(world.base.grid_size) * cs
+	var domain: PackedVector2Array = world.lattice.domain_polygon(world_px.length())
+	for entry in _hands_down:
+		if entry["at"] == null:
+			continue
+		var at := Vector2(entry["at"])
+		_guides.append_array(_clip(PackedVector2Array([
+			Vector2(0, at.y - HAIR * 0.5), Vector2(world_px.x, at.y - HAIR * 0.5),
+			Vector2(world_px.x, at.y + HAIR * 0.5), Vector2(0, at.y + HAIR * 0.5),
+		]), domain))
+		_guides.append_array(_clip(PackedVector2Array([
+			Vector2(at.x - HAIR * 0.5, 0), Vector2(at.x + HAIR * 0.5, 0),
+			Vector2(at.x + HAIR * 0.5, world_px.y), Vector2(at.x - HAIR * 0.5, world_px.y),
+		]), domain))
+	for pair in world.primed:
+		var ca = world.anchor_point(pair["a"])
+		var cb = world.anchor_point(pair["b"])
+		if ca == null or cb == null:
+			continue          # half of it is elsewhere; there is no band to draw
+		_bands.append_array(_clip(_band_polygon(Vector2(ca), Vector2(cb), world_px), domain))
+
+
+## `poly` cut down to one copy of the space. An empty domain means the space does
+## not repeat, and then there is nothing to cut it down to.
+func _clip(poly: PackedVector2Array, domain: PackedVector2Array) -> Array:
+	if domain.size() < 3:
+		return [poly]
+	return Geometry2D.intersect_polygons(poly, domain)
 
 
 func paint() -> void:
@@ -82,25 +126,8 @@ func paint() -> void:
 	_draw_loose_hands()
 	_draw_aim()
 	_draw_placed_hands()
+	_draw_preview()
 	_draw_burst()
-
-
-## What belongs to the frame rather than to the space: guides that span the whole
-## world, and the translucent band an armed pair would excise.
-func paint_once() -> void:
-	if world == null or world.animating():
-		return
-	var cs: float = world.base.cell_size
-	var world_px := Vector2(world.base.grid_size) * cs
-	for entry in _hands_down:
-		if entry["at"] != null:
-			_draw_guides(Vector2(entry["at"]), world_px)
-	for pair in world.primed:
-		var ca = world.anchor_point(pair["a"])
-		var cb = world.anchor_point(pair["b"])
-		if ca == null or cb == null:
-			continue          # half of it is elsewhere; there is no band to draw
-		_draw_band(Vector2(ca), Vector2(cb), world_px)
 
 
 ## A fuse, as a 0..1 throb. Frequency ramps with how far through that pair is, so it
@@ -217,27 +244,30 @@ func _draw_placed_hands() -> void:
 			draw_circle(at, 3.0 + pulse * 2.5, c)
 
 
-## Soft full-extent guides through a placed hand. Folds may be diagonal; the guides
-## just help line up straight ones.
-func _draw_guides(at: Vector2, world_px: Vector2) -> void:
-	var guide := Color(1, 1, 1, 0.08)
-	draw_line(Vector2(0, at.y), Vector2(world_px.x, at.y), guide, HAIR)
-	draw_line(Vector2(at.x, 0), Vector2(at.x, world_px.y), guide, HAIR)
+## The band an armed pair would excise, and the alignment guides — in every copy
+## of the space, because the fold reaches into every copy. What the preview shows
+## is what the fold will take, and inside a repeating space that is a band in each
+## band. Folds may be diagonal; the guides just help line up straight ones.
+func _draw_preview() -> void:
+	for poly in _guides:
+		draw_colored_polygon(poly, Color(1, 1, 1, 0.08))
+	for poly in _bands:
+		draw_colored_polygon(poly, Color(0.95, 0.25, 0.3, 0.22))
 
 
-## The translucent band an armed pair would excise: a parallelogram spanning well past
-## the view, at whatever angle the pair implies.
-func _draw_band(a_center: Vector2, b_center: Vector2, world_px: Vector2) -> void:
+## The parallelogram an armed pair would excise: spanning well past the view, at
+## whatever angle the pair implies.
+func _band_polygon(a_center: Vector2, b_center: Vector2,
+		world_px: Vector2) -> PackedVector2Array:
 	if a_center.is_equal_approx(b_center):
-		return
-	var band := Color(0.95, 0.25, 0.3, 0.22)
+		return PackedVector2Array()
 	var bn := (b_center - a_center).normalized()
 	var bt := Vector2(-bn.y, bn.x)
 	var reach := world_px.length()
-	draw_colored_polygon(PackedVector2Array([
+	return PackedVector2Array([
 		a_center + bt * reach, a_center - bt * reach,
 		b_center - bt * reach, b_center + bt * reach,
-	]), band)
+	])
 
 
 ## The identified crease lines — the glue — so the wrap reads as a real join

@@ -250,3 +250,117 @@ func test_a_fold_that_swallows_you_at_depth_says_how_deep_you_are() -> void:
 	_pinch_again()
 	assert_string_contains(world._flash.text, "2 deep",
 		"Being folded in again is a different event from being folded in")
+
+
+# ---------------------------------------------------------------------------
+# Reaching past a glue line
+# ---------------------------------------------------------------------------
+# A level stores ONE copy of a repeating space, but a fold's band — and the
+# preview of it — live in the space as it repeats. Anything reaching past a glue
+# line used to find nothing there.
+
+func test_a_fold_across_the_glue_pulls_in_sheet_not_void() -> void:
+	# Inside the pit fold, band x in (10.5, 18.5). Fold along the SAME axis but
+	# straddling the far glue: most of what this takes lies past the line, which is
+	# to say in the next copy of this band — which is this band.
+	_pinch_over_pit()
+	world.player.teleport(Vector2(11.0 * CS, 12.5 * CS), false)
+	var ok: bool = world.do_sub_fold(Vector2i(17, 12), Vector2i(20, 12))
+	assert_true(ok, "The fold goes: past the glue is more sheet, not the end of the world")
+
+
+func test_what_a_fold_takes_is_cut_from_the_space_as_it_repeats() -> void:
+	# The strip a straddling fold excises has to contain content from BOTH sides of
+	# the glue — that is the whole claim. Measured as fragments, because a strip cut
+	# from one stored copy would simply stop at the line.
+	_pinch_over_pit()
+	var straddling := Fold.create(900, Vector2i(17, 12), Vector2i(20, 12), CS)
+	var one_copy: Array = WorldCore.capture_strip(world.current_pieces, straddling, CS)
+	var repeating: Array = WorldCore.capture_strip(
+		world.tiled_pieces_for(straddling), straddling, CS)
+	assert_gt(repeating.size(), one_copy.size(),
+		"Cutting from the repeating space finds sheet the stored copy does not have")
+
+
+func test_a_tiled_fragment_still_rides_the_base_frame() -> void:
+	# The copies are ordinary fragments, not a drawing trick: shifting `src_offset`
+	# by the same vector as the polygon keeps `polygon == base_polygon +
+	# src_offset`, which is the invariant everything transports through.
+	_pinch_over_pit()
+	var straddling := Fold.create(901, Vector2i(17, 12), Vector2i(20, 12), CS)
+	for piece in world.tiled_pieces_for(straddling):
+		var back: PackedVector2Array = CollisionCore.shift(piece.polygon, -piece.src_offset)
+		var origin: BaseTile = world.base.tile_by_id(piece.base_id)
+		assert_not_null(origin, "Every copy still names a real base tile")
+		for v in back:
+			assert_between(Vector2(v).x,
+				float(origin.grid_position.x) * CS - 0.01,
+				float(origin.grid_position.x + 1) * CS + 0.01,
+				"...and lands back inside it when its offset is taken off")
+
+
+func test_a_perpendicular_fold_materialises_nothing() -> void:
+	# The period it would tile out is one it KEEPS, and keeping it is what the wrap
+	# already does. Tiling it here as well would draw the same content twice.
+	_pinch_over_pit()
+	var across := Fold.create(902, Vector2i(12, 8), Vector2i(12, 11), CS)
+	assert_eq(world.tiled_pieces_for(across).size(), world.current_pieces.size(),
+		"Nothing added: the wrap has this axis covered")
+
+
+func test_folding_at_an_angle_carries_the_outer_tiling_into_the_strip() -> void:
+	# The outer repetition does not vanish when the inner crease runs across it —
+	# it stops being COPIES and becomes CONTENT. The strip is cut out of the outer
+	# world's tiling, so it holds a row of sheared copies of it.
+	_pinch_over_pit()
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	var diagonal := Fold.create(903, Vector2i(11, 9), Vector2i(15, 14), CS)
+	var carried: Array = world.tiled_pieces_for(diagonal)
+	assert_gt(carried.size(), world.current_pieces.size(),
+		"The band crosses the outer glue over and over, and finds a band each time")
+	# ...and the copies really are one outer period apart.
+	var seen := {}
+	for piece in carried:
+		seen[snappedf(piece.src_offset.x, 0.5)] = true
+	assert_gt(seen.size(), 1, "More than one copy of the outer world is in there")
+
+
+func test_the_preview_band_is_drawn_in_every_copy() -> void:
+	# What the preview shows is what the fold will take, and inside a repeating
+	# space that is a band in EVERY band. Clipped to one copy so the copies tile
+	# rather than stack their alpha into a wash.
+	_pinch_over_pit()
+	world.hands[0] = HandTypes.PLAIN
+	world.hands[1] = HandTypes.PLAIN
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(0, -1))
+	world.tap_action(Vector2i(0, 1))
+	assert_eq(world.primed.size(), 1, "A pair is armed, so there is a band to preview")
+
+	world.overlay.prepare()
+	assert_gt(world.overlay._bands.size(), 0, "The band is prepared")
+	var domain: PackedVector2Array = world.lattice.domain_polygon(1.0e6)
+	for poly in world.overlay._bands:
+		for v in poly:
+			assert_true(Geometry2D.is_point_in_polygon(Vector2(v), domain)
+				or _near_edge(Vector2(v), domain),
+				"...clipped to one copy, so painting it per copy tiles rather than stacks")
+
+
+func _near_edge(p: Vector2, poly: PackedVector2Array) -> bool:
+	for i in range(poly.size()):
+		if p.distance_to(Geometry2D.get_closest_point_to_segment(
+				p, poly[i], poly[(i + 1) % poly.size()])) < 0.5:
+			return true
+	return false
+
+
+func test_the_preview_is_one_band_in_a_world_that_does_not_repeat() -> void:
+	# Outside a fold there is no domain, so nothing is clipped and the preview is
+	# the single full-extent band it always was.
+	world.tap_action(Vector2i(1, 0))
+	world.tap_action(Vector2i(-1, 0))
+	assert_eq(world.primed.size(), 1, "A pair is armed")
+	world.overlay.prepare()
+	assert_eq(world.overlay._bands.size(), 1, "One band, unclipped")
+	assert_eq(world.overlay.offsets, [Vector2.ZERO], "...painted once")

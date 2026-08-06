@@ -147,3 +147,78 @@ func test_the_domain_edges_follow_you_into_the_copy_you_are_in() -> void:
 	var edges: PackedVector2Array = lat.domain_edges(Vector2((13.5 + 8.0) * CS, 0))
 	assert_almost_eq(edges[0].x, (10.5 + 8.0) * CS, 0.01, "One band along")
 	assert_almost_eq(edges[1].x, (18.5 + 8.0) * CS, 0.01, "...and its far side")
+
+
+# ---------------------------------------------------------------------------
+# Descending through a glue line: what survives, and what has to be materialised
+# ---------------------------------------------------------------------------
+
+func test_a_period_a_whole_number_of_gaps_across_descends_sheared() -> void:
+	# Sliding by the whole gap along the crease normal is the identity inside the
+	# fold. So a period whose across-the-band component is a WHOLE NUMBER of gaps
+	# is still a symmetry — of its along-the-band part alone.
+	# Inner crease normal (0.6, 0.8), gap 5 cells. An outer period of (-1, 7) cells
+	# sits exactly ONE gap across it — and 4 cells' worth along it.
+	var inner := _fold(Vector2i(0, 0), Vector2i(3, 4))
+	var lat := FoldLattice.flat().push(_fold(Vector2i(0, 0), Vector2i(-1, 7)), CS) \
+		.push(inner, CS)
+	assert_eq(lat.depth(), 2, "The outer period came down with it")
+	assert_eq(lat.periods()[0], Vector2(-4, 3) * CS,
+		"...with its across-the-band gap taken off: what is left runs along the band")
+	assert_almost_eq(lat.periods()[0].dot(inner.crease_normal), 0.0, 0.001,
+		"A descended period is always along the band, so the axes stay orthogonal")
+
+	# The k = 0 case is the same rule: a period already along the crease is
+	# untouched by the shear.
+	var flat := FoldLattice.flat().push(_fold(Vector2i(0, 0), Vector2i(3, 4)), CS)
+	assert_eq(flat.push(_fold(Vector2i(0, 0), Vector2i(-4, 3)), CS).depth(), 2,
+		"A period perpendicular to the new normal descends unchanged")
+
+
+func test_a_period_exactly_one_gap_across_is_absorbed_not_kept() -> void:
+	# It shears to nothing: it WAS the glue translation, and the child already has
+	# that. Keeping it would be a second copy of the same identification.
+	var outer := _fold(Vector2i(0, 0), Vector2i(4, 0))
+	var inner := _fold(Vector2i(0, 0), Vector2i(4, 0))     # same period, same normal
+	var lat := FoldLattice.flat().push(outer, CS).push(inner, CS)
+	assert_eq(lat.depth(), 1, "One period, not two of the same translation")
+
+
+func test_the_periods_that_do_not_descend_are_the_ones_to_materialise() -> void:
+	# A band that reaches past its own glue reaches into the next copy of this
+	# space — which is this space. Something has to put the sheet there, and this
+	# is what says how much.
+	var outer := _fold(Vector2i(10, 12), Vector2i(18, 12))      # period (8,0) cells
+	var lat := FoldLattice.flat().push(outer, CS)
+
+	var across := _fold(Vector2i(12, 8), Vector2i(12, 11))      # perpendicular
+	assert_true(lat.tiling_for(across, CS).is_flat(),
+		"A perpendicular fold keeps the period as a period — nothing to materialise")
+
+	var along := _fold(Vector2i(12, 12), Vector2i(15, 12))      # parallel, narrower
+	assert_eq(lat.tiling_for(along, CS).depth(), 1,
+		"A parallel band does not keep it, so the content has to be tiled out")
+	assert_eq(lat.tiling_for(along, CS).periods()[0], Vector2(8 * CS, 0),
+		"...along exactly the period it could not keep")
+
+
+func test_the_domain_polygon_is_what_a_full_world_overlay_gets_clipped_to() -> void:
+	assert_eq(FoldLattice.flat().domain_polygon(1000.0).size(), 0,
+		"A space that does not repeat has no domain — nothing to clip to")
+
+	var cyl := FoldLattice.flat().push(_fold(Vector2i(10, 12), Vector2i(18, 12)), CS)
+	var slab: PackedVector2Array = cyl.domain_polygon(1000.0)
+	assert_eq(slab.size(), 4, "A cylinder's domain is a slab")
+	var xs: Array = []
+	for p in slab:
+		xs.append(snappedf(Vector2(p).x, 0.01))
+	xs.sort()
+	assert_almost_eq(float(xs[0]), 10.5 * CS, 0.01, "...from the near glue")
+	assert_almost_eq(float(xs[3]), 18.5 * CS, 0.01, "...to the far one")
+
+	var torus := cyl.push(_fold(Vector2i(12, 8), Vector2i(12, 11)), CS)
+	var box: PackedVector2Array = torus.domain_polygon(1000.0)
+	assert_eq(box.size(), 4, "A torus's domain is bounded both ways")
+	for p in box:
+		assert_between(Vector2(p).y, 8.5 * CS - 0.01, 11.5 * CS + 0.01,
+			"...including across the band")
