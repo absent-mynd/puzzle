@@ -27,8 +27,26 @@ const CAM_ZOOM_SMOOTHING := 2.5
 ## change. Eased, a reversal reads as the view swinging round to your new heading.
 const CAM_LOOKAHEAD_SMOOTHING := 3.0
 
+## World units between footsteps. Distance, not time: a step is a stride, so
+## walking slowly must give slow steps rather than the same steps quieter. At
+## RUN_SPEED that is a little over three a second. (`Sounds.FOOTSTEP` also
+## carries a retrigger floor, but that is a backstop for the degenerate cases —
+## a body shoved along a wall, a fold landing you mid-run — not the stride.)
+const STRIDE := 96.0
+
+## Downward speed a landing must exceed to be heard. Below this the body is
+## settling onto a slope or stepping off a lip, and a sound for it would fire
+## several times while you simply walked along uneven ground.
+const LAND_SPEED := 220.0
+
 var _coyote := 0.0
 var _buffer := 0.0
+
+## Distance run along the ground since the last footstep.
+var _stride := 0.0
+
+## Whether the body was on the floor last frame, for the air->ground edge.
+var _was_grounded := true
 var _visual: Polygon2D
 var _cam: Camera2D
 
@@ -147,8 +165,13 @@ func _physics_process(delta: float) -> void:
 		velocity.y = JUMP_VELOCITY
 		_coyote = 0.0
 		_buffer = 0.0
+		AudioManager.play_sfx(Sounds.JUMP)
 
+	# Read before the move: `move_and_slide` zeroes the fall the moment the body
+	# touches down, so afterwards there is no landing speed left to judge.
+	var fall_speed := velocity.y
 	move_and_slide()
+	_step_audio(delta, fall_speed)
 
 	# Blob squash: stretch along the dominant velocity axis, conserve area.
 	var stretch := clampf(absf(velocity.y) / 2800.0, 0.0, 0.30)
@@ -159,12 +182,43 @@ func _physics_process(delta: float) -> void:
 		_visual.scale = Vector2(1.0 + s, 1.0 - s)
 
 
+## Footsteps and landings, from the state the move left behind.
+##
+## Both live here rather than in the world because both are facts about the
+## BODY — how far it has run, how hard it hit — and the world does not track
+## either. Neither is allowed to influence anything: this reads state and makes
+## noise, and that is the whole of it.
+func _step_audio(delta: float, fall_speed: float) -> void:
+	var grounded := is_on_floor()
+	if grounded and not _was_grounded:
+		if fall_speed > LAND_SPEED:
+			AudioManager.play_sfx(Sounds.LAND)
+		# Whatever the stride had accumulated belongs to the run before the
+		# jump; starting fresh keeps the first step after a landing a full one.
+		_stride = 0.0
+	_was_grounded = grounded
+
+	if grounded:
+		_stride += absf(velocity.x) * delta
+		if _stride >= STRIDE:
+			_stride = 0.0
+			AudioManager.play_sfx(Sounds.FOOTSTEP)
+	else:
+		_stride = 0.0
+
+
 ## Hard placement (fold rides, respawn): move without sweeping and drop
 ## any velocity into the ground so the landing reads as a plant, not a launch.
+##
+## Silent, and it resets the step state: arriving somewhere is not walking
+## there. The fold, the door or the respawn that moved you has its own sound,
+## and a footstep or a landing thud underneath it would say you had travelled.
 func teleport(to: Vector2, keep_velocity: bool = true) -> void:
 	global_position = to
 	if not keep_velocity:
 		velocity = Vector2.ZERO
+	_stride = 0.0
+	_was_grounded = true
 
 
 ## Held vertical intent: -1 up, +1 down, 0 neither. Up wins when both are held —

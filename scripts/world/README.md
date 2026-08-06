@@ -333,6 +333,30 @@ it, at any height. West carries the four authored beats and its geometry is load
 bearing for all of them, so pins went in east, where there is room to be wrong.
 Placing them in west is a playtesting job, not an editing one.
 
+## Sound
+
+Everything the verb does is audible. Placing a hand, arming a pair, the fold
+going off, being swallowed by it, surfacing again, a fold that would not go and
+scattered your hands instead — each has its own sound, and the ones that mean
+opposite things are built as mirrors: `fold` and `unfold` are the same waveform
+reversed, and `pinch` / `surface` are going in and coming out.
+
+Refusals share one sound and one message. If a thing did not happen you get a
+short low blip and a line of text, whatever the reason — the text says which
+reason.
+
+**A fold's interior has its own music.** Crossing into one crossfades the
+overworld bed out and a darker, detuned version of it in: the same room, folded.
+It is the only thing that tells you where you are without a word of UI.
+
+Audio is style, like the lighting: the game is fully playable with the sound
+off, and nothing you can hear is information you cannot also see. Volume is
+read from `user://settings.json` at startup — the settings screen that would
+edit it exists but nothing opens it yet.
+
+Everything shipped is a generated placeholder (`tools/gen_audio.py`). See
+`docs/features/AUDIO.md`.
+
 ## Art & light
 
 The world is drawn as **pixel art with dynamic lighting**. Both are style, not
@@ -477,4 +501,8 @@ do not want yet.
   the target size a given zoom needs (`target_size`).
 - `TileAtlas.gd` — the tileset: kinds, variants, and base-space UVs for fragments.
 - `LightRig.gd` — lit materials, per-frame light uniforms, lamp glyphs.
-- Scene flows in `scripts/tests/test_fold_world.gd`.
+- Audio lives outside this directory: `scripts/systems/Sounds.gd` is the
+  vocabulary and the mix, `AudioManager` is the autoload that plays it. `FoldWorld`
+  and `PlayerBody` only ever call into it — see `_deny` and `_update_music`.
+- Scene flows in `scripts/tests/test_fold_world.gd`; what the world sounds like in
+  `scripts/tests/test_world_audio.gd`.

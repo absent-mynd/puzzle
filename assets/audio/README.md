@@ -1,162 +1,66 @@
-# Audio Assets Directory
-
-This directory contains all audio resources for the Space Folding Puzzle Game.
-
-## Directory Structure
+# Audio assets
 
 ```
 audio/
-├── music/          # Background music tracks
-└── sfx/            # Sound effects
+├── music/     overworld.wav, subspace.wav      — 12s seamless loops
+└── sfx/       21 effects, one per Sounds id
 ```
 
-## Audio Format Requirements
+**Every file here is generated**, by `tools/gen_audio.py`, from the Python
+standard library and nothing else:
 
-- **Format**: .ogg (preferred), .wav, or .mp3
-- **Sample Rate**: 44.1 kHz or 48 kHz
-- **Bit Depth**: 16-bit minimum
-- **Channels**: Stereo for music, mono or stereo for SFX
-
-## Required Audio Assets
-
-### Music Tracks (music/)
-
-#### menu.ogg
-- **Type**: Background music
-- **Duration**: 2-3 minutes (loopable)
-- **Style**: Calm, atmospheric, puzzle-themed
-- **Mood**: Welcoming, contemplative
-- **Usage**: Main menu screen
-
-#### gameplay.ogg
-- **Type**: Background music
-- **Duration**: 3-5 minutes (loopable)
-- **Style**: Ambient, minimal, puzzle-themed
-- **Mood**: Focused, contemplative, slightly mysterious
-- **Usage**: During puzzle gameplay
-- **Notes**: Should not be distracting or too energetic
-
-### Sound Effects (sfx/)
-
-#### fold.ogg
-- **Type**: Action SFX
-- **Duration**: 0.5-1.0 seconds
-- **Style**: Whoosh/swoosh with spatial warping quality
-- **Usage**: When a fold operation is executed
-- **Notes**: Should feel satisfying and "crunchy"
-
-#### selection.ogg
-- **Type**: UI/Feedback SFX
-- **Duration**: 0.1-0.2 seconds
-- **Style**: Soft click or beep
-- **Usage**: When selecting anchor points on the grid
-- **Notes**: Should be subtle and not annoying
-
-#### error.ogg
-- **Type**: Feedback SFX
-- **Duration**: 0.2-0.3 seconds
-- **Style**: Negative beep or buzz
-- **Usage**: When an invalid action is attempted (blocked fold, invalid selection)
-- **Notes**: Should communicate "no" without being harsh
-
-#### victory.ogg
-- **Type**: Celebration SFX
-- **Duration**: 1-2 seconds
-- **Style**: Uplifting chime or fanfare
-- **Usage**: When player reaches the goal
-- **Notes**: Should feel rewarding
-
-#### footstep.ogg
-- **Type**: Action SFX
-- **Duration**: 0.1-0.2 seconds
-- **Style**: Soft step sound
-- **Usage**: When player moves to a new cell
-- **Notes**: Will be played with pitch variation for variety
-
-#### button_hover.ogg
-- **Type**: UI SFX
-- **Duration**: 0.05-0.1 seconds
-- **Style**: Very subtle tick or whoosh
-- **Usage**: When hovering over UI buttons
-- **Notes**: Should be very quiet and subtle
-
-#### button_click.ogg
-- **Type**: UI SFX
-- **Duration**: 0.1-0.2 seconds
-- **Style**: Satisfying click
-- **Usage**: When clicking UI buttons
-- **Notes**: Should feel responsive
-
-#### undo.ogg
-- **Type**: Action SFX
-- **Duration**: 0.3-0.5 seconds
-- **Style**: Reverse whoosh (like fold.ogg but backwards)
-- **Usage**: When undoing a fold operation
-- **Notes**: Should mirror the fold sound
-
-## Audio Sources
-
-### Free Audio Resources
-
-You can find royalty-free audio assets at:
-- **Music**:
-  - [Incompetech](https://incompetech.com/) - Royalty-free music
-  - [OpenGameArt](https://opengameart.org/) - Community audio assets
-  - [Freesound](https://freesound.org/) - Community sound effects
-
-- **SFX**:
-  - [Freesound](https://freesound.org/)
-  - [Zapsplat](https://www.zapsplat.com/)
-  - [SoundBible](http://soundbible.com/)
-
-### Creating Custom Audio
-
-If creating custom audio:
-1. Use a DAW like Audacity (free) or Reaper
-2. Export as .ogg for best Godot compatibility
-3. Normalize audio levels
-4. Remove silence at start/end of files
-5. Test in-game for appropriate volume levels
-
-## Integration
-
-The AudioManager singleton automatically loads all audio files from these directories on startup. File names (without extension) are used as keys for playing audio.
-
-Example:
-```gdscript
-# Play music
-AudioManager.play_music("gameplay")
-
-# Play sound effect
-AudioManager.play_sfx("fold")
-
-# Play with pitch variation
-AudioManager.play_sfx("footstep", true)
+```bash
+python3 tools/gen_audio.py
 ```
 
-## Volume Mixing Guidelines
+Deterministic — one RNG seed per sound name — so regenerating is a no-op unless
+you changed the generator, and retuning one sound never disturbs another.
 
-Recommended relative volumes:
-- **Master**: 100%
-- **Music**: 70% (ambient, should not overpower SFX)
-- **SFX**: 80% (clear and noticeable)
+See `docs/features/AUDIO.md` for the design; this file is about the files.
 
-Individual audio files should be normalized to avoid clipping, then final mixing is done through the AudioManager.
+## What the names mean
 
-## Testing Checklist
+A filename here **is** a `Sounds` id (`scripts/systems/Sounds.gd`) with an
+extension on it. `AudioManager` loads every audio file in these two directories
+at startup and keys them by basename, so there is no manifest and no mapping
+table.
 
-- [ ] All required audio files present
-- [ ] No audio pops or clicks at start/end
-- [ ] Music loops smoothly
-- [ ] SFX trigger at appropriate times
-- [ ] Volume levels are balanced
-- [ ] No audio distortion at max volume
-- [ ] Audio enhances gameplay (not distracting)
+`test_audio_manager` asserts the two sets match in both directions: a
+registered sound with no file, or a file with no registry entry, fails the
+suite. **Adding a file here without adding it to `Sounds` will break the
+build** — that is deliberate, since a sound nothing can name and nothing has
+mixed is not an asset, it is a stray.
 
-## License Information
+## Replacing a placeholder
 
-When sourcing audio, ensure you have appropriate licenses:
-- Check attribution requirements
-- Verify commercial use is allowed
-- Include credits in game documentation
-- Save license information with audio files
+These are honest placeholders: mixed, tuned, and audibly synthesized. To
+replace one with real audio:
+
+1. Drop a file with the **same basename** in the same directory. `.ogg`, `.wav`
+   and `.mp3` all load; `.ogg` is the best fit for anything long.
+2. Delete the old file, and delete that sound's generator function in
+   `tools/gen_audio.py` so it stops claiming to produce it.
+3. Leave `Sounds.gd` alone unless the balance has changed. The `vol` trim there
+   is the mix, and it assumes assets are normalized to a common peak — a new
+   file that is hot or quiet should be normalized rather than compensated for.
+
+Nothing else needs to change. No code references a path or an extension.
+
+## Format
+
+Generated at 22.05 kHz mono for effects, 16 kHz mono for music — low, because
+these are placeholders and the whole set is ~1.1 MB in version control.
+Replacements are not held to that: use 44.1 kHz stereo `.ogg` if you have it.
+
+## Music loops
+
+`overworld.wav` and `subspace.wav` are built **entirely from harmonics of the
+loop fundamental** (1/12 Hz), so each file is exactly periodic over its own
+length and the loop point is sample-exact. Nothing is faded at the edges —
+tapering would carve a dip into the one place that has to be continuous.
+
+`AudioManager` sets the loop flag when it loads them, because the `.import`
+files that would normally carry it are gitignored.
+
+If you replace a bed, make sure your file actually loops. A crossfaded loop is
+audible; a mismatched one is worse.

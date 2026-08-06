@@ -37,7 +37,7 @@ What exists and works today:
 | Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
 | Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
 | Hand-drawn tilesheet | ⚙️ Layout + drop-in path done; sheet is generated in code |
-| Audio | ⚙️ `AudioManager` + `Settings` carried over; no assets |
+| Audio | ✅ Whole fold vocabulary wired; 21 SFX + 2 music beds ship (generated placeholders) |
 | Save / progression | ❌ Not started |
 | Entities (items, enemies, save points) | ❌ Not started |
 
@@ -45,7 +45,7 @@ What exists and works today:
 
 ## Test suite
 
-404 passing across 20 scripts. Composition:
+441 passing across 21 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
@@ -53,7 +53,7 @@ What exists and works today:
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
 | `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
-| `test_audio_manager` | 30 | Bus routing, volume, playback |
+| `test_audio_manager` | 47 | Buses, the volume-applied-once rule, loading + looping, the mix/jitter/throttle registry, fades, persistence |
 | `test_tile_atlas` | 17 | Tileset kinds/variants, base-space UVs, the generated sheet |
 | `test_tile_types` | 16 | The registry |
 | `test_light_source` | 15 | Lights as occupants: fold-away, ride, split, serialization |
@@ -459,7 +459,11 @@ Roughly in priority order — nothing here is committed to yet:
 
 - The `topdown-archive` tag is **local only** — the remote refused the tag push
   (session credentials are scoped to the working branch). Use `git checkout 8bf8193`.
-- No audio assets ship; `AudioManager` is wired but silent.
+- The pause menu and settings screen are complete and wired but **unreachable** —
+  nothing opens them, so the volume sliders cannot be used in-game. Volumes are
+  read from `user://settings.json` at startup, so they are settable by hand.
+- Audio is not positional: a fold across the room sounds like one at your feet.
+- The shipped sounds are generated placeholders (`tools/gen_audio.py`), not art.
 - Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
   the world yet. Pins and triggers now are — see east's right wing.
 - **You can strand yourself.** Spend your last anchors on a fold, walk somewhere its

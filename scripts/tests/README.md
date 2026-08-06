@@ -47,7 +47,8 @@ One `test_<subject>.gd` per subject, matching the source file it covers.
 | `test_world_data.gd` | World format + the shipped world |
 | `test_world_core.gd` | Map parsing, seams, anchor/fold eligibility, camera zoom + lookahead |
 | `test_player_body.gd` | Look/point keys, velocity-as-fraction-of-limits, motion scalar |
-| `test_audio_manager.gd` | Buses, playback, volume |
+| `test_audio_manager.gd` | Buses, playback, volume, the `Sounds` registry |
+| `test_world_audio.gd` | **Scene-driven**: that the world is actually heard |
 | **`test_fold_world.gd`** | **Scene-driven integration** |
 
 `test_fold_world.gd` is the important one. It instantiates the real world scene and
@@ -55,6 +56,12 @@ drives the actual beats — riding a flap, being pinched into a fold, folding in
 subspace, exiting through the glue anchor, door traversal between regions, doors into
 a pre-folded subspace. Everything else is pure and headless; this is what catches
 integration regressions.
+
+`test_world_audio.gd` drives the same scene and listens to `AudioManager.sfx_played`,
+so it asserts what the player would **hear** rather than what the code asked for. It
+exists because the previous audio system rotted in exactly the gap it fills:
+`AudioManager` was tested, complete and correct, and nothing in the game called it.
+A test of the engine alone cannot tell you that.
 
 ## Conventions
 
