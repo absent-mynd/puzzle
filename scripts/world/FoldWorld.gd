@@ -2019,7 +2019,7 @@ func _build_hud() -> void:
 	# anchor readout all say their piece in place, and a wall of text on top of
 	# them explains away the thing the player is meant to work out.
 	var help := Label.new()
-	help.text = "A/D move   Space jump   W/S aim   F tap: place hand · hold: pull back   R reset"
+	help.text = "A/D move   Space tap/hold: jump   W/S aim   F tap: place hand · hold: pull back   R reset"
 	help.position = Vector2(12, 8)
 	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
 	hud.add_child(help)
