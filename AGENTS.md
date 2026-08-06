@@ -464,10 +464,12 @@ These are live, not settled. Do not close them silently in a refactor.
 - **A torus has no turn-back.** Fold yourself in across the grain and the space has
   no ends at all — every direction wraps. Whether that reads as elegant or as being
   lost is a playtesting question.
-- **An outer repetition that becomes content rather than copies** — fold in at an
-  angle and the strip carries sheared copies of the room you came from. It falls
-  out of the geometry and it is almost certainly interesting; whether it is
-  *legible* is untested by play.
+- **A fold does not reach around the cylinder.** Fold across the glue you came in
+  through and the band finds the end of the stored sheet rather than the next copy
+  of it. That is a design choice, not a geometric necessity — the alternative (cut
+  the strip out of the parent's full orbit) was implemented and reverted. What it
+  costs is that a band past the glue is emptier than the space it sits in; what it
+  buys is that the glue line means something.
 - **Triggers are world-level only.** A trigger inside a subspace would have to
   splice folds into an interior list mid-cascade; the resolver does not model that.
 - **Unfold animation** plays only for newest-fold unfolds at world level; mid-stack

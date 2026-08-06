@@ -17,32 +17,51 @@ class_name FoldLattice extends RefCounted
 ## Entering fold F from a space with lattice L gives the strip's lattice:
 ##
 ##   - F's own period is always there — its two creases are glued.
-##   - A period `P` of L descends when translating by it is still a symmetry of
-##     the band `{0 < (p - c)·n_F < gap}` *after gluing*. Inside F, sliding by the
-##     whole gap along `n_F` is the identity, so what matters is `P·n_F` measured
-##     in gaps: when it is a whole number `k`, `P` descends **sheared** to
-##     `P - k·(n_F·gap)`, which is P's component ALONG the band. `P·n_F == 0` is
-##     the ordinary case of that (`k = 0`, P descends unchanged).
-##   - Otherwise `P` does not descend — the band spirals against the parent's glue
-##     and no translate of it lands back on itself. The parent's repetition is
-##     still THERE, but it shows up in the CONTENT rather than in the copies: the
-##     strip is cut out of the parent's tiling, so it carries as many sheared
-##     copies of the outer world as it crosses. See `tiling_for`.
+##   - A period `P` of L descends **iff `P · n_F == 0`**, and the reason is worth
+##     spelling out, because a plausible-looking generalisation of it is false.
 ##
-## Three consequences worth knowing:
+## ## Why `P · n_F == 0` and not "a whole number of gaps"
 ##
-##   - **The axes are always orthogonal.** A descending `P` loses its component
-##     across the band, and F's own period is entirely across it. So there are at
-##     most two axes, they are at right angles, and each wraps independently —
-##     which is what makes `wrap_delta` a per-axis `floor` rather than a lattice
-##     reduction.
-##   - **A period that descends to nothing is dropped.** `P` exactly `k` gaps
-##     along `n_F` shears to zero: it was the same translation as the glue, and
-##     the child already has it.
+## A level is a pair (stored fragments, lattice), and the content it really has is
+## the ORBIT of the stored fragments under the lattice. Descending into F stores
+## `content ∩ B`, where `B = {0 < (p - c)·n_F < gap}` — which is a fundamental
+## domain of `⟨n_F·gap⟩`, so the glue is exact.
+##
+## For a parent period `P` to be a period of the child too, the child's content has
+## to satisfy `C(x + P) == C(x)` for `x` in `B`. It is tempting to argue that
+## sliding by a whole gap is the identity inside F, so a `P` sitting `k` gaps
+## across the band should descend sheared to `P - k·(n_F·gap)`. It does map `B` to
+## itself. But the content does not follow it: the parent's content is invariant
+## under `P`, not under the shear, so `C(x + P - k·n_F·gap) = C(x - k·n_F·gap)`,
+## which is the parent's content `k` bands over — a different piece of sheet.
+##
+## The gluing identifies POSITIONS, not the content those positions carry. Only
+## `k == 0` leaves both intact, and then the shear is the identity and `P` descends
+## unchanged. (This was implemented the other way for one commit; it was wrong.)
+##
+## Two consequences worth knowing:
+##
+##   - **The axes are always orthogonal.** A descending `P` is perpendicular to
+##     `n_F`, and F's own period is parallel to it. So there are at most two axes,
+##     they are at right angles, and each wraps independently — which is what
+##     makes `wrap_delta` a per-axis `floor` rather than a lattice reduction.
 ##   - **Every period is a whole number of cells.** `n * gap` is exactly
-##     `(anchor_b - anchor_a) * cell_size`, and a shear subtracts a whole multiple
-##     of it, so periods land on the art-pixel grid and a wrapped copy is never
-##     half a pixel out.
+##     `(anchor_b - anchor_a) * cell_size`, so periods land on the art-pixel grid
+##     and a wrapped copy is never half a pixel out.
+##
+## ## What the strip contains, and what it does not
+##
+## `content ∩ B` is a fundamental domain of the child's content EXACTLY when every
+## parent period is perpendicular to `n_F` — then each period preserves `B`, so
+## intersecting and orbiting commute. That covers every fold made from the
+## overworld (no periods at all) and the perpendicular nesting case (the torus).
+##
+## When a parent period is NOT perpendicular, `content ∩ B` is a strict SUBSET of
+## what the parent's full orbit puts in the band: a band running past its own glue
+## line finds the end of the stored sheet rather than the next copy of it. That is
+## a deliberate limit, not an oversight — **a fold takes what is in front of it in
+## the sheet it is cut from; it does not reach around the cylinder.** What it shows
+## is always really there; it just does not reach for everything that is.
 ##
 ## Pure kernel: geometry in, geometry out, no view types.
 
@@ -67,57 +86,19 @@ static func flat() -> FoldLattice:
 ## fold was made in. See the class docs for the survival rule.
 func push(fold: Fold, cell_size: float) -> FoldLattice:
 	var out := FoldLattice.new()
+	var n: Vector2 = fold.crease_normal
+	for axis in axes:
+		if absf((axis["period"] as Vector2).dot(n)) <= PARALLEL_EPS:
+			out.axes.append(axis.duplicate())
 	# Exact: n * gap_distance() IS (anchor_b - anchor_a) * cell_size, and stating
 	# it that way keeps the period on the cell grid however diagonal the crease is.
-	var glue := Vector2(fold.anchor_b - fold.anchor_a) * cell_size
-	for axis in axes:
-		var sheared = _shear(axis["period"], fold, glue)
-		if sheared != null and (sheared as Vector2).length() > PARALLEL_EPS:
-			out.axes.append(_axis_for(sheared, float(axis["base"])))
 	out.axes.append({
-		"period": glue,
-		"dir": fold.crease_normal,
+		"period": Vector2(fold.anchor_b - fold.anchor_a) * cell_size,
+		"dir": n,
 		"len": fold.gap_distance(),
-		"base": fold.crease_point1.dot(fold.crease_normal),
+		"base": fold.crease_point1.dot(n),
 	})
 	return out
-
-
-## The periods of THIS lattice that do NOT descend into `fold` — the ones whose
-## repetition has to be materialised as content before the fold can be cut,
-## because past the glue there is otherwise nothing to fold.
-##
-## Returned as a lattice so the caller can just ask it for offsets. Empty when
-## every period descends, which is the ordinary perpendicular case: nothing to
-## tile, and the content is one fundamental domain exactly as before.
-func tiling_for(fold: Fold, cell_size: float) -> FoldLattice:
-	var out := FoldLattice.new()
-	var glue := Vector2(fold.anchor_b - fold.anchor_a) * cell_size
-	for axis in axes:
-		if _shear(axis["period"], fold, glue) == null:
-			out.axes.append(axis.duplicate())
-	return out
-
-
-## `period` as it survives inside `fold`, or null if it does not survive.
-##
-## Sliding by the whole gap along the crease normal is the identity inside the
-## fold, so a period whose across-the-band component is a WHOLE NUMBER of gaps is
-## still a symmetry — of the band's along-component alone. Anything else spirals.
-static func _shear(period: Vector2, fold: Fold, glue: Vector2):
-	var gap := fold.gap_distance()
-	if gap <= 0.0:
-		return null
-	var k := (period as Vector2).dot(fold.crease_normal) / gap
-	if absf(k - roundf(k)) * gap > PARALLEL_EPS:
-		return null
-	return (period as Vector2) - glue * roundf(k)
-
-
-static func _axis_for(period: Vector2, base: float) -> Dictionary:
-	var dir := (period as Vector2).normalized()
-	return {"period": period, "dir": dir, "len": (period as Vector2).length(),
-		"base": base}
 
 
 ## The lattice for a whole context path (outermost fold first).

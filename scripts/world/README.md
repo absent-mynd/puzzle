@@ -252,28 +252,22 @@ which way the second fold runs:
   comes back to where you started, there are no ends at all, and the frame is
   four glue lines rather than two. The status line names it.
 
-- **At any other angle** the inner band spirals against the outer glue: no
-  translation of it lands back on itself, so the outer repetition stops being
-  **copies** and becomes **content**. The strip is cut out of the outer world's
-  tiling, so it carries a whole row of sheared copies of it — you are on a
-  cylinder whose walls are made of the room you came from. (The middle case:
-  when the outer period sits a *whole number of gaps* across the inner band,
-  sliding by it is still the identity after gluing, and it descends **sheared**
-  to its along-the-band part. Copies again.)
+- **At any other angle** the outer repetition does not come down at all, and the
+  space is a plain cylinder with the inner fold's period alone.
 
-None of that is authored. Which periods survive is one line of geometry — measure
-the period across the new band in gaps, and it descends when that comes out whole
-— and everything else (how many copies to draw, where the colliders go, which way
-the camera refuses to lead, how you wrap) is read off it. See `FoldLattice`.
+None of that is authored. Which periods survive is one line of geometry — a
+translation descends exactly when it runs *along* the new band — and everything
+else (how many copies to draw, where the colliders go, which way the camera
+refuses to lead, how you wrap) is read off it. See `FoldLattice`, which sets out
+why "a whole number of gaps across" is *not* a weaker condition that also works.
 
-**A fold reaches into every copy, and takes from every copy.** A band that runs
-past its own glue line is reaching into the next copy of this space, which is
-this space, so what it finds there is the sheet again. The content is
-materialised before the fold is cut (`FoldWorld._tiled_for`) — and only for the
-periods the fold does *not* keep, since the ones it keeps are the child's own
-wrap and would otherwise be drawn twice. The preview band says the same thing:
-it is drawn in every copy, clipped to one, so what you see before the fuse burns
-is what the fold will actually take.
+**A fold takes what is in front of it in the sheet it is cut from; it does not
+reach around the cylinder.** A band that runs past its own glue line finds the
+end of the stored sheet rather than the next copy of it. What you get is always
+really there — the strip is a genuine piece of the space — but for a fold that
+is not perpendicular to the one outside it, it is not *everything* that is there.
+The preview band is drawn in every copy (clipped to one), so what you see before
+the fuse burns is what the fold will actually take.
 
 A hand committed to a fold three layers down is counted by the same ledger as one
 at the surface, and the four places a hand can be still sum to the same number.

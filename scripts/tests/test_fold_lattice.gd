@@ -150,56 +150,24 @@ func test_the_domain_edges_follow_you_into_the_copy_you_are_in() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Descending through a glue line: what survives, and what has to be materialised
+# Descending through a glue line
 # ---------------------------------------------------------------------------
 
-func test_a_period_a_whole_number_of_gaps_across_descends_sheared() -> void:
-	# Sliding by the whole gap along the crease normal is the identity inside the
-	# fold. So a period whose across-the-band component is a WHOLE NUMBER of gaps
-	# is still a symmetry — of its along-the-band part alone.
-	# Inner crease normal (0.6, 0.8), gap 5 cells. An outer period of (-1, 7) cells
-	# sits exactly ONE gap across it — and 4 cells' worth along it.
-	var inner := _fold(Vector2i(0, 0), Vector2i(3, 4))
-	var lat := FoldLattice.flat().push(_fold(Vector2i(0, 0), Vector2i(-1, 7)), CS) \
-		.push(inner, CS)
-	assert_eq(lat.depth(), 2, "The outer period came down with it")
-	assert_eq(lat.periods()[0], Vector2(-4, 3) * CS,
-		"...with its across-the-band gap taken off: what is left runs along the band")
-	assert_almost_eq(lat.periods()[0].dot(inner.crease_normal), 0.0, 0.001,
-		"A descended period is always along the band, so the axes stay orthogonal")
+func test_only_a_period_along_the_band_descends() -> void:
+	# The tempting generalisation — that a period sitting a WHOLE NUMBER of gaps
+	# across the band should descend sheared, since sliding by a gap is the
+	# identity inside a fold — is false. The gluing identifies POSITIONS, not the
+	# content at them: the shear lands on the parent's sheet a band over along the
+	# normal, and the parent is not periodic that way. Only k = 0 survives.
+	var inner := _fold(Vector2i(0, 0), Vector2i(3, 4))          # normal (0.6,0.8), gap 5
+	var one_gap_across := FoldLattice.flat() \
+		.push(_fold(Vector2i(0, 0), Vector2i(-1, 7)), CS)       # P.n is exactly one gap
+	assert_eq(one_gap_across.push(inner, CS).depth(), 1,
+		"A whole number of gaps across is still across: it does not descend")
 
-	# The k = 0 case is the same rule: a period already along the crease is
-	# untouched by the shear.
-	var flat := FoldLattice.flat().push(_fold(Vector2i(0, 0), Vector2i(3, 4)), CS)
-	assert_eq(flat.push(_fold(Vector2i(0, 0), Vector2i(-4, 3)), CS).depth(), 2,
-		"A period perpendicular to the new normal descends unchanged")
-
-
-func test_a_period_exactly_one_gap_across_is_absorbed_not_kept() -> void:
-	# It shears to nothing: it WAS the glue translation, and the child already has
-	# that. Keeping it would be a second copy of the same identification.
-	var outer := _fold(Vector2i(0, 0), Vector2i(4, 0))
-	var inner := _fold(Vector2i(0, 0), Vector2i(4, 0))     # same period, same normal
-	var lat := FoldLattice.flat().push(outer, CS).push(inner, CS)
-	assert_eq(lat.depth(), 1, "One period, not two of the same translation")
-
-
-func test_the_periods_that_do_not_descend_are_the_ones_to_materialise() -> void:
-	# A band that reaches past its own glue reaches into the next copy of this
-	# space — which is this space. Something has to put the sheet there, and this
-	# is what says how much.
-	var outer := _fold(Vector2i(10, 12), Vector2i(18, 12))      # period (8,0) cells
-	var lat := FoldLattice.flat().push(outer, CS)
-
-	var across := _fold(Vector2i(12, 8), Vector2i(12, 11))      # perpendicular
-	assert_true(lat.tiling_for(across, CS).is_flat(),
-		"A perpendicular fold keeps the period as a period — nothing to materialise")
-
-	var along := _fold(Vector2i(12, 12), Vector2i(15, 12))      # parallel, narrower
-	assert_eq(lat.tiling_for(along, CS).depth(), 1,
-		"A parallel band does not keep it, so the content has to be tiled out")
-	assert_eq(lat.tiling_for(along, CS).periods()[0], Vector2(8 * CS, 0),
-		"...along exactly the period it could not keep")
+	var along := FoldLattice.flat().push(_fold(Vector2i(0, 0), Vector2i(-4, 3)), CS)
+	assert_eq(along.push(inner, CS).depth(), 2,
+		"...and a period ALONG the band does, because the content follows it")
 
 
 func test_the_domain_polygon_is_what_a_full_world_overlay_gets_clipped_to() -> void:
