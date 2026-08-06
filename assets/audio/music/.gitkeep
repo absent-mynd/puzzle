@@ -1,4 +1,0 @@
-# This file ensures the music directory is tracked by Git
-# Place .ogg music files here:
-# - menu.ogg (Main menu background music)
-# - gameplay.ogg (Gameplay background music)

@@ -136,6 +136,8 @@ instead.
 | The tileset: kinds, variants, base-space UVs | `scripts/world/TileAtlas.gd` |
 | Lit materials, light uniforms, lamp glyphs | `scripts/world/LightRig.gd` |
 | The lighting shader | `assets/shaders/pixel_lit.gdshader` |
+| **The sound registry** (vocabulary + the whole mix) | `scripts/systems/Sounds.gd` |
+| Buses, voices, fades, volume persistence | `scripts/systems/AudioManager.gd` (autoload) |
 
 See `scripts/world/README.md` for controls and the design beats.
 
@@ -206,6 +208,21 @@ fragment list. That is why a light folded away leaves the overworld and lights
 the fold's interior instead — nobody wrote that; it falls out of asking. When you
 add a new thing that lives in the world, store it that way. Do not cache a
 world position and try to keep it up to date through folds.
+
+### 9. Audio is a leaf, and `Sounds` is its registry
+`AudioManager.play_sfx(...)` is a statement, never a question: nothing reads back
+from audio and no gameplay decision may depend on it, which is what lets a call
+site be one line in the middle of world logic. The game is fully playable silent.
+
+`Sounds` owns the vocabulary AND the mix — a sound's id is its asset's basename,
+and its dB trim, pitch jitter and retrigger floor all live in that one registry.
+So adding a sound means editing `Sounds.gd` and dropping a file, and **balancing
+the game is a diff** rather than a re-render. `test_audio_manager` asserts the
+registry and the shipped assets are the same set in both directions.
+
+Do not scatter volume constants at call sites, and do not add a throttle at one:
+the floor that keeps per-frame events from emptying the voice pool is a registry
+field precisely so it is solved once. See `docs/features/AUDIO.md`.
 
 ---
 
