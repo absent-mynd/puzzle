@@ -335,6 +335,13 @@ These are live, not settled. Do not close them silently in a refactor.
   splice folds into an interior list mid-cascade; the resolver does not model that.
 - **Unfold animation** plays only for newest-fold unfolds at world level; mid-stack
   unfolds are instant.
+- **Jump feel is a first guess, but jump HEIGHT is level design.** How long you hold
+  Space sets the height, from a ~1.25-cell tap to a ~2.6-cell full hold. The curve
+  itself wants playtesting; the two bounds around it do not — the pinned pillar is
+  two tiles because it is meant to be jumped and the plate's wall is three because
+  it is meant to need a fold. `PlayerBody.jump_height_for_hold` integrates the real
+  step and `test_player_body` asserts both bounds, so tune the gravity constants by
+  all means and let that test tell you when you have moved the world.
 - **Hand scarcity and the fuse lengths are not yet tuned.** Two slots, and fuses of
   0.65 / 1.6 / 3.2 seconds, are first guesses; the west beats were authored when
   folding was free and instant. Whether the fuse reads as deliberate pacing or as the
