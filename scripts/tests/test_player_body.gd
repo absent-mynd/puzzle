@@ -1,13 +1,19 @@
 extends GutTest
 
-## Tests for PlayerBody's camera-facing readings — the things the camera asks the
-## body for, because only the body knows its own limits and its own input:
-## the held look direction (which also aims anchors), velocity as a fraction of
-## those limits, and the motion scalar the zoom reads.
+## Tests for PlayerBody's readings and its jump arithmetic — the things that can
+## be asked of the body without running it: the held look direction (which also
+## aims anchors), the jump press EDGE, velocity as a fraction of the body's own
+## limits, the motion scalar the zoom reads, and the gravity the jump is shaped by.
 ##
-## Physics itself (coyote time, jump buffer, squash) is exercised through the real
-## scene in `test_fold_world.gd`; this file is about the readings, so it drives
-## `velocity` directly and presses keys with `Input.parse_input_event`.
+## The jump is variable-height, and its shape is `gravity_scale` — a pure function
+## of "which way am I going" and "am I still holding it". `jump_height_for_hold`
+## integrates the very step the body takes, so the heights asserted here are the
+## heights you get in the world, and the level-design bounds (a tap clears one
+## cell, a full hold two, nothing clears three) are pinned rather than hoped for.
+##
+## The rest of the physics (coyote time, buffering, squash) is exercised through
+## the real scene in `test_fold_world.gd`; this file drives `velocity` directly
+## and presses keys with `Input.parse_input_event`.
 
 var body: PlayerBody
 
@@ -30,7 +36,7 @@ func _press(keycode: int, down: bool) -> void:
 
 
 func _release_all() -> void:
-	for k in [KEY_W, KEY_S, KEY_UP, KEY_DOWN]:
+	for k in [KEY_W, KEY_S, KEY_UP, KEY_DOWN, KEY_SPACE]:
 		_press(k, false)
 
 
@@ -70,6 +76,117 @@ func test_pointing_follows_facing_when_you_hold_nothing() -> void:
 	assert_eq(body.point_dir(), Vector2i(-1, 0), "Facing left, you point left")
 	body.facing = 1
 	assert_eq(body.point_dir(), Vector2i(1, 0), "Facing right, you point right")
+
+
+# ---------------------------------------------------------------------------
+# The jump press is an edge
+# ---------------------------------------------------------------------------
+
+func test_the_jump_press_is_an_edge_not_a_held_state() -> void:
+	assert_false(body.take_jump_press(), "Nothing held is not a press")
+	_press(KEY_SPACE, true)
+	assert_true(body.take_jump_press(), "Pressing it is a press")
+	assert_false(body.take_jump_press(), "...and keeping it down is not another one")
+	assert_false(body.take_jump_press(), "...however many frames you hold it for")
+
+
+func test_releasing_and_pressing_again_is_a_fresh_press() -> void:
+	# The whole point of the edge: hold does not mean "jump again the moment you
+	# land". Bouncing off the floor with the key down would spend the hold that
+	# was supposed to be shaping the jump you are already in.
+	_press(KEY_SPACE, true)
+	assert_true(body.take_jump_press(), "First press")
+	_press(KEY_SPACE, false)
+	assert_false(body.take_jump_press(), "Letting go is not a press")
+	_press(KEY_SPACE, true)
+	assert_true(body.take_jump_press(), "Pressing again is")
+
+
+# ---------------------------------------------------------------------------
+# The gravity the jump is shaped by
+# ---------------------------------------------------------------------------
+
+func test_a_held_rise_gets_plain_gravity() -> void:
+	# Holding it is the full jump — the arc everything else is measured against.
+	assert_almost_eq(PlayerBody.gravity_scale(-400.0, true), 1.0, 0.001,
+		"Rising with the key held is the unmodified arc")
+
+
+func test_letting_go_mid_rise_makes_gravity_bite() -> void:
+	var held := PlayerBody.gravity_scale(-400.0, true)
+	var released := PlayerBody.gravity_scale(-400.0, false)
+	assert_gt(released, held, "Releasing mid-rise pulls you down sooner")
+	assert_almost_eq(released, PlayerBody.JUMP_CUT_GRAVITY, 0.001,
+		"...by exactly the cut multiplier")
+
+
+func test_falling_is_heavier_than_rising() -> void:
+	assert_gt(PlayerBody.gravity_scale(400.0, false), PlayerBody.gravity_scale(-400.0, true),
+		"A landing should arrive sooner than the rise that earned it")
+
+
+func test_holding_does_nothing_once_you_are_falling() -> void:
+	# Sustain is a rise-only affordance; a held key must never slow a fall.
+	assert_almost_eq(PlayerBody.gravity_scale(400.0, true),
+		PlayerBody.gravity_scale(400.0, false), 0.001,
+		"Falling weighs the same whether or not you are still holding it")
+
+
+func test_the_apex_is_lighter_than_either_side_of_it() -> void:
+	# The hang at the top: the frames where you are barely moving vertically are
+	# the frames you steer in, so they are the ones worth having more of.
+	assert_lt(PlayerBody.gravity_scale(-40.0, true), PlayerBody.gravity_scale(-400.0, true),
+		"The last of the rise is lighter than the start of it")
+	assert_lt(PlayerBody.gravity_scale(40.0, false), PlayerBody.gravity_scale(400.0, false),
+		"...and the first of the fall lighter than the rest of it")
+
+
+# ---------------------------------------------------------------------------
+# Tap versus hold — the jump height that falls out of all of that
+# ---------------------------------------------------------------------------
+
+func test_a_tap_is_a_shorter_jump_than_a_hold() -> void:
+	assert_lt(PlayerBody.jump_height_for_hold(0.0), PlayerBody.jump_height_for_hold(1.0),
+		"Tapping gets you less height than holding")
+
+
+func test_height_grows_with_how_long_you_held_it() -> void:
+	# Not two jumps but a continuum: every millisecond of hold you spend buys
+	# height, which is what makes "how long did you tap for" an input at all.
+	var last := 0.0
+	for i in range(10):
+		var h := PlayerBody.jump_height_for_hold(i * 0.04)
+		assert_gt(h, last, "Holding %0.2fs beats holding %0.2fs" % [i * 0.04, (i - 1) * 0.04])
+		last = h
+
+
+func test_holding_past_the_apex_buys_nothing_more() -> void:
+	# The hold window is the rise itself; there is no charge that keeps paying,
+	# and no second jump waiting at the end of a long press.
+	assert_almost_eq(PlayerBody.jump_height_for_hold(1.0),
+		PlayerBody.jump_height_for_hold(5.0), 0.001,
+		"Once the rise is over, more hold is just more hold")
+
+
+func test_a_tap_clears_one_cell_and_a_full_hold_two_but_never_three() -> void:
+	# The world is authored against these: the pinned pillar is two tiles and is
+	# meant to be jumped, the plate's wall is three and is meant to need a fold.
+	# Both bounds are level design, not feel — changing them changes the world.
+	var tap := PlayerBody.jump_height_for_hold(0.0)
+	var full := PlayerBody.jump_height_for_hold(1.0)
+	assert_gt(tap, WorldCore.CELL, "A tap clears a one-tile step")
+	assert_lt(tap, 2.0 * WorldCore.CELL, "...and no more than that")
+	assert_gt(full, 2.0 * WorldCore.CELL, "A full hold clears the two-tile pillar")
+	assert_lt(full, 3.0 * WorldCore.CELL, "...and never the three-tile wall")
+
+
+func test_a_long_fall_still_stops_at_terminal_speed() -> void:
+	# The heavier fall multiplier gets you TO terminal sooner; it must not carry
+	# you past it, or `motion_fraction` would report more than a full fall.
+	var vy := 0.0
+	for _i in range(600):
+		vy = PlayerBody.step_fall(vy, false, 1.0 / 60.0)
+	assert_almost_eq(vy, PlayerBody.MAX_FALL, 0.001, "Ten seconds of falling is terminal, not more")
 
 
 # ---------------------------------------------------------------------------
