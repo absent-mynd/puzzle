@@ -1,11 +1,21 @@
-class_name WorldOverlay extends Node2D
+class_name WorldOverlay extends WrapCanvas
 
 ## WorldOverlay
 ##
-## Draw-only layer for the fold prototype: anchor markers, the excised-band
-## preview, seam-anchor diamonds (with unfoldability tint), the glue lines and
-## outer seam anchor inside a subspace. Reads everything from its owning
-## FoldWorld each frame.
+## Draw-only layer for the fold world: anchor markers, the excised-band preview,
+## seam-anchor diamonds (with unfoldability tint), the glue lines and outer seam
+## anchor inside a subspace, doors and hands lying on the ground. Reads everything
+## from its owning FoldWorld each frame.
+##
+## It is a `WrapCanvas`, so nothing here loops over copies of the space: `paint`
+## draws one band's worth of markers and they appear in every band. What used to
+## be a private `_copy_offsets` threaded through nine draw calls — and had to be
+## remembered by every new marker — is now the base class's business.
+##
+## The two things that must NOT repeat go in `paint_once`: the full-extent axis
+## guides and the translucent preview band. Repeated, they would tile the screen
+## with lines and stack their alpha into a wash, and they read fine drawn once in
+## the band you occupy.
 ##
 ## The overlay draws INSIDE the pixel render target, so every stroke is measured
 ## in art pixels: a 1-unit line would be a quarter of a pixel and would flicker
@@ -22,40 +32,75 @@ const STROKE := HAIR * 2.0
 
 var world  # FoldWorld; untyped to avoid a load-order cycle
 
+# --- Gathered once per frame by `prepare`, drawn once per copy by `paint` ---
+# Whether a seam can come out is a real question (it walks the newer folds and
+# tests their bands), and a torus can be a hundred copies. Ask once.
+var _markers: Dictionary = {}
+var _in_reach: Array = []
+var _exit_ok := true
+var _doors: Array = []
+var _hands_down: Array = []
+
 
 func _process(_delta: float) -> void:
 	queue_redraw()
 
 
-func _draw() -> void:
+func prepare() -> void:
+	_markers = {}
+	_in_reach = []
+	_doors = []
+	_hands_down = []
 	if world == null or world.animating():
 		return
-	var offsets := _copy_offsets()
-	if world.mode == world.Mode.SUBSPACE:
-		_draw_subspace_glue(offsets)
-		_draw_subspace_markers(offsets)
-	else:
-		_draw_seam_markers()
-	_draw_doors(offsets)
-	_draw_loose_hands(offsets)
-	_draw_anchor_and_preview(offsets)
-	_draw_burst(offsets)
+	_markers = world.seam_markers()
+	for fold in world.seams_within_burst():
+		_in_reach.append({"fold": fold, "ok": world.can_unfold_fold(fold)})
+	_exit_ok = world.exit_blocker() == null
+	for id in world.doors:
+		var wp = world.door_point_here(id)
+		if wp != null:
+			_doors.append(Vector2(wp))
+	for entry in world.unpaired:
+		_hands_down.append({"at": world.anchor_point(entry), "kind": int(entry["hand"]),
+			"pulse": 0.0})
+	for pair in world.primed:
+		var pulse: float = _pulse_at(world.fuse_progress_of(pair))
+		for entry in [pair["a"], pair["b"]]:
+			_hands_down.append({"at": world.anchor_point(entry),
+				"kind": int(entry["hand"]), "pulse": pulse})
 
 
-## Where each visible copy of the current view sits. Inside a subspace the
-## strip repeats across the glue, so everything that belongs to it — terrain,
-## the player, doors, seam anchors, your aim — is drawn once per copy. Outside,
-## there is one copy at the origin and every loop over this runs once.
-func _copy_offsets() -> Array:
-	if world.mode != world.Mode.SUBSPACE or world.sub_fold == null:
-		return [Vector2.ZERO]
-	var out: Array = []
-	var n: Vector2 = world.sub_fold.crease_normal
-	var gap: float = world.sub_fold.gap_distance()
-	var copies: int = world.sub_copies
-	for k in range(-copies, copies + 1):
-		out.append(n * (k * gap))
-	return out
+func paint() -> void:
+	if world == null or world.animating():
+		return
+	if not world.lattice.is_flat():
+		_draw_glue()
+		_draw_exit_anchor()
+	_draw_seam_markers()
+	_draw_doors()
+	_draw_loose_hands()
+	_draw_aim()
+	_draw_placed_hands()
+	_draw_burst()
+
+
+## What belongs to the frame rather than to the space: guides that span the whole
+## world, and the translucent band an armed pair would excise.
+func paint_once() -> void:
+	if world == null or world.animating():
+		return
+	var cs: float = world.base.cell_size
+	var world_px := Vector2(world.base.grid_size) * cs
+	for entry in _hands_down:
+		if entry["at"] != null:
+			_draw_guides(Vector2(entry["at"]), world_px)
+	for pair in world.primed:
+		var ca = world.anchor_point(pair["a"])
+		var cb = world.anchor_point(pair["b"])
+		if ca == null or cb == null:
+			continue          # half of it is elsewhere; there is no band to draw
+		_draw_band(Vector2(ca), Vector2(cb), world_px)
 
 
 ## A fuse, as a 0..1 throb. Frequency ramps with how far through that pair is, so it
@@ -74,90 +119,61 @@ func _pulse_at(p: float) -> float:
 ## does — it reports the cell open if anything there can actually come out.
 func _draw_seam_markers() -> void:
 	var cs: float = world.base.cell_size
-	var markers: Dictionary = world.seam_markers()
-	for cell in markers:
+	for cell in _markers:
 		var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
 		_draw_diamond(center, 12.0,
-			Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
+			Color("59e0d0") if bool(_markers[cell]) else Color("e06a6a", 0.9))
 
 
 ## Doors are warp POINTS riding tile centers: drawn only where the point
 ## strictly resolves in the current view (a split door draws nowhere — it is
-## dormant). Inside a subspace the glyph repeats across the wrap copies.
-func _draw_doors(offsets: Array) -> void:
-	for id in world.doors:
-		var wp = world.door_point_here(id)
-		if wp == null:
-			continue
-		for off in offsets:
-			var p: Vector2 = Vector2(wp) + off
-			draw_arc(p, 12.0, 0, TAU, 20, Color("7ce07c"), STROKE)
-			draw_circle(p, HAIR, Color("7ce07c", 0.9))
+## dormant).
+func _draw_doors() -> void:
+	for at in _doors:
+		draw_arc(at, 12.0, 0, TAU, 20, Color("7ce07c"), STROKE)
+		draw_circle(at, HAIR, Color("7ce07c", 0.9))
 
 
 ## Hands lying in the world — caches the world shipped and hands that popped out of a
 ## burst alike, drawn through `HandOrbit.draw_hand` so a hand on the ground is
-## pixel-identical to one riding beside you. They repeat across the wrap copies like
-## doors do, because a strip is a cylinder and so is everything on it.
-func _draw_loose_hands(offsets: Array) -> void:
+## pixel-identical to one riding beside you.
+func _draw_loose_hands() -> void:
 	for entry in world.loose_hand_points():
-		for off in offsets:
-			HandOrbit.draw_hand(self, Vector2(entry["pos"]) + off, entry["pickup"].kind)
+		HandOrbit.draw_hand(self, Vector2(entry["pos"]), entry["pickup"].kind)
 
 
 ## The burst: a ring that snaps out to `BURST_RADIUS` and fades. It is the only thing
 ## that tells you how far the release reached, and it is drawn AFTER the fact, so its
 ## job is to confirm what just happened rather than to aim anything.
-func _draw_burst(offsets: Array) -> void:
+func _draw_burst() -> void:
 	var t: float = world.burst_flash()
 	if t <= 0.0:
 		return
 	var grow := 1.0 - t
 	var r: float = world.BURST_RADIUS * (0.35 + 0.65 * sqrt(grow))
-	var col := Color("ffd27f", t * 0.8)
-	for off in offsets:
-		draw_arc(world.player.global_position + off, r, 0, TAU, 40, col, STROKE)
+	draw_arc(world.player.global_position, r, 0, TAU, 40, Color("ffd27f", t * 0.8), STROKE)
 
 
-## Inside the subspace: seam anchors of interior folds (every wrap copy), and
-## the OUTER fold's anchor point on the glue — both original anchors coincide
-## there; F at the white diamond unfolds the subspace.
-func _draw_subspace_markers(offsets: Array) -> void:
-	var cs: float = world.base.cell_size
+## The way out of a fold: the outer fold's anchor point on the glue, where both
+## of its original anchors coincide. A burst in reach of the white diamond opens
+## the subspace; red means an inner fold is crossing the seam and holding it shut.
+func _draw_exit_anchor() -> void:
 	var outer: Fold = world.sub_fold
 	if outer == null:
 		return
-	var exit_ok: bool = world.exit_blocker() == null
-	# The glue ring lights when a burst from here would reach it — the exit is in
+	var col := Color(1, 1, 1, 0.95) if _exit_ok else Color("e06a6a", 0.95)
+	_draw_diamond(outer.crease_point1, 12.0, col)
+	# The ring lights when a burst from here would reach it — the exit is in
 	# range, not aimed at.
-	var glue_in_reach: bool = world.glue_within_burst()
-	var markers: Dictionary = world.seam_markers()
-	for off in offsets:
-		var glue_col := Color(1, 1, 1, 0.95) if exit_ok else Color("e06a6a", 0.95)
-		_draw_diamond(outer.crease_point1 + off, 12.0, glue_col)
-		if glue_in_reach:
-			draw_arc(outer.crease_point1 + off, 20.0, 0, TAU, 24, glue_col, STROKE)
-		for cell in markers:
-			var center: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs + off
-			_draw_diamond(center, 12.0,
-				Color("59e0d0") if bool(markers[cell]) else Color("e06a6a", 0.9))
+	if world.glue_within_burst():
+		draw_arc(outer.crease_point1, 20.0, 0, TAU, 24, col, STROKE)
 
 
-## Point markers here repeat across the wrap copies, so a player copy is never
-## shown standing next to an aim ring that isn't there. The full-extent guides
-## and the preview band do NOT: repeated they would tile the screen with lines
-## and stack their alpha, and they read fine drawn once in the band you occupy.
-func _draw_anchor_and_preview(offsets: Array) -> void:
+## Where a tap would put a hand, what a burst from here would reach, and how far
+## through a hold the key is.
+func _draw_aim() -> void:
 	var cs: float = world.base.cell_size
-	var world_px := Vector2(world.base.grid_size) * cs
-
-	# Where a tap would put a hand (follows pointing continuously).
-	var cand: Vector2i = world.candidate_anchor()
-	var cand_center: Vector2 = (Vector2(cand) + Vector2(0.5, 0.5)) * cs
-
-	# Seams a burst from here would reach. The burst is not aimed, so what the ring
-	# marks is REACH, not a target — walk closer and more of them light up.
-	var in_reach: Array = world.seams_within_burst()
+	var cand_center: Vector2 = (Vector2(world.candidate_anchor()) + Vector2(0.5, 0.5)) * cs
 
 	# The aim ring takes the colour of the hand you would put down, so you can see
 	# what kind of fold you are about to start before you start it — and reddens when
@@ -167,61 +183,50 @@ func _draw_anchor_and_preview(offsets: Array) -> void:
 	if next_hand >= 0:
 		aim_col = HandTypes.color(next_hand)
 		aim_col.a = 0.45
+	draw_arc(cand_center, 16.0, 0, TAU, 24, aim_col, HAIR)
+
+	# Seams a burst from here would reach. The burst is not aimed, so what the ring
+	# marks is REACH, not a target — walk closer and more of them light up.
+	for entry in _in_reach:
+		var seam: Vector2 = (Vector2(entry["fold"].meeting_pos) + Vector2(0.5, 0.5)) * cs
+		draw_arc(seam, 20.0, 0, TAU, 24,
+			Color("59e0d0") if bool(entry["ok"]) else Color("e06a6a", 0.7), STROKE)
+
 	# A hold in progress fills a ring: the two gestures are distinguishable while
 	# the key is still down, so a hold never lands as a surprise.
 	var hold: float = world.hold_progress()
-
-	for off in offsets:
-		draw_arc(cand_center + off, 16.0, 0, TAU, 24, aim_col, HAIR)
-		for fold in in_reach:
-			var seam: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs
-			var ok: bool = world.can_unfold_fold(fold)
-			draw_arc(seam + off, 20.0, 0, TAU, 24,
-				Color("59e0d0") if ok else Color("e06a6a", 0.7), STROKE)
-		if hold > 0.0:
-			draw_arc(cand_center + off, 23.0, -PI / 2.0, -PI / 2.0 + TAU * hold, 32,
-				Color("ffd27f"), STROKE)
-
-	# Every hand you have put down, in its OWN kind's colour, so a mixed pair reads
-	# as a mixed pair — with soft axis guides (folds may be diagonal; the guides just
-	# help line up straight ones).
-	for entry in world.unpaired:
-		_draw_placed_hand(entry, 0.0, offsets, cs, world_px)
-
-	# Armed pairs pulse, and the pulse is that pair's own fuse: a slow breath winding
-	# up to a flutter as it comes due. Several can be armed at once and they beat at
-	# different rates, which is how you see which is about to go — no number could say
-	# that as quickly, and there is nothing to read but the beat.
-	for pair in world.primed:
-		var pulse: float = _pulse_at(world.fuse_progress_of(pair))
-		var ca = _draw_placed_hand(pair["a"], pulse, offsets, cs, world_px)
-		var cb = _draw_placed_hand(pair["b"], pulse, offsets, cs, world_px)
-		if ca == null or cb == null:
-			continue          # half of it is elsewhere; there is no band to draw
-		_draw_band(Vector2(ca), Vector2(cb), world_px)
+	if hold > 0.0:
+		draw_arc(cand_center, 23.0, -PI / 2.0, -PI / 2.0 + TAU * hold, 32,
+			Color("ffd27f"), STROKE)
 
 
-## One placed hand: its ring (swelling with the pulse), its centre dot, and the soft
-## full-extent guides. Returns where it was drawn, or null if it is not in this frame.
-func _draw_placed_hand(entry, pulse: float, offsets: Array, cs: float, world_px: Vector2):
-	var wp = world.anchor_point(entry)
-	if wp == null:
-		return null
-	var c: Color = HandTypes.color(int(entry["hand"]))
-	var at := Vector2(wp)
+## Every hand you have put down, in its OWN kind's colour, so a mixed pair reads as a
+## mixed pair. Armed pairs pulse on that pair's own fuse: a slow breath winding up to
+## a flutter as it comes due. Several can be armed at once and they beat at different
+## rates, which is how you see which is about to go — no number could say that as
+## quickly, and there is nothing to read but the beat.
+func _draw_placed_hands() -> void:
+	for entry in _hands_down:
+		if entry["at"] == null:
+			continue          # pinned somewhere this frame cannot show
+		var at := Vector2(entry["at"])
+		var pulse: float = entry["pulse"]
+		var c: Color = HandTypes.color(int(entry["kind"]))
+		draw_arc(at, 16.0 + pulse * 5.0, 0, TAU, 24, c, STROKE)
+		if pulse > 0.0:
+			draw_circle(at, 3.0 + pulse * 2.5, c)
+
+
+## Soft full-extent guides through a placed hand. Folds may be diagonal; the guides
+## just help line up straight ones.
+func _draw_guides(at: Vector2, world_px: Vector2) -> void:
 	var guide := Color(1, 1, 1, 0.08)
 	draw_line(Vector2(0, at.y), Vector2(world_px.x, at.y), guide, HAIR)
 	draw_line(Vector2(at.x, 0), Vector2(at.x, world_px.y), guide, HAIR)
-	for off in offsets:
-		draw_arc(at + off, 16.0 + pulse * 5.0, 0, TAU, 24, c, STROKE)
-		if pulse > 0.0:
-			draw_circle(at + off, 3.0 + pulse * 2.5, c)
-	return at
 
 
 ## The translucent band an armed pair would excise: a parallelogram spanning well past
-## the view, at whatever angle the pair implies. Drawn once, not per wrap copy —
-## repeated it would tile the screen and stack its alpha.
+## the view, at whatever angle the pair implies.
 func _draw_band(a_center: Vector2, b_center: Vector2, world_px: Vector2) -> void:
 	if a_center.is_equal_approx(b_center):
 		return
@@ -235,24 +240,17 @@ func _draw_band(a_center: Vector2, b_center: Vector2, world_px: Vector2) -> void
 	]), band)
 
 
-## Inside the subspace: mark the identified crease lines (the glue) so the
-## wrap reads as a real join, not a rendering glitch.
-func _draw_subspace_glue(offsets: Array) -> void:
-	var fold: Fold = world.sub_fold
-	if fold == null:
-		return
-	var n := fold.crease_normal
-	var t := Vector2(-n.y, n.x)
-	var c1 := fold.crease_point1.dot(n)
-	var lo: float = world.sub_extent["min"] - 2.0 * world.base.cell_size
-	var hi: float = world.sub_extent["max"] + 2.0 * world.base.cell_size
-	for off in offsets:
-		draw_line(n * c1 + t * lo + off, n * c1 + t * hi + off, Color("59e0d0", 0.55), HAIR)
+## The identified crease lines — the glue — so the wrap reads as a real join
+## rather than a rendering glitch. One pair per axis of the lattice: two lines
+## down a cylinder, and all four walls of a torus when you are folded in twice.
+func _draw_glue() -> void:
+	for seg in world.glue_lines():
+		draw_line(seg[0], seg[1], Color("59e0d0", 0.55), HAIR)
 
 
 ## Marker diamonds are snapped to the art-pixel grid: a diamond is only three
 ## pixels across, and half a pixel of drift is the difference between a shape
-## and a smear.
+## and a smear. Lattice offsets are whole cells, so a copy is snapped too.
 func _draw_diamond(center: Vector2, r: float, col: Color) -> void:
 	var c := PixelArt.snap_round(center)
 	var pts := PackedVector2Array([

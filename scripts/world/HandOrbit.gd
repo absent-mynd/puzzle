@@ -1,4 +1,4 @@
-class_name HandOrbit extends Node2D
+class_name HandOrbit extends WrapCanvas
 
 ## HandOrbit
 ##
@@ -14,6 +14,13 @@ class_name HandOrbit extends Node2D
 ## redrawn from scratch each frame. These have state of their own — a position and a
 ## velocity that persist between frames — and mixing the two would make the overlay
 ## something you have to update rather than something you can just read.
+##
+## It is a `WrapCanvas`, which is the whole of what it knows about folds: it paints
+## the hands beside the body and they turn up in every copy of a strip, because the
+## body does. Before that base class existed this node was the standing example of
+## the problem — a new object added to the world that quietly appeared in one band
+## and nowhere else, while the terrain, the body and the markers each carried their
+## own copy of the repeat loop.
 ##
 ## The integration itself is `WorldCore.spring_step` / `WorldCore.hand_orbit_offset`,
 ## so the motion is pure and testable and this file is only the drawing.
@@ -67,7 +74,7 @@ func follow(hands: Array, body: Vector2, motion: Vector2, facing: int, delta: fl
 	queue_redraw()
 
 
-func _draw() -> void:
+func paint() -> void:
 	for slot in _slots:
 		if slot["held"]:
 			draw_hand(self, slot["pos"], int(slot["type"]))

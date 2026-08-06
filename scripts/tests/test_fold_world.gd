@@ -43,14 +43,17 @@ func test_pinch_applies_fold_for_real_and_exit_restores() -> void:
 	_pinch_over_pit()
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Player in the strip is folded IN")
 	assert_eq(world.folds.size(), 1, "The pinch fold IS applied to the world")
-	assert_gt(world.sub_geo.get_child_count(), 0, "Subspace geometry exists")
-	assert_false(world.world_geo.visible, "Outside world is hidden")
+	assert_gt(world.geo.layers().size(), 0, "The strip's geometry is what is drawn")
+	var inside: int = world.current_pieces.size()
+	assert_false(world.lattice.is_flat(), "...and the space it draws repeats: you are in a band")
 
 	world.player.teleport(Vector2(15.5 * CS, 12.5 * CS), false)
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Exit returns to the world")
 	assert_eq(world.folds.size(), 0, "Exit unfolds the outer fold")
-	assert_true(world.world_geo.visible, "World visible again")
+	assert_true(world.lattice.is_flat(), "The region does not repeat")
+	assert_gt(world.current_pieces.size(), inside,
+		"...and the whole region is back on screen, not just the strip")
 	assert_almost_eq(world.player.global_position.x, 15.5 * CS, 130.0,
 		"Moving inside the fold moved you in the world")
 
@@ -410,7 +413,7 @@ func test_subspace_wrap_teleports_across_the_glue() -> void:
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Pinched in")
 	# Band along x is (10.5, 18.5) cells. Step past the far crease and wrap.
 	world.player.teleport(Vector2(18.9 * CS, 12.5 * CS), false)
-	world._subspace_wrap_and_turnback()
+	world._wrap_body()
 	assert_almost_eq(world.player.global_position.x, (18.9 - 8.0) * CS, 0.01,
 		"Crossing the glue wraps one band width back")
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Wrap does not eject")
@@ -425,33 +428,38 @@ func test_wrap_moves_the_camera_with_the_body() -> void:
 	var lag: Vector2 = world.player.camera_position() - world.player.global_position
 	assert_ne(lag, Vector2.ZERO, "Camera is lagging behind (nothing snapped it here)")
 
-	world._subspace_wrap_and_turnback()
+	world._wrap_body()
 	assert_almost_eq(
 		(world.player.camera_position() - world.player.global_position - lag).length(),
 		0.0, 0.01, "The wrap preserved the camera's offset from the body exactly")
 
 
-func test_player_is_drawn_in_every_visible_copy_of_the_strip() -> void:
+func test_everything_that_moves_is_drawn_in_every_copy_of_the_strip() -> void:
+	# There is no ghost list any more, and no per-object repeat loop. Everything
+	# that moves is a WrapCanvas and gets the copies handed to it — so the test is
+	# that they ALL have them, including the hands floating beside the body, which
+	# is the object that used to be left out.
 	_pinch_over_pit()
-	assert_eq(world.sub_player_ghosts.size(), 2 * world.sub_copies,
-		"One drawn copy of the player per band, minus the one the body is in")
+	var offsets: Array = world.wrap_offsets
+	assert_gt(offsets.size(), 1, "The strip repeats, so there is more than one copy")
+	assert_eq(offsets[0], Vector2.ZERO, "...and the copy you are in is one of them")
 
-	world.player.teleport(Vector2(15.5 * CS, 12.5 * CS), false)
-	world._update_player_ghosts()
+	for canvas in world._wrap_canvases():
+		assert_eq(canvas.offsets, offsets,
+			"%s stands in every copy of the space" % canvas.get_class())
+
 	var n: Vector2 = world.sub_fold.crease_normal
 	var gap: float = world.sub_fold.gap_distance()
-	# Each copy sits at the body's position offset by a whole number of bands.
-	for ghost in world.sub_player_ghosts:
-		var delta: Vector2 = ghost.global_position - world.player.global_position
-		var k: float = delta.dot(n) / gap
-		assert_almost_eq(delta.distance_to(n * (k * gap)), 0.0, 0.01,
-			"Copy is displaced along the crease normal only")
-		assert_almost_eq(k, roundf(k), 0.01,
-			"Copy sits a whole number of band widths from the body")
-		assert_ne(roundi(k), 0, "...and never on top of it")
+	for off in offsets:
+		var k: float = Vector2(off).dot(n) / gap
+		assert_almost_eq(Vector2(off).distance_to(n * (k * gap)), 0.01, 0.02,
+			"Copies are displaced along the crease normal only")
+		assert_almost_eq(k, roundf(k), 0.01, "...by a whole number of band widths")
 
 	world.try_exit()
-	assert_eq(world.sub_player_ghosts.size(), 0, "Copies are gone outside the fold")
+	assert_eq(world.wrap_offsets, [Vector2.ZERO], "One copy of a world that does not repeat")
+	for canvas in world._wrap_canvases():
+		assert_eq(canvas.offsets, [Vector2.ZERO], "...and every canvas paints once")
 
 
 func test_outside_unfold_splices_interiors() -> void:
@@ -1101,7 +1109,8 @@ func test_the_world_draws_through_the_pixel_viewport() -> void:
 		"sized in art pixels, for the zoom in force")
 	# Everything that is part of the WORLD renders inside it; the HUD does not,
 	# which is what keeps text legible over chunky tiles.
-	for node in [world.world_geo, world.sub_geo, world.player, world.overlay, world.light_rig]:
+	for node in [world.geo, world.player, world.player_visual, world.hand_orbit,
+			world.overlay, world.light_rig]:
 		assert_eq(node.get_parent(), world.pixel_view,
 			"%s draws at art-pixel resolution" % node.name)
 
@@ -1132,16 +1141,38 @@ func test_opening_the_frame_grows_the_target_and_never_moves_the_lens() -> void:
 
 
 func test_tiles_are_drawn_from_the_tileset_and_lit() -> void:
-	var textured := 0
-	for child in world.world_geo.get_children():
-		if not (child is Polygon2D):
-			continue
-		var vis: Polygon2D = child
+	var layers: Array = world.geo.layers()
+	assert_gt(layers.size(), 0, "the world drew some tiles")
+	var drawn := 0
+	for vis in layers:
 		assert_not_null(vis.texture, "every drawn fragment samples the tileset")
 		assert_eq(vis.uv.size(), vis.polygon.size(), "with one UV per vertex")
 		assert_not_null(vis.material, "and is drawn with a lit material")
-		textured += 1
-	assert_gt(textured, 0, "the world drew some tiles")
+		drawn += vis.polygons.size()
+	assert_gt(drawn, 100, "a whole region's worth of fragments")
+
+
+func test_the_sheet_is_batched_rather_than_a_node_per_fragment() -> void:
+	# A region is ~800 tiles and a strip is drawn again in every band it repeats
+	# into. One Polygon2D per fragment per copy meant thousands of nodes torn down
+	# and rebuilt on EVERY fold, which was the most expensive thing the game did.
+	# Only the lit material forces a second canvas item, so two is the ceiling.
+	assert_lte(world.geo.layers().size(), 2,
+		"the whole sheet is at most two canvas items — foreground and background")
+	var fragments := 0
+	for vis in world.geo.layers():
+		fragments += vis.polygons.size()
+	assert_gt(fragments, world.geo.layers().size() * 50,
+		"...carrying many fragments each, not one apiece")
+
+	_pinch_over_pit()
+	assert_lte(world.geo.layers().size(), 2,
+		"and a strip drawn in a dozen copies is still two")
+	var copied := 0
+	for vis in world.geo.layers():
+		copied += vis.polygons.size()
+	assert_gt(copied, world.wrap_offsets.size(),
+		"...with every copy's fragments batched into them")
 
 
 func test_lights_are_placed_in_the_world() -> void:
@@ -1177,9 +1208,12 @@ func test_a_lamp_folded_in_with_you_lights_the_inside() -> void:
 	assert_eq(_light_ids(), ["w_pit"],
 		"the lamp that was over the pit is in here with you, and the ones outside are not")
 	# The strip repeats across the glue, so its lights repeat with it — walking
-	# through the cylinder must not walk into a dark copy of a lit room.
-	var copies: int = 2 * world.SUB_LIGHT_COPIES + 1
-	assert_eq(world.lights_here().size(), copies, "one lamp per wrap copy")
+	# through the cylinder must not walk into a dark copy of a lit room. The near
+	# copies only: the shader takes the nearest handful, so copying every visible
+	# band would crowd out the ones actually lighting you.
+	assert_gt(world.lights_here().size(), 1, "the lamp repeats with the band it is in")
+	assert_lte(world.lights_here().size(), LightRig.MAX_LIGHTS,
+		"...but no further than the shader can carry")
 
 
 func test_the_vault_lamp_is_dark_from_the_overworld() -> void:
@@ -1264,9 +1298,22 @@ func test_the_fold_animation_draws_where_the_world_draws() -> void:
 
 	var layer: Node2D = world._anim["layer"]
 	assert_eq(layer.get_parent(), world.pixel_view,
-		"The animation layer draws inside the pixel viewport, like world_geo does")
-	assert_eq(layer.get_viewport(), world.world_geo.get_viewport(),
+		"The animation layer draws inside the pixel viewport, like the sheet does")
+	assert_eq(layer.get_viewport(), world.geo.get_viewport(),
 		"...which is to say: the same viewport the geometry it replaces was in")
+
+
+func test_the_fold_animation_is_batched_into_its_three_moving_parts() -> void:
+	# A flap moves by a translation, so it is one assignment per frame however
+	# many fragments it carries. Only the strip — which collapses onto the meeting
+	# line — touches vertices at all.
+	world.anim_enabled = true
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	var batches: Dictionary = world._anim["batches"]
+	assert_eq(batches.keys().size(), 3, "Two flaps and the strip between them")
+	for key in batches:
+		assert_lte((batches[key] as TileBatch).layers().size(), 2,
+			"%s is at most two canvas items, like the sheet it stands in for" % key)
 
 
 func test_a_fold_transition_steps_the_camera_back() -> void:

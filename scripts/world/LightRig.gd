@@ -10,16 +10,20 @@ class_name LightRig extends Node2D
 ## `BaseFrame` against whatever configuration is on screen (see `LightSource`),
 ## so a light folded out of the world simply stops being handed to the rig.
 ##
-## Four materials share one shader, so a single uniform upload lights everything:
+## TWO materials share one shader, so a single uniform upload lights everything:
 ##
-##                  world            inside a fold
-##     foreground   fg               fg_sub      (what stops you: walls, pins)
-##     background   bg               bg_sub      (what you move through: air,
-##                                                water, goals, plates)
+##     foreground (FG)   what stops you: walls, pins
+##     background (BG)   what you move through: air, water, goals, plates
 ##
 ## Background answers light more weakly than foreground. That difference is the
 ## only depth cue the flat world has, and it is what makes a lamp read as
 ## standing *in front of* the sheet rather than painted onto it.
+##
+## HOW DEEP you are folded in is a tint on the same two materials rather than a
+## second pair of them (`set_depth`). Only one level is ever on screen, so a
+## uniform says it; and because it is a uniform rather than a material choice,
+## folding yourself deeper than one layer tints further with no new state — the
+## world outside is white, one fold in is lavender, two is more so.
 ##
 ## Everything not in this table — the player, the overlay's anchors and seam
 ## diamonds, the lamp glyphs themselves — is drawn unlit on purpose. Lighting is
@@ -30,18 +34,27 @@ const SHADER_PATH := "res://assets/shaders/pixel_lit.gdshader"
 ## Must match `MAX_LIGHTS` in the shader.
 const MAX_LIGHTS := 12
 
+## The two material groups. Strings rather than an enum because they are also the
+## keys `TileBatch` groups its fragments by.
+const FG := "fg"
+const BG := "bg"
+
 ## Ambient floor per surface class. Unlit ground stays clearly readable.
 const AMBIENT_FG := Vector3(0.68, 0.70, 0.80)
 const AMBIENT_BG := Vector3(0.40, 0.43, 0.56)
 const GAIN_FG := 1.0
 const GAIN_BG := 0.70
 
-## Subspace hue shift, replacing the flat lerp-toward-lavender of the untextured
-## build. Applied as a tint uniform so it multiplies the tileset, not replaces it.
+## Hue shift per level of folded-in-ness, applied as a tint uniform so it
+## multiplies the tileset rather than replacing it. Depth 0 is the overworld.
 const TINT_WORLD := Vector3(1.0, 1.0, 1.0)
 const TINT_SUB := Vector3(0.86, 0.80, 1.12)
+## How far a second and third layer push past the first. Sub-linear on purpose:
+## deep folds should still be legible, and the tint is a cue, not a filter.
+const TINT_DEPTH_FALLOFF := 0.55
 
 var cell_size := 64.0
+var _depth := 0
 
 var _shader: Shader = null
 var _materials: Dictionary = {}
@@ -63,34 +76,63 @@ func _ready() -> void:
 		# and the world stays fully playable.
 		push_warning("LightRig: %s missing — rendering unlit." % SHADER_PATH)
 		return
-	for key in ["fg", "bg", "fg_sub", "bg_sub"]:
+	for key in [FG, BG]:
 		_materials[key] = _make_material(key)
+	_apply_tint()
 	_upload()
 
 
 func _make_material(key: String) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
 	mat.shader = _shader
-	var background := key.begins_with("bg")
+	var background := key == BG
 	mat.set_shader_parameter("ambient", AMBIENT_BG if background else AMBIENT_FG)
 	mat.set_shader_parameter("light_gain", GAIN_BG if background else GAIN_FG)
-	mat.set_shader_parameter("tint", TINT_SUB if key.ends_with("_sub") else TINT_WORLD)
+	mat.set_shader_parameter("tint", TINT_WORLD)
 	mat.set_shader_parameter("pixel_size", PixelArt.WORLD_PER_PIXEL)
 	return mat
 
 
-## The material a fragment of `type` should draw with. Null when the shader is
+## The material for one of the two groups (`FG` / `BG`). Null when the shader is
 ## unavailable — callers then draw unlit rather than not at all.
+func material_for_key(key: String) -> ShaderMaterial:
+	return _materials.get(key, null)
+
+
+## The material a fragment of `type` should draw with.
 ##
 ## The split follows the registry's walkability, not the type list: what stops
 ## you is foreground, what you move through is background. Asking `TileTypes`
 ## also means a walkable tile that carries a motif (a goal, a pressure plate)
 ## does not brighten its whole cell relative to the air around it.
-func material_for(type: int, in_subspace: bool) -> ShaderMaterial:
-	var key := "bg" if TileTypes.is_walkable(type) else "fg"
-	if in_subspace:
-		key += "_sub"
-	return _materials.get(key, null)
+func material_for(type: int) -> ShaderMaterial:
+	return material_for_key(BG if TileTypes.is_walkable(type) else FG)
+
+
+## How many folds deep the space on screen is: 0 for the region, 1 inside a fold,
+## 2 inside a fold inside one. Tints the sheet further with each layer, so how far
+## in you are is legible without a readout.
+func set_depth(depth: int) -> void:
+	if depth == _depth:
+		return
+	_depth = maxi(depth, 0)
+	_apply_tint()
+
+
+func depth() -> int:
+	return _depth
+
+
+## Compound the per-layer shift, with each layer pushing less than the one above.
+func _apply_tint() -> void:
+	var tint := TINT_WORLD
+	var strength := 1.0
+	for _i in range(_depth):
+		tint = tint.lerp(Vector3(tint.x * TINT_SUB.x, tint.y * TINT_SUB.y,
+			tint.z * TINT_SUB.z), strength)
+		strength *= TINT_DEPTH_FALLOFF
+	for key in _materials:
+		(_materials[key] as ShaderMaterial).set_shader_parameter("tint", tint)
 
 
 # ---------------------------------------------------------------------------

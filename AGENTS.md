@@ -2,7 +2,7 @@
 
 **START HERE.** Essential context for anyone (human or agent) working on this project.
 
-**Last Updated:** 2026-08-05
+**Last Updated:** 2026-08-06
 **Engine:** Godot 4.3 · **Language:** GDScript · **Approach:** TDD
 
 ---
@@ -117,6 +117,7 @@ instead.
 | The derivation engine | `scripts/model/FoldReplay.gd` |
 | Derived fragments / queryable state | `scripts/model/FoldedPiece.gd`, `FoldedState.gd` |
 | **Base ↔ derived point transport** | `scripts/model/BaseFrame.gd` |
+| **How a space repeats** (cylinder / torus) | `scripts/model/FoldLattice.gd` |
 | What a tile IS and DOES (the registry) | `scripts/model/TileTypes.gd` |
 | **The hand registry** (one file per kind) | `scripts/model/HandTypes.gd` |
 | A hand lying in the world (an occupant) | `scripts/model/HandPickup.gd` |
@@ -132,6 +133,9 @@ instead.
 | Player physics body | `scripts/world/PlayerBody.gd` |
 | Anchors, previews, seam markers, the fuse pulse | `scripts/world/WorldOverlay.gd` |
 | The hands that float beside you (style only) | `scripts/world/HandOrbit.gd` |
+| **A canvas that repeats with the space** | `scripts/world/WrapCanvas.gd` |
+| The sheet, batched into two canvas items | `scripts/world/TileBatch.gd` |
+| The blob, drawn wherever the space says it is | `scripts/world/PlayerVisual.gd` |
 | How big an art pixel is | `scripts/world/PixelArt.gd` |
 | The tileset: kinds, variants, base-space UVs | `scripts/world/TileAtlas.gd` |
 | Lit materials, light uniforms, lamp glyphs | `scripts/world/LightRig.gd` |
@@ -199,7 +203,36 @@ region they had just left. Stuck in a wall, or off the map.
 If you add anything to that tail, ask whether it can start a transition; if it can,
 the same guard has to follow it.
 
-### 8. Anything in the world is an occupant, resolved through `BaseFrame`
+### 8. One space is on screen, and `FoldLattice` says how it repeats
+There is no world path and subspace path. There is the **current level** — the
+region is simply the level whose `context` is empty — and one set of everything
+derived from it. `FoldLattice` is the whole of what "this space repeats" means:
+no periods in a region, one inside a fold, **two inside a fold whose creases run
+across the fold outside it**, which is a torus. Copies, colliders, the body's
+wrap-around, the camera's framing and the lights all come off that one object.
+
+This is why folding yourself deeper needed no new rendering, and why `do_fold`
+handles a pinch at depth three the same way it handles one at the surface.
+
+### 9. The wrap is not each object's problem
+Two mechanisms, and the rule between them is short:
+
+> **Anything that MOVES repeats through `WrapCanvas`. Anything STATIC bakes its
+> copies at rebuild (`TileBatch`).**
+
+`WrapCanvas` subclasses override `paint()` and draw in ordinary world
+coordinates; the base class repeats those commands at every lattice offset. Put
+a new thing in the world and it appears in every band without being asked.
+Before this there were four separate repeat loops — terrain copies, a player
+ghost list, light offsets, the overlay's `_copy_offsets` — and `HandOrbit`, the
+newest object, had none, so the hands you carry vanished from every copy but
+one. **If you add a drawer and find yourself writing a loop over copies, you
+have written the bug this replaced.**
+
+Register new canvases in `FoldWorld._wrap_canvases()` — one list, so forgetting
+is visible.
+
+### 10. Anything in the world is an occupant, resolved through `BaseFrame`
 Doors and lights have no world position. They store a base identity plus a point
 inside that tile, and where they *are* is a question asked of the current
 fragment list. That is why a light folded away leaves the overworld and lights
@@ -296,15 +329,27 @@ world (unchanged: CELL = 64 world units)
         ▼
   SubViewport, RESIZED per zoom  ← 1 art pixel = 4 world units = WORLD_PER_PIXEL
         │  320x180 at 1:1          the LENS never moves; the target grows instead
-        ├── tiles: Polygon2D + tileset texture + base-space UVs (TileAtlas)
-		│            uv = (polygon - src_offset) mapped into the tile's atlas cell
-		└── lit by pixel_lit.gdshader (ambient + snapped, quantized, dithered lights)
-		│
-		▼
+        │
+        ├── TileBatch   the sheet: ALL fragments of ALL copies in two Polygon2Ds
+        │                 (one per lit material), base-space UVs from TileAtlas,
+        │                 the wrap baked into the vertices
+        ├── StaticBody2D  colliders, domain + the copies one step out
+        └── WrapCanvas×n  everything that moves — the blob, the hands you carry,
+                          the markers — each painted once per lattice offset
+        │
+        ▼
   TextureRect, nearest             HUD renders OUTSIDE this, at window resolution
 ```
 
-Three rules worth keeping:
+**Cost.** The sheet is two canvas items whatever the region size and however many
+copies a wrap draws; a fold transition is three batches, and two of the three move
+by setting a position. What this replaced built one `Polygon2D` per fragment per
+copy — ~800 for a region, ×49 inside a fold — and tore the whole lot down on every
+single fold.
+
+Four rules worth keeping:
+
+- **The wrap belongs to the space, not to the objects in it.** See §9 above.
 
 - **The camera's zoom is fixed; the render target resizes.** Inside a render
   target the size of an art pixel is purely a function of zoom, so moving the lens
@@ -330,7 +375,12 @@ These are live, not settled. Do not close them silently in a refactor.
 - **Fold extent is infinite-crease.** A fold here guts a structure over there. This
   is deliberately unresolved — it is the argument for barrier-scoped fold regions,
   and it needs to be *felt* before it is designed away.
-- **No nested pinch.** You cannot fold yourself deeper while already inside a fold.
+- **How deep nesting should go before it stops being legible** is untested by play.
+  It works to arbitrary depth and the tint deepens with each layer, but three folds
+  in is a claim about the game, not just about the code.
+- **A torus has no turn-back.** Fold yourself in across the grain and the space has
+  no ends at all — every direction wraps. Whether that reads as elegant or as being
+  lost is a playtesting question.
 - **Triggers are world-level only.** A trigger inside a subspace would have to
   splice folds into an interior list mid-cascade; the resolver does not model that.
 - **Unfold animation** plays only for newest-fold unfolds at world level; mid-stack

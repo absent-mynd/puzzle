@@ -1,11 +1,11 @@
 # Project Status — Space Folding
 
-**Last Updated:** 2026-08-05
+**Last Updated:** 2026-08-06
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **404 passing** / 404 (0 failing, 0 risky), 20 scripts, ~14.5s.
+**Tests:** **449 passing** / 449 (0 failing, 0 risky), 23 scripts, ~14.5s.
 
 ---
 
@@ -23,6 +23,7 @@ What exists and works today:
 | Base-frame transport (`BaseFrame`) | ✅ Solid, well covered |
 | Side-view world: gravity, riding flaps, depenetration | ✅ Playable |
 | Subspaces (fold interiors as real places) | ✅ Playable |
+| **Nesting: folding yourself in, and in again** | ✅ Playable, any depth, ⚙️ untuned |
 | Regions + doors (recursive partner resolution) | ✅ Playable |
 | Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
 | Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
@@ -35,6 +36,8 @@ What exists and works today:
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
 | Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
+| **One wrap for the whole view** (`FoldLattice` / `WrapCanvas`) | ✅ In the world |
+| **Batched sheet** — two canvas items, not one per fragment | ✅ In the world |
 | Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
 | Hand-drawn tilesheet | ⚙️ Layout + drop-in path done; sheet is generated in code |
 | Audio | ⚙️ `AudioManager` + `Settings` carried over; no assets |
@@ -45,11 +48,14 @@ What exists and works today:
 
 ## Test suite
 
-404 passing across 20 scripts. Composition:
+449 passing across 23 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 87 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
+| `test_fold_world` | 89 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
+| `test_nested_folds` | 18 | **Scene-driven**: folding yourself deeper, the torus, surfacing a layer at a time, the ledger and the renderer at depth |
+| `test_fold_lattice` | 14 | How a space repeats: descent, orthogonality, wrapping, copies, framing |
+| `test_tile_batch` | 11 | The batched sheet: grouping, UVs, baked copies, per-copy deformation |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
 | `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
@@ -80,6 +86,70 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-06 — Folds inside folds inside folds; one wrap for the whole view
+
+Two things that turned out to be the same thing. Nesting was blocked by there
+being *two* of everything — a world path and a subspace path — and the wrap was
+kludgy for exactly the same reason: four places re-implemented "repeat across the
+copies", and the newest object in the game had forgotten to.
+
+**One space, at any depth.**
+
+- **New `FoldLattice`** (kernel): the periodic structure of a space, stated once.
+  No periods in a region, one inside a fold, **two inside a fold whose creases run
+  across the fold outside it** — a torus. Descent is a one-line rule: a period
+  survives into a fold's interior exactly when it runs ALONG the new band
+  (`P · n == 0`). A consequence worth knowing: the axes are then always
+  orthogonal, so wrapping is a per-axis `floor` rather than a lattice reduction,
+  and every period is a whole number of cells even for a diagonal crease.
+- **`do_sub_fold` is `do_fold`.** The world path and the subspace path collapsed
+  into one, and with them `current_pieces`/`sub_pieces`, `rebuild_world`/
+  `rebuild_sub`, `wall_polys`/`sub_wall_polys`, and the rest of the pairs. The
+  region is simply the level whose context is empty. **Folding yourself deeper is
+  not a feature that was added; it is the refusal that was deleted** — there was
+  no longer a second code path for it to be missing from.
+- Surfacing comes up **one layer at a time**, animating at any depth (drawn
+  against the parent space's copies), and the sheet's tint deepens with each
+  layer so how far in you are is legible without a readout.
+- The exit rules, the unfold-blocking rules and the hand ledger needed no changes
+  at all: all three were already written against "the current level".
+
+**One wrap, and it is not the objects' problem.**
+
+> Anything that MOVES repeats through `WrapCanvas`. Anything STATIC bakes its
+> copies at rebuild (`TileBatch`).
+
+- **New `WrapCanvas`**: a canvas item that paints itself once per lattice offset.
+  Subclasses override `paint()` and draw in ordinary world coordinates.
+  `WorldOverlay`, `HandOrbit` and the new `PlayerVisual` are the three; the ghost
+  list, `_copy_offsets`, the per-copy terrain nodes and the hand-rolled light
+  offsets are all gone.
+- **The hands floating beside you now appear in every band**, which they never
+  did. That took one word — `extends WrapCanvas` — and is the point of the whole
+  exercise.
+- `prepare()` gathers the expensive queries once per frame rather than once per
+  copy; `paint_once()` is for what belongs to the frame rather than the space
+  (the preview band, the full-extent guides).
+
+**And it got a great deal cheaper.**
+
+- **New `TileBatch`**: the entire sheet is **two** `Polygon2D`s — one per lit
+  material — using `Polygon2D.polygons` to carry every fragment of every copy over
+  one vertex array. It was one node per fragment per copy: ~800 for a region,
+  ×49 inside a fold, torn down and rebuilt on **every single fold**.
+- The fold transition is **three batches** (A flap, B flap, strip) instead of a
+  node per sub-fragment. Two of the three move by setting a position; only the
+  strip touches vertices, and its deformation is applied per copy so each band
+  collapses onto its own seam.
+- `LightRig` went from four materials to two, with depth as a tint uniform — which
+  is what lets an arbitrary nesting depth read differently with no new state.
+- Colliders are one body whose shapes cover the domain and the copies one step
+  out, and they are detached before being freed rather than lingering a frame.
+- Full suite: **16.0s → ~14.5s**, with 45 more tests in it.
+
+**New tests:** `test_fold_lattice` (14), `test_nested_folds` (18),
+`test_tile_batch` (11).
 
 ### 2026-08-05 — A fold in flight owns the frame
 
