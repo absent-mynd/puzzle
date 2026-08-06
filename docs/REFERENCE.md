@@ -38,7 +38,8 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | **Base ↔ derived point transport.** `transport()`, `world_point_from_base()`, `resolve_base_point()`, `piece_at()` | `BaseFrame.gd` |
 | **The tile registry.** walkable / merge_rank / blocks_fold / blocks_anchor / on_enter / grant | `TileTypes.gd` |
 | **The hand registry.** One entry per kind: colour, fuse, authoring key. `fuse_for()` mixes a pair | `HandTypes.gd` |
-| **The slot ledger.** `SLOTS`, `free_slots()`, `first_empty()`, `can_receive()`, `held_in()`, `total()` — conservation arithmetic, nothing stored | `AnchorStock.gd` |
+| A hand lying in the world: base identity + point in tile, `dropped_at()`, `resolve_all()`. One object for authored caches and hands a burst popped out | `HandPickup.gd` |
+| **The slot ledger.** `SLOTS`, `free_slots()`, `first_empty()`, `held_in()`, `total()` — conservation across slots / pinned / folds / ground, nothing stored | `AnchorStock.gd` |
 | Entities that ride base tiles: split-on-unfold latents, carried geometry, footprints | `Occupants.gd` |
 | Fold-on-enter cascade: channels, fire-once guard, bounded fixpoint | `TriggerResolver.gd` |
 | Authored world: regions (ASCII rows), doors, pre-placed folds, lights, `starting_hands`; JSON round trip | `WorldData.gd` |
@@ -58,11 +59,11 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 
 | Concern | File |
 |---|---|
-| **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/hold verb, the hand ledger, the auto-commit fuse, caches, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
+| **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/burst verb, the hand ledger, the auto-commit fuse, loose hands, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
 | Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
 | Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing) | `PlayerBody.gd` |
-| Anchors, fold preview band, seam diamonds, glue lines, the hold-progress ring, the fuse pulse | `WorldOverlay.gd` |
-| The hands that float beside the player — presentation only | `HandOrbit.gd` |
+| Anchors, fold preview band, seam diamonds, glue lines, the hold-progress ring, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
+| The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |
 | **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping | `PixelArt.gd` |
 | **The tileset.** Kinds, variants, and base-space UVs for cut fragments | `TileAtlas.gd` |
 | Lit materials, per-frame light uniforms, lamp glyphs | `LightRig.gd` |

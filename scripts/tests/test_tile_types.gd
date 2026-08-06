@@ -110,30 +110,3 @@ func test_blocks_anchor_false_for_existing_types():
 func test_unknown_type_does_not_block_anchor():
 	assert_false(TileTypes.blocks_anchor(999), "unknown type does not block anchors by default")
 
-
-## --- Anchor caches ---
-
-const ANCHOR_CACHE := TileTypes.ANCHOR_CACHE
-
-
-func test_anchor_cache_registered_and_walkable():
-	assert_true(TileTypes.is_registered(ANCHOR_CACHE), "ANCHOR_CACHE should be registered")
-	assert_true(TileTypes.is_walkable(ANCHOR_CACHE), "you collect a cache by walking into it")
-
-
-func test_anchor_cache_names_its_reaction():
-	assert_eq(TileTypes.on_enter_kind(ANCHOR_CACHE), "anchors",
-		"the registry names the reaction; the world interprets it")
-
-
-func test_nothing_else_hands_you_anything():
-	for t in [NULL, EMPTY, WALL, WATER, GOAL, TileTypes.PIN, TileTypes.TRIGGER_FOLD,
-			UNANCHORABLE_FLOOR, UNANCHORABLE_WALL, 999]:
-		assert_eq(TileTypes.on_enter_kind(t), "" if t != TileTypes.TRIGGER_FOLD else "fold",
-			"type %d does not hand out hands" % t)
-
-
-func test_anchor_cache_is_inert_to_the_fold_rules():
-	# A cache folded away is not lost — it is inside the fold, waiting.
-	assert_false(TileTypes.blocks_fold(ANCHOR_CACHE), "a cache does not refuse folds")
-	assert_false(TileTypes.blocks_anchor(ANCHOR_CACHE), "nor refuse being anchored on")

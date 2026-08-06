@@ -45,6 +45,7 @@ extends Resource
 ##   "tile_data": Dictionary,     "x,y" -> per-tile params
 ##   "folds":     Array,          pre-placed folds, [{anchor1:{x,y}, anchor2:{x,y}}, ...]
 ##   "lights":    Array[LightSource], lights placed on base cells (see LightSource)
+##   "hands":     Array[HandPickup], loose hands lying on base cells (see HandPickup)
 ## }
 @export var regions: Dictionary = {}
 
@@ -65,12 +66,16 @@ func to_dict() -> Dictionary:
 		var out_lights: Array = []
 		for light in r.get("lights", []):
 			out_lights.append(light.to_dict())
+		var out_hands: Array = []
+		for pickup in r.get("hands", []):
+			out_hands.append(pickup.to_dict())
 		out_regions[id] = {
 			"rows": (r.get("rows", []) as Array).duplicate(),
 			"spawn": {"x": r.get("spawn", Vector2.ZERO).x, "y": r.get("spawn", Vector2.ZERO).y},
 			"tile_data": (r.get("tile_data", {}) as Dictionary).duplicate(true),
 			"folds": (r.get("folds", []) as Array).duplicate(true),
 			"lights": out_lights,
+			"hands": out_hands,
 		}
 	var out_doors: Dictionary = {}
 	for id in doors:
@@ -112,12 +117,18 @@ func from_dict(dict: Dictionary) -> void:
 			var light := LightSource.from_dict(entry)
 			light.region = id
 			lights.append(light)
+		var hands: Array = []
+		for entry in r.get("hands", []):
+			var pickup := HandPickup.from_dict(entry)
+			pickup.region = id
+			hands.append(pickup)
 		regions[id] = {
 			"rows": rows,
 			"spawn": Vector2(float(sp.get("x", 0.0)), float(sp.get("y", 0.0))),
 			"tile_data": r.get("tile_data", {}),
 			"folds": r.get("folds", []),
 			"lights": lights,
+			"hands": hands,
 		}
 
 	doors = {}
@@ -205,6 +216,18 @@ func starting_hand_slots() -> Array:
 	var out: Array = AnchorStock.empty_slots()
 	for i in range(mini(starting_hands.size(), out.size())):
 		out[i] = HandTypes.from_name(String(starting_hands[i]))
+	return out
+
+
+## A region's authored loose hands, as fresh unbound copies — same reasoning as
+## `lights_of`: binding writes into them, and a reset must re-bind from the authored
+## world rather than from whatever the last session did to it.
+func hands_of(id: String) -> Array:
+	var out: Array = []
+	if not regions.has(id):
+		return out
+	for pickup in regions[id].get("hands", []):
+		out.append(pickup.duplicate_pickup())
 	return out
 
 

@@ -61,6 +61,11 @@ const ANIM_TIME := 0.24
 ## How long the fold key must be held before it reads as "pull back" rather than
 ## "push in". Long enough that a committing tap never trips it by accident.
 const HOLD_TIME := 0.35
+## Reach of the release burst, in world units. About a tile — the burst is a thing you
+## do to the space you are standing in, not a thing you aim.
+const BURST_RADIUS := 1.2 * CS
+## How long the burst ring stays drawn.
+const BURST_FLASH := 0.35
 ## How many wrap copies either side of the strip carry their lights. The subspace
 ## repeats forever; its lamps do not need to.
 const SUB_LIGHT_COPIES := 2
@@ -84,15 +89,15 @@ var folds: Array[Fold] = []
 var seam_segs: Dictionary = {}
 ## fold_id -> Array[Fold]: a fold's interior folds, persistent while it lives.
 var interiors: Dictionary = {}
-## base_id -> grant: anchor caches already taken in THIS region (a view into
-## `collected_caches`).
-var collected: Dictionary = {}
+## Loose hands lying in THIS region (a view into `hand_pickups`).
+var loose_hands: Array = []
 var _spawn := Vector2.ZERO
 
-## Anchor caches taken, region id -> {base_id: grant}. This is the player's
-## progression, not the world's state, so it deliberately lives OUTSIDE `regions`
-## and survives `_setup_all` — see `_reset`.
-var collected_caches: Dictionary = {}
+## Loose hands, region id -> Array[HandPickup]. Authored caches and hands that popped
+## out of a burst are the SAME list and the same object — to the player they are the
+## same thing, a hand on the ground — and only `_reset` reads `authored` to tell them
+## apart. Lives outside `regions` so a region rebuild cannot silently drop them.
+var hand_pickups: Dictionary = {}
 
 var next_fold_id := 0
 ## Triggered folds draw ids from a reserved high range so they never collide with
@@ -121,6 +126,9 @@ var hands: Array = []
 var _hold_active := false
 var _hold_fired := false
 var _hold_elapsed := 0.0
+
+## Seconds left on the burst ring the overlay draws.
+var _burst_flash_left := 0.0
 
 # --- The fuse: a completed pair commits itself ---
 ## Seconds left before the pinned pair folds, and what it started at (for the pulse).
@@ -247,6 +255,7 @@ func _setup_all() -> void:
 	_door_latch = {}
 	pending_a = null
 	pending_b = null
+	hand_pickups = {}
 	_cancel_fuse()
 
 	world_data = WorldData.load_from(WORLD_PATH)
@@ -272,6 +281,16 @@ func _setup_all() -> void:
 			pieces = FoldReplay.apply_one_fold(pieces, f, CS)
 		regions[id] = {"base": rbase, "folds": rfolds, "seam_segs": rsegs,
 			"interiors": {}, "spawn": world_data.spawn_px(id)}
+
+		# Authored loose hands bind exactly as lights do — a hand on the ground has no
+		# world position either, only a base identity the configuration is asked about.
+		var region_hands: Array = []
+		for pickup in world_data.hands_of(id):
+			if pickup.bind(rbase):
+				region_hands.append(pickup)
+			else:
+				push_error("FoldWorld: hand pickup in %s sits outside the region" % id)
+		hand_pickups[id] = region_hands
 
 		# Lights bind to base tiles exactly as doors do: from here on a light has
 		# no world position, only a base identity that the current configuration
@@ -319,14 +338,14 @@ func _load_region(id: String) -> void:
 	seam_segs = r["seam_segs"]
 	interiors = r["interiors"]
 	_spawn = r["spawn"]
-	collected = _ensure_collected(id)
+	loose_hands = _ensure_pickups(id)
 
 
-## The caches taken in a region, creating the entry on first ask.
-func _ensure_collected(id: String) -> Dictionary:
-	if not collected_caches.has(id):
-		collected_caches[id] = {}
-	return collected_caches[id]
+## The loose hands in a region, creating the list on first ask.
+func _ensure_pickups(id: String) -> Array:
+	if not hand_pickups.has(id):
+		hand_pickups[id] = []
+	return hand_pickups[id]
 
 
 # ---------------------------------------------------------------------------
@@ -377,15 +396,6 @@ func _make_tile(piece, poly: PackedVector2Array, in_sub: bool) -> Polygon2D:
 		vis.color = Color.WHITE
 	else:
 		vis.color = TileAtlas.base_color(piece.type)
-	# A cache is painted neutral in the atlas and TINTED by the kind of hand it
-	# holds, so one tile row covers every variant and the colour on the ground is
-	# the same colour the hand will be. Once taken it stays as a spent husk rather
-	# than vanishing — modulating keeps it recognisably the same object, used up.
-	if piece.type == TileTypes.ANCHOR_CACHE:
-		var hand := cache_hand_type(base.tile_by_id(piece.base_id) if base != null else null)
-		vis.color = vis.color * HandTypes.color(hand)
-		if collected.has(piece.base_id):
-			vis.color = vis.color.darkened(0.72)
 	if light_rig != null:
 		var mat := light_rig.material_for(piece.type, in_sub)
 		if mat != null:
@@ -641,7 +651,7 @@ func _tick_hold(delta: float) -> void:
 	_hold_elapsed += delta
 	if _hold_elapsed >= HOLD_TIME:
 		_hold_fired = true
-		hold_action(player.point_dir())
+		hold_action()   # the burst is not aimed; where you stand is the whole input
 
 
 func player_cell() -> Vector2i:
@@ -766,57 +776,122 @@ func tap_action(dir: Vector2i) -> void:
 		_show_flash("Both hands are down — it is about to fold.")
 
 
-## HOLD: pull back whatever you are pointing at. Your own pending anchor comes
-## back to hand; a seam anchor is a fold coming apart (and inside a subspace, the
-## glue anchor is the way out). Pointing at nothing pulls back your last anchor.
+## HOLD: a release BURST around you.
 ##
-## There is no remote unfold. The anchors in a fold are where you left them: to get
-## them back you walk to the seam.
-func hold_action(dir: Vector2i) -> void:
+## Not an aimed action — a small sphere of influence centred on your body
+## (`BURST_RADIUS`, about a tile). Everything of yours inside it comes loose at once:
+##
+##   - hands you have placed as anchors come back;
+##   - folds whose seam is in reach come apart, if nothing newer is blocking them;
+##   - inside a subspace, the glue anchor in reach is the way out;
+##   - and any hand with nowhere to go POPS INTO THE WORLD at your feet.
+##
+## That last clause is what makes the burst safe to fire blind. Nothing is ever
+## refused for want of a slot and nothing is ever destroyed: a hand that cannot be
+## caught is simply a hand on the ground, which is the same object a cache is.
+##
+## Folds come apart one at a time and the first to animate takes the burst with it,
+## so a stack under one diamond clears over several bursts rather than all at once.
+func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	if animating():
 		return
-	var cand := candidate_anchor(dir)
-	# Newest slot first, so pointing at two anchors stacked on one cell is still
-	# a last-in-first-out retrieval.
+	var origin := player.global_position
+	_burst_flash_left = BURST_FLASH
+	var freed := 0
+
+	# Your own placed hands first: cheap, and they change no geometry.
 	for slot in [1, 0]:
-		if pending_slot(slot) != null and pending_cell(slot) == cand:
+		if pending_slot(slot) != null and _pending_within(slot, origin, BURST_RADIUS):
 			_retrieve_pending(slot)
-			return
-	if aiming_at_glue(dir):
+			freed += 1
+
+	# Inside a fold, the glue anchor in reach is the exit.
+	if mode == Mode.SUBSPACE and _glue_within(origin, BURST_RADIUS):
 		try_exit()
 		return
-	var aimed := aimed_fold(dir)
-	if aimed != null:
-		unfold_level_fold(aimed)
-		return
-	if pending_b != null:
-		_retrieve_pending(1)
-	elif pending_a != null:
-		_retrieve_pending(0)
-	else:
-		_show_flash("Nothing here to pull back.")
+
+	# Then the folds — the ones that were unfoldable WHEN THE BURST FIRED, decided up
+	# front. A stack under one diamond clears one layer per burst: releasing the newer
+	# fold is what unblocks the older, and cascading into it would mean a single press
+	# undid work you never asked it to reach. Snapshotting also makes the burst
+	# deterministic, rather than depending on which unfolds happen to animate.
+	for fold in _unfoldable_within(origin, BURST_RADIUS):
+		if animating():
+			break
+		unfold_level_fold(fold)
+		freed += 1
+
+	if freed == 0:
+		_show_flash("Nothing here to release.")
 
 
-## Take a placed hand back. Always possible: the slot it came from was emptied by
-## placing it, so there is room for it by construction — which is also why pulling
-## back is the reliable way out of a fuse you did not mean to light.
+## A pending anchor's current distance from a point, or false if it is unresolvable
+## in this frame (pinned in another region, or folded away).
+func _pending_within(slot: int, origin: Vector2, radius: float) -> bool:
+	var cell = pending_cell(slot)
+	if cell == null:
+		return false
+	return ((Vector2(cell) + Vector2(0.5, 0.5)) * CS).distance_to(origin) <= radius
+
+
+func _glue_within(origin: Vector2, radius: float) -> bool:
+	if mode != Mode.SUBSPACE or sub_fold == null:
+		return false
+	for c in [sub_fold.anchor_a, sub_fold.anchor_b]:
+		if ((Vector2(c) + Vector2(0.5, 0.5)) * CS).distance_to(origin) <= radius:
+			return true
+	return false
+
+
+## Folds of this level whose seam is in reach AND can come out right now, newest
+## first — the older of a stacked pair is exactly the one the newer is blocking, so
+## working backwards offers the ones that can actually move.
+func _unfoldable_within(origin: Vector2, radius: float) -> Array:
+	var out: Array = []
+	var list: Array = level_folds()
+	for i in range(list.size() - 1, -1, -1):
+		var fold: Fold = list[i]
+		var seam: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * CS
+		if seam.distance_to(origin) <= radius and can_unfold_fold(fold):
+			out.append(fold)
+	return out
+
+
+## Seams a burst from here would reach, for the overlay to mark. Includes blocked
+## ones: the marker should show what is in range, and its own colour says whether it
+## will move.
+func seams_within_burst() -> Array:
+	var out: Array = []
+	var origin := player.global_position
+	for fold in level_folds():
+		var seam: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * CS
+		if seam.distance_to(origin) <= BURST_RADIUS:
+			out.append(fold)
+	return out
+
+
+## Is the subspace's glue anchor within burst reach? The overlay lights the white
+## diamond on this.
+func glue_within_burst() -> bool:
+	return _glue_within(player.global_position, BURST_RADIUS)
+
+
+func burst_flash() -> float:
+	return clampf(_burst_flash_left / BURST_FLASH, 0.0, 1.0)
+
+
+## Take a placed hand back. Usually there is a slot for it — the one it came from —
+## but you may have filled that from a pickup in the meantime, in which case it lands
+## on the ground rather than vanishing.
 func _retrieve_pending(slot: int) -> void:
 	var entry = pending_slot(slot)
 	if entry == null:
 		return
 	_set_pending(slot, null)
-	var into := AnchorStock.first_empty(hands)
-	if into >= 0:
-		hands[into] = int(entry["hand"])
+	_give_hand(int(entry["hand"]))
 	_cancel_fuse()
-	_show_flash("Hand back.")
 
 
-## Fire the pinned pair. Called by the fuse, never by a keypress.
-##
-## On failure the second hand comes BACK rather than staying pinned: a pair that
-## cannot fold would otherwise sit there with a dead fuse, and the player would have
-## to guess that pulling one back is what unsticks it.
 func commit_pending() -> void:
 	if animating():
 		return
@@ -897,10 +972,18 @@ func next_hand_type() -> int:
 	return -1 if i < 0 else int(hands[i])
 
 
-## Every hand that exists. Only picking one up may change this; placing, committing
-## and unfolding must all leave it alone.
+## Hands lying on the ground, everywhere in the world.
+func hands_loose() -> int:
+	var n := 0
+	for id in hand_pickups:
+		n += (hand_pickups[id] as Array).size()
+	return n
+
+
+## Every hand that exists, in all four places. NOTHING in the game changes this:
+## placing, committing, unfolding, bursting and picking up all just move one.
 func hands_total() -> int:
-	return AnchorStock.total(hands, hands_pending(), _all_fold_lists())
+	return AnchorStock.total(hands, hands_pending(), _all_fold_lists(), hands_loose())
 
 
 # ---------------------------------------------------------------------------
@@ -1125,23 +1208,53 @@ func _interior_glue_blocker(fold: Fold, lvl_base: Array, list: Array, idx: int) 
 	return null
 
 
-## Is there somewhere for this fold's hands to go? A fold gives back everything it
-## was holding at once, and you can only hold `AnchorStock.SLOTS`. Carrying a spare
-## hand you picked up therefore blocks reclaiming a fold until you put it down —
-## which is a real constraint, not an oversight: hands are objects and there are only
-## so many of you to hold them.
-func _has_room_for(fold: Fold) -> bool:
-	return AnchorStock.can_receive(hands, fold.held_hands.size())
+## Give the player a hand: into a free slot if there is one, otherwise onto the
+## GROUND at their feet as a loose pickup.
+##
+## The overflow case is the whole reason nothing in this file has to refuse a hand.
+## A hand you cannot catch is not a hand destroyed and not an action denied — it is a
+## hand lying where you were standing, which is exactly the object an authored cache
+## already is. Conservation holds without anyone having to check for room first.
+func _give_hand(kind: int) -> void:
+	var into := AnchorStock.first_empty(hands)
+	if into >= 0:
+		hands[into] = kind
+		return
+	_drop_hand(kind, player.global_position)
 
 
-## Move a fold's hands back into your slots. Call BEFORE the fold leaves the list, so
+## Put a hand on the ground at a world point. It binds to whatever fragment is under
+## that point, so from then on it rides folds like any other occupant. If the point is
+## over void there is no sheet to lie on, so we search outward a little before giving
+## up — a dropped hand landing nowhere would be the one way this system loses one.
+func _drop_hand(kind: int, at: Vector2) -> void:
+	# Fan successive drops apart a little, so two hands out of one fold read as two.
+	# The fan is applied AFTER the fragment is chosen, never before: a burst usually
+	# happens standing on a seam, and picking the fragment from a fanned point would
+	# put one hand either side of the crease — which the unfold then carries to
+	# opposite ends of the world. Same base tile, different spot on it.
+	var fan := Vector2((loose_hands.size() % 3) - 1, 0) * (0.28 * CS)
+	var offsets: Array[Vector2] = [Vector2.ZERO]
+	for step in range(1, 5):
+		offsets.append(Vector2(0, -0.5 * CS * step))
+		offsets.append(Vector2(-0.5 * CS * step, 0))
+		offsets.append(Vector2(0.5 * CS * step, 0))
+		offsets.append(Vector2(0, 0.5 * CS * step))
+	for off in offsets:
+		var piece = BaseFrame.piece_containing(_frame_index(), at + off, CS)
+		if piece != null:
+			loose_hands.append(
+				HandPickup.dropped_at(kind, piece, at + off + fan, region_id))
+			_refresh_pickup_visuals()
+			return
+	push_warning("FoldWorld: nowhere to drop a hand near %s" % at)
+
+
+## Move a fold's hands back to the player. Call BEFORE the fold leaves the list, so
 ## the hands are never in two places at once.
 func _take_back(fold: Fold) -> void:
 	for kind in fold.held_hands:
-		var into := AnchorStock.first_empty(hands)
-		if into < 0:
-			break      # guarded by `_has_room_for`; a lost hand is better than a duplicated one
-		hands[into] = int(kind)
+		_give_hand(int(kind))
 	fold.held_hands = [] as Array[int]
 
 
@@ -1154,9 +1267,6 @@ func unfold_level_fold(fold: Fold) -> void:
 		return
 	if not can_unfold_fold(fold):
 		_show_flash("Blocked — a newer fold crosses this seam.")
-		return
-	if not _has_room_for(fold):
-		_show_flash("No room — put a hand down first.")
 		return
 	var lvl_base := _level_base_pieces()
 	if _interior_glue_blocker(fold, lvl_base, list, idx) != null:
@@ -1202,7 +1312,7 @@ func unfold_level_fold(fold: Fold) -> void:
 			rebuild_world()
 		player.teleport(landed)
 		if regained > 0:
-			_show_flash("Unfolded — %d hands back." % regained)
+			_show_flash("Released — %d hands." % regained)
 	if was_newest and kids.is_empty():
 		_play_transition(new_pieces, fold, false, true,
 			player.global_position, landed, in_sub, finalize)
@@ -1227,9 +1337,6 @@ func try_exit() -> void:
 		return
 	if exit_blocker() != null:
 		_show_flash("Blocked — an inner fold crosses the outer seam.")
-		return
-	if not _has_room_for(sub_fold):
-		_show_flash("No room — put a hand down first.")
 		return
 	var outer := sub_fold
 	var parent_path := context.slice(0, context.size() - 1)
@@ -1564,6 +1671,7 @@ func _camera_focus() -> PackedVector2Array:
 # ---------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
+	_burst_flash_left = maxf(_burst_flash_left - delta, 0.0)
 	_flash_left = maxf(_flash_left - delta, 0.0)
 	if _flash_left == 0.0 and _flash != null:
 		_flash.visible = false
@@ -1584,7 +1692,7 @@ func _physics_process(delta: float) -> void:
 			_show_flash("You fell out of the world — respawned.")
 	_tick_fuse(delta)
 	_check_goal()
-	_check_caches()
+	_check_pickups()
 	_check_triggers()
 	_check_doors()
 
@@ -1663,50 +1771,47 @@ func _check_triggers() -> void:
 	_show_flash("The ground answers — space folds around you.")
 
 
-## Hand caches: walk onto one and it gives you A HAND — one, into one free slot.
+## Loose hands: walk onto one and it is yours, if you have a slot free.
 ##
-## It only takes if you have a slot free, and a slot is free because you PUT A HAND
-## DOWN. So a cache is not a stockpile you raid on the way past; it is the second half
-## of a fold you have already started. Place a hand, walk to a cache, take a different
-## kind, place that — and the fold you finish is not the fold you would have made with
-## the pair you set out with.
+## One object covers both the caches a world ships and the hands that pop out of a
+## burst, because to the player they are one thing. It only takes if a slot is free,
+## and a slot is free because you PUT A HAND DOWN — so a cache is not a stockpile you
+## raid on the way past, it is the second half of a fold you have already started.
 ##
-## The kind it gives is authored per tile (`data.hand`, a `HandTypes` key), which is
-## what the colour on the tile is telling you.
-##
-## Works at world level AND inside a subspace: a cache that got folded away is not lost,
-## it is in there with everything else the strip took, and taking it in there counts.
-func _check_caches() -> void:
-	if base == null:
+## Works at world level AND inside a subspace: a hand the fold swallowed is lying in
+## there with everything else, and taking it in there counts.
+func _check_pickups() -> void:
+	if loose_hands.is_empty():
 		return
-	var here = BaseFrame.piece_containing(_frame_index(), player.global_position, CS)
-	if here == null:
+	if AnchorStock.first_empty(hands) < 0:
+		return                      # full hands walk over it, and it waits
+	for i in range(loose_hands.size()):
+		var pickup: HandPickup = loose_hands[i]
+		var wp = pickup.position_in(_frame_pieces())
+		if wp == null:
+			continue                # folded away — not here to be picked up
+		if player.global_position.distance_to(Vector2(wp)) > PlayerBody.RADIUS + 8.0:
+			continue
+		hands[AnchorStock.first_empty(hands)] = pickup.kind
+		loose_hands.remove_at(i)
+		_refresh_pickup_visuals()
+		_show_flash("Picked up a %s hand." % HandTypes.type_name(pickup.kind))
 		return
-	var tile := base.tile_by_id(here.base_id)
-	if tile == null or TileTypes.on_enter_kind(tile.type) != "anchors":
-		return
-	if collected.has(here.base_id):
-		return
-	# Full hands walk straight over it — and it stays for when they are not.
-	var into := AnchorStock.first_empty(hands)
-	if into < 0:
-		return
-	var kind := cache_hand_type(tile)
-	hands[into] = kind
-	collected[here.base_id] = kind
-	if mode == Mode.SUBSPACE:
-		rebuild_sub()
-	else:
-		rebuild_world()
-	_show_flash("Picked up a %s hand." % HandTypes.type_name(kind))
 
 
-## Which kind of hand a cache tile holds. Authored in the tile's own data, so two
-## caches of different colours are two ordinary tiles rather than two tile types.
-func cache_hand_type(tile) -> int:
-	if tile == null:
-		return HandTypes.PLAIN
-	return HandTypes.from_name(str(tile.data.get("hand", "plain")))
+## Where every loose hand in the current view lies right now, as
+## `[{"pickup", "pos"}, ...]`. The overlay draws these; a hand folded away resolves
+## to nothing and is simply not in the list.
+func loose_hand_points() -> Array:
+	return HandPickup.resolve_all(_frame_pieces(), loose_hands)
+
+
+## Loose hands are drawn by the overlay, which redraws itself every frame, so there is
+## nothing to rebuild — but taking or dropping one should also relight the scene, since
+## a hand is a thing the player is looking for.
+func _refresh_pickup_visuals() -> void:
+	if overlay != null:
+		overlay.queue_redraw()
 
 
 func _check_goal() -> void:
@@ -1723,15 +1828,12 @@ func _check_goal() -> void:
 
 ## Put everything back — the world AND your hands.
 ##
-## Caches respawn with the world. That is not the same call as when a cache was a
-## permanent capacity upgrade: the number of hands you can hold no longer grows, so
-## there is no progression left for a reset to confiscate. What a pickup gives you is
-## another hand for an empty slot, and hands are exactly what a reset restores — so
-## leaving the caches spent would strand you at fewer hands than you started with,
-## which is the opposite of what an escape hatch is for.
-##
-## This is also why reset remains the answer to stranding yourself: every fold drops,
-## and your starting pair is back in your hands.
+## `_setup_all` rebuilds the loose-hand lists from the authored world, so caches
+## respawn and hands dropped during play are forgotten. That is the coherent reading
+## now that the number you can hold does not grow: a pickup is another hand for an
+## empty slot, not a permanent upgrade, and hands are exactly what a reset restores —
+## leaving caches spent would strand you at fewer hands than you started with, which
+## is the opposite of what an escape hatch is for.
 func _reset() -> void:
 	if not _anim.is_empty():
 		var layer: Node2D = _anim["layer"]
@@ -1741,8 +1843,8 @@ func _reset() -> void:
 		light_rig.visible = true
 	_hold_active = false
 	_hold_fired = false
+	_burst_flash_left = 0.0
 	context.clear()
-	collected_caches = {}
 	_setup_all()
 	_show_flash("Reset.")
 

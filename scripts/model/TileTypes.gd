@@ -17,11 +17,6 @@ class_name TileTypes extends RefCounted
 ##                 water > empty reproduces the two legacy orderings exactly.
 ##   blocks_fold : does an occupant of this type block a fold that would cut/excise
 ##                 it? (Consumed by the general fold-block predicate — F5.)
-## ANCHOR_CACHE ties with GOAL on merge_rank, which is harmless: the only consumers of
-## dominance (walkability, blocks_anchor) answer identically for both. WHICH kind of
-## hand a cache holds is not a per-type fact — it is authored per tile in `data.hand`,
-## so two caches of different colours are two ordinary tiles, not two tile types.
-##
 ## Behavior hooks (on_enter / on_fold / on_unfold) are intentionally NOT baked in
 ## yet; they arrive with the trigger system (F3). `get_def` returns a plain
 ## Dictionary so those keys can be added without changing call sites.
@@ -44,10 +39,6 @@ const UNANCHORABLE_FLOOR := 6
 ## An UNANCHORABLE_WALL tile is not walkable (like a wall) and also cannot be used
 ## as a fold anchor. Useful for walls that must never become fold reference points.
 const UNANCHORABLE_WALL := 7
-## An ANCHOR_CACHE hands the player ONE hand when entered, if they have a slot free
-## (see `AnchorStock`). Walkable and foldable like air — a cache folded away is not
-## lost, it is inside the fold, waiting.
-const ANCHOR_CACHE := 8
 
 ## type -> definition. Keep merge_rank strictly ordered: null(5) > goal(4) >
 ## wall(3) > water(2) > empty(1). FoldedState never produces null pieces, so its
@@ -67,8 +58,6 @@ const _REGISTRY := {
 	PIN:          {"walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": ""},
 	UNANCHORABLE_FLOOR: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
 	UNANCHORABLE_WALL:  {"walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
-	ANCHOR_CACHE: {"walkable": true, "merge_rank": 4, "blocks_fold": false,
-		"blocks_anchor": false, "on_enter": "anchors"},
 }
 
 ## Safe defaults for an unregistered type: not walkable, lowest rank, non-blocking.

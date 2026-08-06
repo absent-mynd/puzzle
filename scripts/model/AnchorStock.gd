@@ -96,8 +96,10 @@ static func held_in(fold_lists: Array) -> int:
 	return total
 
 
-## Every hand that exists, wherever it is. Conservation is stated here rather than
-## enforced: placing, committing and unfolding must all leave this unchanged, and only
-## picking one up may raise it.
-static func total(hands: Array, pending: int, fold_lists: Array) -> int:
-	return held_count(hands) + pending + held_in(fold_lists)
+## Every hand that exists, wherever it is — slots, pinned, held by a fold, or lying
+## on the ground. Conservation is stated here rather than enforced, and now it is
+## TOTAL: once loose hands are counted, nothing in the game changes this number.
+## Placing, committing, unfolding, bursting and picking up all just move a hand from
+## one of the four places to another.
+static func total(hands: Array, pending: int, fold_lists: Array, loose: int = 0) -> int:
+	return held_count(hands) + pending + held_in(fold_lists) + loose

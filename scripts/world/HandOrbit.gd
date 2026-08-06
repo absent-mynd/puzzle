@@ -69,10 +69,17 @@ func follow(hands: Array, body: Vector2, motion: Vector2, facing: int, delta: fl
 
 func _draw() -> void:
 	for slot in _slots:
-		if not slot["held"]:
-			continue
-		var c: Color = HandTypes.color(int(slot["type"]))
-		var p: Vector2 = slot["pos"]
-		# A darker rim so a hand stays legible against ground of its own colour.
-		draw_circle(p, HAND_RADIUS + 1.5, Color(c.r * 0.25, c.g * 0.25, c.b * 0.25, 0.85))
-		draw_circle(p, HAND_RADIUS, c)
+		if slot["held"]:
+			draw_hand(self, slot["pos"], int(slot["type"]))
+
+
+## How a hand looks, wherever it is. STATIC and shared on purpose: a hand carried
+## beside you, a cache the world shipped and a hand that popped out of a burst are the
+## same object to the player, so they must not be drawn by two different pieces of
+## code that could drift apart. `WorldOverlay` draws loose ones through here.
+static func draw_hand(on: CanvasItem, at: Vector2, kind: int, scale: float = 1.0) -> void:
+	var c: Color = HandTypes.color(kind)
+	var r: float = HAND_RADIUS * scale
+	# A darker rim so a hand stays legible against ground of its own colour.
+	on.draw_circle(at, r + 1.5, Color(c.r * 0.25, c.g * 0.25, c.b * 0.25, 0.85))
+	on.draw_circle(at, r, c)

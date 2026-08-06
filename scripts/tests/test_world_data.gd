@@ -24,6 +24,7 @@ func _sample() -> WorldData:
 			"folds": [{"anchor1": {"x": 0, "y": 1}, "anchor2": {"x": 3, "y": 1}}],
 		},
 	}
+	wd.regions["a"]["hands"] = [HandPickup.from_dict({"kind": "swift", "cell": {"x": 1, "y": 0}})]
 	wd.doors = {"D1": {"region": "a", "cell": Vector2i(1, 1), "pair": "D2"}}
 	return wd
 
@@ -35,6 +36,8 @@ func test_round_trip_through_dict():
 	assert_eq(copy.world_id, "t", "id survives")
 	assert_eq(copy.start_region, "a", "start region survives")
 	assert_eq(copy.starting_hands, ["swift", "patient"], "the starting hands survive")
+	assert_eq((copy.regions["a"]["hands"] as Array).size(), 1, "authored loose hands survive")
+	assert_eq(copy.regions["a"]["hands"][0].kind, HandTypes.SWIFT, "...with their kind")
 	assert_almost_eq(copy.cell_size, 64.0, 0.001, "cell size survives")
 	assert_eq((copy.regions["a"]["rows"] as Array).size(), 2, "rows survive")
 	assert_eq(copy.regions["a"]["spawn"], Vector2(1.5, 0.5), "spawn survives as a Vector2")
@@ -129,47 +132,44 @@ func test_starting_hand_keys_resolve_and_typos_fall_back():
 		"a typo yields an ordinary hand rather than a broken one")
 
 
-func test_shipped_caches_name_a_real_hand_kind():
+func test_shipped_world_places_loose_hands():
+	# Loose hands are the only source of a hand beyond the pair you start with, so a
+	# world with none is a world where your starting pair is the whole game.
 	var wd := WorldData.load_from(WORLD_PATH)
-	var named := 0
+	var total := 0
 	for id in wd.regions:
-		var base := wd.build_base(id)
-		for t in base.tiles:
-			if t.type != TileTypes.ANCHOR_CACHE:
-				continue
-			var key := str(t.data.get("hand", ""))
-			assert_ne(key, "", "cache at %s in %s says which hand it holds" % [t.grid_position, id])
-			assert_true(HandTypes.is_registered(HandTypes.from_name(key)),
-				"cache at %s names a real kind (%s)" % [t.grid_position, key])
-			named += 1
-	assert_gt(named, 0, "at least one cache ships")
+		total += wd.hands_of(id).size()
+	assert_gt(total, 0, "the shipped world lays out at least one loose hand")
 
 
-func test_shipped_world_places_anchor_caches():
-	# Caches are the only way the ceiling ever rises, so a world with none is a
-	# world where the starting allowance is the whole game.
-	var wd := WorldData.load_from(WORLD_PATH)
-	var caches := 0
-	for id in wd.regions:
-		for t in wd.build_base(id).tiles:
-			if t.type == TileTypes.ANCHOR_CACHE:
-				caches += 1
-	assert_gt(caches, 0, "the shipped world places at least one anchor cache")
-
-
-func test_shipped_caches_stand_on_ground():
-	# A cache in mid-air is a cache you cannot walk into. Every one must have
-	# something solid directly beneath it.
+func test_shipped_loose_hands_bind_and_stand_on_ground():
+	# A hand in mid-air is a hand you cannot walk into, and one off the grid binds
+	# to nothing at all.
 	var wd := WorldData.load_from(WORLD_PATH)
 	for id in wd.regions:
 		var base := wd.build_base(id)
-		for t in base.tiles:
-			if t.type != TileTypes.ANCHOR_CACHE:
-				continue
-			var below := base.tile_at(t.grid_position + Vector2i(0, 1))
-			assert_not_null(below, "cache at %s in %s is not at the map edge" % [t.grid_position, id])
+		for pickup in wd.hands_of(id):
+			assert_true(pickup.bind(base),
+				"hand at %s in %s binds to a real tile" % [pickup.cell, id])
+			assert_true(HandTypes.is_registered(pickup.kind),
+				"hand at %s in %s is a real kind" % [pickup.cell, id])
+			var below := base.tile_at(pickup.cell + Vector2i(0, 1))
+			assert_not_null(below, "hand at %s in %s is not at the map edge" % [pickup.cell, id])
 			assert_false(TileTypes.is_walkable(below.type),
-				"cache at %s in %s stands on solid ground" % [t.grid_position, id])
+				"hand at %s in %s lies on solid ground" % [pickup.cell, id])
+
+
+func test_hands_of_hands_out_copies():
+	# Same reasoning as lights: binding writes into a pickup, and the authored world
+	# must stay the authored world so a reset re-binds from scratch.
+	var wd := WorldData.load_from(WORLD_PATH)
+	var first: Array = wd.hands_of("west")
+	if first.is_empty():
+		return
+	first[0].kind = HandTypes.PATIENT
+	first[0].base_id = 999
+	var second: Array = wd.hands_of("west")
+	assert_ne(second[0].base_id, 999, "the authored pickup was not written through")
 
 
 func test_shipped_world_regions_build():

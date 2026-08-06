@@ -5,7 +5,7 @@
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **388 passing** / 388 (0 failing, 0 risky), 20 scripts, ~9.3s.
+**Tests:** **392 passing** / 392 (0 failing, 0 risky), 20 scripts, ~13.5s.
 
 ---
 
@@ -24,11 +24,11 @@ What exists and works today:
 | Side-view world: gravity, riding flaps, depenetration | ✅ Playable |
 | Subspaces (fold interiors as real places) | ✅ Playable |
 | Regions + doors (recursive partner resolution) | ✅ Playable |
-| Tile registry (pins, unanchorable, water, triggers, caches) | ✅ Wired, tested, **in the world** |
+| Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
 | Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
 | Hands: two slots, typed, conserved (`AnchorStock`/`HandTypes`) | ✅ Playable, **in the world** |
-| Hand caches (`A`) — one hand, colour-coded by kind | ✅ Three placed, ⚙️ untuned |
-| One-key verb (tap = place a hand, hold = pull one back) | ✅ Playable |
+| Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
+| One-key verb (tap = place a hand, hold = release burst) | ✅ Playable |
 | Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
 | Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
@@ -45,17 +45,17 @@ What exists and works today:
 
 ## Test suite
 
-388 passing across 20 scripts. Composition:
+392 passing across 20 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 68 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy and the fuse |
+| `test_fold_world` | 76 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 41 | Map parsing, seams, anchor/fold eligibility, camera framing + lookahead, the hand spring |
-| `test_world_data` | 31 | World format + the shipped world's content, incl. lights, hands and caches |
+| `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
-| `test_tile_types` | 20 | The registry |
 | `test_tile_atlas` | 17 | Tileset kinds/variants, base-space UVs, the generated sheet |
+| `test_tile_types` | 16 | The registry |
 | `test_light_source` | 15 | Lights as occupants: fold-away, ride, split, serialization |
 | `test_pixel_art` | 14 | The art-pixel quantum; the target that resizes so zoom stays crisp |
 | `test_collision_core` | 13 | Polygon clipping under folds |
@@ -63,7 +63,7 @@ What exists and works today:
 | `test_occupants` | 11 | Split-on-unfold, footprints, carried geometry |
 | `test_folded_state` | 11 | Per-position stacks, dominant type |
 | `test_fold_replay` | 11 | The derivation engine |
-| `test_anchor_stock` | 11 | Hand conservation: slots ↔ pinned ↔ fold |
+| `test_anchor_stock` | 11 | Hand conservation: slots ↔ pinned ↔ fold ↔ ground |
 | `test_hand_types` | 10 | The kind registry: colours, fuses, mixed pairs |
 | `test_player_body` | 10 | Look/point keys, velocity-as-fraction, motion scalar |
 | `test_base_grid` | 9 | Immutable base model |
@@ -80,6 +80,40 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — Hands pop into the world; recall becomes a burst
+
+Two changes that turn out to be the same change: a hand that has nowhere to go is a
+hand on the ground, and once that is true nothing has to be refused.
+
+- **New `HandPickup`** (kernel): a hand lying in the world, stored as a base identity
+  plus a point in the tile — the same shape as `LightSource` and a door. So it rides
+  flaps, folds away with its tile, and is found again inside the fold. Authored caches
+  and hands a burst popped out are the SAME object in the SAME list, drawn by the SAME
+  function (`HandOrbit.draw_hand`), because to the player they are the same thing.
+- **The `ANCHOR_CACHE` tile type is gone**, with its `A` character and its atlas row.
+  A loose hand is an occupant of the sheet, not terrain; it is authored per region in
+  a `hands` array beside `lights`, and it draws as a hand rather than as a tile.
+- **Recall is a BURST, not an aimed act.** Holding F fires a small sphere around the
+  body (`BURST_RADIUS`, ~1.2 tiles) that takes back placed hands in reach, opens folds
+  whose seam is in reach, exits a subspace from its glue — and **drops any hand with
+  nowhere to go at your feet**. `hold_action` no longer takes a direction: where you
+  stand is the whole input. A ring confirms the reach after the fact.
+- **Nothing is refused for want of room any more.** The `_has_room_for` gate added
+  yesterday is deleted; overflow lands on the ground instead. That one clause is what
+  lets the burst be fired blind.
+- **A burst releases what was releasable when it fired**, not a cascade: a stack of
+  two folds under one diamond clears one layer per press, and the behaviour no longer
+  depends on which unfolds happen to animate.
+- **Conservation is now total.** `AnchorStock.total` counts the ground as a fourth
+  place a hand can be, so *nothing* in the game changes the number of hands — placing,
+  committing, unfolding, bursting and picking up all just move one.
+
+Two bugs the tests caught rather than review: dropping two hands with a positional fan
+picked their fragments from the fanned points, which at a seam put one either side of
+the crease — the unfold then carried them to opposite ends of the world (the fan now
+applies after the fragment is chosen); and a burst that cascaded cleared a whole stack
+in one press.
 
 ### 2026-08-05 — Anchors become HANDS: two of them, typed, and they fold themselves
 

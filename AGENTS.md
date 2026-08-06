@@ -119,6 +119,7 @@ instead.
 | **Base ↔ derived point transport** | `scripts/model/BaseFrame.gd` |
 | What a tile IS and DOES (the registry) | `scripts/model/TileTypes.gd` |
 | **The hand registry** (one file per kind) | `scripts/model/HandTypes.gd` |
+| A hand lying in the world (an occupant) | `scripts/model/HandPickup.gd` |
 | **The slot ledger** (conservation arithmetic) | `scripts/model/AnchorStock.gd` |
 | Entities that ride tiles through folds | `scripts/model/Occupants.gd` |
 | Fold-on-enter cascade | `scripts/model/TriggerResolver.gd` |
@@ -196,13 +197,18 @@ world position and try to keep it up to date through folds.
 
 | Where a hand can be | How it gets there | How it comes back |
 |---|---|---|
-| One of your two slots | the world's `starting_hands`; a cache, if a slot is free | — |
-| Pinned as an anchor | tap F pointing at a cell (leaves the slot at once) | hold F |
-| Held by a standing fold | the fuse going off | hold F at its seam |
+| One of your two slots | the world's `starting_hands`; walking over a loose hand | — |
+| Pinned as an anchor | tap F pointing at a cell (leaves the slot at once) | a burst in reach |
+| Held by a standing fold | the fuse going off | a burst at its seam |
+| Lying on the ground | authored by the world; overflow from a burst | walk over it |
 
-**One key, two directions.** Tap puts a hand down; hold takes one back. There is no
-committing press — the second hand lights a **fuse** and the pair folds itself. The
-input mirrors the economy on purpose.
+**One key, two directions.** Tap puts a hand down; hold fires a **release burst**.
+There is no committing press — the second hand lights a **fuse** and the pair folds
+itself. The input mirrors the economy on purpose.
+
+Those four places always sum to the same number. **Nothing in the game creates or
+destroys a hand** — placing, committing, unfolding, bursting and picking up all just
+move one — which is what `AnchorStock.total` states and `test_anchor_stock` pins.
 
 Consequences worth keeping in mind when designing:
 
@@ -213,10 +219,14 @@ Consequences worth keeping in mind when designing:
 - **Traversal is nearly free; configuration is not.** Fold a pit shut, walk across
   the seam, unfold behind you — you keep the hands and you are across. What costs you
   is a fold you must *leave standing*.
-- **Unfolding can be refused for want of room.** A fold returns both hands at once,
-  so a spare you are carrying blocks reclaiming it until you put one down. This is a
-  real constraint, not an oversight. The richer alternative — dropping the overflow
-  into the world as a fresh pickup — was left unbuilt deliberately.
+- **Nothing is ever refused for want of room.** A fold returns both hands at once,
+  and a hand with nowhere to go lands on the ground as a `HandPickup` — the same
+  object an authored cache is. That one clause is what lets the burst be fired blind
+  and is why no code path has to ask "is there a slot" first.
+- **The burst is not aimed.** `hold_action` takes no direction: where you stand is
+  the whole input, and it releases what was releasable when it fired rather than
+  cascading. Do not give it a target without a design conversation — the untargeted
+  reading is what makes it read as a thing you *do*, not a thing you *point*.
 - **A kind only changes the fuse.** Colour is identity, `HandTypes.fuse` is the whole
   of the behaviour, and a mixed pair fuses at the MEAN of its two. If you give kinds a
   second behaviour, that is a design change; do it in `HandTypes` and nowhere else.
@@ -289,10 +299,10 @@ These are live, not settled. Do not close them silently in a refactor.
   game taking the decision away from you is a playtesting question.
 - **A kind changes only the fuse.** Whether that is enough to make picking up a
   colour feel like a choice, or whether kinds want a second axis, is open.
-- **Cache collection is state outside `(base, folds)`** — `FoldWorld.collected_caches`,
-  region id -> {base_id: kind}. It lives outside `regions` so a region rebuild cannot
-  silently clear it, and `_reset` clears it deliberately. It is the first thing that
-  will need the save system to outlive a session.
+- **Loose hands are state outside `(base, folds)`** — `FoldWorld.hand_pickups`,
+  region id -> Array[HandPickup]. It lives outside `regions` so a region rebuild
+  cannot silently clear it, and `_setup_all` rebuilds it from the authored world. It
+  is the first thing that will need the save system to outlive a session.
 - **Lights do not cast shadows.** Occluders would have to be re-derived per fold,
   and they would want to soften the seam — which is the one thing the art is
   currently committed to keeping hard.

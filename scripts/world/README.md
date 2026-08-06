@@ -25,11 +25,11 @@ and `WorldCore.CHARS` for the terrain characters.
 | Space | jump |
 | hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
 | **tap F** | put a **hand** down on the cell you point at — the second one lights the fuse |
-| **hold F** | **pull back**: your own hand if you point at it, the fold under a seam diamond, the subspace's white glue diamond (exit) — or, pointing at nothing, the last hand you placed |
+| **hold F** | **release burst**: everything of yours within about a tile comes loose at once |
 | R | reset |
 
-One key, two directions. **Tap puts a hand down; hold takes one back.** There is
-no committing press: put both hands down and the fold goes off by itself.
+One key, two directions. **Tap puts a hand down; hold bursts them loose.** There
+is no committing press: put both hands down and the fold goes off by itself.
 
 Anchor placement is **embodied**: both hands must be placed from somewhere you
 can stand (or jump — mid-air placement works), so folding is gated by
@@ -40,7 +40,28 @@ creases); a second hand placed too close to the first is refused *when you
 place it*.
 
 There is **no remote unfold**. The hands in a fold are exactly where you left
-them, so getting them back means walking to its seam diamond and holding.
+them, so getting them back means walking to its seam and bursting.
+
+### The burst
+
+Holding F fires a small sphere of influence around your body (`BURST_RADIUS`,
+about a tile — tune it in `FoldWorld`). It is **not aimed**: where you stand is
+the whole input. Everything of yours inside it comes loose at once —
+
+- hands you placed as anchors come back;
+- folds whose seam is in reach come apart, if nothing newer is blocking them;
+- inside a fold, the glue anchor in reach is the way out;
+- and **any hand with nowhere to go pops into the world at your feet.**
+
+That last clause is what makes the burst safe to fire blind. Nothing is refused
+for want of a slot and nothing is destroyed: a hand you cannot catch is a hand
+on the ground, which is the same object a cache is. A ring shows how far the
+burst reached, after the fact — it confirms, it does not aim.
+
+A burst releases the folds that were unfoldable **when it fired**. A stack of
+two folds under one diamond clears one layer per press, because releasing the
+newer one is what unblocks the older, and one press undoing work you never
+asked it to reach would be a surprise.
 
 ## Hands
 
@@ -55,15 +76,14 @@ you is how many you have and what **kind** they are.
 - Placing a hand takes it out of its slot **immediately**.
 - Placing the second lights the **fuse**. Both hands pulse, slowly at first and
   faster as the fold comes due, then it folds. No press commits it.
-- **Pulling a hand back defuses the pair** and returns it to a slot.
+- **Bursting takes back** whatever is in reach and defuses a pair.
 - **Unfolding gives back the same two hands that went in** — kinds and all.
-- Unfolding is **refused if there is no room**: a fold returns two hands at
-  once, so a spare you are carrying has to go down first.
+- Hands with nowhere to go **land on the ground** rather than being refused.
 
 So the budget is not how many folds you may ever make but **how many folds may
 stand at once** — and with two slots, that is one, until you find more hands.
 Crossing a pit still costs nothing permanent: fold it, walk across the seam,
-unfold behind you, keep your hands.
+burst behind you, keep your hands.
 
 ### Kinds
 
@@ -80,34 +100,41 @@ A fold may be pinned with **two different kinds**, and its fuse is the mean of
 the two — so a mixed pair lands genuinely between its parents rather than being
 decided by one of them. That is what makes mixing a decision.
 
-### Caches
+### Hands on the ground
 
-**Hand caches** (`A`) give you **one hand**, into one free slot, and the tile is
-tinted the colour of the kind it holds. A slot is free because you *put a hand
-down* — so a cache is not a stockpile you raid on the way past, it is the second
-half of a fold you have already started:
+A hand lying in the world is one object, whether the world put it there or a
+burst did. Same storage, same rules, **same drawing** — a loose hand looks
+exactly like the ones orbiting you, in its kind's colour, because to you it is
+the same thing.
 
-> place a hand → walk to a cache → take a different kind → place that → the fold
-> you finish is not the fold you would have made with the pair you set out with.
+Walking over one takes it **into a free slot**, one at a time. A slot is free
+because you *put a hand down* — so a loose hand is not a stockpile you raid on
+the way past, it is the second half of a fold you have already started:
 
-Walk over a cache with both hands full and it stays where it is, waiting. A
-cache folded away is not lost: it is inside the fold, and taking it in there
-counts. Spent caches stay as dimmed husks.
+> place a hand → walk to a loose one → take a different kind → place that → the
+> fold you finish is not the fold you would have made with the pair you set out
+> with.
+
+Walk over one with both hands full and it stays where it is, waiting. Like a
+door or a lamp, a loose hand is an **occupant of the sheet**: it stores a base
+identity rather than a position, so it rides flaps, folds away with its tile,
+and is found again inside the fold.
 
 `AnchorStock` owns the arithmetic and stores nothing: committed hands are read
-off the folds themselves, so unfolding gives them back by removing the fold.
+off the folds themselves, so unfolding gives them back by removing the fold, and
+the four places a hand can be — slot, pinned, in a fold, on the ground — always
+sum to the same total. Nothing in the game changes that number.
 
 Two folds can **meet in the same cell**, and then one diamond stands for both.
-F there acts on the newest fold that can actually come out — not the first in
-fold order, which is precisely the one the newer fold is blocking (see
-`FoldWorld.aimed_fold`). The diamond is drawn once per cell and reads unblocked
-whenever F would do something, so the marker never promises what the act
-refuses.
+A burst there takes the newest that can actually come out — not the first in
+fold order, which is precisely the one the newer fold is blocking. The diamond
+is drawn once per cell and reads unblocked whenever a burst would do something,
+so the marker never promises what the act refuses.
 
 **Inside a fold, the same rules apply.** The subspace is a real place: the
 pinch fold is applied to the world, and the outer fold's two anchors coincide
-at one point on the glue line — the white diamond. Holding F there unfolds the
-subspace (exit). You can pin anchors and fold *within* the subspace; interior
+at one point on the glue line — the white diamond. A burst in reach of it opens
+the subspace (exit), and the diamond lights when you are close enough. You can pin anchors and fold *within* the subspace; interior
 folds persist into the world when you exit, and pending anchors ride along
 and land where the strip content lands. **Unfold blocking** applies
 everywhere: a fold cannot be unfolded while a newer fold's band crosses its
@@ -376,13 +403,13 @@ do not want yet.
 - Unanchorable tiles (`_`, `X`) and occupants are supported by the format and covered
   by tests, but the shipped world does not place any yet.
 - **You can strand yourself.** Put both hands into a fold, walk somewhere its seam
-  cannot be reached from, and short of finding a cache there is no way back to them
-  but `R` — which drops every fold and puts your starting pair back in your hands.
-  The accepted cost of having no remote unfold; save points are the real answer and
-  do not exist yet.
-- Hand caches are tracked in runtime state (`FoldWorld.collected_caches`) — the one
-  thing tracked that is not `(base, folds)`. `R` respawns them along with the world,
-  because your hands are reset too and leaving them spent would strand you short.
+  cannot be reached from, and short of finding a loose hand there is no way back to
+  them but `R` — which drops every fold and puts your starting pair back in your
+  hands. The accepted cost of having no remote unfold; save points are the real
+  answer and do not exist yet.
+- Loose hands are runtime state (`FoldWorld.hand_pickups`) — the one thing tracked
+  that is not `(base, folds)`. `R` rebuilds the list from the authored world, so
+  caches respawn and hands dropped in play are forgotten.
 - Lights do not cast shadows, and the seam is not lit specially — see *Art & light*.
 - The player and the overlay markers are drawn unlit, so they never disappear
   into an unlit corner.
@@ -393,8 +420,12 @@ do not want yet.
   Covered by `scripts/tests/test_hand_types.gd`.
 - `AnchorStock.gd` (kernel) — the slot ledger: conservation arithmetic, nothing
   stored. Covered by `scripts/tests/test_anchor_stock.gd`.
-- `HandOrbit.gd` — the circles that float beside you. Presentation only; the spring
-  itself is `WorldCore.spring_step`.
+- `HandPickup.gd` (kernel) — a hand lying in the world: base identity + point in
+  tile, exactly like a door or a lamp. One object for authored caches and dropped
+  hands alike.
+- `HandOrbit.gd` — the circles that float beside you, and `draw_hand`, the ONE place
+  a hand is drawn (the overlay draws loose ones through it, so they cannot drift
+  apart). The spring itself is `WorldCore.spring_step`.
 - `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
   and glue segments, depenetration, anchor/fold eligibility, camera zoom and
   lookahead). Covered by `scripts/tests/test_world_core.gd`.

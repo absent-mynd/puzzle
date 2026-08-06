@@ -48,8 +48,7 @@ const K_PIN := 6
 const K_UFLOOR := 7
 const K_UWALL := 8
 const K_LAMP := 9           ## the glyph drawn at a light source
-const K_CACHE := 10         ## a hand cache: one spare hand, there for the taking
-const KINDS := 11
+const KINDS := 10
 
 # --- Palette -----------------------------------------------------------------
 # Hues carry over from the flat-colour build so the world reads the same; the
@@ -72,10 +71,6 @@ const _PALETTE := {
 	K_UFLOOR: [Color(0.20, 0.22, 0.26), Color(0.13, 0.14, 0.18), Color(0.30, 0.33, 0.39)],
 	K_UWALL: [Color(0.42, 0.44, 0.50), Color(0.26, 0.28, 0.33), Color(0.56, 0.59, 0.67)],
 	K_LAMP: [Color(1.00, 0.82, 0.50), Color(0.24, 0.18, 0.12), Color(1.00, 0.97, 0.86)],
-	# NEUTRAL on purpose: a cache is tinted at draw time by the kind of hand it holds
-	# (`HandTypes.color`), so one row covers every variant and the colour on the ground
-	# is the same colour the hand will be. Painted near-white so the tint carries.
-	K_CACHE: [Color(0.92, 0.92, 0.94), Color(0.55, 0.55, 0.60), Color(1.00, 1.00, 1.00)],
 }
 
 ## type -> kind, for types that do not depend on their surroundings.
@@ -88,7 +83,6 @@ const _KIND_OF_TYPE := {
 	TileTypes.PIN: K_PIN,
 	TileTypes.UNANCHORABLE_FLOOR: K_UFLOOR,
 	TileTypes.UNANCHORABLE_WALL: K_UWALL,
-	TileTypes.ANCHOR_CACHE: K_CACHE,
 }
 
 static var _texture: Texture2D = null
@@ -216,28 +210,6 @@ static func _paint(img: Image, kind: int, v: int, o: Vector2i) -> void:
 			_paint_hatched_wall(img, o, v)
 		K_LAMP:
 			_paint_lamp(img, o, v)
-		K_CACHE:
-			_paint_cache(img, o, v)
-
-
-## A hand cache: ONE peg stood upright on the floor of the cell, because one hand is
-## exactly what it gives you. (It was a pair when a cache granted two anchors at once;
-## the art says the denomination, so it changed when the denomination did.)
-static func _paint_cache(img: Image, o: Vector2i, v: int) -> void:
-	_paint_paper(img, o, v)
-	var pal: Array = _PALETTE[K_CACHE]
-	for peg in [7]:
-		for y in range(5, 14):
-			for x in range(peg - 1, peg + 1):
-				var c: Color = pal[0]
-				if x == peg - 1:
-					c = pal[2]          # lit edge down the left of each peg
-				elif y > 11:
-					c = pal[1]          # shadowed foot
-				img.set_pixel(o.x + x, o.y + y, c)
-		# The head of the peg: the bit you grip.
-		for x in range(peg - 2, peg + 2):
-			img.set_pixel(o.x + x, o.y + 4, pal[2] if (x + v) % 2 == 0 else pal[0])
 
 
 ## The sheet itself: near-black with a faint lattice, so folded-away space
