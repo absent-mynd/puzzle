@@ -4,8 +4,9 @@
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
-dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **416 passing** / 416 (0 failing, 0 risky), 20 scripts, ~12.8s.
+dynamic lighting, framed by a camera that zooms and leads with the moment. The
+world is now **authored in an editor** rather than by hand-editing JSON.
+**Tests:** **580 passing** / 580 (0 failing, 0 risky), 24 scripts, ~14.5s.
 
 ---
 
@@ -34,6 +35,7 @@ What exists and works today:
 | Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
+| **World editor** — paint, canvases, doors, pre-placed folds | ✅ Usable (`./run_editor.sh`) |
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
 | Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
 | Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
@@ -46,11 +48,14 @@ What exists and works today:
 
 ## Test suite
 
-453 passing across 21 scripts. Composition:
+580 passing across 24 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
 | `test_fold_world` | 87 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
+| `test_editor_doc` | 59 | Editor document: canvases, painting, undo, resize, doors, pre-placed folds, validation, the file round trip |
+| `test_world_editor` | 37 | **Scene-driven**: hit-testing, the camera, and every gesture — stroke, rect, card drag, resize grip, door link, fold link |
+| `test_editor_tools` | 31 | The derived palette, raster ops, resize arithmetic, fold guides vs. the kernel |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
 | `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
@@ -82,6 +87,59 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-06 — A world editor: paint, canvases, and folds you can see
+
+Hand-editing ASCII rows in JSON was workable and was not going to survive the
+next region. There is now an editor — `./run_editor.sh`, or
+`godot --path . scenes/editor/WorldEditor.tscn`.
+
+**An MS-Paint canvas on a Mural board.** A card is a region; you paint terrain
+onto it with a brush or a rectangle, drag it around by its title bar, and resize
+it by its corners. Cards can be arranged freely because **where a card sits is
+not a fact about the world** — regions are separate sheets connected by doors,
+not by adjacency — so the board is a place to think, and the layout lives in an
+authoring-only `editor` block that nothing in `scripts/world/` reads.
+
+**Doors and folds are both made by dragging between two things.** Drag door →
+door to connect them, across cards if they are in different regions. Drag anchor
+→ anchor to make a pre-placed fold. An anchor with no partner yet is saved as a
+loose anchor, so a half-finished design survives a save.
+
+**A pre-placed fold is drawn, not applied.** The card keeps its shape and the
+fold shows as its two crease lines, the shaded band it will excise, and — drawn
+bright — the line the two halves will meet along. A card that shipped already
+folded would show you a hole and no way to reason about what is sealed in it.
+The band is not a lookalike: `EditorTools.fold_guides` builds a real `Fold` and
+asks `CollisionCore.fold_polygons` what it drops, which is the same call
+`FoldReplay` makes for real, and a test pins the equality.
+
+**Nested pre-placed folds are designed and deferred.** A fold entry reserves
+`"in": [i, ...]`, the index path of the interiors it lives in, and
+`WorldData.fold_pairs` skips any entry with a non-empty path — so a nested fold
+is authored, saved and drawn but does not ship folded, rather than being applied
+at world level where its anchors would fold a stranger part of the region.
+`docs/features/WORLD_EDITOR.md` §"Nested pre-placed folds" writes down what
+implementing it would take and why it shares machinery with the open question
+about triggers inside subspaces.
+
+Two things worth knowing:
+
+- **The palette is derived, not listed.** It is built from `WorldCore.CHARS` and
+  `TileTypes`, so registering a tile type makes it paintable with no list to
+  update — and `TileTypes` gained a `name` field so the label comes from the
+  registry too, keeping "adding a type is one file" true.
+- **The editor has undo, and the game still does not.** Different things: one
+  edits a file, the other is a continuous physics world with no discrete move to
+  reverse. `EditorDoc` snapshots `WorldData`; the two stacks never meet.
+
+Not yet editable: per-tile `tile_data` (a trigger's channel and anchors), and a
+light's colour/radius/flicker.
+
+**Tests:** +127 across three scripts — `test_editor_tools` (31),
+`test_editor_doc` (59), `test_world_editor` (37, scene-driven).
+
+---
 
 ### 2026-08-06 — The jump has a hold, and the hold has a height
 
@@ -487,8 +545,11 @@ Roughly in priority order — nothing here is committed to yet:
    collected caches need to outlive a session, and the answer to stranding yourself
    with no anchors and no reachable seam.
 6. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
-7. **Authoring tooling.** ASCII rows in JSON are workable but hand-editing region
-   geometry will not scale. Revisit an editor once the tile vocabulary settles.
+7. ~~**Authoring tooling.**~~ Done — `./run_editor.sh`, see
+   `docs/features/WORLD_EDITOR.md`. What it does NOT yet edit is per-tile
+   `tile_data` (a trigger's channel and anchors are still hand-written JSON) and
+   a light's colour/radius. **Nested pre-placed folds are designed but deferred**;
+   the format reserves `folds[].in` and the loader ignores it.
 
 ---
 

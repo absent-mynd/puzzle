@@ -22,6 +22,15 @@ extends Resource
 ## `folds` on a region are PRE-PLACED: applied at load, before the player spawns. A fold
 ## hides everything between its creases, so a pre-placed fold ships a region already
 ## folded, with content sealed inside it that unfolding (or a door) reveals.
+##
+## A fold entry is `{"anchor1": {x,y}, "anchor2": {x,y}, "in": [i, ...]}`. `in` is the
+## INDEX PATH of the interiors this fold lives in — `[]` (or absent) is the region's own
+## sheet, `[0]` is inside the interior of the region's first pre-placed fold, `[0, 1]`
+## one level deeper. It is reserved, not yet implemented: `fold_pairs` returns only
+## world-level entries, so a nested one is authored, saved and drawn by the editor but
+## does NOT ship folded. See `docs/features/WORLD_EDITOR.md` §"Nested pre-placed folds"
+## for what implementing it would take. Ignoring it is the deliberate choice — applying
+## a nested fold's anchors at world level would fold a stranger part of the region.
 
 @export var world_id: String = ""
 @export var world_name: String = ""
@@ -46,7 +55,17 @@ extends Resource
 ##   "folds":     Array,          pre-placed folds, [{anchor1:{x,y}, anchor2:{x,y}}, ...]
 ##   "lights":    Array[LightSource], lights placed on base cells (see LightSource)
 ##   "hands":     Array[HandPickup], loose hands lying on base cells (see HandPickup)
+##   "editor":    Dictionary,     AUTHORING ONLY — see below. The game never reads it.
 ## }
+##
+## `editor` is the level editor's scratch space, carried through the file so a
+## half-finished design survives a save. Nothing in `scripts/world/` may read it:
+## a region's PLACE on the editor board is not a fact about the world (regions have
+## no spatial relationship to each other — they are separate sheets), and a fold
+## anchor waiting for a partner is not a fold. Both are facts about the DESIGN.
+##
+##   "pos":     {"x": float, "y": float}  where this region's card sits on the board
+##   "anchors": [{"x": int, "y": int}]    fold anchors placed but not yet connected
 @export var regions: Dictionary = {}
 
 ## door id -> {"region": String, "cell": Vector2i, "pair": door id}
@@ -76,6 +95,7 @@ func to_dict() -> Dictionary:
 			"folds": (r.get("folds", []) as Array).duplicate(true),
 			"lights": out_lights,
 			"hands": out_hands,
+			"editor": (r.get("editor", {}) as Dictionary).duplicate(true),
 		}
 	var out_doors: Dictionary = {}
 	for id in doors:
@@ -129,6 +149,7 @@ func from_dict(dict: Dictionary) -> void:
 			"folds": r.get("folds", []),
 			"lights": lights,
 			"hands": hands,
+			"editor": (r.get("editor", {}) as Dictionary).duplicate(true),
 		}
 
 	doors = {}
@@ -194,12 +215,17 @@ func spawn_px(id: String) -> Vector2:
 	return (regions[id]["spawn"] as Vector2) * cell_size
 
 
-## A region's pre-placed folds as [anchor1, anchor2] Vector2i pairs, in order.
+## A region's WORLD-LEVEL pre-placed folds as [anchor1, anchor2] Vector2i pairs, in
+## order. Entries with a non-empty `in` path are nested inside another fold's interior
+## and are SKIPPED: the world boot applies this list to the region's own sheet, and a
+## nested fold's anchors mean nothing there. See the `folds` note in the header.
 func fold_pairs(id: String) -> Array:
 	var out: Array = []
 	if not regions.has(id):
 		return out
 	for f in regions[id].get("folds", []):
+		if not (f.get("in", []) as Array).is_empty():
+			continue
 		var a: Dictionary = f.get("anchor1", {})
 		var b: Dictionary = f.get("anchor2", {})
 		out.append([
@@ -207,6 +233,41 @@ func fold_pairs(id: String) -> Array:
 			Vector2i(int(b.get("x", 0)), int(b.get("y", 0))),
 		])
 	return out
+
+
+## The board position of a region's card in the editor, in world px. Authoring only —
+## see the `editor` note in the header. `Vector2.ZERO` when the region has never been
+## placed, which the editor treats as "needs a home" rather than "belongs at the origin".
+func board_pos(id: String) -> Vector2:
+	if not regions.has(id):
+		return Vector2.ZERO
+	var e: Dictionary = regions[id].get("editor", {})
+	var p: Dictionary = e.get("pos", {})
+	return Vector2(float(p.get("x", 0.0)), float(p.get("y", 0.0)))
+
+
+## Fold anchors placed in a region but not yet connected to a partner, as Vector2i
+## cells. Authoring only: an unpaired anchor is a design in progress, not a fold.
+func loose_anchors(id: String) -> Array:
+	var out: Array = []
+	if not regions.has(id):
+		return out
+	var e: Dictionary = regions[id].get("editor", {})
+	for a in e.get("anchors", []):
+		out.append(Vector2i(int(a.get("x", 0)), int(a.get("y", 0))))
+	return out
+
+
+## The grid shape of a region, in cells, read off its ASCII rows. Rows are padded to
+## the widest one when parsed (`WorldCore.parse_map`), so the width is the widest row.
+func region_size(id: String) -> Vector2i:
+	if not regions.has(id):
+		return Vector2i.ZERO
+	var rows: Array = regions[id].get("rows", [])
+	var w := 0
+	for row in rows:
+		w = maxi(w, String(row).length())
+	return Vector2i(w, rows.size())
 
 
 ## The starting hands as a slot array: `HandTypes` ids, one entry per slot, `null`

@@ -48,21 +48,26 @@ const UNANCHORABLE_WALL := 7
 ## The reaction's parameters come from the tile's per-instance `data`; the resolver
 ## (TriggerResolver) interprets the name. Kept as a string, not a Callable, so the
 ## registry stays a pure const data table.
+##
+## `name` is what a human calls this tile — the label the level editor's palette
+## shows. It lives here rather than in the editor because a new tile type must
+## still mean editing ONE file; a palette that kept its own name table would be a
+## second place to forget.
 const _REGISTRY := {
-	NULL:  {"walkable": false, "merge_rank": 5, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	EMPTY: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	WALL:  {"walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	WATER: {"walkable": true,  "merge_rank": 2, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	GOAL:  {"walkable": true,  "merge_rank": 4, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	TRIGGER_FOLD: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "fold"},
-	PIN:          {"walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": ""},
-	UNANCHORABLE_FLOOR: {"walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
-	UNANCHORABLE_WALL:  {"walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
+	NULL:  {"name": "void",    "walkable": false, "merge_rank": 5, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
+	EMPTY: {"name": "air",     "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
+	WALL:  {"name": "wall",    "walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
+	WATER: {"name": "water",   "walkable": true,  "merge_rank": 2, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
+	GOAL:  {"name": "goal",    "walkable": true,  "merge_rank": 4, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
+	TRIGGER_FOLD: {"name": "trigger", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "fold"},
+	PIN:          {"name": "pin",     "walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": ""},
+	UNANCHORABLE_FLOOR: {"name": "unanchorable floor", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
+	UNANCHORABLE_WALL:  {"name": "unanchorable wall",  "walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
 }
 
 ## Safe defaults for an unregistered type: not walkable, lowest rank, non-blocking.
 ## Unknown types should never be silently walkable.
-const _DEFAULT := {"walkable": false, "merge_rank": 0, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""}
+const _DEFAULT := {"name": "unknown", "walkable": false, "merge_rank": 0, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""}
 
 
 ## Full definition for a type (falls back to safe defaults for unknown types).
@@ -72,6 +77,17 @@ static func get_def(type: int) -> Dictionary:
 
 static func is_registered(type: int) -> bool:
 	return _REGISTRY.has(type)
+
+
+## Every registered type, in id order — for palettes and for tests that assert the
+## registry and the authoring characters describe the same set.
+static func all_types() -> Array:
+	return _REGISTRY.keys()
+
+
+## The human name of a tile type ("wall", "unanchorable floor").
+static func type_name(type: int) -> String:
+	return get_def(type)["name"]
 
 
 ## Can the player stand on a complete cell whose dominant type is `type`?
