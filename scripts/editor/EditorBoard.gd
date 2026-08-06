@@ -67,6 +67,8 @@ const C_ANCHOR := Color(1.00, 0.62, 0.36)
 const C_FOLD := Color(0.72, 0.55, 1.00)
 const C_BAND := Color(0.72, 0.55, 1.00, 0.16)
 const C_HOVER := Color(1, 1, 1, 0.22)
+const C_PARAM := Color(0.92, 0.55, 0.85)
+const C_PARAM_UNSET := Color(0.55, 0.58, 0.68)
 
 var _tile_cache: Dictionary = {}   # region id -> {"tex": ImageTexture, "stamp": int}
 
@@ -123,6 +125,7 @@ func _draw_card(doc: EditorDoc, id: String) -> void:
 	_origin = pos
 	draw_set_transform(pos, 0.0, Vector2.ONE)
 	_draw_folds(doc, id, cell)
+	_draw_tile_params(doc, id, cell)
 	_draw_spawn(doc, id, cell)
 	_draw_lights(doc, id, cell)
 	_draw_hands(doc, id, cell)
@@ -269,6 +272,72 @@ func _anchor_dot(at: Vector2, cell: float, color: Color, filled: bool) -> void:
 	else:
 		draw_arc(at, r, 0, TAU, 24, color, _px(LINE_PX * 1.6))
 		draw_circle(at, r * 0.30, color)
+
+
+## What a configured tile POINTS AT.
+##
+## Any parameter of type `cells` is drawn as a line from the tile to each cell it
+## names, with a numbered marker on each. Nothing here knows what a trigger is:
+## it walks the schema, so a parameter added to any tile type shows up on the
+## board the day it is declared. That is the whole reason the coordinates in a
+## tile's data are worth having a board at all — a pair of numbers in a JSON file
+## tells you nothing about where the fold will land.
+##
+## The tile being INSPECTED additionally gets the full fold preview, when its
+## type reacts by folding. Drawing that for every configured plate at once would
+## be a wall of overlapping bands; drawing it for the one you are editing is the
+## answer to "what will this actually do".
+func _draw_tile_params(doc: EditorDoc, id: String, cell: float) -> void:
+	var focus: Dictionary = editor.inspected()
+	for tile_cell in doc.tiles_with_data(id):
+		var type := doc.type_at(id, tile_cell)
+		if not TileParams.has_params(type):
+			continue
+		var data := doc.tile_data(id, tile_cell)
+		var from := _center(tile_cell, cell)
+		var focused: bool = not focus.is_empty() \
+			and String(focus["region"]) == id and focus["cell"] == tile_cell
+		for spec in TileParams.specs_for(type):
+			if String(spec.get("type", "")) != TileParams.CELLS:
+				continue
+			var cells: Array = data.get(String(spec["key"]), [])
+			for i in range(cells.size()):
+				var target: Vector2i = cells[i]
+				if target == TileParams.UNSET:
+					continue
+				var to := _center(target, cell)
+				_dashed(from, to, Color(C_PARAM, 0.75 if focused else 0.4),
+					_px(LINE_PX), _px(6.0))
+				draw_arc(to, cell * 0.30, 0, TAU, 22, C_PARAM, _px(LINE_PX * 1.5))
+				_label(to + Vector2(cell * 0.34, -cell * 0.12), str(i + 1), C_PARAM, 11)
+			if focused and TileTypes.on_enter_kind(type) == "fold" and cells.size() >= 2:
+				_draw_reaction_preview(doc, id, cells[0], cells[1], cell)
+		draw_rect(Rect2(Vector2(tile_cell) * cell, Vector2(cell, cell)),
+			C_PARAM, false, _px(BORDER_PX if focused else LINE_PX))
+
+	# The tile the inspector is on, even when it has nothing stored — selecting a
+	# wall must look like selecting something.
+	if not focus.is_empty() and String(focus["region"]) == id:
+		var sel: Vector2i = focus["cell"]
+		draw_rect(Rect2(Vector2(sel) * cell, Vector2(cell, cell)),
+			C_SELECTED, false, _px(BORDER_PX))
+		if not editor.picking.is_empty():
+			draw_rect(Rect2(Vector2(sel) * cell, Vector2(cell, cell)), Color(C_SELECTED, 0.18))
+
+
+## The fold a reacting tile will make, drawn exactly as a pre-placed fold is —
+## same guides, dimmer. It is the same question ("where will this cut?") asked of
+## a fold that has not happened yet rather than one that ships already made.
+func _draw_reaction_preview(doc: EditorDoc, id: String, a: Vector2i, b: Vector2i, cell: float) -> void:
+	if a == TileParams.UNSET or b == TileParams.UNSET or a == b:
+		return
+	var guides := EditorTools.fold_guides(a, b, doc.size_of(id), cell)
+	for poly in guides["band"]:
+		draw_colored_polygon(poly, Color(C_PARAM, 0.10))
+	for key in ["crease1", "crease2"]:
+		var seg: PackedVector2Array = guides[key]
+		if seg.size() == 2:
+			_dashed(seg[0], seg[1], Color(C_PARAM, 0.7), _px(LINE_PX), _px(7.0))
 
 
 func _draw_spawn(doc: EditorDoc, id: String, cell: float) -> void:

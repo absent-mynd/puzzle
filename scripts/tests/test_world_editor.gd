@@ -350,6 +350,147 @@ func test_the_hand_tool_places_the_selected_kind():
 
 
 # ---------------------------------------------------------------------------
+# The tile inspector
+# ---------------------------------------------------------------------------
+
+func _a_trigger() -> Vector2i:
+	## Paint a trigger somewhere in west and return its cell.
+	var cell := Vector2i(6, 6)
+	ed.doc.paint("west", cell, "T")
+	ed.doc.end_gesture()
+	return cell
+
+
+func test_nothing_is_inspected_to_begin_with():
+	assert_eq(ed.inspected(), {}, "the inspector opens empty")
+
+
+func test_the_tile_tool_selects_a_tile():
+	ed.set_tool(ed.Tool.TILE)
+	ed._press(_pos("west", Vector2i(3, 4)), false)
+	ed._release(_pos("west", Vector2i(3, 4)))
+	var target: Dictionary = ed.inspected()
+	assert_eq(String(target["region"]), "west", "the region came through")
+	assert_eq(target["cell"], Vector2i(3, 4), "and the cell")
+
+
+func test_a_tile_with_no_parameters_can_still_be_inspected():
+	# The inspector's job includes saying "a wall does nothing per-tile", which
+	# beats a blank panel that leaves you wondering whether you missed.
+	ed.set_tool(ed.Tool.TILE)
+	ed._press(_pos("west", Vector2i(0, 15)), false)
+	ed._release(_pos("west", Vector2i(0, 15)))
+	assert_eq(int(ed.inspected()["type"]), TileTypes.WALL, "a wall selects like anything else")
+
+
+func test_inspecting_survives_switching_tools_but_not_a_vanished_cell():
+	var cell := _a_trigger()
+	ed.select_tile("west", cell)
+	ed.set_tool(ed.Tool.PAINT)
+	assert_eq(ed.inspected()["cell"], cell, "the selection is not lost to a tool change")
+	ed.doc.resize_region("west", Vector2i.ZERO, Vector2i(4, 4))
+	assert_eq(ed.inspected(), {}, "but a cell cropped off the canvas stops being inspectable")
+
+
+func test_setting_a_parameter_through_the_editor():
+	var cell := _a_trigger()
+	ed.select_tile("west", cell)
+	ed.set_tile_param("channel", "vault")
+	assert_eq(ed.doc.raw_tile_data("west", cell), {"channel": "vault"}, "it reached the document")
+
+
+func test_right_clicking_a_tile_clears_its_settings():
+	var cell := _a_trigger()
+	ed.doc.set_tile_param("west", cell, "channel", "vault")
+	ed.doc.end_gesture()
+	ed.set_tool(ed.Tool.TILE)
+	ed._press(_pos("west", cell), true)
+	ed._release(_pos("west", cell))
+	assert_eq(ed.doc.raw_tile_data("west", cell), {}, "the entry is gone")
+
+
+func test_picking_a_cell_on_the_board_fills_a_parameter():
+	# The reason cell parameters are clicked rather than typed: they are base
+	# cells, and nobody can read a fold out of two integers.
+	var cell := _a_trigger()
+	ed.select_tile("west", cell)
+	ed.begin_pick("anchors", 0)
+	assert_false(ed.picking.is_empty(), "the next click is armed")
+	ed._press(_pos("west", Vector2i(12, 6)), false)
+	ed._release(_pos("west", Vector2i(12, 6)))
+	assert_true(ed.picking.is_empty(), "and spent")
+	assert_eq(ed.doc.tile_data("west", cell)["anchors"][0], Vector2i(12, 6), "slot 1 is set")
+	assert_eq(ed.doc.tile_data("west", cell)["anchors"][1], TileParams.UNSET, "slot 2 is not")
+
+
+func test_a_pick_beats_the_tool_and_the_chrome():
+	# While a pick is armed the whole board is a target — a click landing on a
+	# resize grip or painting instead would be maddening.
+	var cell := _a_trigger()
+	ed.select_tile("west", cell)
+	ed.set_tool(ed.Tool.PAINT)
+	ed.set_brush("#")
+	ed.begin_pick("anchors", 1)
+	ed._press(_pos("west", Vector2i(9, 3)), false)
+	ed._release(_pos("west", Vector2i(9, 3)))
+	assert_eq(ed.doc.char_at("west", Vector2i(9, 3)), ".", "the paint tool did not fire")
+	assert_eq(ed.doc.tile_data("west", cell)["anchors"][1], Vector2i(9, 3), "the pick did")
+
+
+func test_right_click_cancels_a_pick():
+	var cell := _a_trigger()
+	ed.select_tile("west", cell)
+	ed.begin_pick("anchors", 0)
+	ed._press(_pos("west", Vector2i(12, 6)), true)
+	ed._release(_pos("west", Vector2i(12, 6)))
+	assert_true(ed.picking.is_empty(), "the pick was cancelled")
+	assert_eq(ed.doc.tile_data("west", cell)["anchors"][0], TileParams.UNSET, "and set nothing")
+
+
+func test_a_picked_cell_must_be_in_the_tiles_own_region():
+	# Base ids are per-region and DO overlap; a cell of another region would
+	# silently resolve onto whatever tile shares its numbers.
+	var cell := _a_trigger()
+	ed.select_tile("west", cell)
+	ed.begin_pick("anchors", 0)
+	ed._press(_pos("east", Vector2i(3, 3)), false)
+	ed._release(_pos("east", Vector2i(3, 3)))
+	assert_eq(ed.doc.tile_data("west", cell)["anchors"][0], TileParams.UNSET,
+		"the cross-region pick was refused")
+
+
+func test_unsetting_one_slot_leaves_the_other():
+	var cell := _a_trigger()
+	ed.select_tile("west", cell)
+	ed.doc.set_tile_param("west", cell, "anchors", [Vector2i(4, 1), Vector2i(6, 1)])
+	ed.doc.end_gesture()
+	ed.unset_tile_cell("anchors", 0)
+	assert_eq(ed.doc.tile_data("west", cell)["anchors"][0], TileParams.UNSET, "slot 1 cleared")
+	assert_eq(ed.doc.tile_data("west", cell)["anchors"][1], Vector2i(6, 1), "slot 2 untouched")
+
+
+func test_the_inspector_takes_board_room_only_while_it_is_open():
+	ed.set_tool(ed.Tool.PAINT)
+	await get_tree().process_frame
+	var wide: float = ed.free_rect().size.x
+	ed.set_tool(ed.Tool.TILE)
+	await get_tree().process_frame
+	assert_lt(ed.free_rect().size.x, wide,
+		"an open inspector is window the board does not get, and framing has to know")
+	ed.set_tool(ed.Tool.PAINT)
+	await get_tree().process_frame
+	assert_almost_eq(ed.free_rect().size.x, wide, 0.5, "and it gives the room back")
+
+
+func test_the_shipped_trigger_reads_back_through_the_inspector():
+	# east's plate is the one piece of authored tile_data in the game.
+	ed.select_tile("east", Vector2i(25, 9))
+	var data: Dictionary = ed.doc.tile_data("east", Vector2i(25, 9))
+	assert_eq(data["channel"], "vault", "its channel")
+	assert_eq(data["anchors"], [Vector2i(26, 9), Vector2i(28, 9)], "and both its anchors")
+
+
+# ---------------------------------------------------------------------------
 # Canvases
 # ---------------------------------------------------------------------------
 

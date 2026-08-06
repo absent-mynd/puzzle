@@ -37,7 +37,7 @@ const ZOOM_STEP := 1.15
 const MIN_CELLS := 2
 const MAX_CELLS := 512
 
-enum Tool { PAINT, RECT, PICK, SPAWN, DOOR, FOLD, LIGHT, HAND }
+enum Tool { PAINT, RECT, PICK, SPAWN, DOOR, FOLD, LIGHT, HAND, TILE }
 
 ## Tool -> the one-line hint the status bar shows. Kept beside the enum so adding a
 ## tool means adding a row, not hunting for the place that describes it.
@@ -50,6 +50,7 @@ const TOOL_HINT := {
 	Tool.FOLD: "click to place an anchor · drag anchor→anchor to make a pre-placed fold · right-click to remove",
 	Tool.LIGHT: "click to place a light · right-click to remove",
 	Tool.HAND: "click to leave a hand on the ground · right-click to remove",
+	Tool.TILE: "click a tile to edit what it DOES · right-click to clear its settings",
 }
 
 var doc: EditorDoc = null
@@ -66,6 +67,17 @@ var hand_kind: int = HandTypes.PLAIN
 var selected_region: String = ""
 var hover_region: String = ""
 var hover_cell: Vector2i = Vector2i.ZERO
+
+## The tile the inspector is showing, as `{"region": String, "cell": Vector2i}`,
+## or `{}`. Separate from `selected_region` because selecting a CARD and
+## selecting a TILE ON it are different questions, and a card drag must not
+## silently retarget the panel you were typing into.
+var selected_tile: Dictionary = {}
+
+## Set while the inspector is waiting for a board click to fill a cell-valued
+## parameter: `{"key": String, "index": int}`. The affordance is generated from
+## the schema, so any future `cells` parameter gets it without new code.
+var picking: Dictionary = {}
 
 ## The in-flight gesture: `{}` when idle, otherwise `{"kind": String, ...}`. One
 ## dictionary rather than a flag per gesture, because exactly one can be running
@@ -283,15 +295,17 @@ func zoom_at(anchor: Vector2, factor: float) -> void:
 	board.queue_redraw()
 
 
-## The part of the window the board actually gets: everything the panel is not
+## The part of the window the board actually gets: everything the panels are not
 ## covering. Framing into the whole viewport would centre a world neatly and then
 ## hide its left-hand card behind the tools.
 func free_rect() -> Rect2:
 	var view := get_viewport_rect().size
 	var left := 0.0
+	var right := 0.0
 	if ui != null:
 		left = ui.panel_width()
-	return Rect2(left, 0.0, maxf(view.x - left, 1.0), view.y)
+		right = ui.inspector_width()   # zero while the tile inspector is hidden
+	return Rect2(left, 0.0, maxf(view.x - left - right, 1.0), view.y)
 
 
 ## Fit every card into the free area. The default view of a world you have just
@@ -350,6 +364,17 @@ func _press(at: Vector2, alt: bool) -> void:
 		_gesture = {"kind": "pan"}
 		return
 	var id := region_at(at)
+
+	# Waiting for a cell to fill a parameter with. This runs ahead of everything,
+	# chrome included: the whole board is a target while a pick is armed, and a
+	# stray click landing on a resize grip instead would be maddening. Right-click
+	# (or Escape) cancels.
+	if not picking.is_empty():
+		if alt:
+			cancel_pick()
+		else:
+			_finish_pick(id, at)
+		return
 
 	if not alt and selected_region != "" and doc.has_region(selected_region):
 		for handle in resize_handles(selected_region):
@@ -411,6 +436,20 @@ func _tool_press(id: String, cell: Vector2i, at: Vector2, alt: bool) -> void:
 				doc.remove_hand(id, cell)
 			elif not doc.add_hand(id, cell, hand_kind):
 				toast("a hand is already on that cell", EditorBoard.C_WARN)
+		Tool.TILE:
+			_tile_press(id, cell, alt)
+
+
+## Select a tile for the inspector, or clear what it has stored.
+##
+## Every tile can be selected, not only the ones that take parameters: the
+## inspector's job includes saying "a wall does nothing per-tile", which is a
+## more useful answer than the panel staying blank and leaving you to wonder
+## whether you missed.
+func _tile_press(id: String, cell: Vector2i, alt: bool) -> void:
+	selected_tile = {"region": id, "cell": cell}
+	if alt:
+		clear_tile_data()
 
 
 func _door_press(id: String, cell: Vector2i, at: Vector2, alt: bool) -> void:
@@ -541,6 +580,127 @@ func _finish_fold_link(at: Vector2) -> void:
 		toast("pre-placed fold %s → %s" % [from, target], EditorBoard.C_OK)
 
 
+# ---------------------------------------------------------------------------
+# The tile inspector
+# ---------------------------------------------------------------------------
+
+## The tile the inspector is on, or `{}` if there is none or it has gone away
+## (deleted region, cropped-off cell). Asked rather than trusted, so nothing has
+## to remember to clear the selection.
+func inspected() -> Dictionary:
+	if selected_tile.is_empty():
+		return {}
+	var id := String(selected_tile["region"])
+	var cell: Vector2i = selected_tile["cell"]
+	if not doc.has_region(id) or not EditorTools.in_bounds(cell, doc.size_of(id)):
+		return {}
+	return {"region": id, "cell": cell, "type": doc.type_at(id, cell)}
+
+
+func select_tile(id: String, cell: Vector2i) -> void:
+	selected_tile = {"region": id, "cell": cell}
+	refresh()
+
+
+## Write one parameter of the inspected tile. The panel calls this for every
+## field it generated; which field it was is a string, because the whole form is
+## generated from the schema and there is nothing type-specific to dispatch on.
+##
+## `commit` false leaves the undo step OPEN under a per-key tag, so a text field
+## writing on every keystroke costs one undo for the whole word rather than one
+## per letter. The field calls `commit_tile_param` when it is done.
+func set_tile_param(key: String, value, commit: bool = true) -> void:
+	var target := inspected()
+	if target.is_empty():
+		return
+	var tag := "" if commit else "param:%s" % key
+	if doc.set_tile_param(String(target["region"]), target["cell"], key, value, tag) and commit:
+		doc.end_gesture()
+	refresh()
+
+
+## Close the undo step a text field has been writing into.
+func commit_tile_param() -> void:
+	doc.end_gesture()
+	refresh()
+
+
+func clear_tile_data() -> void:
+	var target := inspected()
+	if target.is_empty():
+		return
+	if doc.clear_tile_data(String(target["region"]), target["cell"]):
+		doc.end_gesture()
+		toast("cleared the settings on %s" % target["cell"], EditorBoard.C_OK)
+	refresh()
+
+
+## Unset one slot of a cell-valued parameter, leaving the others alone.
+func unset_tile_cell(key: String, index: int) -> void:
+	var target := inspected()
+	if target.is_empty():
+		return
+	var cells: Array = (doc.tile_data(String(target["region"]), target["cell"])
+		.get(key, []) as Array).duplicate()
+	while cells.size() <= index:
+		cells.append(TileParams.UNSET)
+	cells[index] = TileParams.UNSET
+	set_tile_param(key, cells)
+
+
+## Arm a board click to fill slot `index` of a cell-valued parameter.
+func begin_pick(key: String, index: int) -> void:
+	if inspected().is_empty():
+		return
+	picking = {"key": key, "index": index}
+	var spec := TileParams.spec_of(int(inspected()["type"]), key)
+	toast("click a cell for %s %d — right-click or escape to cancel"
+		% [String(spec.get("label", key)), index + 1], EditorBoard.C_OK)
+	refresh()
+
+
+func cancel_pick() -> void:
+	if picking.is_empty():
+		return
+	picking = {}
+	toast("cancelled", EditorBoard.C_DIM)
+	refresh()
+
+
+## A board click landed while a pick was armed.
+##
+## The cell must be in the SAME region as the tile being configured: the
+## coordinates are base cells of that region's own sheet, and a cell of another
+## region would silently resolve onto whatever tile shares its numbers — the same
+## trap `AGENTS.md` records for anchors ("anchors carry their region, and
+## resolution checks it").
+func _finish_pick(id: String, at: Vector2) -> void:
+	var target := inspected()
+	var key := String(picking["key"])
+	var index := int(picking["index"])
+	picking = {}
+	if target.is_empty():
+		refresh()
+		return
+	if id != String(target["region"]):
+		toast("that cell is in another region — a tile's cells are its own region's",
+			EditorBoard.C_WARN)
+		refresh()
+		return
+	var cell := cell_at(id, at)
+	if not EditorTools.in_bounds(cell, doc.size_of(id)):
+		refresh()
+		return
+	var cells: Array = (doc.tile_data(id, target["cell"]).get(key, []) as Array).duplicate()
+	while cells.size() <= index:
+		cells.append(TileParams.UNSET)
+	cells[index] = cell
+	if doc.set_tile_param(id, target["cell"], key, cells):
+		doc.end_gesture()
+		toast("%s %d → %s" % [key, index + 1, cell], EditorBoard.C_OK)
+	refresh()
+
+
 ## Draw whatever gesture is in flight. Called from `EditorBoard._draw` so the
 ## preview sits over the cards, and written here because the gesture's shape is
 ## this file's business.
@@ -624,8 +784,13 @@ func _key(event: InputEventKey) -> void:
 		KEY_A: set_tool(Tool.FOLD)
 		KEY_L: set_tool(Tool.LIGHT)
 		KEY_H: set_tool(Tool.HAND)
+		KEY_T: set_tool(Tool.TILE)
 		KEY_HOME: frame_all()
-		KEY_ESCAPE: _end_gesture()
+		KEY_ESCAPE:
+			if not picking.is_empty():
+				cancel_pick()
+			else:
+				_end_gesture()
 		_:
 			var index := event.keycode - KEY_1
 			if index >= 0 and index < 9:

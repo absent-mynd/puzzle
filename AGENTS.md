@@ -124,6 +124,7 @@ instead.
 | Derived fragments / queryable state | `scripts/model/FoldedPiece.gd`, `FoldedState.gd` |
 | **Base ↔ derived point transport** | `scripts/model/BaseFrame.gd` |
 | What a tile IS and DOES (the registry) | `scripts/model/TileTypes.gd` |
+| What a tile's per-instance params MEAN | `scripts/model/TileParams.gd` |
 | **The hand registry** (one file per kind) | `scripts/model/HandTypes.gd` |
 | A hand lying in the world (an occupant) | `scripts/model/HandPickup.gd` |
 | **The slot ledger** (conservation arithmetic) | `scripts/model/AnchorStock.gd` |
@@ -162,9 +163,17 @@ and re-derive. Never edit a `FoldedPiece` in place and expect it to persist.
 
 ### 2. The registry owns per-type behavior
 `TileTypes` is the single authority for walkable / merge rank / `blocks_fold` /
-`blocks_anchor` / `on_enter`. Adding a tile type should mean editing **one** file.
-If you are about to write `if piece.type == TileTypes.WALL`, ask whether you want
-`TileTypes.is_walkable(piece.type)` instead — almost always yes.
+`blocks_anchor` / `on_enter` / `name` / `params`. Adding a tile type should mean
+editing **one** file. If you are about to write `if piece.type == TileTypes.WALL`,
+ask whether you want `TileTypes.is_walkable(piece.type)` instead — almost always yes.
+
+`params` extends that rule to a tile's PER-INSTANCE data (`tile_data`): the
+registry declares each parameter's key, value type, default and label, and
+`TileParams` says what those declarations mean. The editor's tile inspector is
+generated from them and names no tile type, so declaring a parameter is the whole
+job — it becomes editable, validated, drawn on the board and saved with nothing
+else touched. Do not add a bespoke editor panel for a new parameter; add a row to
+the schema. See `docs/features/WORLD_EDITOR.md` §"Per-tile parameters".
 
 ### 3. Transport by base frame, not by crease math
 When something must survive a fold, map it through `BaseFrame`. Crease arithmetic

@@ -53,21 +53,42 @@ const UNANCHORABLE_WALL := 7
 ## shows. It lives here rather than in the editor because a new tile type must
 ## still mean editing ONE file; a palette that kept its own name table would be a
 ## second place to forget.
+##
+## `params` DECLARES the per-instance parameters a tile of this type takes — the
+## shape of its entry in a region's `tile_data`. The ASCII grid says what a tile
+## IS; `tile_data` says what this particular one DOES, and this is the schema of
+## that "does". Each entry is:
+##
+##   {"key": String, "type": String, "default": Variant, "label": String,
+##    "hint": String, and per-type extras}
+##
+## `type` is a plain string, not a constant from elsewhere, for the same reason
+## `on_enter` is — the registry stays a pure const data table with no outbound
+## references. `TileParams` owns what those names MEAN, validates against them,
+## and is what the editor generates its inspector from. So a new parameter on a
+## new tile type becomes editable, validated and saved without the editor
+## learning anything: it is still ONE file to touch.
 const _REGISTRY := {
-	NULL:  {"name": "void",    "walkable": false, "merge_rank": 5, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	EMPTY: {"name": "air",     "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	WALL:  {"name": "wall",    "walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	WATER: {"name": "water",   "walkable": true,  "merge_rank": 2, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	GOAL:  {"name": "goal",    "walkable": true,  "merge_rank": 4, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""},
-	TRIGGER_FOLD: {"name": "trigger", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "fold"},
-	PIN:          {"name": "pin",     "walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": ""},
-	UNANCHORABLE_FLOOR: {"name": "unanchorable floor", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
-	UNANCHORABLE_WALL:  {"name": "unanchorable wall",  "walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": true, "on_enter": ""},
+	NULL:  {"name": "void",    "walkable": false, "merge_rank": 5, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
+	EMPTY: {"name": "air",     "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
+	WALL:  {"name": "wall",    "walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
+	WATER: {"name": "water",   "walkable": true,  "merge_rank": 2, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
+	GOAL:  {"name": "goal",    "walkable": true,  "merge_rank": 4, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
+	TRIGGER_FOLD: {"name": "trigger", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "fold",
+		"params": [
+			{"key": "channel", "type": "string", "default": "", "label": "channel",
+			 "hint": "names the fold this plate makes. Two plates on one channel are one fold: whichever fires first makes it, and the other finds it already standing."},
+			{"key": "anchors", "type": "cells", "default": [], "count": 2, "required": true, "label": "fold anchors",
+			 "hint": "the two cells the fired fold is pinned between, in BASE coordinates — they ride earlier folds like anything else."},
+		]},
+	PIN:          {"name": "pin",     "walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": "", "params": []},
+	UNANCHORABLE_FLOOR: {"name": "unanchorable floor", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "params": []},
+	UNANCHORABLE_WALL:  {"name": "unanchorable wall",  "walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "params": []},
 }
 
 ## Safe defaults for an unregistered type: not walkable, lowest rank, non-blocking.
 ## Unknown types should never be silently walkable.
-const _DEFAULT := {"name": "unknown", "walkable": false, "merge_rank": 0, "blocks_fold": false, "blocks_anchor": false, "on_enter": ""}
+const _DEFAULT := {"name": "unknown", "walkable": false, "merge_rank": 0, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []}
 
 
 ## Full definition for a type (falls back to safe defaults for unknown types).
@@ -88,6 +109,13 @@ static func all_types() -> Array:
 ## The human name of a tile type ("wall", "unanchorable floor").
 static func type_name(type: int) -> String:
 	return get_def(type)["name"]
+
+
+## The per-instance parameter schema of a tile type — the shape of its `tile_data`
+## entry. Empty for most types. `TileParams` is what reads it; see the note on
+## `params` in the registry above.
+static func params(type: int) -> Array:
+	return get_def(type).get("params", [])
 
 
 ## Can the player stand on a complete cell whose dominant type is `type`?

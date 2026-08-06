@@ -131,6 +131,160 @@ func test_the_edited_rows_still_build_a_base_grid():
 
 
 # ---------------------------------------------------------------------------
+# Per-tile parameters
+# ---------------------------------------------------------------------------
+
+func _trigger_doc() -> EditorDoc:
+	var doc := _doc()
+	doc.paint("west", Vector2i(2, 2), "T")
+	doc.end_gesture()
+	return doc
+
+
+func test_an_unconfigured_tile_reads_as_its_defaults():
+	var doc := _trigger_doc()
+	var data := doc.tile_data("west", Vector2i(2, 2))
+	assert_eq(data["channel"], "", "the channel defaults")
+	assert_eq(data["anchors"], [TileParams.UNSET, TileParams.UNSET], "with two slots to fill")
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {},
+		"...while the FILE says nothing at all about it")
+
+
+func test_setting_a_parameter_stores_it():
+	var doc := _trigger_doc()
+	assert_true(doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault"), "it took")
+	assert_eq(doc.tile_data("west", Vector2i(2, 2))["channel"], "vault", "and reads back")
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {"channel": "vault"},
+		"stored on its own — the untouched anchors are not written out")
+
+
+func test_setting_a_parameter_back_to_its_default_removes_it():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.end_gesture()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "")
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {},
+		"clearing a field really clears it, and the whole entry goes with the last one")
+
+
+func test_setting_a_parameter_to_what_it_already_is_is_not_a_change():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.end_gesture()
+	assert_false(doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault"),
+		"a no-op must not push an undo step")
+
+
+func test_cells_are_stored_in_the_files_own_form():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "anchors", [Vector2i(4, 1), Vector2i(6, 1)])
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2))["anchors"], [[4, 1], [6, 1]],
+		"no Vector2i reaches the file")
+	assert_eq(doc.tile_data("west", Vector2i(2, 2))["anchors"],
+		[Vector2i(4, 1), Vector2i(6, 1)], "but the editor sees cells")
+
+
+func test_a_half_filled_cell_pair_keeps_its_empty_slot():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "anchors", [Vector2i(4, 1), TileParams.UNSET])
+	assert_eq(doc.tile_data("west", Vector2i(2, 2))["anchors"],
+		[Vector2i(4, 1), TileParams.UNSET], "one chosen, one still to pick")
+
+
+func test_an_unknown_parameter_is_kept_as_given():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "future_thing", {"a": 1})
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2))["future_thing"], {"a": 1},
+		"a key with no spec is data somebody meant")
+
+
+func test_clear_tile_data_removes_the_whole_entry():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.end_gesture()
+	assert_true(doc.clear_tile_data("west", Vector2i(2, 2)), "there was something to clear")
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {}, "and now there is not")
+	assert_false(doc.clear_tile_data("west", Vector2i(2, 2)), "clearing nothing is not a change")
+
+
+func test_tiles_with_data_lists_the_configured_cells():
+	var doc := _trigger_doc()
+	doc.paint("west", Vector2i(5, 2), "T")
+	doc.set_tile_param("west", Vector2i(5, 2), "channel", "b")
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "a")
+	assert_eq(doc.tiles_with_data("west"), [Vector2i(2, 2), Vector2i(5, 2)],
+		"in reading order, and only the ones that actually carry something")
+
+
+func test_parameters_are_undoable():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.end_gesture()
+	doc.undo()
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {}, "the setting came back off")
+
+
+func test_typing_a_channel_costs_one_undo():
+	var doc := _trigger_doc()
+	for text in ["v", "va", "vau", "vaul", "vault"]:
+		doc.set_tile_param("west", Vector2i(2, 2), "channel", text, "param:channel")
+	doc.end_gesture()
+	doc.undo()
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {},
+		"one undo takes back the whole word, not one letter of it")
+
+
+func test_painting_a_tile_to_another_type_drops_its_parameters():
+	# Otherwise a trigger's config lives on invisibly under a wall, and comes back
+	# to life the day somebody paints a trigger there again.
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.end_gesture()
+	doc.paint("west", Vector2i(2, 2), "#")
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {}, "the settings went with the tile")
+
+
+func test_that_drop_is_part_of_the_same_undo_as_the_paint():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.end_gesture()
+	doc.paint("west", Vector2i(2, 2), "#")
+	doc.end_gesture()
+	doc.undo()
+	assert_eq(doc.char_at("west", Vector2i(2, 2)), "T", "the tile is back")
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {"channel": "vault"},
+		"and so are its settings — one undo, one state")
+
+
+func test_repainting_the_same_type_keeps_the_parameters():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.end_gesture()
+	doc.paint("west", Vector2i(2, 2), "T")
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {"channel": "vault"},
+		"painting a trigger over a trigger changes nothing, so it costs nothing")
+
+
+func test_a_rect_fill_drops_the_parameters_it_paints_over():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.end_gesture()
+	doc.fill_rect("west", Vector2i(0, 0), Vector2i(7, 4), "#")
+	assert_eq(doc.raw_tile_data("west", Vector2i(2, 2)), {},
+		"a big stroke is held to the same rule as a single click")
+
+
+func test_resizing_carries_the_parameters_with_the_terrain():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.end_gesture()
+	doc.resize_region("west", Vector2i(3, 0), Vector2i(11, 5))
+	assert_eq(doc.char_at("west", Vector2i(5, 2)), "T", "the trigger moved")
+	assert_eq(doc.raw_tile_data("west", Vector2i(5, 2)), {"channel": "vault"},
+		"and its settings moved with it")
+
+
+# ---------------------------------------------------------------------------
 # Undo
 # ---------------------------------------------------------------------------
 
@@ -512,6 +666,50 @@ func test_an_anchor_on_an_unanchorable_tile_is_a_warning():
 	doc.connect_anchors("west", Vector2i(1, 1), Vector2i(5, 1))
 	assert_true(_has(_messages(doc, "warn"), "unanchorable"),
 		"a fold pinned to a tile that refuses anchors is worth saying out loud")
+
+
+func test_an_unconfigured_trigger_is_reported():
+	var doc := _trigger_doc()
+	assert_eq(doc.error_count(), 0, "the world still loads — the plate just does nothing")
+	assert_true(_has(_messages(doc, "warn"), "not configured"),
+		"but a plate that does nothing is exactly what you want told: %s"
+			% [_messages(doc, "warn")])
+
+
+func test_a_half_configured_trigger_says_which_slot():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "anchors", [Vector2i(4, 1), TileParams.UNSET])
+	assert_true(_has(_messages(doc, "warn"), "1 of 2 not chosen"),
+		"the count comes through: %s" % [_messages(doc, "warn")])
+
+
+func test_a_finished_trigger_is_reported_no_further():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
+	doc.set_tile_param("west", Vector2i(2, 2), "anchors", [Vector2i(4, 1), Vector2i(6, 1)])
+	assert_false(_has(_messages(doc, "warn"), "trigger"),
+		"a finished plate is quiet, but got: %s" % [_messages(doc, "warn")])
+
+
+func test_an_anchor_outside_the_region_is_reported():
+	var doc := _trigger_doc()
+	doc.set_tile_param("west", Vector2i(2, 2), "anchors", [Vector2i(4, 1), Vector2i(99, 1)])
+	assert_true(_has(_messages(doc, "warn"), "outside the region"),
+		"a plate aimed off the map: %s" % [_messages(doc, "warn")])
+
+
+func test_tile_data_stranded_outside_the_grid_is_an_error():
+	var doc := _trigger_doc()
+	doc.world.regions["west"]["tile_data"]["99,99"] = {"channel": "x"}
+	assert_gt(doc.error_count(), 0, "the loader cannot make sense of that at all")
+
+
+func test_tile_data_on_a_type_that_takes_none_is_a_warning():
+	var doc := _trigger_doc()
+	doc.world.regions["west"]["tile_data"]["0,0"] = {"channel": "x"}
+	assert_eq(doc.error_count(), 0, "it loads, harmlessly")
+	assert_true(_has(_messages(doc, "warn"), "leftover tile data"),
+		"but it is dead weight and worth saying: %s" % [_messages(doc, "warn")])
 
 
 func test_a_missing_start_region_is_an_error():

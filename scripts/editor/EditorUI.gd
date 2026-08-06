@@ -23,6 +23,7 @@ const C_BAD := EditorBoard.C_BAD
 const C_DIM := EditorBoard.C_DIM
 
 const PANEL_W := 292
+const INSPECTOR_W := 236
 const TOAST_SECONDS := 4.0
 
 var editor = null
@@ -42,7 +43,21 @@ var _sel_name: LineEdit
 var _sel_w: SpinBox
 var _sel_h: SpinBox
 var _sel_box: VBoxContainer
+var _inspector: PanelContainer
+var _tile_box: VBoxContainer
+var _tile_head: Label
+var _tile_form: VBoxContainer
 var _issues: RichTextLabel
+
+## Signature of the tile form currently built, so `refresh()` — which runs on
+## every press — rebuilds the widgets only when the form's SHAPE changes. A
+## rebuild on every refresh would take focus out of the field being typed in
+## after each keystroke.
+var _tile_form_key: String = ""
+
+## The generated parameter widgets, as `{"key", "kind", "node", "index"}`, so
+## values can be pushed into them without rebuilding. See `_sync_tile_form`.
+var _param_rows: Array = []
 var _hint: Label
 var _toast: Label
 var _toast_left: float = 0.0
@@ -113,6 +128,7 @@ func _build() -> void:
 	_build_palette(col)
 	_build_canvases(col)
 	_build_issues(col)
+	_build_inspector()
 	_build_status()
 
 
@@ -164,6 +180,7 @@ func _build_tools(col: VBoxContainer) -> void:
 		[WorldEditor.Tool.PICK, "Pick (I)"], [WorldEditor.Tool.SPAWN, "Spawn (P)"],
 		[WorldEditor.Tool.DOOR, "Door (D)"], [WorldEditor.Tool.FOLD, "Fold anchor (A)"],
 		[WorldEditor.Tool.LIGHT, "Light (L)"], [WorldEditor.Tool.HAND, "Hand (H)"],
+		[WorldEditor.Tool.TILE, "Tile data (T)"],
 	]:
 		var tool: int = entry[0]
 		var b := Button.new()
@@ -274,6 +291,229 @@ func _build_canvases(col: VBoxContainer) -> void:
 	_button(act_row, "Delete", func(): editor.delete_region(editor.selected_region))
 
 
+## The tile inspector: its own panel on the RIGHT, not another section of the
+## left one.
+##
+## Two reasons. It is the panel you are actively working in while clicking cells,
+## and a section at the bottom of a column that already scrolls would be below
+## the fold exactly when it is in use. And it appears only when there is a tile
+## to show, so the board keeps the whole window the rest of the time.
+##
+## Its CONTENTS are generated per selected tile from `TileTypes`' `params`
+## schema — see `_rebuild_tile_form`. There is deliberately nothing
+## trigger-shaped here: this panel has never heard of a channel.
+func _build_inspector() -> void:
+	_inspector = PanelContainer.new()
+	_inspector.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	_inspector.custom_minimum_size = Vector2(INSPECTOR_W, 0)
+	_inspector.offset_left = -INSPECTOR_W
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.09, 0.10, 0.13)
+	bg.border_color = Color(0.20, 0.22, 0.28)
+	bg.border_width_left = 1
+	bg.content_margin_left = 10
+	bg.content_margin_right = 10
+	bg.content_margin_top = 10
+	bg.content_margin_bottom = 10
+	_inspector.add_theme_stylebox_override("panel", bg)
+	add_child(_inspector)
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_inspector.add_child(scroll)
+
+	_tile_box = VBoxContainer.new()
+	_tile_box.custom_minimum_size = Vector2(INSPECTOR_W - 24, 0)
+	_tile_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tile_box.add_theme_constant_override("separation", 6)
+	scroll.add_child(_tile_box)
+
+	var title := Label.new()
+	title.text = "TILE DATA"
+	title.add_theme_font_size_override("font_size", 11)
+	title.modulate = C_DIM
+	_tile_box.add_child(title)
+
+	_tile_head = Label.new()
+	_tile_head.add_theme_font_size_override("font_size", 12)
+	_tile_head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tile_box.add_child(_tile_head)
+
+	_tile_form = VBoxContainer.new()
+	_tile_form.add_theme_constant_override("separation", 4)
+	_tile_box.add_child(_tile_form)
+
+
+## How much of the window the inspector covers — zero while it is hidden. Same
+## contract as `panel_width`, and `WorldEditor.free_rect` subtracts both.
+func inspector_width() -> float:
+	if _inspector == null or not _inspector.visible:
+		return 0.0
+	return maxf(_inspector.size.x, INSPECTOR_W)
+
+
+## Build the form for the selected tile, one row per declared parameter.
+##
+## This is the uniform part: the widget comes from the parameter's `type`, the
+## label and tooltip from its `label` and `hint`, and the write-back is
+## `editor.set_tile_param(key, value)` for every one of them. Declaring a
+## parameter in `TileTypes` is the whole job — no branch here names a tile type.
+##
+## Building is separate from FILLING (`_sync_tile_form`) because the two happen
+## at different rates: the widgets change only when a different tile is selected,
+## while their values change on every edit. Rebuilding to show a new value would
+## free the field being typed in.
+func _rebuild_tile_form(doc: EditorDoc) -> void:
+	# `queue_free` without `remove_child`: a rebuild is usually running inside a
+	# signal handler of one of these very buttons, so they cannot be freed now —
+	# and detaching them first would leave them parentless until the frame ends,
+	# which is the definition of an orphan. They stay put and die at end of frame;
+	# a second rebuild before then skips the ones already on their way out.
+	for child in _tile_form.get_children():
+		if not child.is_queued_for_deletion():
+			child.queue_free()
+	_param_rows = []
+	var target: Dictionary = editor.inspected()
+	if target.is_empty():
+		_tile_head.text = "no tile selected — take the Tile tool (T) and click one"
+		_tile_head.modulate = C_DIM
+		return
+
+	var type: int = target["type"]
+	var cell: Vector2i = target["cell"]
+	_tile_head.text = "%s at %d,%d" % [TileTypes.type_name(type), cell.x, cell.y]
+	_tile_head.modulate = Color.WHITE
+	if not TileParams.has_params(type):
+		_tile_head.text += " — nothing to configure"
+		_tile_head.modulate = C_DIM
+		return
+
+	for spec in TileParams.specs_for(type):
+		_add_param_row(spec)
+
+	var clear := Button.new()
+	clear.text = "Clear settings"
+	clear.tooltip_text = "remove this tile's entry from the world file entirely"
+	clear.pressed.connect(func(): editor.clear_tile_data())
+	_tile_form.add_child(clear)
+	_sync_tile_form(doc)
+
+
+## One parameter: a label, then whatever widget its declared type calls for.
+func _add_param_row(spec: Dictionary) -> void:
+	var key := String(spec["key"])
+	var hint := String(spec.get("hint", ""))
+	var label := Label.new()
+	label.text = String(spec.get("label", key))
+	label.add_theme_font_size_override("font_size", 11)
+	label.modulate = C_DIM
+	label.tooltip_text = hint
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tile_form.add_child(label)
+
+	match String(spec.get("type", TileParams.STRING)):
+		TileParams.CELLS:
+			_add_cells_rows(spec)
+		TileParams.BOOL:
+			var check := CheckBox.new()
+			check.tooltip_text = hint
+			check.toggled.connect(func(on: bool): editor.set_tile_param(key, on))
+			_tile_form.add_child(check)
+			_param_rows.append({"key": key, "kind": TileParams.BOOL, "node": check})
+		TileParams.INT, TileParams.FLOAT:
+			var spin := SpinBox.new()
+			spin.allow_greater = true
+			spin.allow_lesser = true
+			spin.step = 1.0 if String(spec["type"]) == TileParams.INT else 0.1
+			spin.tooltip_text = hint
+			spin.value_changed.connect(func(v: float): editor.set_tile_param(key, v))
+			_tile_form.add_child(spin)
+			_param_rows.append({"key": key, "kind": String(spec["type"]), "node": spin})
+		_:
+			var edit := LineEdit.new()
+			edit.tooltip_text = hint
+			# Written on every keystroke under a coalescing tag, so the value is
+			# never left uncommitted in a widget — clicking away from a
+			# half-typed field must not discard it — while the whole typing
+			# session still costs exactly one undo.
+			edit.text_changed.connect(func(text: String): editor.set_tile_param(key, text, false))
+			edit.text_submitted.connect(func(_text: String): editor.commit_tile_param())
+			edit.focus_exited.connect(func(): editor.commit_tile_param())
+			_tile_form.add_child(edit)
+			_param_rows.append({"key": key, "kind": TileParams.STRING, "node": edit})
+
+
+## One row per slot of a `cells` parameter: what it points at, a button that arms
+## a board click to change it, and a button that unsets it. Picking on the board
+## rather than typing coordinates is the point — these are base cells, and nobody
+## can read a fold out of two integers.
+func _add_cells_rows(spec: Dictionary) -> void:
+	var key := String(spec["key"])
+	for i in range(maxi(int(spec.get("count", 1)), 1)):
+		var index := i
+		var row := HBoxContainer.new()
+		_tile_form.add_child(row)
+
+		var slot := Label.new()
+		slot.text = "%d" % (i + 1)
+		slot.custom_minimum_size = Vector2(12, 0)
+		slot.add_theme_font_size_override("font_size", 11)
+		slot.modulate = C_DIM
+		row.add_child(slot)
+
+		var pick := Button.new()
+		pick.tooltip_text = "pick this cell on the board"
+		pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pick.clip_text = true
+		pick.pressed.connect(func(): editor.begin_pick(key, index))
+		row.add_child(pick)
+
+		var clear := Button.new()
+		clear.text = "×"
+		clear.tooltip_text = "unset this cell"
+		clear.pressed.connect(func(): editor.unset_tile_cell(key, index))
+		row.add_child(clear)
+
+		_param_rows.append({"key": key, "kind": TileParams.CELLS,
+			"node": pick, "index": index})
+
+
+## Push the stored values into the built widgets.
+##
+## A widget that currently has KEYBOARD FOCUS is skipped: it already shows what
+## the user is typing, and writing the committed value back into it mid-word
+## would fight them for the caret.
+func _sync_tile_form(doc: EditorDoc) -> void:
+	var target: Dictionary = editor.inspected()
+	if target.is_empty() or _param_rows.is_empty():
+		return
+	var data := doc.tile_data(String(target["region"]), target["cell"])
+	for row in _param_rows:
+		var key := String(row["key"])
+		var node: Control = row["node"]
+		var value = data.get(key, null)
+		match String(row["kind"]):
+			TileParams.CELLS:
+				var index := int(row["index"])
+				var cells: Array = value if value is Array else []
+				var cell: Vector2i = cells[index] if index < cells.size() else TileParams.UNSET
+				var armed: bool = String(editor.picking.get("key", "")) == key \
+					and int(editor.picking.get("index", -1)) == index
+				var button := node as Button
+				button.text = "click a cell…" if armed else \
+					("not set" if cell == TileParams.UNSET else "%d,%d" % [cell.x, cell.y])
+				button.add_theme_color_override("font_color",
+					C_WARN if armed else (C_DIM if cell == TileParams.UNSET else C_OK))
+			TileParams.BOOL:
+				(node as CheckBox).button_pressed = bool(value)
+			TileParams.INT, TileParams.FLOAT:
+				if not (node as SpinBox).get_line_edit().has_focus():
+					(node as SpinBox).value = float(value)
+			_:
+				if not node.has_focus():
+					(node as LineEdit).text = str(value)
+
+
 func _build_issues(col: VBoxContainer) -> void:
 	_heading(col, "Problems")
 	_issues = RichTextLabel.new()
@@ -335,6 +575,7 @@ func refresh() -> void:
 		return
 	var doc: EditorDoc = editor.doc
 	_status_bar.offset_left = panel_width() + 12.0
+	_status_bar.offset_right = -(inspector_width() + 12.0)
 	_path_label.text = "%s%s" % [doc.path, "  •unsaved" if doc.dirty else ""]
 	_path_label.modulate = C_WARN if doc.dirty else C_DIM
 
@@ -364,10 +605,38 @@ func refresh() -> void:
 		_sel_w.value = size.x
 		_sel_h.value = size.y
 
+	_refresh_tile(doc)
 	_refresh_issues(doc)
 	var navigation := "wheel zoom · middle/space-drag pan · drag a title bar to move a canvas" \
 		+ " · drag a corner to resize · ctrl+z undo · ctrl+s save · home frame all"
 	_hint.text = "%s  ·  %s" % [String(WorldEditor.TOOL_HINT.get(editor.tool, "")), navigation]
+
+
+## Rebuild the tile form only when its SHAPE changes — a different tile, a
+## different type, or a pick being armed or finished. `refresh()` runs on every
+## mouse press, and rebuilding the widgets each time would yank focus out of the
+## field you were typing in and drop the keystroke.
+##
+## The stored VALUES are not part of the key on purpose: a field the user is
+## editing already shows what they typed, and rewriting it under them is exactly
+## the loop this guard exists to avoid. The board is what reflects a committed
+## value back.
+func _refresh_tile(doc: EditorDoc) -> void:
+	var target: Dictionary = editor.inspected()
+	# Shown when there is a tile to show, and also whenever the Tile tool is in
+	# hand — so taking the tool is itself the thing that reveals the panel you are
+	# about to use, rather than a click into apparent nothing.
+	_inspector.visible = not target.is_empty() or editor.tool == WorldEditor.Tool.TILE
+	var key := "-"
+	if not target.is_empty():
+		key = "%s|%s|%d|%s|%d" % [
+			String(target["region"]), target["cell"], int(target["type"]),
+			String(editor.picking.get("key", "")), int(editor.picking.get("index", -1))]
+	if key == _tile_form_key:
+		_sync_tile_form(doc)
+		return
+	_tile_form_key = key
+	_rebuild_tile_form(doc)
 
 
 func _refresh_issues(doc: EditorDoc) -> void:

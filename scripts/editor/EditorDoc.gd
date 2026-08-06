@@ -385,26 +385,122 @@ func paint(id: String, cell: Vector2i, ch: String, tag: String = "paint") -> boo
 ## Paint a set of cells in one step. Returns false and records nothing when the
 ## stroke would change nothing — a no-op must not push an undo step, or undo
 ## after hovering becomes a lottery.
+##
+## **Painting a cell to a different TYPE drops its per-tile parameters.** A
+## trigger's channel and anchors left behind on a cell that is now a wall is
+## invisible state: it does nothing, it is not shown anywhere, and it would come
+## back to life the day somebody painted a trigger there again. It goes with the
+## tile, in the same undo step as the paint that removed it.
 func paint_cells(id: String, cells: Array, ch: String, tag: String = "paint") -> bool:
 	if not world.regions.has(id):
 		return false
 	var rows: Array = world.regions[id].get("rows", [])
 	var size := EditorTools.grid_size(rows)
-	var changed := false
+	var next_type := EditorTools.type_of_char(ch)
+	var retyped: Array = []
 	for c in cells:
 		var cell: Vector2i = c
-		if EditorTools.in_bounds(cell, size) and EditorTools.char_at(rows, cell) != ch:
-			changed = true
-			break
-	if not changed:
+		if not EditorTools.in_bounds(cell, size):
+			continue
+		if EditorTools.type_of_char(EditorTools.char_at(rows, cell)) != next_type:
+			retyped.append(cell)
+	if retyped.is_empty():
 		return false
 	_snapshot(tag)
+	_begin_batch()
 	world.regions[id]["rows"] = EditorTools.paint_many(rows, cells, ch)
+	for cell in retyped:
+		_write_tile_data(id, cell, {})
+	_end_batch()
 	return true
 
 
 func fill_rect(id: String, a: Vector2i, b: Vector2i, ch: String, tag: String = "") -> bool:
 	return paint_cells(id, EditorTools.rect_cells(a, b), ch, tag)
+
+
+# ---------------------------------------------------------------------------
+# Per-tile parameters
+# ---------------------------------------------------------------------------
+
+## A tile's parameters, complete and canonical: every key its type declares, at
+## its default where the file says nothing. This is what an inspector reads.
+func tile_data(id: String, cell: Vector2i) -> Dictionary:
+	return TileParams.normalize(type_at(id, cell), raw_tile_data(id, cell))
+
+
+## What is actually stored for a cell — usually a subset of the above, and `{}`
+## for the overwhelming majority of tiles. This is what the FILE says.
+func raw_tile_data(id: String, cell: Vector2i) -> Dictionary:
+	if not world.regions.has(id):
+		return {}
+	var td: Dictionary = world.regions[id].get("tile_data", {})
+	return td.get(TileParams.key_of(cell), {})
+
+
+func type_at(id: String, cell: Vector2i) -> int:
+	return EditorTools.type_of_char(char_at(id, cell))
+
+
+## Set one parameter of one tile.
+##
+## Storage is minimal: a value equal to its default is REMOVED rather than
+## written, and a cell left with nothing to say loses its `tile_data` entry
+## entirely. So painting a hundred triggers does not add a hundred empty
+## dictionaries to the world file, and clearing a field really clears it.
+func set_tile_param(id: String, cell: Vector2i, key: String, value, tag: String = "") -> bool:
+	if not world.regions.has(id) or not EditorTools.in_bounds(cell, size_of(id)):
+		return false
+	var type := type_at(id, cell)
+	var spec := TileParams.spec_of(type, key)
+	var current := raw_tile_data(id, cell)
+	var next := current.duplicate(true)
+	if spec.is_empty():
+		next[key] = value    # an unknown key is data somebody meant; keep it as given
+	else:
+		var stored = TileParams.to_stored(spec, value)
+		if stored == null:
+			next.erase(key)
+		else:
+			next[key] = stored
+	if next == current:
+		return false
+	_snapshot(tag)
+	_write_tile_data(id, cell, next)
+	return true
+
+
+func clear_tile_data(id: String, cell: Vector2i, tag: String = "") -> bool:
+	if raw_tile_data(id, cell).is_empty():
+		return false
+	_snapshot(tag)
+	_write_tile_data(id, cell, {})
+	return true
+
+
+## The cells of a region that carry stored parameters, in reading order. Used by
+## validation and by the board, which draws what a configured tile points at.
+func tiles_with_data(id: String) -> Array:
+	var out: Array = []
+	if not world.regions.has(id):
+		return out
+	var td: Dictionary = world.regions[id].get("tile_data", {})
+	for key in td:
+		if not (td[key] as Dictionary).is_empty():
+			out.append(TileParams.cell_of_key(String(key)))
+	out.sort_custom(func(a, b): return a.y < b.y if a.y != b.y else a.x < b.x)
+	return out
+
+
+## Write (or drop) a cell's entry. No snapshot — callers have taken one.
+func _write_tile_data(id: String, cell: Vector2i, data: Dictionary) -> void:
+	var td: Dictionary = world.regions[id].get("tile_data", {})
+	var key := TileParams.key_of(cell)
+	if data.is_empty():
+		td.erase(key)
+	else:
+		td[key] = data
+	world.regions[id]["tile_data"] = td
 
 
 func set_spawn(id: String, at: Vector2, tag: String = "") -> bool:
@@ -755,6 +851,9 @@ func validate() -> Array:
 				"message": "spawn sits inside a %s" % TileTypes.type_name(
 					EditorTools.type_of_char(char_at(id, spawn_cell)))})
 
+		for issue in _tile_data_issues(id, size):
+			out.append(issue)
+
 		for entry in folds_of(id):
 			var a: Vector2i = entry["a"]
 			var b: Vector2i = entry["b"]
@@ -811,6 +910,66 @@ func validate() -> Array:
 		elif String(world.doors[pair]["pair"]) != door_id:
 			out.append({"level": "error", "region": rid,
 				"message": "door %s -> %s is one-way" % [door_id, pair]})
+	return out
+
+
+## Everything wrong with a region's per-tile parameters.
+##
+## All of it is a WARNING, deliberately. The runtime already refuses to act on a
+## half-configured tile — `TriggerResolver._next_reaction` returns no reaction
+## when the anchors are missing — so the world loads; it just contains a plate
+## that does nothing, which is precisely the thing worth being told. Only data
+## stranded outside the grid is an error, because that is a file the loader
+## cannot make sense of at all.
+##
+## Walks the ROWS rather than asking `type_at` per cell: `char_at` re-measures
+## the grid on every call, and this runs on every panel refresh.
+func _tile_data_issues(id: String, size: Vector2i) -> Array:
+	var out: Array = []
+	var stored_all: Dictionary = world.regions[id].get("tile_data", {})
+
+	for key in stored_all:
+		var cell := TileParams.cell_of_key(String(key))
+		var stored: Dictionary = stored_all[key]
+		if stored.is_empty():
+			continue
+		if not EditorTools.in_bounds(cell, size):
+			out.append({"level": "error", "region": id,
+				"message": "tile data at %s is outside the region" % cell})
+			continue
+		var cell_type := type_at(id, cell)
+		if not TileParams.has_params(cell_type):
+			out.append({"level": "warn", "region": id,
+				"message": "leftover tile data at %s, on a %s that takes none" %
+					[cell, TileTypes.type_name(cell_type)]})
+			continue
+		for problem in TileParams.issues(cell_type, stored, size):
+			out.append({"level": "warn", "region": id,
+				"message": "%s at %s — %s" % [TileTypes.type_name(cell_type), cell, problem]})
+
+	# The other direction: a tile whose type TAKES parameters but has no entry at
+	# all. It does nothing at runtime, and is far likelier to be unfinished than
+	# intended — so it has to be found from the terrain, since the whole point is
+	# that there is no `tile_data` to iterate.
+	var chars: Array = []
+	for type in TileParams.types_with_params():
+		var ch := EditorTools.char_of_type(int(type))
+		if ch != "":
+			chars.append(ch)
+	if chars.is_empty():
+		return out
+	var rows: Array = world.regions[id].get("rows", [])
+	for y in range(rows.size()):
+		var row := String(rows[y])
+		for x in range(row.length()):
+			if not chars.has(row[x]):
+				continue
+			var cell := Vector2i(x, y)
+			if not (stored_all.get(TileParams.key_of(cell), {}) as Dictionary).is_empty():
+				continue
+			out.append({"level": "warn", "region": id,
+				"message": "%s at %s is not configured and will do nothing" %
+					[TileTypes.type_name(EditorTools.type_of_char(row[x])), cell]})
 	return out
 
 

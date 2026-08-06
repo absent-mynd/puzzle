@@ -6,7 +6,7 @@ vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment. The
 world is now **authored in an editor** rather than by hand-editing JSON.
-**Tests:** **580 passing** / 580 (0 failing, 0 risky), 24 scripts, ~14.5s.
+**Tests:** **649 passing** / 649 (0 failing, 0 risky), 25 scripts, ~14.6s.
 
 ---
 
@@ -35,7 +35,7 @@ What exists and works today:
 | Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
-| **World editor** — paint, canvases, doors, pre-placed folds | ✅ Usable (`./run_editor.sh`) |
+| **World editor** — paint, canvases, doors, folds, per-tile params | ✅ Usable (`./run_editor.sh`) |
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
 | Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
 | Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
@@ -48,14 +48,15 @@ What exists and works today:
 
 ## Test suite
 
-580 passing across 24 scripts. Composition:
+649 passing across 25 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
 | `test_fold_world` | 87 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
-| `test_editor_doc` | 59 | Editor document: canvases, painting, undo, resize, doors, pre-placed folds, validation, the file round trip |
-| `test_world_editor` | 37 | **Scene-driven**: hit-testing, the camera, and every gesture — stroke, rect, card drag, resize grip, door link, fold link |
+| `test_editor_doc` | 81 | Editor document: canvases, painting, undo, resize, doors, pre-placed folds, validation, the file round trip |
+| `test_world_editor` | 50 | **Scene-driven**: hit-testing, the camera, and every gesture — stroke, rect, card drag, resize grip, door link, fold link |
 | `test_editor_tools` | 31 | The derived palette, raster ops, resize arithmetic, fold guides vs. the kernel |
+| `test_tile_params` | 34 | The per-tile parameter schema: defaults, coercion, minimal storage, validation |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
 | `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
@@ -87,6 +88,64 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-06 — A tile says what it DOES, and the registry says how to ask
+
+`tile_data` — the per-instance parameters that make one trigger plate different
+from another — was the last thing in a world file you had to hand-write JSON
+for. It is now edited in the editor, uniformly: take the **Tile data** tool
+(`T`), click a tile, and an inspector opens with a field per parameter.
+
+**The uniform part is that the registry declares them.** `TileTypes` gained a
+`params` schema — key, value type, default, label, hint — and `TileParams` says
+what those declarations mean: defaults, coercion, what is worth writing to the
+file, and what is wrong with it. The inspector generates itself from the two and
+has never heard of a channel. **Declaring a parameter is the whole job**: it
+becomes editable, validated, drawn on the board and saved, without the editor or
+the loader learning a new name. Same rule as the palette, and as `TileTypes`
+itself — a new tile type is one file.
+
+**Cells are picked, not typed.** A `cells` parameter (the trigger's two fold
+anchors) gets a row per slot whose button arms the next board click. That is the
+reason it is worth a UI at all: the values are base cells, and nobody can read a
+fold out of two integers. While a pick is armed it beats every tool and all the
+chrome, so a click cannot land on a resize grip by accident. The picked cell must
+be in the tile's own region — base ids are per-region and overlap, the same trap
+`AGENTS.md` records for fold anchors.
+
+**The board draws what a tile points at.** Every configured tile is outlined with
+a dashed line to each cell it names; the tile being inspected also gets the fold
+its reaction will make, drawn with the same guides as a pre-placed fold. Both are
+driven off the schema, so a `cells` parameter added to any type shows up on the
+board the day it is declared.
+
+Three decisions worth keeping:
+
+- **Only non-default values are stored.** A freshly painted trigger writes
+  nothing, so painting a hundred does not add a hundred empty dictionaries to
+  the file — and clearing a field really clears it.
+- **Unknown keys are kept.** A key this build has no spec for is data somebody
+  meant. Dropping it would make opening a file in the editor lossy.
+- **Painting a cell to a different type drops its parameters**, in the same undo
+  step as the paint. A trigger's channel left behind under a wall is invisible
+  state that would come back to life the day somebody painted a trigger there.
+
+Validation reports an unconfigured plate, a half-filled anchor pair, an anchor
+off the map and leftover data on a type that takes none — all as warnings, since
+`TriggerResolver` already refuses to act on a half-configured tile. The world
+loads; it just contains something that does nothing, which is the thing worth
+being told.
+
+The inspector is its own panel on the right rather than another section of the
+left one: it is what you are working in while clicking cells, and it appears only
+when there is a tile to show, so the board keeps the window the rest of the time.
+
+**Tests:** +69 — `test_tile_params` (34, new), plus 22 in `test_editor_doc` and
+13 in `test_world_editor`. One of them caught a real bug: `String(42)` is not a
+valid Godot 4 constructor, so a hand-edited numeric value would have coerced to
+null instead of text.
+
+---
 
 ### 2026-08-06 — A world editor: paint, canvases, and folds you can see
 
@@ -546,10 +605,11 @@ Roughly in priority order — nothing here is committed to yet:
    with no anchors and no reachable seam.
 6. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
 7. ~~**Authoring tooling.**~~ Done — `./run_editor.sh`, see
-   `docs/features/WORLD_EDITOR.md`. What it does NOT yet edit is per-tile
-   `tile_data` (a trigger's channel and anchors are still hand-written JSON) and
-   a light's colour/radius. **Nested pre-placed folds are designed but deferred**;
-   the format reserves `folds[].in` and the loader ignores it.
+   `docs/features/WORLD_EDITOR.md`. Terrain, canvases, doors, pre-placed folds and
+   per-tile `tile_data` are all editable. What is NOT yet is a light's
+   colour/radius/flicker — the obvious next thing to move onto the `TileParams`
+   pattern. **Nested pre-placed folds are designed but deferred**; the format
+   reserves `folds[].in` and the loader ignores it.
 
 ---
 

@@ -56,6 +56,7 @@ why it lives in an authoring-only `editor` block that nothing in
 | `A` | Fold anchor | place an anchor; **drag anchor→anchor to make a fold** | disconnect / remove |
 | `L` | Light | place a light | remove it |
 | `H` | Hand | leave a hand of the chosen kind on the ground | remove it |
+| `T` | Tile data | select a tile and edit what it DOES | clear its settings |
 
 `1`–`9` pick a brush from the palette. Navigation is the same whatever tool is
 selected: **wheel** zooms about the cursor, **middle-drag** or **space-drag**
@@ -73,6 +74,93 @@ without a modal "select" tool to switch back to.
 update, and `test_editor_tools` asserts the palette and the loader understand
 the same set of characters in both directions. The human name comes from
 `TileTypes`' registry too, which is why adding a type is still one file.
+
+---
+
+## Per-tile parameters
+
+The ASCII grid says what a tile IS. A region's `tile_data` says what *this
+particular one* DOES — a trigger plate's channel, and the two cells the fold it
+fires is pinned between. Take the **Tile data** tool (`T`), click a tile, and an
+inspector opens on the right with a field per parameter.
+
+**The form is generated from the registry.** `TileTypes` declares what
+parameters a tile type takes; `TileParams` says what those declarations mean;
+the inspector builds itself from the two. Nothing in the editor has heard of a
+channel. So declaring a parameter is the whole job — it becomes editable,
+validated, drawn on the board and saved, with no editor change:
+
+```gdscript
+TRIGGER_FOLD: {
+    ...,
+    "params": [
+        {"key": "channel", "type": "string", "default": "", "label": "channel",
+         "hint": "names the fold this plate makes..."},
+        {"key": "anchors", "type": "cells", "default": [], "count": 2,
+         "required": true, "label": "fold anchors", "hint": "..."},
+    ]},
+```
+
+| `type` | stored as | edited as |
+|---|---|---|
+| `string` | String | a text field |
+| `int` / `float` | number | a spinner |
+| `bool` | bool | a checkbox |
+| `cells` | `[[x, y], ...]` | a row per slot, **clicked on the board** |
+
+### Cells are picked, not typed
+
+A `cells` parameter's rows each have a button; pressing one arms the next board
+click. That is the reason this is worth a UI at all — the values are base cells
+of the region, and nobody can read a fold out of two integers. While a pick is
+armed it beats every tool and all the chrome, so a click cannot land on a resize
+grip by accident; right-click or `Escape` cancels.
+
+The picked cell must be in the **same region** as the tile. Base ids are
+per-region and do overlap, so a cell from another card would silently resolve
+onto whatever tile shares its numbers — the same trap `AGENTS.md` records for
+fold anchors.
+
+### What the board shows
+
+Every configured tile is outlined, with a dashed line to each cell it names and
+a numbered ring on each. The tile you are *inspecting* additionally gets the
+fold its reaction will make, drawn with the same guides as a pre-placed fold.
+Both are driven off the schema — a `cells` parameter added to any tile type
+appears on the board the day it is declared.
+
+### Two rules about storage
+
+**Only non-default values are written.** A freshly painted trigger stores
+nothing at all, so painting a hundred of them does not put a hundred empty
+dictionaries in the world file, and clearing a field really clears it — the
+whole entry disappears with the last value.
+
+**Unknown keys are kept.** A key this build has no spec for is data somebody
+meant, whether from a hand edit or a newer version. Dropping it would make
+opening a file in the editor a lossy operation.
+
+### Painting over a tile drops its parameters
+
+Change a cell's *type* and its `tile_data` goes with it, in the same undo step
+as the paint. A trigger's channel left behind under a wall is invisible state:
+it does nothing, it is shown nowhere, and it would come back to life the day
+somebody painted a trigger there again. Repainting the *same* type changes
+nothing and so costs nothing.
+
+### What validation says
+
+All of it is a warning, deliberately — the runtime already refuses to act on a
+half-configured tile (`TriggerResolver` returns no reaction when the anchors are
+missing), so the world loads; it just contains a plate that does nothing, which
+is precisely the thing worth being told. Reported:
+
+- a tile whose type takes parameters with **no entry at all** — it will do nothing
+- a `cells` parameter with slots unfilled, out of bounds, or naming one cell twice
+- `tile_data` left on a tile type that takes none
+
+Only data stranded outside the grid is an error, because that is a file the
+loader cannot make sense of at all.
 
 ---
 
@@ -196,6 +284,8 @@ building it once for both is better than building it twice.
 
 | Concern | File |
 |---|---|
+| **What a tile type's parameters ARE** (the schema) | `scripts/model/TileTypes.gd` |
+| What they MEAN — defaults, coercion, storage, validation | `scripts/model/TileParams.gd` |
 | Palette, raster ops, resize arithmetic, fold guides — **pure** | `scripts/editor/EditorTools.gd` |
 | The document: every mutation, plus undo and validation | `scripts/editor/EditorDoc.gd` |
 | The board, the cards, every overlay, the whole palette | `scripts/editor/EditorBoard.gd` |
@@ -231,9 +321,9 @@ gesture when the mouse comes up.
 - **No copy/paste, no flood fill, no multi-select.** Paint, rect and the object
   tools are the whole vocabulary.
 - **Lights are placed with defaults.** Colour, radius, energy and flicker are
-  editable through `EditorDoc.update_light` but have no panel controls yet.
-- **`tile_data` is not editable.** A `TRIGGER_FOLD` tile can be painted, but the
-  channel and anchors it fires still have to be written into the JSON by hand.
+  editable through `EditorDoc.update_light` but have no panel controls yet. They
+  are the obvious next thing to move onto the `TileParams` pattern — a light is
+  an occupant rather than a tile, so it wants a schema of its own shape.
 - **No file dialog.** `--world=` on the command line, or edit the shipped one.
 - **Starting hands have no panel control** (`EditorDoc.set_starting_hands` exists).
 - Nested pre-placed folds, as above.
