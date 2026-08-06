@@ -58,14 +58,9 @@ func _copy_offsets() -> Array:
 	return out
 
 
-## The fuse, as a 0..1 throb. Frequency ramps with how far through the fuse we are,
-## so the pair beats slowly when it is just lit and flutters when it is about to go.
-## Returns 0 when no fuse is running, which switches the pulse off entirely rather
-## than leaving the rings breathing at rest.
-func _fuse_pulse() -> float:
-	if not world.fuse_running():
-		return 0.0
-	var p: float = world.fuse_progress()
+## A fuse, as a 0..1 throb. Frequency ramps with how far through that pair is, so it
+## beats slowly when just lit and flutters when about to go.
+func _pulse_at(p: float) -> float:
 	var hz: float = lerpf(2.2, 11.0, p * p)
 	var wave := 0.5 - 0.5 * cos(Time.get_ticks_msec() / 1000.0 * hz * TAU)
 	# Deepen the swing as well as quickening it: late pulses read as urgent, not
@@ -187,49 +182,57 @@ func _draw_anchor_and_preview(offsets: Array) -> void:
 			draw_arc(cand_center + off, 23.0, -PI / 2.0, -PI / 2.0 + TAU * hold, 32,
 				Color("ffd27f"), STROKE)
 
-	# The placed hands, each drawn in its OWN kind's colour — a mixed pair is legible
+	# Every hand you have put down, in its OWN kind's colour, so a mixed pair reads
 	# as a mixed pair — with soft axis guides (folds may be diagonal; the guides just
 	# help line up straight ones).
-	#
-	# Once both are down they PULSE, and the pulse is the fuse: it starts as a slow
-	# breath and winds up to a flutter as the fold comes due. Nothing tells you the
-	# number of seconds, because the thing worth reading is "how long have I got",
-	# and a quickening beat says that better than a countdown does.
-	var centers: Array = [null, null]
-	var pulse := _fuse_pulse()
-	for i in range(2):
-		var cell = world.pending_cell(i)
-		if cell == null:
-			continue
-		var entry = world.pending_slot(i)
-		var col: Color = HandTypes.color(int(entry["hand"])) if entry != null else Color.WHITE
-		var c: Vector2 = (Vector2(cell) + Vector2(0.5, 0.5)) * cs
-		centers[i] = c
-		var guide := Color(1, 1, 1, 0.08)
-		draw_line(Vector2(0, c.y), Vector2(world_px.x, c.y), guide, HAIR)
-		draw_line(Vector2(c.x, 0), Vector2(c.x, world_px.y), guide, HAIR)
-		for off in offsets:
-			draw_arc(c + off, 16.0 + pulse * 5.0, 0, TAU, 24, col, STROKE)
-			if pulse > 0.0:
-				draw_circle(c + off, 3.0 + pulse * 2.5, col)
+	for entry in world.unpaired:
+		_draw_placed_hand(entry, 0.0, offsets, cs, world_px)
 
-	if centers[0] == null or centers[1] == null:
+	# Armed pairs pulse, and the pulse is that pair's own fuse: a slow breath winding
+	# up to a flutter as it comes due. Several can be armed at once and they beat at
+	# different rates, which is how you see which is about to go — no number could say
+	# that as quickly, and there is nothing to read but the beat.
+	for pair in world.primed:
+		var pulse: float = _pulse_at(world.fuse_progress_of(pair))
+		var ca = _draw_placed_hand(pair["a"], pulse, offsets, cs, world_px)
+		var cb = _draw_placed_hand(pair["b"], pulse, offsets, cs, world_px)
+		if ca == null or cb == null:
+			continue          # half of it is elsewhere; there is no band to draw
+		_draw_band(Vector2(ca), Vector2(cb), world_px)
+
+
+## One placed hand: its ring (swelling with the pulse), its centre dot, and the soft
+## full-extent guides. Returns where it was drawn, or null if it is not in this frame.
+func _draw_placed_hand(entry, pulse: float, offsets: Array, cs: float, world_px: Vector2):
+	var wp = world.anchor_point(entry)
+	if wp == null:
+		return null
+	var c: Color = HandTypes.color(int(entry["hand"]))
+	var at := Vector2(wp)
+	var guide := Color(1, 1, 1, 0.08)
+	draw_line(Vector2(0, at.y), Vector2(world_px.x, at.y), guide, HAIR)
+	draw_line(Vector2(at.x, 0), Vector2(at.x, world_px.y), guide, HAIR)
+	for off in offsets:
+		draw_arc(at + off, 16.0 + pulse * 5.0, 0, TAU, 24, c, STROKE)
+		if pulse > 0.0:
+			draw_circle(at + off, 3.0 + pulse * 2.5, c)
+	return at
+
+
+## The translucent band an armed pair would excise: a parallelogram spanning well past
+## the view, at whatever angle the pair implies. Drawn once, not per wrap copy —
+## repeated it would tile the screen and stack its alpha.
+func _draw_band(a_center: Vector2, b_center: Vector2, world_px: Vector2) -> void:
+	if a_center.is_equal_approx(b_center):
 		return
-	if not WorldCore.anchors_valid(world.pending_cell(0), world.pending_cell(1)):
-		return
-	# Translucent band between the two crease lines: a parallelogram spanning
-	# well past the view, at whatever angle the anchor pair implies. It folds itself.
-	var a_center: Vector2 = centers[0]
-	var b_center: Vector2 = centers[1]
 	var band := Color(0.95, 0.25, 0.3, 0.22)
 	var bn := (b_center - a_center).normalized()
 	var bt := Vector2(-bn.y, bn.x)
 	var reach := world_px.length()
-	var quad := PackedVector2Array([
+	draw_colored_polygon(PackedVector2Array([
 		a_center + bt * reach, a_center - bt * reach,
 		b_center - bt * reach, b_center + bt * reach,
-	])
-	draw_colored_polygon(quad, band)
+	]), band)
 
 
 ## Inside the subspace: mark the identified crease lines (the glue) so the

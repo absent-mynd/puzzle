@@ -5,7 +5,7 @@
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **397 passing** / 397 (0 failing, 0 risky), 20 scripts, ~14.8s.
+**Tests:** **402 passing** / 402 (0 failing, 0 risky), 20 scripts, ~14.0s.
 
 ---
 
@@ -45,11 +45,11 @@ What exists and works today:
 
 ## Test suite
 
-397 passing across 20 scripts. Composition:
+402 passing across 20 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 80 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
+| `test_fold_world` | 85 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
 | `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
@@ -80,6 +80,37 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — Any number of hands down; several folds armed at once
+
+**Bug:** place a hand in one region, cross to another, place a second — and the game
+wedged. Reported as "I can no longer place any more hands"; reproduced exactly. The
+two fixed anchor registers were the cause: the hand left behind occupied one forever,
+so every pair formed afterwards contained a partner that could not be reached, the
+fuse paused permanently, and the burst could not recover it from where you now were.
+
+Fixed by removing the limit rather than special-casing the symptom.
+
+- **`pending_a`/`pending_b` became `unpaired` + `primed`.** `unpaired` holds hands
+  waiting for a partner; `primed` holds PAIRS, each counting its own fuse. There is no
+  bound but the hands you are carrying.
+- **A hand pairs with the last unpaired anchor you can SEE.** An anchor in another
+  region — or sealed inside a fold — is not a partner a fold could be finished with,
+  so a new hand starts a fresh pair rather than being spent on one that can never
+  fire. The stranded hand waits where it is.
+- **Several folds can be armed at once, and they fire in FUSE order.** A swift pair
+  laid second goes off before a patient pair laid first. That falls out of per-pair
+  fuses rather than being arranged.
+- **An armed pair outside your region pauses**, and resumes when you come back —
+  leaving one ticking behind you is now a thing you can choose to do.
+- **A burst reaching either half of an armed pair breaks the whole pair.** You cannot
+  half-defuse a fold: what you can reach comes back, the far hand drops where it was
+  pinned, so reaching into an armed pair always costs you one.
+- **Anchors now carry their region and resolution checks it.** Base ids are per-region
+  and overlap, so a west anchor could otherwise resolve onto whatever east tile shared
+  its id — latent, and only not biting because the two regions differ in size.
+- The overlay draws every placed hand and every armed pair's band, each pulsing on its
+  own fuse, so two armed folds beat at different rates and you can see which is next.
 
 ### 2026-08-05 — Validity moves to the fuse; the distance rule goes
 

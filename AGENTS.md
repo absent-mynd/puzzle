@@ -199,6 +199,7 @@ world position and try to keep it up to date through folds.
 |---|---|---|
 | One of your two slots | the world's `starting_hands`; walking over a loose hand | — |
 | Pinned as an anchor | tap F pointing at a cell (leaves the slot at once) | a burst in reach |
+| Pinned in an ARMED pair | pairing with a reachable unpaired anchor | a burst reaching either half |
 | Held by a standing fold | the fuse going off | a burst at its seam |
 | Lying on the ground | authored by the world; overflow from a burst; a fold that failed at the fuse | walk over it |
 
@@ -227,17 +228,29 @@ Consequences worth keeping in mind when designing:
   the whole input, and it releases what was releasable when it fired rather than
   cascading. Do not give it a target without a design conversation — the untargeted
   reading is what makes it read as a thing you *do*, not a thing you *point*.
-- **Fold validity is asked at the FUSE, not at placement.** `place_pending` checks
+- **Fold validity is asked at the FUSE, not at placement.** `place_hand` checks
   only that there is sheet to pin to (which is storage, not a rule — an anchor is a
   base identity, and void has none). Everything else — the degenerate pair, the
-  surface rules, the span, somewhere to land — is `commit_pending`'s question. That
+  surface rules, the span, somewhere to land — is `fire_pair`'s question. That
   is what makes the fuse a *window*: you can put both hands down from a spot the fold
   could not put you and run clear before it fires. Moving a check back to placement
   would close that window, so do not.
-- **A failed fold scatters rather than refunds.** `_scatter_pending` drops both hands
-  where they were pinned, converting each pending anchor straight into a `HandPickup`
-  — they are already stored as the same thing. Returning them to your slots would
-  make a mistimed fold free.
+- **A failed fold scatters rather than refunds.** `_scatter_pair` drops both hands
+  where they were pinned, converting each anchor straight into a `HandPickup` — they
+  are already stored as the same thing. Returning them to your slots would make a
+  mistimed fold free.
+- **There is no fixed number of placed anchors.** `unpaired` holds hands waiting for
+  a partner and `primed` holds pairs, each with its OWN fuse. Two fixed registers is
+  what wedged the game: a hand left in another region sat in one forever, so every
+  pair formed afterwards contained an unreachable partner and never fired. Do not
+  reintroduce a bound here — the bound is how many hands you are carrying.
+- **A hand pairs with the last unpaired anchor you can SEE.** Not merely the last one
+  placed: an anchor in another region or sealed in a fold is not a partner a fold
+  could be finished with, so pairing with it would spend a hand on a fold that can
+  never fire.
+- **Anchors carry their region, and resolution checks it.** Base ids are per-region
+  and DO overlap, so without that check a west anchor can quietly resolve onto
+  whatever east tile shares its id.
 - **There is no minimum anchor distance.** A one-cell fold is a fold. The only
   impossible pair is two anchors on one cell, which has no crease direction at all.
 - **A kind only changes the fuse.** Colour is identity, `HandTypes.fuse` is the whole

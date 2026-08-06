@@ -53,13 +53,25 @@ pick them up, or leave them and pin somewhere better.
 There is **no remote unfold**. The hands in a fold are exactly where you left
 them, so getting them back means walking to its seam and bursting.
 
+A hand you leave in another region (or sealed inside a fold) is **not a partner
+you could finish a fold with**, so the next hand you place starts a fresh pair
+instead of being wasted on one that could never fire. The stranded hand waits
+where it is until you go back for it — with a burst, or by pairing it with a new
+one when you return.
+
+An armed pair **outside the region you are in pauses**. Leave a fold ticking in
+west, walk to east, and it waits; come back and it resumes. Leaving one armed
+behind you is a thing you can choose to do.
+
 ### The burst
 
 Holding F fires a small sphere of influence around your body (`BURST_RADIUS`,
 about a tile — tune it in `FoldWorld`). It is **not aimed**: where you stand is
 the whole input. Everything of yours inside it comes loose at once —
 
-- hands you placed as anchors come back;
+- unpaired hands you placed come back;
+- armed pairs you can reach either half of come apart — what you can reach comes
+  back, the far hand falls where it was pinned;
 - folds whose seam is in reach come apart, if nothing newer is blocking them;
 - inside a fold, the glue anchor in reach is the way out;
 - and **any hand with nowhere to go pops into the world at your feet.**
@@ -85,9 +97,16 @@ That is style, not a mechanic: nothing reads their positions. What they tell
 you is how many you have and what **kind** they are.
 
 - Placing a hand takes it out of its slot **immediately**.
-- Placing the second lights the **fuse**. Both hands pulse, slowly at first and
-  faster as the fold comes due, then it folds. No press commits it.
-- **Bursting takes back** whatever is in reach and defuses a pair.
+- A hand pairs with the last unpaired one **you can currently see**, and the pair
+  lights its **fuse**. Both hands pulse, slowly at first and faster as the fold
+  comes due, then it folds. No press commits it.
+- **Several pairs can be armed at once** — as many as you have hands for. Each
+  counts its own fuse, so they go off in the order their fuses run out rather
+  than the order you laid them: a swift pair laid second fires before a patient
+  pair laid first.
+- **Bursting takes back** whatever is in reach. Reaching either half of an armed
+  pair breaks the whole pair — the far hand drops where it was pinned, so
+  reaching into one always costs you a hand.
 - A pair that **fails at the fuse** drops both hands where they were pinned.
 - **Unfolding gives back the same two hands that went in** — kinds and all.
 - Hands with nowhere to go **land on the ground** rather than being refused.

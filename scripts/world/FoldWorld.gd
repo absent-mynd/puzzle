@@ -110,13 +110,24 @@ var mode: Mode = Mode.WORLD
 ## Path of entered folds (outermost first). Empty = region world.
 var context: Array[Fold] = []
 
-## Pending anchors: null or {"bid": int, "bp": Vector2, "hand": int} — a base-frame
-## point plus the KIND of hand pinned there. Frame-independent: rides folds, survives
-## subspace exit; inert (unresolvable) outside its region. A pinned anchor is a hand
-## that has LEFT you — it is out of its slot from the moment you place it, and comes
-## back only when you pull it out again.
-var pending_a = null
-var pending_b = null
+## Hands you have PUT DOWN but not yet spent on a fold.
+##
+## An anchor is {"bid", "bp", "hand", "region"} — a base-frame point, the kind of hand
+## pinned there, and the region it belongs to. Frame-independent: it rides folds and
+## survives subspace exit, and it is inert (unresolvable) anywhere it does not belong.
+## A pinned anchor is a hand that has LEFT you: out of its slot from the moment you
+## place it, back only when you go and release it.
+##
+## `unpaired` holds anchors still waiting for a partner. `primed` holds PAIRS, each
+## counting its own fuse down independently — so several folds can be armed at once,
+## and they go off in the order their fuses run out rather than the order you placed
+## them. A swift pair laid second fires before a patient pair laid first.
+##
+## There is no fixed number of either. Two registers is what wedged the game: an
+## anchor left in another region sat in one of them forever, so every pair you formed
+## afterwards contained a partner you could not reach and never fired.
+var unpaired: Array = []
+var primed: Array = []
 
 ## The hands you are carrying: one entry per slot, a `HandTypes` id or null.
 ## See `AnchorStock` — this array is the whole of your possession.
@@ -130,11 +141,7 @@ var _hold_elapsed := 0.0
 ## Seconds left on the burst ring the overlay draws.
 var _burst_flash_left := 0.0
 
-# --- The fuse: a completed pair commits itself ---
-## Seconds left before the pinned pair folds, and what it started at (for the pulse).
-## Zero total = no fuse running.
-var _fuse_left := 0.0
-var _fuse_total := 0.0
+# --- The fuse lives on each primed pair; see `primed`. ---
 
 var current_pieces: Array[FoldedPiece] = []
 var pieces_by_pos: Dictionary = {}
@@ -253,10 +260,9 @@ func _setup_all() -> void:
 	regions = {}
 	region_lights = {}
 	_door_latch = {}
-	pending_a = null
-	pending_b = null
+	unpaired = []
+	primed = []
 	hand_pickups = {}
-	_cancel_fuse()
 
 	world_data = WorldData.load_from(WORLD_PATH)
 	if world_data == null:
@@ -663,30 +669,52 @@ func candidate_anchor(dir: Vector2i = Vector2i.ZERO) -> Vector2i:
 	return player_cell() + d * ANCHOR_REACH
 
 
-## The current cell of a pending anchor in THIS frame, or null if unset or if
-## its base tile has no fragment here (other region, or folded elsewhere).
-func pending_cell(slot: int):
-	var p = pending_a if slot == 0 else pending_b
-	if p == null:
+## Where an anchor lies in THIS frame, or null if it is not here — wrong region, or
+## its base tile is folded away.
+##
+## The region check is not belt-and-braces: base ids are per-region and DO overlap
+## between regions, so without it a west anchor could quietly resolve onto whatever
+## east tile happens to share its id.
+func anchor_point(entry):
+	if entry == null or String(entry["region"]) != region_id:
 		return null
-	var wp = BaseFrame.world_point_from_base(_frame_pieces(), p["bid"], p["bp"])
+	return BaseFrame.world_point_from_base(_frame_pieces(), entry["bid"], entry["bp"])
+
+
+func anchor_cell(entry):
+	var wp = anchor_point(entry)
 	if wp == null:
 		return null
 	return Vector2i((Vector2(wp) / CS).floor())
 
 
-func pending_slot(slot: int):
-	return pending_a if slot == 0 else pending_b
+func anchor_here(entry) -> bool:
+	return anchor_point(entry) != null
 
 
-func _set_pending(slot: int, entry) -> void:
-	if slot == 0:
-		pending_a = entry
-	else:
-		pending_b = entry
+## The cells your placed hands are on, in this frame. Anchors that are elsewhere —
+## another region, or sealed inside a fold — are simply not in the list, because the
+## question this answers is "where are my hands", not "how many do I have out".
+func anchor_cells() -> Array:
+	var out: Array = []
+	for entry in all_anchors():
+		var cell = anchor_cell(entry)
+		if cell != null:
+			out.append(cell)
+	return out
 
 
-func place_pending(slot: int, dir: Vector2i) -> void:
+## Every anchor you have put down, paired or not.
+func all_anchors() -> Array:
+	var out: Array = []
+	out.append_array(unpaired)
+	for pair in primed:
+		out.append(pair["a"])
+		out.append(pair["b"])
+	return out
+
+
+func place_hand(dir: Vector2i) -> void:
 	if animating():
 		return
 	var cand := candidate_anchor(dir)
@@ -707,19 +735,26 @@ func place_pending(slot: int, dir: Vector2i) -> void:
 	# Placing puts a HAND down: it leaves your slot now, and its kind travels with
 	# the anchor because the fold will need to know what it was pinned with. Re-siting
 	# an anchor you already placed reuses the hand already in it.
-	var kind: int = HandTypes.PLAIN
-	var existing = pending_slot(slot)
-	if existing != null:
-		kind = int(existing["hand"])
-	else:
-		var from_slot := AnchorStock.first_held(hands)
-		if from_slot < 0:
-			_show_flash("No hand to place.")
+	var from_slot := AnchorStock.first_held(hands)
+	if from_slot < 0:
+		_show_flash("No hand to place.")
+		return
+	var kind := int(hands[from_slot])
+	hands[from_slot] = null
+	var entry := {"bid": piece.base_id, "bp": center - piece.src_offset,
+		"hand": kind, "region": region_id}
+
+	# Pair with the most recently placed unpaired anchor YOU CAN CURRENTLY SEE. An
+	# anchor left in another region (or sealed inside a fold) is not a partner you
+	# could finish a fold with, so it waits where it is and this hand starts a fresh
+	# pair instead of being wasted on one that could never fire.
+	for i in range(unpaired.size() - 1, -1, -1):
+		if anchor_here(unpaired[i]):
+			var partner = unpaired[i]
+			unpaired.remove_at(i)
+			_prime(partner, entry)
 			return
-		kind = int(hands[from_slot])
-		hands[from_slot] = null
-	_set_pending(slot, {"bid": piece.base_id, "bp": center - piece.src_offset, "hand": kind})
-	_refresh_fuse()
+	unpaired.append(entry)
 
 
 ## The fold that F should unfold from where you are standing / aiming. Several
@@ -760,19 +795,15 @@ func aiming_at_glue(dir: Vector2i = Vector2i.ZERO) -> bool:
 	return false
 
 
-## TAP: put a hand down. The first fills anchor 1, the second anchor 2 — and the
-## second also lights the fuse, because a completed pair commits ITSELF (see
-## `_refresh_fuse`). There is no committing press: what you do is place hands, and
-## what the fold does is go off.
+## TAP: put a hand down. That is all it ever does.
+##
+## The second hand of a pair lights that pair's fuse and it commits ITSELF; the next
+## hand after that starts another pair, which arms alongside the first. There is no
+## committing press and no limit but the hands you are carrying.
 func tap_action(dir: Vector2i) -> void:
 	if animating():
 		return
-	if pending_a == null:
-		place_pending(0, dir)
-	elif pending_b == null:
-		place_pending(1, dir)
-	else:
-		_show_flash("Both hands are down — it is about to fold.")
+	place_hand(dir)
 
 
 ## HOLD: a release BURST around you.
@@ -799,9 +830,19 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	var freed := 0
 
 	# Your own placed hands first: cheap, and they change no geometry.
-	for slot in [1, 0]:
-		if pending_slot(slot) != null and _pending_within(slot, origin, BURST_RADIUS):
-			_retrieve_pending(slot)
+	# An unpaired anchor in reach simply comes back.
+	for i in range(unpaired.size() - 1, -1, -1):
+		if _anchor_within(unpaired[i], origin, BURST_RADIUS):
+			_release_anchor(unpaired[i], true)
+			unpaired.remove_at(i)
+			freed += 1
+	# A primed pair with EITHER anchor in reach is broken: you cannot half-defuse a
+	# fold. What you can reach comes back to your hands, what you cannot drops where
+	# it was pinned — so reaching into an armed pair always costs you the far hand.
+	for pair in primed.duplicate():
+		if _anchor_within(pair["a"], origin, BURST_RADIUS) \
+				or _anchor_within(pair["b"], origin, BURST_RADIUS):
+			_break_pair(pair, origin, BURST_RADIUS)
 			freed += 1
 
 	# Inside a fold, the glue anchor in reach is the exit.
@@ -824,13 +865,11 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 		_show_flash("Nothing here to release.")
 
 
-## A pending anchor's current distance from a point, or false if it is unresolvable
-## in this frame (pinned in another region, or folded away).
-func _pending_within(slot: int, origin: Vector2, radius: float) -> bool:
-	var cell = pending_cell(slot)
-	if cell == null:
-		return false
-	return ((Vector2(cell) + Vector2(0.5, 0.5)) * CS).distance_to(origin) <= radius
+## Is this anchor within `radius` of a point? False when it is unresolvable in the
+## frame we are looking at — an anchor you cannot see is not one you can reach.
+func _anchor_within(entry, origin: Vector2, radius: float) -> bool:
+	var wp = anchor_point(entry)
+	return wp != null and Vector2(wp).distance_to(origin) <= radius
 
 
 func _glue_within(origin: Vector2, radius: float) -> bool:
@@ -879,77 +918,86 @@ func burst_flash() -> float:
 	return clampf(_burst_flash_left / BURST_FLASH, 0.0, 1.0)
 
 
-## A fold that would not go: both hands drop WHERE THEY WERE PINNED, not into your
-## slots and not at your feet.
-##
-## They are already stored as exactly what a loose hand is — a base identity plus a
-## point in that tile — so this is a conversion rather than a placement, and the hands
-## land on the spots you chose, still holding the shape of the fold you tried to make.
-## Go and pick them up, or leave them and pin somewhere better.
-func _scatter_pending() -> void:
-	for slot in [0, 1]:
-		var entry = pending_slot(slot)
-		if entry == null:
-			continue
-		var p := HandPickup.new()
-		p.kind = int(entry["hand"])
-		p.region = region_id
-		p.authored = false
-		p.base_id = int(entry["bid"])
-		p.bp = entry["bp"]
-		loose_hands.append(p)
-		_set_pending(slot, null)
-	_cancel_fuse()
+## Arm a pair. Its fuse is its own — the mean of its two hands' — so pairs laid at
+## different moments with different kinds go off in whatever order their fuses run
+## out, not the order you laid them.
+func _prime(a, b) -> void:
+	var total: float = HandTypes.fuse_for(int(a["hand"]), int(b["hand"]))
+	primed.append({"a": a, "b": b, "left": total, "total": total})
+
+
+## Put an anchor back where it belongs: into a slot if you have one free and can
+## reach it, otherwise onto the ground exactly where it was pinned.
+func _release_anchor(entry, into_hand: bool) -> void:
+	if into_hand and AnchorStock.first_empty(hands) >= 0:
+		hands[AnchorStock.first_empty(hands)] = int(entry["hand"])
+		return
+	var p := HandPickup.new()
+	p.kind = int(entry["hand"])
+	p.region = String(entry["region"])
+	p.authored = false
+	p.base_id = int(entry["bid"])
+	p.bp = entry["bp"]
+	_ensure_pickups(p.region).append(p)
 	_refresh_pickup_visuals()
 
 
-## Take a placed hand back. Usually there is a slot for it — the one it came from —
-## but you may have filled that from a pickup in the meantime, in which case it lands
-## on the ground rather than vanishing.
-func _retrieve_pending(slot: int) -> void:
-	var entry = pending_slot(slot)
-	if entry == null:
-		return
-	_set_pending(slot, null)
-	_give_hand(int(entry["hand"]))
-	_cancel_fuse()
+## Break a primed pair without folding it. Anchors within `reach` of `origin` come
+## back to your hands; the rest drop where they were pinned.
+##
+## An anchor is already stored as exactly what a loose hand is — a base identity plus
+## a point in that tile — so dropping one is a conversion rather than a placement, and
+## it lands on the spot you chose rather than at your feet.
+func _break_pair(pair: Dictionary, origin: Vector2, reach: float) -> void:
+	primed.erase(pair)
+	for entry in [pair["a"], pair["b"]]:
+		var wp = anchor_point(entry)
+		var caught: bool = wp != null and Vector2(wp).distance_to(origin) <= reach
+		_release_anchor(entry, caught)
 
 
-func commit_pending() -> void:
+## A fold that would not go: every anchor of the pair drops where it was pinned.
+## None of them come back to your slots — returning them would make a mistimed fold
+## free, and the hands lying on the spots you chose still hold the shape of the fold
+## you tried to make. Go and pick them up, or leave them and pin somewhere better.
+func _scatter_pair(pair: Dictionary) -> void:
+	primed.erase(pair)
+	for entry in [pair["a"], pair["b"]]:
+		_release_anchor(entry, false)
+
+
+## Fire one primed pair. Called by its fuse, never by a keypress.
+func fire_pair(pair: Dictionary) -> void:
 	if animating():
 		return
-	if pending_a == null or pending_b == null:
-		return
-	var ca = pending_cell(0)
-	var cb = pending_cell(1)
+	var ca = anchor_cell(pair["a"])
+	var cb = anchor_cell(pair["b"])
 	if ca == null or cb == null:
 		_show_flash("A hand lies beyond this fold.")
-		_scatter_pending()
+		_scatter_pair(pair)
 		return
 	if not WorldCore.anchors_valid(ca, cb):
 		_show_flash("Both hands came down on one spot.")
-		_scatter_pending()
+		_scatter_pair(pair)
 		return
 	# The surface rules are asked HERE, not at placement: a tile that refuses to be
 	# gripped is a fact about the fold, and the fold is what is happening now.
 	if not WorldCore.can_anchor_at(_frame_index(), ca) \
 			or not WorldCore.can_anchor_at(_frame_index(), cb):
 		_show_flash("That surface would not hold a fold.")
-		_scatter_pending()
+		_scatter_pair(pair)
 		return
-	var pinned: Array[int] = [int(pending_a["hand"]), int(pending_b["hand"])]
+	var pinned: Array[int] = [int(pair["a"]["hand"]), int(pair["b"]["hand"])]
 	var committed := do_sub_fold(ca, cb, pinned) if mode == Mode.SUBSPACE \
 		else do_fold(ca, cb, pinned)
 	if committed:
 		# The fold is holding the SAME two hands that were pinned — they went from
 		# your slots to the anchors to the fold without ever being duplicated.
-		pending_a = null
-		pending_b = null
-		_cancel_fuse()
+		primed.erase(pair)
 	else:
 		# `do_fold` has already said why. The hands falling where they stood is the
 		# rest of the answer, and it needs no words.
-		_scatter_pending()
+		_scatter_pair(pair)
 
 
 # ---------------------------------------------------------------------------
@@ -990,7 +1038,7 @@ func hands_in_folds() -> int:
 
 
 func hands_pending() -> int:
-	return (1 if pending_a != null else 0) + (1 if pending_b != null else 0)
+	return unpaired.size() + primed.size() * AnchorStock.HANDS_PER_FOLD
 
 
 func can_place_hand() -> bool:
@@ -1022,46 +1070,47 @@ func hands_total() -> int:
 # The fuse: a completed pair folds itself
 # ---------------------------------------------------------------------------
 
-## Light, re-time or drop the fuse to match the pending pair. Called whenever an
-## anchor lands: two down starts it, anything less means there is nothing to count
-## down. Re-siting an anchor restarts it from full, so adjusting a pair always buys
-## back the whole delay rather than folding under your hands.
-func _refresh_fuse() -> void:
-	if pending_a == null or pending_b == null:
-		_cancel_fuse()
-		return
-	_fuse_total = HandTypes.fuse_for(int(pending_a["hand"]), int(pending_b["hand"]))
-	_fuse_left = _fuse_total
-
-
-func _cancel_fuse() -> void:
-	_fuse_left = 0.0
-	_fuse_total = 0.0
-
-
+## Is any pair counting down?
 func fuse_running() -> bool:
-	return _fuse_total > 0.0
+	return not primed.is_empty()
 
 
-## How far through the fuse we are, 0 (just lit) to 1 (folding now). The overlay
-## pulses the pending rings on this.
-func fuse_progress() -> float:
-	if _fuse_total <= 0.0:
+## How far through its fuse a pair is, 0 (just lit) to 1 (folding now). The overlay
+## pulses each pair's own anchors on its own number, so two armed folds beat at
+## different rates and you can see which is closer to going.
+func fuse_progress_of(pair: Dictionary) -> float:
+	var total: float = pair["total"]
+	if total <= 0.0:
 		return 0.0
-	return clampf(1.0 - _fuse_left / _fuse_total, 0.0, 1.0)
+	return clampf(1.0 - float(pair["left"]) / total, 0.0, 1.0)
 
 
-## Run the fuse down. PAUSED while either anchor is unresolvable in the frame we are
-## looking at — walk through a door mid-count and the fold waits for you rather than
-## firing somewhere you cannot see, or failing on an anchor that is merely elsewhere.
+## The progress of whichever pair is closest to firing, or 0 if none is armed.
+func fuse_progress() -> float:
+	var best := 0.0
+	for pair in primed:
+		best = maxf(best, fuse_progress_of(pair))
+	return best
+
+
+## Run every armed pair's fuse down. A pair whose anchors are not BOTH resolvable in
+## the frame we are looking at is PAUSED — walk through a door mid-count and that fold
+## waits for you rather than firing somewhere you cannot see. It resumes when you come
+## back, which is what makes leaving one armed a thing you can choose to do.
+##
+## Iterated over a copy: firing a pair re-derives the world and can scatter or move
+## the others, so the list must not be mutated underneath the loop.
 func _tick_fuse(delta: float) -> void:
-	if not fuse_running() or animating():
-		return
-	if pending_cell(0) == null or pending_cell(1) == null:
-		return
-	_fuse_left = maxf(_fuse_left - delta, 0.0)
-	if _fuse_left <= 0.0:
-		commit_pending()
+	for pair in primed.duplicate():
+		if animating():
+			return
+		if not primed.has(pair):
+			continue
+		if not anchor_here(pair["a"]) or not anchor_here(pair["b"]):
+			continue
+		pair["left"] = maxf(float(pair["left"]) - delta, 0.0)
+		if pair["left"] <= 0.0:
+			fire_pair(pair)
 
 
 # ---------------------------------------------------------------------------
@@ -1070,7 +1119,7 @@ func _tick_fuse(delta: float) -> void:
 
 ## What a committed fold takes custody of.
 ##
-## `commit_pending` passes the two hands that were actually pinned — they left your
+## `fire_pair` passes the two hands that were actually pinned — they left your
 ## slots when you placed them, so they are already accounted for. Any other caller
 ## (`do_fold` as a bare primitive: tests, debug) is folding without having placed
 ## anything, so the hands come STRAIGHT OUT OF YOUR SLOTS here.
@@ -1677,13 +1726,13 @@ func _in_subspace() -> bool:
 ## World points that would be a mistake to leave off screen right now.
 func _camera_focus() -> PackedVector2Array:
 	var pts := PackedVector2Array([player.global_position])
-	# A pinned anchor is one half of a fold you are still composing. Walk away
-	# from it and the frame opens to keep the span you are judging in view — the
-	# camera showing you how big the fold has got.
-	for slot in [0, 1]:
-		var cell = pending_cell(slot)
-		if cell != null:
-			pts.append((Vector2(cell) + Vector2(0.5, 0.5)) * CS)
+	# Every hand you have put down is part of a fold you are still composing or one
+	# already ticking. Walk away and the frame opens to keep the spans you are
+	# judging in view — the camera showing you how big your folds have got.
+	for entry in all_anchors():
+		var wp = anchor_point(entry)
+		if wp != null:
+			pts.append(Vector2(wp))
 	# Inside a fold the band IS the room: frame it glue to glue, so a wide strip
 	# reads as the cylinder it is rather than a corridor with no visible walls.
 	if _in_subspace():
@@ -1933,6 +1982,8 @@ func _update_status() -> void:
 		kinds.append("—" if h == null else HandTypes.type_name(int(h)))
 	var stock := "Hands: %s   (%d down, %d in folds)" \
 		% [" ".join(kinds), hands_pending(), hands_in_folds()]
+	if not primed.is_empty():
+		stock += "   %d armed" % primed.size()
 	if mode == Mode.WORLD:
 		_status.text = "Region: %s   Folds: %d   Mode: WORLD\n%s" \
 			% [region_id, folds.size(), stock]
