@@ -691,19 +691,18 @@ func place_pending(slot: int, dir: Vector2i) -> void:
 		return
 	var cand := candidate_anchor(dir)
 	var center := (Vector2(cand) + Vector2(0.5, 0.5)) * CS
+	# The ONLY thing placement asks of a spot is that there be sheet there to pin to.
+	# That is not a rule, it is storage: an anchor is a base identity plus a point in
+	# a tile, and over void there is no tile to be a point in.
+	#
+	# Everything else — whether the pair makes a fold, whether the surface will hold
+	# it, whether you have anywhere to land — is checked WHEN THE FUSE FIRES, not
+	# here. The fuse is a window in which you can go and make a doubtful fold work:
+	# put both hands down, then run to somewhere the fold can put you. Refusing at
+	# placement would close that window before it opened.
 	var piece = BaseFrame.piece_containing(_frame_index(), center, CS)
 	if piece == null:
-		_show_flash("Nothing there to anchor to.")
-		return
-	if not WorldCore.can_anchor_at(_frame_index(), cand):
-		_show_flash("Nothing to grip there.")
-		return
-	# Checked at PLACEMENT, not at commit: with one key the next tap is the commit,
-	# so an un-committable pair has to be refused while you can still see why.
-	# (Skipped when the other anchor is inert — pinned in a frame we cannot resolve.)
-	var other = pending_cell(1 - slot)
-	if other != null and not WorldCore.anchors_valid(other, cand):
-		_show_flash("Too close to your other anchor.")
+		_show_flash("Nothing there to pin to.")
 		return
 	# Placing puts a HAND down: it leaves your slot now, and its kind travels with
 	# the anchor because the fold will need to know what it was pinned with. Re-siting
@@ -880,6 +879,30 @@ func burst_flash() -> float:
 	return clampf(_burst_flash_left / BURST_FLASH, 0.0, 1.0)
 
 
+## A fold that would not go: both hands drop WHERE THEY WERE PINNED, not into your
+## slots and not at your feet.
+##
+## They are already stored as exactly what a loose hand is — a base identity plus a
+## point in that tile — so this is a conversion rather than a placement, and the hands
+## land on the spots you chose, still holding the shape of the fold you tried to make.
+## Go and pick them up, or leave them and pin somewhere better.
+func _scatter_pending() -> void:
+	for slot in [0, 1]:
+		var entry = pending_slot(slot)
+		if entry == null:
+			continue
+		var p := HandPickup.new()
+		p.kind = int(entry["hand"])
+		p.region = region_id
+		p.authored = false
+		p.base_id = int(entry["bid"])
+		p.bp = entry["bp"]
+		loose_hands.append(p)
+		_set_pending(slot, null)
+	_cancel_fuse()
+	_refresh_pickup_visuals()
+
+
 ## Take a placed hand back. Usually there is a slot for it — the one it came from —
 ## but you may have filled that from a pickup in the meantime, in which case it lands
 ## on the ground rather than vanishing.
@@ -900,12 +923,19 @@ func commit_pending() -> void:
 	var ca = pending_cell(0)
 	var cb = pending_cell(1)
 	if ca == null or cb == null:
-		_show_flash("An anchor lies beyond this fold.")
-		_retrieve_pending(1)
+		_show_flash("A hand lies beyond this fold.")
+		_scatter_pending()
 		return
 	if not WorldCore.anchors_valid(ca, cb):
-		_show_flash("Anchors must be at least 2 tiles apart.")
-		_retrieve_pending(1)
+		_show_flash("Both hands came down on one spot.")
+		_scatter_pending()
+		return
+	# The surface rules are asked HERE, not at placement: a tile that refuses to be
+	# gripped is a fact about the fold, and the fold is what is happening now.
+	if not WorldCore.can_anchor_at(_frame_index(), ca) \
+			or not WorldCore.can_anchor_at(_frame_index(), cb):
+		_show_flash("That surface would not hold a fold.")
+		_scatter_pending()
 		return
 	var pinned: Array[int] = [int(pending_a["hand"]), int(pending_b["hand"])]
 	var committed := do_sub_fold(ca, cb, pinned) if mode == Mode.SUBSPACE \
@@ -917,7 +947,9 @@ func commit_pending() -> void:
 		pending_b = null
 		_cancel_fuse()
 	else:
-		_retrieve_pending(1)
+		# `do_fold` has already said why. The hands falling where they stood is the
+		# rest of the answer, and it needs no words.
+		_scatter_pending()
 
 
 # ---------------------------------------------------------------------------

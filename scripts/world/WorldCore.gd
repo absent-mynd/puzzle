@@ -240,9 +240,11 @@ static func depenetrate(center: Vector2, radius: float, solids: Array) -> Vector
 # ---------------------------------------------------------------------------
 # Anchor & fold eligibility
 # ---------------------------------------------------------------------------
-# Off-axis pairs are allowed — the fold engine handles arbitrary crease angles. The
-# constraints are a minimum Euclidean gap (so the strip is substantial) and the
-# registry's per-type anchor/fold eligibility.
+# Off-axis pairs are allowed — the fold engine handles arbitrary crease angles — and
+# so is any distance down to one cell. What is left of "eligibility" is the registry's
+# per-type rules and the one degenerate case (both anchors on one cell), and both are
+# asked WHEN THE FOLD FIRES rather than when a hand is placed: the fuse is a window
+# for making a doubtful fold work, and a refusal at placement would close it.
 
 # ---------------------------------------------------------------------------
 # Spring follow (the hands that float beside you)
@@ -281,11 +283,16 @@ static func hand_orbit_offset(index: int, count: int, facing: int, motion: Vecto
 	return Vector2(cos(angle), sin(angle)) * radius - motion * 0.06
 
 
+## Can these two cells make a fold? The only answer is no when they are the SAME
+## cell: two coincident anchors give a zero-length crease normal, and every piece of
+## geometry downstream divides by a gap of zero.
+##
+## There is deliberately no minimum distance. A one-cell fold is a perfectly good
+## fold — it excises a one-cell band and the halves meet — and the rule that used to
+## demand two cells was protecting nothing but taste. Whether a fold is worth making
+## is the player's call, and they find out by making it.
 static func anchors_valid(a: Vector2i, b: Vector2i) -> bool:
-	if a == b:
-		return false
-	var d := b - a
-	return d.x * d.x + d.y * d.y >= 4
+	return a != b
 
 
 ## Can an anchor be pinned on the surface at this plane cell? Refused when the dominant

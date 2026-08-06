@@ -200,7 +200,7 @@ world position and try to keep it up to date through folds.
 | One of your two slots | the world's `starting_hands`; walking over a loose hand | — |
 | Pinned as an anchor | tap F pointing at a cell (leaves the slot at once) | a burst in reach |
 | Held by a standing fold | the fuse going off | a burst at its seam |
-| Lying on the ground | authored by the world; overflow from a burst | walk over it |
+| Lying on the ground | authored by the world; overflow from a burst; a fold that failed at the fuse | walk over it |
 
 **One key, two directions.** Tap puts a hand down; hold fires a **release burst**.
 There is no committing press — the second hand lights a **fuse** and the pair folds
@@ -227,6 +227,19 @@ Consequences worth keeping in mind when designing:
   the whole input, and it releases what was releasable when it fired rather than
   cascading. Do not give it a target without a design conversation — the untargeted
   reading is what makes it read as a thing you *do*, not a thing you *point*.
+- **Fold validity is asked at the FUSE, not at placement.** `place_pending` checks
+  only that there is sheet to pin to (which is storage, not a rule — an anchor is a
+  base identity, and void has none). Everything else — the degenerate pair, the
+  surface rules, the span, somewhere to land — is `commit_pending`'s question. That
+  is what makes the fuse a *window*: you can put both hands down from a spot the fold
+  could not put you and run clear before it fires. Moving a check back to placement
+  would close that window, so do not.
+- **A failed fold scatters rather than refunds.** `_scatter_pending` drops both hands
+  where they were pinned, converting each pending anchor straight into a `HandPickup`
+  — they are already stored as the same thing. Returning them to your slots would
+  make a mistimed fold free.
+- **There is no minimum anchor distance.** A one-cell fold is a fold. The only
+  impossible pair is two anchors on one cell, which has no crease direction at all.
 - **A kind only changes the fuse.** Colour is identity, `HandTypes.fuse` is the whole
   of the behaviour, and a mixed pair fuses at the MEAN of its two. If you give kinds a
   second behaviour, that is a design change; do it in `HandTypes` and nowhere else.

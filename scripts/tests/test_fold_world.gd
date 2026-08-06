@@ -73,16 +73,75 @@ func test_one_key_places_both_hands_and_the_fuse_does_the_rest() -> void:
 	assert_eq(world.pending_a, null, "The hands went from the anchors into the fold")
 
 
-func test_a_too_close_second_anchor_is_refused_at_placement() -> void:
-	# With one key the next tap IS the commit, so an un-committable pair has to be
-	# refused while the player can still see which anchor caused it.
+func test_neighbouring_hands_make_a_perfectly_good_fold() -> void:
+	# There is no minimum distance. A one-cell fold is a fold.
 	world.tap_action(Vector2i(1, 0))                # (5,12)
-	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor 1 pinned")
+	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                # (6,12): the very next cell
+	assert_eq(world.pending_cell(1), Vector2i(6, 12), "The neighbouring hand lands")
+	assert_true(world.fuse_running(), "...and lights the fuse like any pair")
 
-	world.tap_action(Vector2i(0, 1))                # (4,13): dist sqrt(2)
-	assert_eq(world.pending_cell(1), null, "The too-close second anchor never lands")
-	assert_eq(world.pending_cell(0), Vector2i(5, 12), "Anchor 1 is kept for adjustment")
-	assert_eq(world.folds.size(), 0, "And nothing commits")
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.hands_in_folds(), 2, "It folded, holding both hands")
+
+
+func test_placement_asks_nothing_of_the_fold() -> void:
+	# The player may put hands anywhere there is sheet to pin to, valid pair or not.
+	# Whether it makes a fold is the fuse's question, not placement's.
+	world.tap_action(Vector2i(1, 0))                # (5,12)
+	assert_eq(world.pending_cell(0), Vector2i(5, 12), "First hand down")
+
+	world.tap_action(Vector2i(0, 1))                # (4,13): would once have been refused
+	assert_eq(world.pending_cell(1), Vector2i(4, 13), "The second lands wherever it was aimed")
+	assert_true(world.fuse_running(), "...and the pair is counting down")
+
+
+func test_a_fold_that_cannot_go_drops_both_hands_where_they_stood() -> void:
+	# Both hands on ONE cell is the one pair with no crease direction at all. The
+	# fuse still runs — you had that long to move one of them — and when it fires
+	# the hands fall on the spots you chose rather than returning to you.
+	world.tap_action(Vector2i(1, 0))                # (5,12)
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                # (5,12) again: the same cell
+	assert_eq(world.pending_cell(0), world.pending_cell(1), "Both hands on one cell")
+	assert_true(world.fuse_running(), "The pair still counts down")
+
+	var loose_before: int = world.hands_loose()
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.folds.size(), 0, "Nothing folded")
+	assert_eq(world.hands_pending(), 0, "Neither hand is still pinned")
+	assert_eq(world.hands_held(), 0, "...and neither came back to you")
+	assert_eq(world.hands_loose(), loose_before + 2, "Both fell where they were placed")
+	assert_eq(_total(), 5, "Conserved, as ever")
+
+
+func test_dropped_hands_land_on_the_cells_they_were_pinned_to() -> void:
+	world.tap_action(Vector2i(1, 0))                # (5,12)
+	var at = _plane_point(Vector2i(5, 12))
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                # (5,12) again — degenerate
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+
+	var near := 0
+	for entry in world.loose_hand_points():
+		if Vector2(entry["pos"]).distance_to(Vector2(at)) < 0.01:
+			near += 1
+	assert_eq(near, 2, "Both hands are lying on the cell they were pinned to")
+
+
+func test_the_fuse_is_a_window_to_make_a_doubtful_fold_work() -> void:
+	# The point of checking late: put both hands down from a spot the fold cannot
+	# put you, then move somewhere it can before it fires.
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)   # mid-air over the pit
+	world.tap_action(Vector2i(-1, 0))               # (12,12)
+	world.tap_action(Vector2i(1, 0))                # (14,12) — you are inside the band
+	assert_true(world.fuse_running(), "Both down, counting")
+
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)    # run clear of the band
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.mode, world.Mode.WORLD,
+		"Having left the band before it fired, you ride a flap instead of being swallowed")
+	assert_eq(world.folds.size(), 1, "And the fold went ahead")
 
 
 func test_a_tap_at_a_seam_places_and_the_burst_clears_everything() -> void:

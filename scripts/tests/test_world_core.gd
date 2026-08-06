@@ -207,16 +207,32 @@ func test_hand_orbit_trails_the_motion() -> void:
 	assert_lt(running.x, still.x, "Running right strings the hand out behind you")
 
 
-func test_anchors_valid_rules() -> void:
-	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(6, 3)), "Same row, gap>=2")
-	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(2, 8)), "Same column, gap>=2")
-	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(4, 5)),
-		"Off-axis pair 2+ apart is a valid (diagonal) fold")
+func test_anchors_valid_rejects_only_the_degenerate_pair() -> void:
+	# There is no minimum distance any more. The only impossible pair is two anchors
+	# on one cell, which has no crease direction at all.
+	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(6, 3)), "Same row, far apart")
+	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(2, 8)), "Same column")
+	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(4, 5)), "Off-axis (diagonal)")
 	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(0, 3)), "Direction irrelevant")
-	assert_false(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(3, 4)),
-		"Adjacent diagonal (dist sqrt(2)) is too close")
-	assert_false(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(3, 3)), "Gap 1 rejected")
-	assert_false(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(2, 3)), "Same cell rejected")
+	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(3, 3)),
+		"Neighbouring cells make a one-cell fold, which is a fold")
+	assert_true(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(3, 4)),
+		"...and so does a diagonal neighbour")
+	assert_false(WorldCore.anchors_valid(Vector2i(2, 3), Vector2i(2, 3)),
+		"Both on one cell has no crease direction — the one refusal left")
+
+
+func test_a_one_cell_fold_is_geometrically_sound() -> void:
+	# The distance rule used to hide this case; with it gone, the narrowest fold has
+	# to actually work.
+	var bg := WorldCore.parse_map(["........", "########"], CS)
+	var pieces := FoldReplay.identity_pieces(bg)
+	var fold := Fold.create(0, Vector2i(2, 0), Vector2i(3, 0), CS)
+	assert_gt(fold.gap_distance(), 0.0, "A one-cell pair has a real gap")
+	var dropped := WorldCore.capture_strip(pieces, fold, CS)
+	assert_gt(dropped.size(), 0, "...and excises a one-cell band")
+	var folded := FoldReplay.apply_one_fold(pieces, fold, CS)
+	assert_gt(folded.size(), 0, "...leaving a world behind")
 
 
 # ---------------------------------------------------------------------------

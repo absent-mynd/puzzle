@@ -5,7 +5,7 @@
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **392 passing** / 392 (0 failing, 0 risky), 20 scripts, ~13.5s.
+**Tests:** **397 passing** / 397 (0 failing, 0 risky), 20 scripts, ~14.8s.
 
 ---
 
@@ -45,13 +45,13 @@ What exists and works today:
 
 ## Test suite
 
-392 passing across 20 scripts. Composition:
+397 passing across 20 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 76 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
+| `test_fold_world` | 80 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
-| `test_world_core` | 41 | Map parsing, seams, anchor/fold eligibility, camera framing + lookahead, the hand spring |
+| `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
 | `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
 | `test_audio_manager` | 30 | Bus routing, volume, playback |
 | `test_tile_atlas` | 17 | Tileset kinds/variants, base-space UVs, the generated sheet |
@@ -80,6 +80,28 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-05 — Validity moves to the fuse; the distance rule goes
+
+The fuse was a delay. It is now a *window*.
+
+- **Placement asks nothing of the fold.** `place_pending` checks one thing: that
+  there is sheet under the cell to pin to. That is storage rather than a rule — an
+  anchor is a base identity plus a point in a tile, and void has no tile to be a
+  point in. The degenerate pair, the surface rules (`can_anchor_at`), the span and
+  somewhere-to-land are all `commit_pending`'s question now.
+- **Which makes the fuse a window to make a doubtful fold work.** Put both hands down
+  while standing where the fold cannot put you, then run clear before it fires and
+  ride the flap instead of being swallowed. Refusing at placement would have closed
+  that window before it opened.
+- **A fold that fails at the fuse scatters.** Both hands drop WHERE THEY WERE PINNED
+  — not into your slots, not at your feet. A pending anchor already stores exactly
+  what a loose hand does, so `_scatter_pending` is a conversion, not a placement, and
+  the hands land on the spots you chose. Returning them would make a mistimed fold
+  free.
+- **The two-tile minimum is gone.** A one-cell fold excises a one-cell band and the
+  halves meet; the rule was protecting taste, not geometry. `anchors_valid` now
+  rejects only two anchors on one cell, which genuinely has no crease direction.
 
 ### 2026-08-05 — Hands pop into the world; recall becomes a burst
 

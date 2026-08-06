@@ -33,11 +33,22 @@ is no committing press: put both hands down and the fold goes off by itself.
 
 Anchor placement is **embodied**: both hands must be placed from somewhere you
 can stand (or jump — mid-air placement works), so folding is gated by
-reachability. Where you are standing when the fuse runs out is what decides
-your fate — inside the red band to be folded in, outside it to ride a flap.
-Hands must be 2+ tiles apart in any direction (off-axis pairs make diagonal
-creases); a second hand placed too close to the first is refused *when you
-place it*.
+reachability. Any distance apart works, down to neighbouring cells, and off-axis
+pairs make diagonal creases.
+
+**Placement asks nothing of the fold.** Put hands wherever there is sheet to pin
+to — the only question at placement is whether *something is there*. Whether the
+pair makes a fold at all, whether the surface will hold it, whether you have
+anywhere to land: all of that is asked **when the fuse fires**.
+
+That is what the fuse is *for*. It is a window in which to make a doubtful fold
+work: put both hands down while standing somewhere the fold cannot put you, then
+run clear before it goes off and ride the flap instead of being swallowed.
+
+If the fold still cannot go when the fuse runs out, **both hands drop where they
+were pinned** — not back into your slots, not at your feet. They lie on the
+spots you chose, still holding the shape of the fold you tried to make. Go and
+pick them up, or leave them and pin somewhere better.
 
 There is **no remote unfold**. The hands in a fold are exactly where you left
 them, so getting them back means walking to its seam and bursting.
@@ -77,6 +88,7 @@ you is how many you have and what **kind** they are.
 - Placing the second lights the **fuse**. Both hands pulse, slowly at first and
   faster as the fold comes due, then it folds. No press commits it.
 - **Bursting takes back** whatever is in reach and defuses a pair.
+- A pair that **fails at the fuse** drops both hands where they were pinned.
 - **Unfolding gives back the same two hands that went in** — kinds and all.
 - Hands with nowhere to go **land on the ground** rather than being refused.
 
