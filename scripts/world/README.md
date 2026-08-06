@@ -22,7 +22,7 @@ and `WorldCore.CHARS` for the terrain characters.
 | Input | Action |
 |---|---|
 | A/D or ←/→ | move (also sets your facing) |
-| Space | jump |
+| Space | jump — **tap for a hop, hold for full height** |
 | hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
 | **tap F** | put a **hand** down on the cell you point at — the second one lights the fuse |
 | **hold F** | **release burst**: everything of yours within about a tile comes loose at once |
@@ -30,6 +30,41 @@ and `WorldCore.CHARS` for the terrain characters.
 
 One key, two directions. **Tap puts a hand down; hold bursts them loose.** There
 is no committing press: put both hands down and the fold goes off by itself.
+
+## Moving
+
+**The jump is variable-height, and how long you hold Space is the input.** Every
+jump leaves the floor at the same speed; what you decide on the way up is when to
+stop paying for it. Let go and gravity doubles, so the rise is cut short by weight
+rather than by having your velocity clipped — which means the height is a
+*continuum*, not two jumps:
+
+| Hold | Rise |
+|---|---|
+| a bare tap | ~1.25 cells — clears a one-tile step |
+| ~0.15s | ~2 cells |
+| through the whole rise (~0.45s) | ~2.6 cells — clears the two-tile pillar, never the three-tile wall |
+
+Holding past the apex buys nothing: the hold window *is* the rise. And holding
+through a landing does not bounce you — a jump needs a fresh press, so the hold
+you are spending always belongs to the jump you are in.
+
+Those bounds are **level design, not feel**. The pinned pillar is two tiles because
+it is meant to be jumped; the pressure plate's wall is three because it is meant to
+need a fold. `PlayerBody.jump_height_for_hold` integrates the real step so the test
+suite can pin them — if you tune a gravity constant, that test is what tells you
+whether you moved the world.
+
+Two smaller things, both about the frames you actually make decisions in:
+
+- **The apex is lighter.** Near the top of a jump gravity drops to 0.7, which buys
+  more of the frames where you are barely moving vertically and entirely occupied
+  with where to land — and where the sealed chamber wants a mid-air anchor pinned.
+  It costs about 6 units of height, which is why the three-cell wall is still a wall.
+- **Letting go in mid-air does not stop you dead.** Air deceleration is much gentler
+  than ground deceleration, so a jump keeps the run that launched it. Steering the
+  *other* way is unchanged, so nothing you could reach before is harder to reach —
+  only stopping in place mid-flight is.
 
 Anchor placement is **embodied**: both hands must be placed from somewhere you
 can stand (or jump — mid-air placement works), so folding is gated by
@@ -372,6 +407,30 @@ it, at any height. West carries the four authored beats and its geometry is load
 bearing for all of them, so pins went in east, where there is room to be wrong.
 Placing them in west is a playtesting job, not an editing one.
 
+## Sound
+
+Everything the verb does is audible. Placing a hand, arming a pair, the fold
+going off, being swallowed by it, surfacing again, a fold that would not go and
+scattered your hands instead — each has its own sound, and the ones that mean
+opposite things are built as mirrors: `fold` and `unfold` are the same waveform
+reversed, and `pinch` / `surface` are going in and coming out.
+
+Refusals share one sound and one message. If a thing did not happen you get a
+short low blip and a line of text, whatever the reason — the text says which
+reason.
+
+**A fold's interior has its own music.** Crossing into one crossfades the
+overworld bed out and a darker, detuned version of it in: the same room, folded.
+It is the only thing that tells you where you are without a word of UI.
+
+Audio is style, like the lighting: the game is fully playable with the sound
+off, and nothing you can hear is information you cannot also see. Volume is
+read from `user://settings.json` at startup — the settings screen that would
+edit it exists but nothing opens it yet.
+
+Everything shipped is a generated placeholder (`tools/gen_audio.py`). See
+`docs/features/AUDIO.md`.
+
 ## Art & light
 
 The world is drawn as **pixel art with dynamic lighting**. Both are style, not
@@ -532,11 +591,13 @@ do not want yet.
   fold/unfold with player riding, folding yourself in to any depth, wrap and exit,
   regions, doors, triggers, the tap/hold verb, the anchor ledger, and the pixel
   render target (which it resizes as the zoom changes).
-- `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, squash) and
-  the pixel-snapped camera, whose smoothing is driven here so the wrap can
-  displace it by a whole band width without losing its lag. Its camera-facing
-  readings (`look_dir`, `motion_fraction`, `motion_intensity`) are covered by
-  `scripts/tests/test_player_body.gd`.
+- `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, the
+  variable-height jump, squash) and the pixel-snapped camera, whose smoothing is
+  driven here so the wrap can displace it by a whole band width without losing its
+  lag. It does not draw itself — `PlayerVisual` does, once per copy of the space.
+  Its readings (`look_dir`, `take_jump_press`, `motion_fraction`,
+  `motion_intensity`) and its jump arithmetic (`gravity_scale`, `step_fall`,
+  `jump_height_for_hold`) are covered by `scripts/tests/test_player_body.gd`.
 - `WorldOverlay.gd` — anchors, strip preview band, seam markers, glue lines,
   doors, loose hands. A `WrapCanvas`: it draws one band's worth and they appear
   in every band. Seam diamonds are one per meeting CELL, since folds can share one
@@ -545,4 +606,8 @@ do not want yet.
   the target size a given zoom needs (`target_size`).
 - `TileAtlas.gd` — the tileset: kinds, variants, and base-space UVs for fragments.
 - `LightRig.gd` — lit materials, per-frame light uniforms, lamp glyphs.
-- Scene flows in `scripts/tests/test_fold_world.gd`.
+- Audio lives outside this directory: `scripts/systems/Sounds.gd` is the
+  vocabulary and the mix, `AudioManager` is the autoload that plays it. `FoldWorld`
+  and `PlayerBody` only ever call into it — see `_deny` and `_update_music`.
+- Scene flows in `scripts/tests/test_fold_world.gd`; what the world sounds like in
+  `scripts/tests/test_world_audio.gd`.

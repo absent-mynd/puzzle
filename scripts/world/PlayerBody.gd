@@ -3,16 +3,47 @@ class_name PlayerBody extends CharacterBody2D
 ## PlayerBody
 ##
 ## Minimal side-view platformer body for the fold prototype: run, gravity,
-## jump with coyote time + input buffer, and a cheap blob squash so the
-## character reads as soft. Input is raw physical keys so the prototype needs
-## no project input-map changes.
+## variable-height jump with coyote time + input buffer, and a cheap blob squash
+## so the character reads as soft. Input is raw physical keys so the prototype
+## needs no project input-map changes.
+##
+## **The jump is variable-height.** Every jump leaves the floor at the same speed;
+## how high it goes is decided on the way up, by whether you are still holding the
+## key (see `gravity_scale`). A tap clears a one-tile step, a full hold clears the
+## two-tile pillar, and nothing clears the three-tile wall — those bounds are
+## authored into the world, and `test_player_body` pins them.
 
 const GRAVITY := 1800.0
 const MAX_FALL := 1400.0
 const RUN_SPEED := 320.0
 const RUN_ACCEL := 2600.0
 const RUN_DECEL := 3200.0
+## Deceleration with nothing held, in the AIR. Much gentler than on the ground:
+## letting go of the stick mid-jump should not stop you dead over a pit, so a
+## jump keeps the run that launched it. Steering the other way is unaffected —
+## that is `RUN_ACCEL` and always was, so nothing you could reach before is
+## harder to reach now; only stopping in mid-air is.
+const AIR_DECEL := 1400.0
 const JUMP_VELOCITY := -780.0
+## Gravity multiplier while rising with the jump key RELEASED — the whole of the
+## tap-versus-hold difference. Cutting the rise short with weight rather than by
+## clipping the velocity is what makes the height a continuum: release at any
+## point in the rise and you get the height you paid for, instead of one of two
+## jumps. The floor of that continuum is the shortest possible tap, which this
+## number sets: a bare tap rises about 1.35 cells against a full hold's 2.7.
+const JUMP_CUT_GRAVITY := 2.0
+## ...and while falling. A landing that arrives a little sooner than the rise that
+## earned it reads as weight; a symmetric arc reads as the moon. Deliberately
+## small — the fall is also the part of the arc you steer a landing in.
+const FALL_GRAVITY := 1.12
+## The band around the apex, in vertical speed, that gets `APEX_GRAVITY`.
+const APEX_SPEED := 200.0
+## Gravity multiplier inside that band. The top of a jump is where you are barely
+## moving vertically and entirely occupied with where you are going to land — and
+## with pinning the mid-air anchor the sealed chamber wants. Lightening it buys
+## more of those frames without raising the arc much (about 6 units, which is why
+## the three-cell wall is still a wall).
+const APEX_GRAVITY := 0.7
 const COYOTE_TIME := 0.09
 const JUMP_BUFFER := 0.11
 const RADIUS := 20.0
@@ -27,6 +58,18 @@ const CAM_ZOOM_SMOOTHING := 2.5
 ## change. Eased, a reversal reads as the view swinging round to your new heading.
 const CAM_LOOKAHEAD_SMOOTHING := 3.0
 
+## World units between footsteps. Distance, not time: a step is a stride, so
+## walking slowly must give slow steps rather than the same steps quieter. At
+## RUN_SPEED that is a little over three a second. (`Sounds.FOOTSTEP` also
+## carries a retrigger floor, but that is a backstop for the degenerate cases —
+## a body shoved along a wall, a fold landing you mid-run — not the stride.)
+const STRIDE := 96.0
+
+## Downward speed a landing must exceed to be heard. Below this the body is
+## settling onto a slope or stepping off a lip, and a sound for it would fire
+## several times while you simply walked along uneven ground.
+const LAND_SPEED := 220.0
+
 var _coyote := 0.0
 var _buffer := 0.0
 ## The blob's outline, in body-local space, and the squash currently applied to
@@ -35,6 +78,21 @@ var _buffer := 0.0
 ## knowing that folds have insides. See `WrapCanvas`.
 var _outline := PackedVector2Array()
 var _squash := Vector2.ONE
+
+## Last frame's held state of the jump key, so a press can be told from a hold.
+var _jump_held := false
+## True from the launch of a jump until you let go or the rise ends. This — not
+## the held key — is what buys height: it is armed only by a jump WE launched, so
+## a body thrown upward by the world is not quietly made floatier by a key that
+## happened to be down, and a key held through a landing cannot re-arm it without
+## a fresh press.
+var _sustaining := false
+
+## Distance run along the ground since the last footstep.
+var _stride := 0.0
+
+## Whether the body was on the floor last frame, for the air->ground edge.
+var _was_grounded := true
 var _cam: Camera2D
 
 ## Last horizontal input: -1 left, +1 right. Default faces right.
@@ -136,20 +194,39 @@ func _physics_process(delta: float) -> void:
 	elif dir < 0.0:
 		facing = -1
 
-	var accel := RUN_ACCEL if absf(dir) > 0.0 else RUN_DECEL
+	# Steering always gets the full accel; only letting go reads the ground.
+	var accel := RUN_ACCEL
+	if is_zero_approx(dir):
+		accel = RUN_DECEL if is_on_floor() else AIR_DECEL
 	velocity.x = move_toward(velocity.x, dir * RUN_SPEED, accel * delta)
-	velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
 
 	_coyote = COYOTE_TIME if is_on_floor() else maxf(_coyote - delta, 0.0)
 	# Space only: W/Up are reserved for POINTING (anchor placement direction).
-	var jump_pressed := Input.is_physical_key_pressed(KEY_SPACE)
+	var jump_pressed := take_jump_press()
+	if not _jump_held:
+		_sustaining = false
 	_buffer = JUMP_BUFFER if jump_pressed else maxf(_buffer - delta, 0.0)
 	if _buffer > 0.0 and _coyote > 0.0:
+		# The launch frame takes no gravity: the jump IS this frame's vertical step.
 		velocity.y = JUMP_VELOCITY
+		_sustaining = true
 		_coyote = 0.0
 		_buffer = 0.0
+		# The launch, not the key: a buffered press that never finds coyote time
+		# makes no sound, and one that finds it a few frames later sounds then.
+		AudioManager.play_sfx(Sounds.JUMP)
+	else:
+		velocity.y = step_fall(velocity.y, _sustaining, delta)
+	if velocity.y >= 0.0:
+		# The rise is over — by apex, by ceiling, or by landing. Nothing left to
+		# sustain, and holding the key must not lighten a fall.
+		_sustaining = false
 
+	# Read before the move: `move_and_slide` zeroes the fall the moment the body
+	# touches down, so afterwards there is no landing speed left to judge.
+	var fall_speed := velocity.y
 	move_and_slide()
+	_step_audio(delta, fall_speed)
 
 	# Blob squash: stretch along the dominant velocity axis, conserve area.
 	var stretch := clampf(absf(velocity.y) / 2800.0, 0.0, 0.30)
@@ -160,12 +237,111 @@ func _physics_process(delta: float) -> void:
 		_squash = Vector2(1.0 + s, 1.0 - s)
 
 
+## Whether the jump key has been pressed AFRESH since this was last asked — the
+## rising edge, not the held state. Reading it consumes the edge, so call it once
+## per physics frame; after it returns, `_jump_held` is this frame's held state.
+##
+## The edge is what makes holding mean "keep rising" rather than "jump again the
+## moment you land": sampling the held key straight into the buffer, as this used
+## to, left the buffer permanently full, so a player holding for height bounced off
+## the floor on the frame they touched it and spent the hold on the wrong jump.
+func take_jump_press() -> bool:
+	var held := Input.is_physical_key_pressed(KEY_SPACE)
+	var fresh := held and not _jump_held
+	_jump_held = held
+	return fresh
+
+
+## The gravity multiplier in force for a body moving at `vy` (negative up), where
+## `sustaining` means "a jump we launched is still rising and the key is still
+## down". Pure, and the whole shape of the jump:
+##
+## - **rising, held** — plain gravity. This is the full jump, the arc the world
+##   is authored against.
+## - **rising, released** — `JUMP_CUT_GRAVITY`. The rise is cut short by weight,
+##   not by clipping the velocity, so how high you go is a continuous function of
+##   how long you held rather than a choice between two jumps.
+## - **falling** — `FALL_GRAVITY`, whatever the key is doing. Sustain is a
+##   rise-only affordance; a held key must never slow a fall.
+## - **either, near the apex** — `APEX_GRAVITY` on top. The frames where you are
+##   barely moving vertically are the frames you steer and pin anchors in, so they
+##   are the ones worth having more of.
+static func gravity_scale(vy: float, sustaining: bool) -> float:
+	var scale := 1.0
+	if vy < 0.0:
+		if not sustaining:
+			scale = JUMP_CUT_GRAVITY
+	else:
+		scale = FALL_GRAVITY
+	if absf(vy) < APEX_SPEED:
+		scale *= APEX_GRAVITY
+	return scale
+
+
+## One frame of vertical motion: `vy` a frame on, terminal fall respected. The
+## body takes exactly this step, so anything that integrates it is predicting the
+## real arc — see `jump_height_for_hold`.
+static func step_fall(vy: float, sustaining: bool, delta: float) -> float:
+	return minf(vy + GRAVITY * gravity_scale(vy, sustaining) * delta, MAX_FALL)
+
+
+## How high a jump rises, in world units, if the key is held for `hold` seconds —
+## the tap-to-hold curve, integrated from the same step the body takes.
+##
+## This is here to be *asked*: the world is authored against these heights (a
+## one-tile step a tap clears, the two-tile pillar a full hold clears, the
+## three-tile wall nothing clears), and a constant nudged for feel can quietly
+## move them. `test_player_body` asks it so that cannot happen silently.
+static func jump_height_for_hold(hold: float, step: float = 1.0 / 60.0) -> float:
+	var vy := JUMP_VELOCITY
+	var y := 0.0
+	var peak := 0.0
+	var t := 0.0
+	while vy < 0.0:
+		vy = step_fall(vy, t < hold, step)
+		y += vy * step
+		peak = minf(peak, y)
+		t += step
+	return -peak
+
+
+## Footsteps and landings, from the state the move left behind.
+##
+## Both live here rather than in the world because both are facts about the
+## BODY — how far it has run, how hard it hit — and the world does not track
+## either. Neither is allowed to influence anything: this reads state and makes
+## noise, and that is the whole of it.
+func _step_audio(delta: float, fall_speed: float) -> void:
+	var grounded := is_on_floor()
+	if grounded and not _was_grounded:
+		if fall_speed > LAND_SPEED:
+			AudioManager.play_sfx(Sounds.LAND)
+		# Whatever the stride had accumulated belongs to the run before the
+		# jump; starting fresh keeps the first step after a landing a full one.
+		_stride = 0.0
+	_was_grounded = grounded
+
+	if grounded:
+		_stride += absf(velocity.x) * delta
+		if _stride >= STRIDE:
+			_stride = 0.0
+			AudioManager.play_sfx(Sounds.FOOTSTEP)
+	else:
+		_stride = 0.0
+
+
 ## Hard placement (fold rides, respawn): move without sweeping and drop
 ## any velocity into the ground so the landing reads as a plant, not a launch.
+##
+## Silent, and it resets the step state: arriving somewhere is not walking
+## there. The fold, the door or the respawn that moved you has its own sound,
+## and a footstep or a landing thud underneath it would say you had travelled.
 func teleport(to: Vector2, keep_velocity: bool = true) -> void:
 	global_position = to
 	if not keep_velocity:
 		velocity = Vector2.ZERO
+	_stride = 0.0
+	_was_grounded = true
 
 
 ## Held vertical intent: -1 up, +1 down, 0 neither. Up wins when both are held —

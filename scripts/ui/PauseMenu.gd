@@ -37,7 +37,7 @@ func hide_pause_menu() -> void:
 
 ## Resume the game
 func _on_resume_button_pressed() -> void:
-	AudioManager.play_sfx("button_click")
+	AudioManager.play_sfx(Sounds.UI_CLICK)
 
 	hide_pause_menu()
 	resume_requested.emit()
@@ -45,7 +45,7 @@ func _on_resume_button_pressed() -> void:
 
 ## Respawn at the last checkpoint
 func _on_restart_button_pressed() -> void:
-	AudioManager.play_sfx("button_click")
+	AudioManager.play_sfx(Sounds.UI_CLICK)
 
 	hide_pause_menu()
 	respawn_requested.emit()
@@ -53,7 +53,7 @@ func _on_restart_button_pressed() -> void:
 
 ## Open settings (overlay on the pause menu)
 func _on_settings_button_pressed() -> void:
-	AudioManager.play_sfx("button_click")
+	AudioManager.play_sfx(Sounds.UI_CLICK)
 
 	var scene := load("res://scenes/ui/Settings.tscn")
 	if scene == null:
@@ -68,6 +68,6 @@ func _on_settings_button_pressed() -> void:
 
 ## Quit the game
 func _on_main_menu_button_pressed() -> void:
-	AudioManager.play_sfx("button_click")
+	AudioManager.play_sfx(Sounds.UI_CLICK)
 
 	get_tree().quit()

@@ -5,7 +5,7 @@
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **449 passing** / 449 (0 failing, 0 risky), 23 scripts, ~14.5s.
+**Tests:** **498 passing** / 498 (0 failing, 0 risky), 24 scripts, ~14.5s.
 
 ---
 
@@ -22,6 +22,7 @@ What exists and works today:
 | Fold kernel (derive/replay, arbitrary crease angles) | ✅ Solid, well covered |
 | Base-frame transport (`BaseFrame`) | ✅ Solid, well covered |
 | Side-view world: gravity, riding flaps, depenetration | ✅ Playable |
+| Variable-height jump (tap vs hold), air control | ✅ Playable |
 | Subspaces (fold interiors as real places) | ✅ Playable |
 | **Nesting: folding yourself in, and in again** | ✅ Playable, any depth, ⚙️ untuned |
 | Regions + doors (recursive partner resolution) | ✅ Playable |
@@ -40,7 +41,7 @@ What exists and works today:
 | **Batched sheet** — two canvas items, not one per fragment | ✅ In the world |
 | Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
 | Hand-drawn tilesheet | ⚙️ Layout + drop-in path done; sheet is generated in code |
-| Audio | ⚙️ `AudioManager` + `Settings` carried over; no assets |
+| Audio | ✅ Whole fold vocabulary wired; 21 SFX + 2 music beds ship (generated placeholders) |
 | Save / progression | ❌ Not started |
 | Entities (items, enemies, save points) | ❌ Not started |
 
@@ -48,7 +49,7 @@ What exists and works today:
 
 ## Test suite
 
-449 passing across 23 scripts. Composition:
+498 passing across 24 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
@@ -59,7 +60,9 @@ What exists and works today:
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
 | `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
 | `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
-| `test_audio_manager` | 30 | Bus routing, volume, playback |
+| `test_audio_manager` | 47 | Buses, the volume-applied-once rule, loading + looping, the mix/jitter/throttle registry, fades, persistence |
+| `test_player_body` | 22 | Look/point keys, the jump press edge, the tap-to-hold height curve, velocity-as-fraction, motion scalar |
+| `test_world_audio` | 20 | **Scene-driven**: that the fold vocabulary is actually heard |
 | `test_tile_atlas` | 17 | Tileset kinds/variants, base-space UVs, the generated sheet |
 | `test_tile_types` | 16 | The registry |
 | `test_light_source` | 15 | Lights as occupants: fold-away, ride, split, serialization |
@@ -71,7 +74,6 @@ What exists and works today:
 | `test_fold_replay` | 11 | The derivation engine |
 | `test_anchor_stock` | 11 | Hand conservation: slots ↔ pinned ↔ fold ↔ ground |
 | `test_hand_types` | 10 | The kind registry: colours, fuses, mixed pairs |
-| `test_player_body` | 10 | Look/point keys, velocity-as-fraction, motion scalar |
 | `test_base_grid` | 9 | Immutable base model |
 | `test_base_frame` | 9 | Base ↔ derived transport |
 | `test_fold_unfold_inverse` | 4 | Unfold-as-drop-and-re-derive |
@@ -150,6 +152,41 @@ copies", and the newest object in the game had forgotten to.
 
 **New tests:** `test_fold_lattice` (14), `test_nested_folds` (18),
 `test_tile_batch` (11).
+
+### 2026-08-06 — The jump has a hold, and the hold has a height
+
+The jump was one height: press the key and you got the whole arc, whatever you
+meant. Now **how long you hold Space is an input**, and the height is a continuum
+from a ~1.25-cell tap to a ~2.6-cell full hold.
+
+- **Cut the rise with weight, not by clipping the velocity.** Releasing mid-rise
+  doubles gravity (`JUMP_CUT_GRAVITY`) rather than truncating `velocity.y`. Same
+  launch speed every time, so `motion_fraction` still measures a fresh jump as a
+  full -1 up — and, more importantly, releasing at any point in the rise gives the
+  height you paid for instead of one of two jumps.
+- **The press is now an EDGE** (`take_jump_press`). The buffer used to be refilled
+  from the *held* key, which left it permanently full while you held: the player
+  holding for height bounced off the floor on the frame they touched it and spent
+  the hold on the wrong jump. Sustain is armed only by a jump we launched, so a
+  held key cannot re-arm it without a fresh press, and a body thrown upward by the
+  world is not quietly made floatier by a key that happened to be down.
+- **The apex is lighter** (`APEX_GRAVITY`, 0.7 within 200 units/s of the peak) and
+  **the fall is heavier** (1.12). More of the frames where you are choosing a
+  landing or pinning the sealed chamber's mid-air anchor; a landing that arrives
+  sooner than the rise that earned it.
+- **Air deceleration is gentler than ground** (`AIR_DECEL` 1400 vs 3200), so
+  letting go of the stick mid-jump keeps the run that launched it. Steering the
+  other way still gets the full `RUN_ACCEL` — nothing that was reachable got harder
+  to reach, only stopping dead in mid-air did.
+
+**The level-design bounds are now pinned by tests, not by hope.**
+`PlayerBody.jump_height_for_hold` integrates the very step the body takes, and
+`test_player_body` asserts a tap clears one cell, a full hold clears the two-tile
+pinned pillar, and nothing clears the three-tile wall the pressure plate opens. A
+gravity constant nudged for feel can move the world; that test is what says so.
+
+12 new tests (404 → 416). What is *not* pinned is feel — the curve is a first
+guess and wants a controller in a human's hands.
 
 ### 2026-08-05 — A fold in flight owns the frame
 
@@ -529,7 +566,11 @@ Roughly in priority order — nothing here is committed to yet:
 
 - The `topdown-archive` tag is **local only** — the remote refused the tag push
   (session credentials are scoped to the working branch). Use `git checkout 8bf8193`.
-- No audio assets ship; `AudioManager` is wired but silent.
+- The pause menu and settings screen are complete and wired but **unreachable** —
+  nothing opens them, so the volume sliders cannot be used in-game. Volumes are
+  read from `user://settings.json` at startup, so they are settable by hand.
+- Audio is not positional: a fold across the room sounds like one at your feet.
+- The shipped sounds are generated placeholders (`tools/gen_audio.py`), not art.
 - Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
   the world yet. Pins and triggers now are — see east's right wing.
 - **You can strand yourself.** Spend your last anchors on a fold, walk somewhere its

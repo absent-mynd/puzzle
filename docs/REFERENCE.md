@@ -98,7 +98,9 @@ understand how the pieces meet. Its header comment is the map.
 
 | Concern | File |
 |---|---|
+| **The sound vocabulary + the mix** (one file per sound) | `scripts/systems/Sounds.gd` |
 | Audio buses, SFX/music playback, volume persistence | `scripts/systems/AudioManager.gd` (autoload) |
+| Generating the shipped audio assets | `tools/gen_audio.py` |
 | In-world pause: resume / respawn / settings / quit | `scripts/ui/PauseMenu.gd` |
 | Audio & display settings | `scripts/ui/Settings.gd` |
 

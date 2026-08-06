@@ -567,6 +567,7 @@ func _apply_context() -> void:
 	_bg.color = Color("0a0b12").lerp(Color("140a2a"), minf(float(context.size()) * 0.7, 1.0))
 	geo.visible = true
 	rebuild()
+	_update_music()
 
 
 ## The glue lines of the current space: where its copies are identified. Two down
@@ -714,17 +715,18 @@ func place_hand(dir: Vector2i) -> void:
 	# placement would close that window before it opened.
 	var piece = BaseFrame.piece_containing(pieces_by_pos, center, CS)
 	if piece == null:
-		_show_flash("Nothing there to pin to.")
+		_deny("Nothing there to pin to.")
 		return
 	# Placing puts a HAND down: it leaves your slot now, and its kind travels with
 	# the anchor because the fold will need to know what it was pinned with. Re-siting
 	# an anchor you already placed reuses the hand already in it.
 	var from_slot := AnchorStock.first_held(hands)
 	if from_slot < 0:
-		_show_flash("No hand to place.")
+		_deny("No hand to place.")
 		return
 	var kind := int(hands[from_slot])
 	hands[from_slot] = null
+	AudioManager.play_sfx(Sounds.HAND_PLACE)
 	var entry := {"bid": piece.base_id, "bp": center - piece.src_offset,
 		"hand": kind, "region": region_id}
 
@@ -818,6 +820,7 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 
 	# Inside a fold, the glue anchor in reach is the exit.
 	if mode == Mode.SUBSPACE and _glue_within(origin, BURST_RADIUS):
+		AudioManager.play_sfx(Sounds.BURST)
 		try_exit()
 		return
 
@@ -826,14 +829,22 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	# fold is what unblocks the older, and cascading into it would mean a single press
 	# undid work you never asked it to reach. Snapshotting also makes the burst
 	# deterministic, rather than depending on which unfolds happen to animate.
-	for fold in _unfoldable_within(origin, BURST_RADIUS):
+	# The burst itself, before the folds it releases: it is the gesture, and the
+	# unfold it sets off should sound like a consequence of it. Only when
+	# something actually came loose — the flash always fires, but a burst into
+	# empty air is exactly the case the refusal below is for.
+	var releasing: Array = _unfoldable_within(origin, BURST_RADIUS)
+	if freed > 0 or not releasing.is_empty():
+		AudioManager.play_sfx(Sounds.BURST)
+
+	for fold in releasing:
 		if animating():
 			break
 		unfold_level_fold(fold)
 		freed += 1
 
 	if freed == 0:
-		_show_flash("Nothing here to release.")
+		_deny("Nothing here to release.")
 
 
 ## Is this anchor within `radius` of a point? False when it is unresolvable in the
@@ -895,6 +906,9 @@ func burst_flash() -> float:
 func _prime(a, b) -> void:
 	var total: float = HandTypes.fuse_for(int(a["hand"]), int(b["hand"]))
 	primed.append({"a": a, "b": b, "left": total, "total": total})
+	# The fuse is the one thing in this game that goes off without you: it is
+	# the only warning there is, and it plays over the hand you just placed.
+	AudioManager.play_sfx(Sounds.PAIR_ARMED)
 
 
 ## Put an anchor back where it belongs: into a slot if you have one free and can
@@ -903,6 +917,10 @@ func _release_anchor(entry, into_hand: bool) -> void:
 	if into_hand and AnchorStock.first_empty(hands) >= 0:
 		hands[AnchorStock.first_empty(hands)] = int(entry["hand"])
 		return
+	# Caught, and it is silent — the burst that caught it already spoke. Only a
+	# hand that reaches the GROUND makes a sound of its own, because a hand on
+	# the ground is a thing you now have to go and fetch.
+	AudioManager.play_sfx(Sounds.HAND_DROP)
 	var p := HandPickup.new()
 	p.kind = int(entry["hand"])
 	p.region = String(entry["region"])
@@ -933,6 +951,11 @@ func _break_pair(pair: Dictionary, origin: Vector2, reach: float) -> void:
 ## you tried to make. Go and pick them up, or leave them and pin somewhere better.
 func _scatter_pair(pair: Dictionary) -> void:
 	primed.erase(pair)
+	# The one place a refused fold is heard. Every refusal in `fire_pair` and
+	# `do_fold` funnels through here, so the sound sits where the OUTCOME is
+	# rather than being repeated at each of the six ways to reach it — and it
+	# lands under the two hands hitting the ground, which say the rest.
+	AudioManager.play_sfx(Sounds.FOLD_REFUSED)
 	for entry in [pair["a"], pair["b"]]:
 		_release_anchor(entry, false)
 
@@ -1165,6 +1188,7 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 			_apply_context()
 			_show_flash("Folded in." if context.size() == 1
 				else "Folded in again — %d deep." % context.size())
+		AudioManager.play_sfx(Sounds.PINCH)
 		_play_transition(pre, fold, true, false, p, p, finalize_pinch)
 		return true
 
@@ -1177,6 +1201,7 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 	var finalize_ride := func() -> void:
 		rebuild()
 		player.teleport(landed)
+	AudioManager.play_sfx(Sounds.FOLD)
 	_play_transition(pre, fold, true, true, player.global_position, landed, finalize_ride)
 	return true
 
@@ -1287,6 +1312,7 @@ func _drop_hand(kind: int, at: Vector2) -> void:
 			loose_hands.append(
 				HandPickup.dropped_at(kind, piece, at + off + fan, region_id))
 			_refresh_pickup_visuals()
+			AudioManager.play_sfx(Sounds.HAND_DROP)
 			return
 	push_warning("FoldWorld: nowhere to drop a hand near %s" % at)
 
@@ -1307,11 +1333,11 @@ func unfold_level_fold(fold: Fold) -> void:
 	if idx < 0:
 		return
 	if not can_unfold_fold(fold):
-		_show_flash("Blocked — a newer fold crosses this seam.")
+		_deny("Blocked — a newer fold crosses this seam.")
 		return
 	var lvl_base: Array = level_base
 	if _interior_glue_blocker(fold, lvl_base, list, idx) != null:
-		_show_flash("Blocked — a fold inside it crosses its seam.")
+		_deny("Blocked — a fold inside it crosses its seam.")
 		return
 
 	var kids: Array = interiors.get(fold.fold_id, [])
@@ -1339,11 +1365,14 @@ func unfold_level_fold(fold: Fold) -> void:
 		list.insert(idx, fold)
 		if not kids.is_empty():
 			interiors[fold.fold_id] = kids
-		_show_flash("Unfold blocked — nowhere for you to land.")
+		_deny("Unfold blocked — nowhere for you to land.")
 		return
 
 	var was_newest := idx == list.size() - kids.size()
 	var regained: int = fold.held_hands.size()
+	# Before `_take_back`, which can drop a hand it cannot give you — this
+	# should be the sound underneath that, not the other way round.
+	AudioManager.play_sfx(Sounds.UNFOLD)
 	_take_back(fold)
 	var finalize := func() -> void:
 		rebuild()
@@ -1380,7 +1409,7 @@ func try_exit() -> void:
 	if mode != Mode.SUBSPACE or animating():
 		return
 	if exit_blocker() != null:
-		_show_flash("Blocked — an inner fold crosses the outer seam.")
+		_deny("Blocked — an inner fold crosses the outer seam.")
 		return
 	var outer := sub_fold
 	var parent_path := context.slice(0, context.size() - 1)
@@ -1395,7 +1424,7 @@ func try_exit() -> void:
 	if seg.size() >= 2:
 		for j in range(idx + 1, plist.size()):
 			if WorldCore.segment_intersects_band(seg[0], seg[1], plist[j]):
-				_show_flash("Blocked — a newer fold outside crosses this seam.")
+				_deny("Blocked — a newer fold outside crosses this seam.")
 				return
 
 	var kids: Array = level_folds()
@@ -1419,6 +1448,10 @@ func try_exit() -> void:
 		landed = Vector2(dest)
 
 	context = parent_path
+	# Coming out. The mirror of `PINCH`, and the pair is deliberate: going in
+	# and coming out are one gesture heard from its two sides. `_apply_context`
+	# swaps the music back in the finalize below.
+	AudioManager.play_sfx(Sounds.SURFACE)
 	_take_back(outer)
 	var kept := not kids.is_empty()
 	var surfaced := context.is_empty()
@@ -1511,15 +1544,19 @@ func _traverse(id: String) -> void:
 	var pair_id: String = doors[id]["pair"]
 	var res = resolve_door(pair_id)
 	if res == null:
-		_show_flash("The door is dormant — its far side is split.")
+		_deny("The door is dormant — its far side is split.")
 		return
 	var landed := WorldCore.depenetrate(
 		res["pos"], PlayerBody.RADIUS, WorldCore.solid_polys_of(res["pieces"]))
 	if landed == Vector2.INF:
-		_show_flash("The way is blocked — something is folded over the door.")
+		_deny("The way is blocked — something is folded over the door.")
 		return
 	_door_latch[pair_id] = true
 	var into_fold: bool = not res["path"].is_empty()
+	# A door you come out of INSIDE a fold is the pinch by another route, and it
+	# should land as one — the door sound alone would undersell arriving
+	# somewhere that is not the world.
+	AudioManager.play_sfx(Sounds.PINCH if into_fold else Sounds.DOOR)
 	var rid: String = doors[pair_id]["region"]
 	if rid != region_id:
 		_load_region(rid)
@@ -1741,6 +1778,7 @@ func _physics_process(delta: float) -> void:
 	_wrap_body()
 	if lattice.is_flat() and player.global_position.y > (base.grid_size.y + 6) * CS:
 		player.teleport(_spawn, false)
+		AudioManager.play_sfx(Sounds.RESPAWN)
 		_show_flash("You fell out of the world — respawned.")
 	_tick_fuse(delta)
 	# A fuse that just fired has started a fold TRANSITION, and the rest of this
@@ -1790,6 +1828,9 @@ func _wrap_body() -> void:
 		var landed := WorldCore.depenetrate(back, PlayerBody.RADIUS, wall_polys)
 		player.teleport(back if landed == Vector2.INF else landed, false)
 		_cut_camera()
+		# Same sound as falling out of the world, because it is the same event
+		# seen from inside a fold: you left the sheet and were put back.
+		AudioManager.play_sfx(Sounds.RESPAWN)
 		_show_flash("The fold turns back on itself here.")
 
 
@@ -1835,6 +1876,7 @@ func _check_triggers() -> void:
 	var landed := WorldCore.depenetrate(
 		settled["player_pos"], PlayerBody.RADIUS, WorldCore.solid_polys_of(current_pieces))
 	player.teleport(settled["player_pos"] if landed == Vector2.INF else landed)
+	AudioManager.play_sfx(Sounds.TRIGGER)
 	_show_flash("The ground answers — space folds around you.")
 
 
@@ -1862,6 +1904,7 @@ func _check_pickups() -> void:
 		hands[AnchorStock.first_empty(hands)] = pickup.kind
 		loose_hands.remove_at(i)
 		_refresh_pickup_visuals()
+		AudioManager.play_sfx(Sounds.HAND_PICKUP)
 		_show_flash("Picked up a %s hand." % HandTypes.type_name(pickup.kind))
 		return
 
@@ -1888,6 +1931,7 @@ func _check_goal() -> void:
 			touching = true
 			break
 	if touching and not _on_goal:
+		AudioManager.play_sfx(Sounds.GOAL)
 		_show_flash("★ GOAL reached! ★")
 	_on_goal = touching
 
@@ -1913,6 +1957,7 @@ func _reset() -> void:
 	_burst_flash_left = 0.0
 	context.clear()
 	_setup_all()
+	AudioManager.play_sfx(Sounds.RESET)
 	_show_flash("Reset.")
 
 
@@ -1941,7 +1986,7 @@ func _build_hud() -> void:
 	# anchor readout all say their piece in place, and a wall of text on top of
 	# them explains away the thing the player is meant to work out.
 	var help := Label.new()
-	help.text = "A/D move   Space jump   W/S aim   F tap: place hand · hold: pull back   R reset"
+	help.text = "A/D move   Space tap/hold: jump   W/S aim   F tap: place hand · hold: pull back   R reset"
 	help.position = Vector2(12, 8)
 	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
 	hud.add_child(help)
@@ -1995,3 +2040,29 @@ func _show_flash(text: String) -> void:
 	_flash.text = text
 	_flash.visible = true
 	_flash_left = 2.5
+
+
+## A refusal: the message, and the sound that goes with every refusal that has
+## no more specific one of its own.
+##
+## Refusals are the one class of event worth funnelling, because there are a
+## dozen of them and they all mean the same thing to the player — "that did not
+## happen". Kept apart from `_show_flash` because that also carries good news
+## ("Folded in.", "Picked up a plain hand."), and a game that beeps at you for
+## succeeding is worse than one that says nothing. `Sounds.DENY` carries the
+## retrigger floor that keeps a per-frame refusal from becoming a drone.
+func _deny(text: String) -> void:
+	AudioManager.play_sfx(Sounds.DENY)
+	_show_flash(text)
+
+
+## Match the bed to where the player is. `play_music` ignores a request for the
+## track already playing, so this is safe to call whenever the context changes
+## and costs nothing when it has not.
+##
+## Inside a fold is a different PLACE, and the open question in AGENTS.md is
+## whether it reads as one. This is the cheapest honest answer: the interior
+## has its own bed, and crossing the boundary crossfades between them.
+func _update_music() -> void:
+	AudioManager.play_music(Sounds.MUSIC_SUBSPACE if mode == Mode.SUBSPACE
+		else Sounds.MUSIC_OVERWORLD)

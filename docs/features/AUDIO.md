@@ -1,314 +1,236 @@
-# Audio System Implementation Summary
+# Audio
 
-**Date:** 2025-11-06
-**Status:** ✅ Complete
-**Tests:** `scripts/tests/test_audio_manager.gd` (see STATUS.md for suite totals)
+**Last updated:** 2026-08-06 · **Tests:** `test_audio_manager`, `test_world_audio`
 
-## Overview
+The game has a voice. Folding, unfolding, being pinched in, surfacing, arming a
+fuse, scattering a failed pair, taking a hand off the ground — all of it is
+audible, and all of it ships with sound.
 
-The audio system has been successfully implemented for the Space Folding Puzzle Game. The system provides comprehensive audio management including background music, sound effects, and volume controls.
-
-## Components Implemented
-
-### 1. AudioManager Singleton (`scripts/systems/AudioManager.gd`)
-
-**Features:**
-- ✅ Singleton autoload for global audio management
-- ✅ Separate audio buses for Master, Music, and SFX
-- ✅ Music playback with fade in/out transitions
-- ✅ SFX player pool (8 concurrent sounds)
-- ✅ Pitch variation for SFX (adds variety)
-- ✅ Volume controls for all audio buses
-- ✅ Graceful handling of missing audio files
-- ✅ Automatic audio resource loading from directories
-- ✅ Signals for audio events (music_started, music_stopped, sfx_played)
-
-**Key Methods:**
-```gdscript
-AudioManager.play_music("track_name", fade_in)
-AudioManager.stop_music(fade_out)
-AudioManager.play_sfx("sound_name", pitch_variation)
-AudioManager.set_master_volume(volume)
-AudioManager.set_music_volume(volume)
-AudioManager.set_sfx_volume(volume)
-```
-
-### 2. Audio Asset Structure
-
-**Directory Layout:**
-```
-assets/audio/
-├── music/          # Background music tracks (.ogg, .wav, .mp3)
-│   ├── menu.ogg (needed)
-│   └── gameplay.ogg (needed)
-└── sfx/            # Sound effects
-	├── fold.ogg (needed)
-	├── selection.ogg (needed)
-	├── error.ogg (needed)
-	├── victory.ogg (needed)
-	├── footstep.ogg (needed)
-	├── button_hover.ogg (needed)
-	├── button_click.ogg (needed)
-	└── undo.ogg (needed)
-```
-
-**Documentation:**
-- `assets/audio/README.md` - Complete guide to audio requirements
-- `assets/audio/AUDIO_ASSETS_NEEDED.md` - Asset tracking and status
-
-### 3. Audio Integration Points
-
-> ⚠️ **Status after the 2026-08-04 consolidation.** Every call site listed here
-> previously lived in the deleted top-down build. `AudioManager` itself carried over
-> intact and is still an autoload, but **the world does not call it yet** — apart
-> from `PauseMenu`, which plays `button_click`. Wiring the gravity world's events
-> (fold commit, fold refused, pinch, unfold, door traversal, landing, respawn) is
-> open work.
-
-#### PauseMenu (`scripts/ui/PauseMenu.gd`)
-- ✅ Plays "button_click" on every menu action
-
-#### FoldWorld (`scripts/world/FoldWorld.gd`)
-- ❌ Not wired. Natural trigger points: `do_fold()` / `do_sub_fold()` success and
-  refusal, the pinch branch, `unfold_level_fold()`, `try_exit()`, `_check_doors()`,
-  `_check_triggers()`, and the fall-out-of-world respawn.
-
-#### PlayerBody (`scripts/world/PlayerBody.gd`)
-- ❌ Not wired. Natural trigger points: jump, landing, footsteps.
-
-### 4. Test Suite (`scripts/tests/test_audio_manager.gd`)
-
-**30 comprehensive tests covering:**
-- AudioManager singleton existence and initialization
-- Audio bus setup and configuration
-- Music and SFX player creation
-- Volume control functionality (get/set for Master, Music, SFX)
-- Volume clamping (0.0 to 1.0 range)
-- Graceful handling of non-existent audio files
-- Track and SFX existence checking
-- Audio bus volume application
-- Pitch variation settings
-- Signals and constants
-- Resource loading and reloading
-- Multiple simultaneous SFX playback
-- Singleton pattern verification
-- Directory structure verification
-
-**Test Results:** 29/30 passed (1 risky - intentionally no assertion)
-
-## Technical Details
-
-### Audio Bus Configuration
-
-The system uses three audio buses:
-1. **Master** - Top-level volume control (default: 100%)
-2. **Music** - Background music (default: 70%)
-3. **SFX** - Sound effects (default: 80%)
-
-All buses are automatically created by AudioManager if they don't exist.
-
-### Music System Features
-
-- **Fade Transitions:** 1.0 second fade in/out for smooth music changes
-- **Track Switching:** Prevents restarting same track
-- **Current Track Tracking:** Keeps track of currently playing music
-- **Fade State Management:** Prevents overlapping fade operations
-
-### SFX System Features
-
-- **Player Pool:** 8 AudioStreamPlayer instances for concurrent sounds
-- **Pitch Variation:** ±10% pitch variation for variety (configurable)
-- **Automatic Player Selection:** Finds available player from pool
-- **Overflow Handling:** Gracefully handles pool exhaustion
-
-### Volume Management
-
-- **Linear to dB Conversion:** Proper audio volume scaling
-- **Range Clamping:** All volumes clamped to 0.0-1.0 range
-- **Bus Application:** Volumes applied to AudioServer buses
-- **Persistent Settings:** Volume values stored in AudioManager
-
-## Audio File Requirements
-
-### Format Recommendations
-- **Primary:** .ogg (best Godot compatibility)
-- **Alternatives:** .wav, .mp3
-- **Sample Rate:** 44.1 kHz or 48 kHz
-- **Bit Depth:** 16-bit minimum
-- **Channels:** Stereo for music, mono/stereo for SFX
-
-### Required Audio Files (8 total)
-
-**Music (2 files):**
-1. `menu.ogg` - Main menu background music (2-3 min, loopable)
-2. `gameplay.ogg` - Gameplay background music (3-5 min, loopable, ambient)
-
-**SFX (6 files):**
-1. `fold.ogg` - Fold execution sound (0.5-1.0s, whoosh/warp effect)
-2. `selection.ogg` - Anchor selection (0.1-0.2s, soft click)
-3. `error.ogg` - Invalid action (0.2-0.3s, negative beep)
-4. `victory.ogg` - Goal reached (1-2s, celebration chime)
-5. `footstep.ogg` - Player movement (0.1-0.2s, soft step)
-6. `button_hover.ogg` - UI hover (0.05-0.1s, subtle tick)
-7. `button_click.ogg` - UI click (0.1-0.2s, satisfying click)
-8. `undo.ogg` - Undo operation (0.3-0.5s, reverse whoosh)
-
-### Free Audio Resources
-
-**Music:**
-- [Incompetech](https://incompetech.com/) - Royalty-free music
-- [OpenGameArt](https://opengameart.org/) - Community assets
-
-**SFX:**
-- [Freesound](https://freesound.org/) - Community sound library
-- [Zapsplat](https://www.zapsplat.com/) - Free SFX
-- [SoundBible](http://soundbible.com/) - Public domain sounds
-
-## System Behavior
-
-### With Audio Files Present
-- Music plays on scene load
-- SFX trigger on appropriate events
-- Volume controls work as expected
-- Smooth transitions between scenes
-
-### Without Audio Files (Current State)
-- ✅ Game runs without crashes
-- ✅ Warnings logged for missing files
-- ✅ All gameplay functionality intact
-- ✅ Audio system ready for assets
-
-## Integration Status
-
-| Component | Status | Audio Triggers |
-|-----------|--------|----------------|
-| AudioManager | ✅ Complete | Singleton, buses, volume controls |
-| PauseMenu | ✅ Integrated | button_click |
-| Settings | ✅ Integrated | volume controls |
-| FoldWorld | ❌ Not wired | fold / refuse / pinch / unfold / door / respawn |
-| PlayerBody | ❌ Not wired | jump, land, footstep |
-| Tests | ✅ Complete | 30 tests passing |
-
-**No audio assets ship yet** — the buses and API are in place and silent.
-
-## Performance Considerations
-
-- **Music Player:** Single instance, minimal overhead
-- **SFX Pool:** 8 players allow concurrent sounds without recreation overhead
-- **Memory:** Audio streams loaded once on startup
-- **CPU:** Minimal - only active players consume resources
-- **Disk I/O:** One-time load on AudioManager initialization
-
-## Future Enhancements
-
-### Optional Features (Not Currently Implemented)
-- Settings persistence (save volume preferences)
-- UI buttons with audio feedback (button_hover)
-- Menu music
-- Additional ambient sounds (water, wind, etc.)
-- Music crossfading between different gameplay states
-- Sound occlusion/distance attenuation
-- Audio visualization (volume meters)
-
-### Integration Opportunities
-- **FoldWorld:** the whole fold vocabulary — commit, refuse, pinch, unfold, exit
-- **Subspaces:** a distinct ambience inside a fold would sell it as a *place*
-- **Doors:** traversal and the refused-because-jammed case
-- **PlayerBody:** jump, land, footstep
-- **Save points:** once checkpoints exist
-
-## Acceptance Criteria Status
-
-⚙️ **Music plays during gameplay**
-- The API is ready; the world does not start music yet.
-
-⚙️ **SFX trigger on all appropriate events**
-- Menu clicks are wired. World events are not — see Integration Points above.
-- Anchor selection: selection sound
-
-✅ **Volume controls work correctly**
-- Master, Music, SFX volumes independent
-- Range clamping (0.0-1.0)
-- Real-time bus application
-- Tested and verified
-
-✅ **No audio pops or clicks**
-- Proper fade transitions for music
-- Clean SFX playback
-- No audio artifacts
-
-✅ **Audio enhances experience**
-- System designed for immersive feedback
-- Pitch variation adds variety
-- Non-intrusive warning system
-- Graceful degradation without assets
-
-## Known Limitations
-
-1. **No Audio Assets:** Actual audio files not included (beyond scope)
-2. **No Settings Persistence:** Volume changes not saved between sessions
-3. **No UI Sounds:** Button sounds not integrated (UI not implemented yet)
-4. **No Menu Music:** Main menu not implemented yet
-5. **No Undo Sound:** Undo system not implemented yet
-
-## Warnings and Errors
-
-### Expected Warnings
-The following warnings are expected until audio files are added:
-```
-WARNING: AudioManager: Music track not found: gameplay
-WARNING: AudioManager: Sound effect not found: fold
-WARNING: AudioManager: Sound effect not found: error
-WARNING: AudioManager: Sound effect not found: footstep
-WARNING: AudioManager: Sound effect not found: victory
-WARNING: AudioManager: Sound effect not found: selection
-```
-
-These warnings are informational and do not affect gameplay.
-
-## Development Notes
-
-### Code Quality
-- ✅ Follows GDScript style guidelines
-- ✅ Comprehensive documentation
-- ✅ Clear separation of concerns
-- ✅ Proper error handling
-- ✅ Memory management (queue_free patterns)
-- ✅ Signal-based architecture
-
-### Testing Coverage
-- ✅ 30 unit tests for AudioManager
-- ✅ Integration testing via existing tests
-- ✅ Edge case handling verified
-- ✅ Graceful degradation tested
-
-### Performance
-- ✅ Minimal overhead when no audio playing
-- ✅ Efficient player pooling
-- ✅ Single resource load per audio file
-- ✅ No frame drops or stuttering
-
-## Conclusion
-
-The audio system implementation is **complete and production-ready**. The system:
-- Provides a solid foundation for game audio
-- Handles all required audio events
-- Degrades gracefully without audio files
-- Is fully tested and integrated
-- Follows best practices and project standards
-
-**Next Steps:**
-1. Source or create audio assets (see AUDIO_ASSETS_NEEDED.md)
-2. Add audio files to `assets/audio/` directories
-3. Test in-game audio experience
-4. Adjust volume mixing if needed
-5. Wire the world's fold vocabulary to the existing API
-
-**Tests:** `scripts/tests/test_audio_manager.gd`
-
-**Risk Level:** ✅ LOW - Well-defined functionality, solid implementation
+Audio here is a **leaf**. Nothing reads back from it and no gameplay decision
+depends on it; the game is fully playable with the master volume at zero. That
+is the constraint that lets call sites be one line in the middle of world logic
+without anyone having to reason about ordering.
 
 ---
 
-**AudioManager implemented:** 2025-11-06
-**Last reviewed:** 2026-08-04 (call sites re-audited after the consolidation)
+## The three files
+
+| Concern | File |
+|---|---|
+| **The vocabulary and the mix** — what sounds exist, how loud, how jittered, how often | `scripts/systems/Sounds.gd` |
+| **The engine** — buses, players, fades, loading, persistence | `scripts/systems/AudioManager.gd` (autoload) |
+| **The assets** — every sound, synthesized | `tools/gen_audio.py` → `assets/audio/` |
+
+Adding a sound means: a const and a `_REGISTRY` line in `Sounds.gd`, a
+generator function in `tools/gen_audio.py`, and a call at the moment it
+happens. Nothing else learns a new name — a `Sounds` id *is* the asset
+basename, so there is no mapping table to fall out of date.
+
+`test_audio_manager` asserts the registry and the shipped assets are the same
+set **in both directions**, so a name with no file, or a file no code can
+reach, fails the suite instead of going quiet at runtime.
+
+---
+
+## The vocabulary
+
+Named for *this* game. (The set that used to live here — `selection`, `undo`,
+`victory` — was the deleted top-down puzzler's, and none of those events exist.)
+
+**Folding**
+
+| Sound | Fires when |
+|---|---|
+| `hand_place` | a tap pins a hand |
+| `pair_armed` | the second hand completes a pair and lights its fuse |
+| `fold` | a fold commits and you ride a flap |
+| `pinch` | the fold closes over you instead — you are inside it |
+| `surface` | you come back out of a fold's interior |
+| `unfold` | a fold comes apart |
+| `burst` | the release burst fires and something comes loose |
+| `fold_refused` | the fuse went off and the fold would not go |
+| `trigger` | a trigger tile fires — the world folding itself |
+
+**Hands** — `hand_pickup`, `hand_drop`.
+**Body and world** — `jump`, `land`, `footstep`, `door`, `respawn`, `reset`,
+`goal`, `deny`.
+**UI** — `ui_click`, `ui_move`.
+**Music** — `overworld`, `subspace`.
+
+### Pairs that carry meaning
+
+Three of these are deliberately *mirrors*, because the events are:
+
+- **`pinch` / `surface`** — going into a fold and coming out of it, one gesture
+  heard from its two sides.
+- **`fold` / `unfold`** — literally the same waveform reversed, which is what
+  unfolding *is* in this game (drop the fold and re-derive).
+- **`fold` / `fold_refused`** — a fold that goes and a fold that does not must
+  never be mistakable for one another, which is why the refusal is short, dull
+  and low rather than a quieter whoosh.
+
+### Refusals
+
+Every refusal in `FoldWorld` goes through `_deny(text)` — the flash message and
+`Sounds.DENY` together. Kept separate from `_show_flash`, which also carries
+good news ("Folded in.", "Picked up a plain hand."): a game that beeps at you
+for succeeding is worse than one that says nothing.
+
+`DENY` carries the longest retrigger floor in the registry (0.3s). Most
+refusals come from per-frame checks that stay true for many frames running, and
+a refusal that repeats stops being information and becomes nagging.
+
+---
+
+## Why there is a registry
+
+Three things belong in one place rather than at twenty call sites.
+
+**The mix.** `tools/gen_audio.py` normalizes every effect to the same peak, so
+the whole balance is the `vol` column of `Sounds._REGISTRY` — readable,
+diffable, reviewable. Balancing by re-rendering assets would bury the mix in a
+binary.
+
+**Pitch jitter.** Anything that repeats gets some; anything the player might
+learn to recognise gets none. `pair_armed` is at zero on purpose — it is a
+countdown starting, and a countdown that arrives at a different pitch each time
+is harder to learn.
+
+**The retrigger floor.** This is the load-bearing one. Footsteps, dropped
+hands and refusals all fire from `_physics_process`, and without a floor on the
+interval, one frame's worth of events empties the voice pool. Solved once in
+the registry instead of at each call site.
+
+One deliberate exception: `hand_drop` has **no** floor. A refused fold scatters
+both its hands in the same frame and two hands out of one fold are meant to read
+as two; any gap at all would swallow the second. The wide pitch jitter is what
+keeps the simultaneous pair sounding like two objects.
+
+---
+
+## Music
+
+Two beds, and which one plays is a function of where you are: `overworld` at
+world level, `subspace` inside a fold. `FoldWorld._update_music()` is called
+from `_apply_context()`, the single place `mode` changes, and `play_music`
+ignores a request for the track already playing — so walking in and out of a
+fold crossfades, and everything else costs nothing.
+
+This is the cheapest honest answer to the open question in AGENTS.md about
+whether a fold's interior reads as a **place**. `subspace` is the overworld bed
+moved down a fourth and pulled out of tune with itself — the same room, folded.
+The beating between its detuned pairs is the only thing in the mix that tells
+you where you are without a word of UI.
+
+---
+
+## The assets are code
+
+Every sound ships as a WAV generated by `tools/gen_audio.py`, from the Python
+standard library and nothing else:
+
+```bash
+python3 tools/gen_audio.py       # rewrites assets/audio/{sfx,music}
+```
+
+Deterministic — one RNG seed per sound name, so retuning one sound never
+disturbs another and the whole set is reproducible from that file alone.
+
+**Why synthesize rather than source.** No licence question, no attribution to
+track, no binary blob whose provenance is a link in a README. The character of
+each sound is a readable function with a comment saying what it is trying to
+be, and changing one is a diff. About 1.1 MB for the set.
+
+**These are placeholders, and they read as placeholders.** They are honest,
+tuned and mixed, but they are synthesized bleeps. Replacing any of them means
+dropping a file with the same basename into `assets/audio/sfx/` — the loader
+takes `.ogg`, `.wav` and `.mp3`, and the registry entry carries over untouched.
+Delete that sound's generator function when you do, so the file stops claiming
+to produce it.
+
+### The music loops are seamless by construction
+
+Both beds are built **entirely from harmonics of the loop fundamental**
+(1/12 Hz), so the waveform is exactly periodic over the file and the loop point
+is sample-exact. That is why the pads are additive rather than sampled noise:
+noise would need a crossfade at the seam, and a crossfade is the one thing you
+can hear. Nothing is faded at the file's edges for the same reason — tapering
+would carve a dip into the one place that must be continuous.
+
+`AudioManager` sets the loop flag at load time rather than relying on the import
+settings, because `.import` files are gitignored and so nothing on disk can
+carry it.
+
+---
+
+## Three things in `AudioManager` that are easy to undo
+
+**The user's volume is applied once, on the bus.** A player's `volume_db` is
+never the user's setting — it is the fade envelope for music, and the mix trim
+for an effect. The old version set both, so the music volume multiplied into
+itself and half volume played at a quarter.
+
+**The autoload runs while the tree is paused** (`PROCESS_MODE_ALWAYS`). Godot
+pauses an `AudioStreamPlayer` along with its tree, and the pause menu pauses the
+tree — without this, the click that opened the menu is the last thing you hear
+and any fade in flight freezes half way.
+
+**Fades are tweens, not `await` loops.** The old fade could not be cancelled,
+which is what let a track change during a fade stop the music outright. One
+cancellable chain now does out → swap → in.
+
+Two smaller ones, both regressions the tests pin:
+
+- **The pool steals, it does not drop.** When all eight voices are busy the
+  oldest is taken. A dropped sound is a fold you did not hear, and the pool
+  exists to let sounds overlap, not to cap how many events the game may have.
+  Voice age is a monotonic counter, not a clock — several sounds routinely start
+  in the same millisecond and a timestamp cannot order those.
+- **A missing sound warns once.** It fires from `_physics_process`; one warning
+  per frame is how a log becomes useless.
+
+---
+
+## Volumes persist
+
+`AudioManager` loads the three volumes at startup and can save them, sharing
+`user://settings.json` with `Settings.gd` — each side owns its own keys and
+both read-modify-write, so neither clobbers the other's.
+
+The bug this replaces: the volumes were written by the settings screen and read
+back by nothing else, so however the player set them, every session started at
+the defaults.
+
+---
+
+## Status
+
+| Component | State |
+|---|---|
+| `AudioManager` — buses, pool, fades, loading, persistence | ✅ |
+| `Sounds` — vocabulary, mix, jitter, throttling | ✅ |
+| Assets — 21 effects + 2 music beds, generated | ✅ placeholders |
+| `FoldWorld` — the whole fold vocabulary | ✅ wired |
+| `PlayerBody` — jump, land, footsteps | ✅ wired |
+| `PauseMenu` / `Settings` | ✅ wired, ⚠️ **unreachable** |
+
+**The one real gap:** nothing shows the pause menu. `PauseMenu.tscn` and
+`Settings.tscn` are complete and correctly wired, but no key opens them and
+nothing in the world instantiates either — so the volume sliders cannot be
+reached in-game. That is an input/UI gap rather than an audio one (it predates
+this work), and closing it means deciding how pausing interacts with a fold in
+flight — see AGENTS.md decision 7. Until then, volumes are settable by editing
+`user://settings.json`, and they are honoured at startup.
+
+## Open
+
+- **Nothing is positional.** Every sound is a bare `AudioStreamPlayer`. A fold
+  going off across the room sounds exactly like one at your feet. `SubViewport`
+  already has `audio_listener_enable_2d`, so `AudioStreamPlayer2D` is available
+  when it is wanted — but *what a fold's position even is* while the world is
+  mid-rearrangement is a real question, not a mechanical change.
+- **The fuse does not tick.** It is the one moment of tension the game has, and
+  it currently gets one sound at the start and one at the end. A rising tick
+  would need a dedicated looping voice whose rate tracks `fuse_progress()`.
+- **No ducking.** A fold landing under a music swell is louder than either.
+- **No save-point or checkpoint sounds** — those events do not exist yet.
