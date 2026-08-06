@@ -5,7 +5,7 @@
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment.
-**Tests:** **416 passing** / 416 (0 failing, 0 risky), 20 scripts, ~12.8s.
+**Tests:** **500 passing** / 500 (0 failing, 0 risky), 21 scripts, ~8.1s.
 
 ---
 
@@ -46,13 +46,13 @@ What exists and works today:
 
 ## Test suite
 
-453 passing across 21 scripts. Composition:
+500 passing across 21 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 87 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
+| `test_fold_world` | 106 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
-| `test_world_core` | 42 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring |
+| `test_world_core` | 70 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring, its idle drift, and the falling-hand ball physics |
 | `test_world_data` | 31 | World format + the shipped world's content, incl. lights and loose hands |
 | `test_audio_manager` | 47 | Buses, the volume-applied-once rule, loading + looping, the mix/jitter/throttle registry, fades, persistence |
 | `test_player_body` | 22 | Look/point keys, the jump press edge, the tap-to-hold height curve, velocity-as-fraction, motion scalar |
@@ -82,6 +82,78 @@ scene and exercises the beats end to end.
 ---
 
 ## Recent Changes
+
+### 2026-08-06 — Hands are objects: they float, they fall, they orbit
+
+Hands used to be markers that appeared where the code put them. Now they behave like
+things.
+
+- **They drift when nothing is happening** (`WorldCore.hand_drift`) — carried and lying
+  on the ground alike, since both draw through `HandOrbit.draw_hand`. Two beating sines
+  per axis on frequencies sharing no period, so there is no loop the eye can learn. It is
+  a function of wall time rather than an integration, so a hand dropped and picked back up
+  keeps its phase, and the wrap copies of one hand inside a strip bob identically. Each
+  hand's phase is seeded from *what it is*, never its list index — seeding by index made
+  every remaining hand twitch when a different one was picked up.
+- **The burst reaches 1.3 cells** (was 1.2). At a tile it kept missing seams that looked
+  well inside it, which reads as the key not working.
+- **A loose hand is a light, draggy BALL while in flight** (`WorldCore.hand_ball_step`),
+  and an occupant again once it stops (`_land_ball`). It floats down rather than dropping,
+  rolls off slopes, ejects out of walls, and rests hovering on its floating radius. It can
+  be **caught in mid-air**, and `hands_loose()` counts balls so conservation never wobbles
+  mid-fall.
+- **Folds carry a hand in flight** (`_carry_balls_through`, through `BaseFrame` exactly as
+  the player) — and one swept into a strip **keeps flying inside the strip**, velocity
+  intact, because a fold is a translation and the step is position-independent.
+- **A strip is a cylinder, so a falling thing wraps** (`WorldCore.wrap_into_strip` — a
+  modulo, not the player's one-band if/elif, because a falling object can cross several
+  bands in a frame). With a vertical wrap axis a hand **orbits indefinitely**: a real
+  object in a closed space, still counted, still catchable, landing the moment a fold puts
+  ground in its way.
+- **A resting hand wakes if a fold takes its ground away** (`_wake_unsupported_hands`). A
+  fold that merely slides its tile carries it, as before.
+
+Three bugs found by writing the tests first, all of which a player would have met:
+
+1. A ball rolling into the corner at the foot of a slope **pinned itself there forever** —
+   holding a velocity every direction of which was blocked, so a speed-based rest test
+   never fired and the position never changed. Rest is now judged on *progress*
+   (`HAND_STALL_DISTANCE`), which is the honest test of motion.
+2. A hand unpinned from a wall face **fell down the inside of the wall**, because contact
+   resolution assumed it was arriving at a surface rather than already buried. Balls now
+   eject before anything else.
+3. Two tests were **teleporting the player fully inside a merged wall pillar** —
+   `depenetrate` returns `INF` there, a state not even the player can occupy — and passing
+   because the old instant-drop landed the hand on top of them.
+
+Also: **authored hands are settled at load** (`_settle_authored`). Authoring names a cell,
+which puts a hand at that tile's *centre*, half a cell up; without settling, the first
+fold near a cache dropped it, since it was never really on the ground.
+
+The trade, chosen explicitly: a refused fold no longer leaves its hands on the exact cells
+you picked, so the shape of a failed attempt is no longer legible in the world. Bought for
+"a hand is always somewhere you can see and walk to", with no exceptions to learn. And a
+cache can now move without you touching it.
+
+79 new tests (416 → 495).
+
+**Follow-up fix (same day): the hand that vanished on unfold.** Reported as holding one
+anchor, releasing a folded one, and never finding the second hand. Two independent bugs,
+neither caught by the conservation tests because `hands_total` was right the whole time:
+
+1. `_take_back` ran **before** the unfold rebuilt the geometry and teleported the player,
+   so the overflow hand was let go at the pre-unfold position and into the old fragment
+   list — cells away from where you ended up, on ground that had since slid out from under
+   it. Same ordering bug on the subspace-exit path, where it was worse: the ball was tagged
+   as flying inside a strip that no longer existed, so it could never be stepped, drawn or
+   collected.
+2. `_land_ball` **warned and gave up** when no sheet was within two cells — the one code
+   path that could really destroy a hand, silent because a warning is not a failing test.
+   It now falls back to the spawn tile, then to keeping the hand airborne.
+
+Also `_recover_lost_hand`: a hand falling out of the world used to be re-dropped as a
+*ball* at the player, so a player standing over a pit had it fall off again and loop
+forever — counted, never findable. It lands as a pickup now. 5 new tests (495 → 500).
 
 ### 2026-08-06 — The jump has a hold, and the hold has a height
 
@@ -213,7 +285,7 @@ hand on the ground, and once that is true nothing has to be refused.
   A loose hand is an occupant of the sheet, not terrain; it is authored per region in
   a `hands` array beside `lights`, and it draws as a hand rather than as a tile.
 - **Recall is a BURST, not an aimed act.** Holding F fires a small sphere around the
-  body (`BURST_RADIUS`, ~1.2 tiles) that takes back placed hands in reach, opens folds
+  body (`BURST_RADIUS`, ~1.3 tiles) that takes back placed hands in reach, opens folds
   whose seam is in reach, exits a subspace from its glue — and **drops any hand with
   nowhere to go at your feet**. `hold_action` no longer takes a direction: where you
   stand is the whole input. A ring confirms the reach after the fact.
@@ -261,8 +333,10 @@ holds the two you pinned it with.
 - **Unfolding can now be refused for want of room.** A fold gives back both hands at
   once, so a spare you picked up has to go down first.
 - **Hands float beside you** (`HandOrbit`): small circles on a spring, trailing your
-  motion. Style only — nothing reads their positions. The integrator is
-  `WorldCore.spring_step`, pure and tested; the node is just the drawing.
+  motion, and drifting on their own even at rest — carried or lying on the ground
+  alike, since both go through `draw_hand`. Style only — nothing reads their
+  positions. `WorldCore.spring_step` and `WorldCore.hand_drift` are pure and tested;
+  the node is just the drawing.
 - **Reset restores hands and respawns caches**, reversing yesterday's call *because
   the model changed under it*: capacity no longer grows, so there is no progression
   left for a reset to confiscate — and hands are exactly what a reset gives back, so
