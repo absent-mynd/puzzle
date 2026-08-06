@@ -787,9 +787,13 @@ const LOOKAHEAD_MAX := 6.0 * CELL
 ##               The body normalizes, because the body owns those limits.
 ##   `look`      (float) held vertical look, -1 up .. +1 down. Vertical only:
 ##               left/right is what running already says.
-##   `flat_axis` (Vector2) unit axis to lead nowhere along (a fold's crease
-##               normal: the strip already repeats that way, so a lead along it
-##               slides the view past identical bands for nothing)
+##   `flat_axes` (Array[Vector2]) axes to lead nowhere along — the periods of the
+##               space (see `FoldLattice`). A repeating space already shows every
+##               copy there is along an axis it repeats on, so a lead there slides
+##               the view past identical bands for nothing. One axis inside a
+##               fold; TWO on the torus you get by folding yourself in twice
+##               across the grain, and then the lead is the body's alone.
+##   `flat_axis` (Vector2) the single-axis form, for callers with one.
 ##   `frozen`    (bool) riding a fold — lead nowhere; the transition frames itself
 static func camera_lookahead_for(ctx: Dictionary) -> Vector2:
 	if bool(ctx.get("frozen", false)):
@@ -804,8 +808,14 @@ static func camera_lookahead_for(ctx: Dictionary) -> Vector2:
 		- LOOKAHEAD_RISE * clampf(-vel.y, 0.0, 1.0)
 		+ LOOKAHEAD_PEEK * look)
 
-	var flat: Vector2 = ctx.get("flat_axis", Vector2.ZERO)
-	if flat.length_squared() > GeometryCore.EPSILON:
-		var n := flat.normalized()
+	var flats: Array = ctx.get("flat_axes", [])
+	var single: Vector2 = ctx.get("flat_axis", Vector2.ZERO)
+	if single.length_squared() > GeometryCore.EPSILON:
+		flats = flats + [single]
+	for axis in flats:
+		var v: Vector2 = axis
+		if v.length_squared() <= GeometryCore.EPSILON:
+			continue
+		var n := v.normalized()
 		lead -= n * lead.dot(n)
 	return lead.limit_length(LOOKAHEAD_MAX)

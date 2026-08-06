@@ -17,7 +17,10 @@ What makes it a metroidvania rather than a puzzle game:
 - **Folds persist.** They are world state, not a move you undo. Regions keep their
   fold state when you leave them.
 - **Folds are places.** The strip a fold excises is a real interior you can be
-  pinched into, walk around in, fold *within*, and surface from somewhere else.
+  pinched into, walk around in, fold *within*, and surface from somewhere else —
+  and folding *within* can pinch you deeper again, with no limit. Fold yourself in
+  across the grain of the fold you are already in and the space you are standing
+  in is a **torus**: every direction comes back to where you started.
 - **Doors are warp points that ride folds.** Fold a door away and its partner
   delivers you *inside* that fold. Fold something over a door and you have jammed it
   shut until you unfold.
@@ -50,10 +53,12 @@ the world file in place.
 
 ```
 scripts/
-├── model/     # kernel: base grid, folds, derivation, transport, tile registry
+├── model/     # kernel: base grid, folds, derivation, transport, how a space
+│           #   repeats (FoldLattice), tile registry
 ├── utils/     # kernel: geometry and collision math
 ├── world/     # the game: FoldWorld, WorldCore, PlayerBody, WorldOverlay,
-│           #   and the render pass: PixelArt, TileAtlas, LightRig
+│           #   and the render pass: PixelArt, TileAtlas, TileBatch,
+│           #   WrapCanvas, LightRig
 ├── systems/   # Sounds (the audio vocabulary + mix), AudioManager
 ├── editor/    # the world editor: EditorTools, EditorDoc, EditorBoard,
 │           #   WorldEditor, EditorUI

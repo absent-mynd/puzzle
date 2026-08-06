@@ -231,6 +231,47 @@ riding** (each fragment knows its base identity and offset), not approximate
 crease math. Folds and unfolds animate: flaps slide, the strip collapses
 onto — or springs from — the seam.
 
+## Folding yourself deeper
+
+Being inside a fold does not stop you folding. Stand in the band of a fold you
+make *in there* and it swallows you again, and you are **two folds deep** — and
+there is no limit but the hands to do it with. The status line says how deep,
+the sheet tints further with every layer, and surfacing by the glue diamond
+brings you up **one layer at a time**, unfolding as it goes.
+
+What is worth going in for is what the space becomes. It depends entirely on
+which way the second fold runs:
+
+- **With the grain** — the inner creases parallel to the glue you came in
+  through — and the inner band never reaches that glue. You are in a narrower
+  band inside the band: still a **cylinder**, wrapping one way, with two ends
+  you can run off (the fold turns you back).
+- **Across the grain** — the inner creases perpendicular — and the inner band
+  spans the outer one glue to glue. Walking along the outer normal still wraps,
+  and now walking across it wraps too. You are on a **torus**: every direction
+  comes back to where you started, there are no ends at all, and the frame is
+  four glue lines rather than two. The status line names it.
+
+- **At any other angle** the outer repetition does not come down at all, and the
+  space is a plain cylinder with the inner fold's period alone.
+
+None of that is authored. Which periods survive is one line of geometry — a
+translation descends exactly when it runs *along* the new band — and everything
+else (how many copies to draw, where the colliders go, which way the camera
+refuses to lead, how you wrap) is read off it. See `FoldLattice`, which sets out
+why "a whole number of gaps across" is *not* a weaker condition that also works.
+
+**A fold takes what is in front of it in the sheet it is cut from; it does not
+reach around the cylinder.** A band that runs past its own glue line finds the
+end of the stored sheet rather than the next copy of it. What you get is always
+really there — the strip is a genuine piece of the space — but for a fold that
+is not perpendicular to the one outside it, it is not *everything* that is there.
+The preview band is drawn in every copy (clipped to one), so what you see before
+the fuse burns is what the fold will actually take.
+
+A hand committed to a fold three layers down is counted by the same ledger as one
+at the surface, and the four places a hand can be still sum to the same number.
+
 ## The camera
 
 The frame is not a fixed lens — it opens and closes with what the moment is
@@ -243,9 +284,10 @@ closes in on you unasked):
 - **The fold you are composing.** Pin an anchor and walk away, and the view
   opens to keep it on screen. The camera is showing you how big the fold has
   got — that span *is* the decision you are about to make.
-- **The band you are inside.** In a subspace the strip is framed glue to glue,
-  so a wide band reads as the cylinder it is rather than a corridor with no
-  visible walls.
+- **The band you are inside.** In a subspace the fundamental domain is framed
+  glue to glue, so a wide band reads as the cylinder it is rather than a corridor
+  with no visible walls — and on a torus that is all four walls, out of the same
+  call.
 - **A fold rearranging the world.** The transition steps the camera back so you
   watch the space move, then settles.
 
@@ -267,9 +309,10 @@ view sits ahead of you, and the asymmetries are the design:
 - **Holding a look key leads on its own.** The same W/S that aim an anchor lean
   the frame, so pressing up to point up shows you what you are pointing at —
   wanting to see up there is a thing you can ask for without moving.
-- **Inside a fold the lead is flat along the band.** The strip repeats along the
-  crease normal, so the frame already shows every copy there is that way; leading
-  along it would slide the view across identical bands for nothing.
+- **The lead is flat along every axis the space repeats on.** A repeating space
+  already shows every copy there is that way, so leading along it slides the view
+  across identical bands for nothing. One axis inside a fold — and on a torus,
+  both, so the lead is the body's own motion and nothing else.
 
 The lead eases even more lazily than the zoom, because it *flips sign* the
 instant you turn around: eased, a reversal reads as the view swinging round to
@@ -353,6 +396,13 @@ pinned and resolve again when you return.
 7. **Find a cache inside a fold.** Through door W1: you arrive inside east's
    shipped pre-fold, and there is a cache in there with the goal. Folded-away
    space is real space, and it holds real things.
+8. **Fold yourself in twice, across the grain.** Get pinched into the pit fold
+   (beat 2), then — standing in the band — fold *across* it: a vertical anchor
+   pair, so the new creases run the other way. It swallows you again. You are two
+   folds deep, and the space you are in has no ends: walk any direction far enough
+   and you come back to yourself. The status line calls it a **torus**, because
+   that is what the two folds together made, and nothing authored it. Then walk
+   somewhere and surface twice — you come out where you walked to, as always.
 
 ## The pin & plate wing (east)
 
@@ -445,6 +495,18 @@ stays pinned at `PixelArt.CAMERA_ZOOM` forever.
   patch of art it was cut from. A tile's variant is hashed from its `base_id`,
   and the "open sky above" edge tile is read from the base grid — so a tile's
   look never changes because it was folded, ridden or cut.
+- **The whole sheet is two canvas items** (`TileBatch`). A region is ~800 tiles,
+  folds cut those into more fragments, and inside a fold the strip is drawn again
+  in every band it repeats into. `Polygon2D` holds many sub-polygons over one
+  vertex array and the tileset is one texture, so the only thing forcing a second
+  node is the lit material: foreground and background. A fold rebuild touches two
+  nodes instead of thousands.
+- **The wrap is a property of the space, not of the things in it.** Static content
+  bakes its copies into vertices; anything that moves is a `WrapCanvas` and is
+  painted once per copy by its base class, in ordinary world coordinates. That is
+  the whole contract — add a floating object and it turns up in every band without
+  knowing folds exist. (The hands orbiting your body are the object that proved
+  the point: they used to appear in one copy and nowhere else.)
 - **The seam stays a hard line.** Because the art is cut by the crease exactly
   as the geometry is, two flaps meeting at a seam show two tiles cut mid-pattern
   against each other. Nothing blends, blurs or fades across it. That is
@@ -500,13 +562,16 @@ do not want yet.
 
 ## Current limits (deliberate)
 
-- No nested pinch: you cannot fold yourself deeper while already inside a
-  fold (the fold is blocked with a message).
 - Fold extent is the whole world (infinite-crease semantics) — deliberately
   kept so the "a fold over here guts a structure over there" problem is
   *feelable*; it's the live design argument for barrier-scoped fold regions.
-- Unfold animation plays only when the unfolded fold is the newest (the
-  reverse transform is exact only there); mid-stack unfolds are instant.
+- Unfold animation plays only when the unfolded fold is the newest of its level
+  (the reverse transform is exact only there); mid-stack unfolds are instant.
+- **A fold's own level is not re-derived when a fold cuts across its glue.** What
+  the fold TAKES is cut from the repeating space (so you land in sheet, not void),
+  but the flaps left behind are still drawn at the period the level came in with.
+  That configuration is already the one the game singles out — it blocks the exit
+  and reddens the glue diamond.
 - Movable seams are design-agreed but not implemented.
 - Triggers only fire at world level — a trigger inside a subspace would have to
   splice folds into an interior list mid-cascade, which the resolver does not model.
@@ -533,12 +598,25 @@ do not want yet.
 - `HandPickup.gd` (kernel) — a hand lying in the world: base identity + point in
   tile, exactly like a door or a lamp. One object for authored caches and dropped
   hands alike.
+- `FoldLattice.gd` (kernel) — how the space you are in repeats: no periods in a
+  region, one inside a fold, two on the torus you get by folding yourself in
+  across the grain. Copies, colliders, wrap-around and framing all read off it.
+  Covered by `scripts/tests/test_fold_lattice.gd`.
+- `WrapCanvas.gd` — a canvas item that paints itself once per copy of the space.
+  Subclasses override `paint()` and never mention folds. `paint_once()` is for
+  what belongs to the frame instead (the preview band, the full-extent guides).
+- `TileBatch.gd` — the sheet, batched into two canvas items, with the wrap baked
+  into the vertices. Also what the fold transition draws through: three batches,
+  two of which move by setting a position. Covered by
+  `scripts/tests/test_tile_batch.gd`.
+- `PlayerVisual.gd` — the blob, drawn wherever the space says the body is.
 - `HandOrbit.gd` — the circles that float beside you, and `draw_hand`, the ONE place
   a hand is drawn (the overlay draws loose ones through it, so they cannot drift
   apart — which is also why the idle drift lives in `draw_hand` and no caller can
   forget it). The spring is `WorldCore.spring_step`; the passive float is
   `WorldCore.hand_drift`, a function of wall time rather than an integration, so it
-  needs no state and a hand dropped or picked up never restarts its phase.
+  needs no state and a hand dropped or picked up never restarts its phase. A
+  `WrapCanvas`, which is the whole of what it knows about folds.
 - **The falling hand**: `WorldCore.hand_ball_step` is the whole simulation (light, draggy,
   swept collision, rolls, rests) and it is pure, so it is pinned by `test_world_core`
   without a scene. `FoldWorld.hand_balls` is the transient in-flight list;
@@ -549,19 +627,21 @@ do not want yet.
 - `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
   and glue segments, depenetration, anchor/fold eligibility, camera zoom and
   lookahead). Covered by `scripts/tests/test_world_core.gd`.
-- `FoldWorld.gd` — scene driver: derived geometry → textured Polygon2D + colliders,
-  fold/unfold with player riding, subspace enter/wrap/exit, regions, doors,
-  triggers, the tap/hold verb, the anchor ledger, and the pixel render target
-  (which it resizes as the zoom changes).
+- `FoldWorld.gd` — scene driver. ONE space at a time (the region is the level
+  whose context is empty): derived geometry → batched tiles + colliders,
+  fold/unfold with player riding, folding yourself in to any depth, wrap and exit,
+  regions, doors, triggers, the tap/hold verb, the anchor ledger, and the pixel
+  render target (which it resizes as the zoom changes).
 - `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, the
   variable-height jump, squash) and the pixel-snapped camera, whose smoothing is
   driven here so the wrap can displace it by a whole band width without losing its
-  lag. Its readings (`look_dir`, `take_jump_press`, `motion_fraction`,
+  lag. It does not draw itself — `PlayerVisual` does, once per copy of the space.
+  Its readings (`look_dir`, `take_jump_press`, `motion_fraction`,
   `motion_intensity`) and its jump arithmetic (`gravity_scale`, `step_fall`,
   `jump_height_for_hold`) are covered by `scripts/tests/test_player_body.gd`.
-- `WorldOverlay.gd` — anchors, strip preview band, seam markers, glue lines.
-  Everything point-like repeats across the wrap copies (`_copy_offsets`); seam
-  diamonds are one per meeting CELL, since folds can share one
+- `WorldOverlay.gd` — anchors, strip preview band, seam markers, glue lines,
+  doors, loose hands. A `WrapCanvas`: it draws one band's worth and they appear
+  in every band. Seam diamonds are one per meeting CELL, since folds can share one
   (`FoldWorld.seam_markers`). Stroke widths are multiples of one art pixel.
 - `PixelArt.gd` — how big an art pixel is; the one place that says so, including
   the target size a given zoom needs (`target_size`).

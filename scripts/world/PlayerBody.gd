@@ -72,6 +72,13 @@ const LAND_SPEED := 220.0
 
 var _coyote := 0.0
 var _buffer := 0.0
+## The blob's outline, in body-local space, and the squash currently applied to
+## it. The body does NOT draw itself: `PlayerVisual` does, once per copy of the
+## space, so that inside a fold you appear in every band without this file
+## knowing that folds have insides. See `WrapCanvas`.
+var _outline := PackedVector2Array()
+var _squash := Vector2.ONE
+
 ## Last frame's held state of the jump key, so a press can be told from a hold.
 var _jump_held := false
 ## True from the launch of a jump until you let go or the rise ends. This — not
@@ -86,8 +93,6 @@ var _stride := 0.0
 
 ## Whether the body was on the floor last frame, for the air->ground edge.
 var _was_grounded := true
-
-var _visual: Polygon2D
 var _cam: Camera2D
 
 ## Last horizontal input: -1 left, +1 right. Default faces right.
@@ -129,14 +134,10 @@ func _ready() -> void:
 	shape.shape = circle
 	add_child(shape)
 
-	_visual = Polygon2D.new()
-	var pts := PackedVector2Array()
+	_outline = PackedVector2Array()
 	for i in range(20):
 		var ang := TAU * i / 20.0
-		pts.append(Vector2(cos(ang), sin(ang)) * RADIUS)
-	_visual.polygon = pts
-	_visual.color = Color("ffd27f")
-	add_child(_visual)
+		_outline.append(Vector2(cos(ang), sin(ang)) * RADIUS)
 
 	# Smoothing is driven here rather than by Camera2D's own, because the
 	# subspace wrap must displace the camera by exactly one strip width while
@@ -230,10 +231,10 @@ func _physics_process(delta: float) -> void:
 	# Blob squash: stretch along the dominant velocity axis, conserve area.
 	var stretch := clampf(absf(velocity.y) / 2800.0, 0.0, 0.30)
 	if absf(velocity.y) > absf(velocity.x):
-		_visual.scale = Vector2(1.0 - stretch, 1.0 + stretch)
+		_squash = Vector2(1.0 - stretch, 1.0 + stretch)
 	else:
 		var s := clampf(absf(velocity.x) / 2200.0, 0.0, 0.18)
-		_visual.scale = Vector2(1.0 + s, 1.0 - s)
+		_squash = Vector2(1.0 + s, 1.0 - s)
 
 
 ## Whether the jump key has been pressed AFRESH since this was last asked — the
@@ -431,15 +432,16 @@ func camera_position() -> Vector2:
 	return _cam.global_position if _cam != null else global_position
 
 
-## A fresh Polygon2D matching the blob's outline and colour. The subspace wrap
-## draws one of these in every visible copy of the strip.
-func make_visual_copy() -> Polygon2D:
-	var node := Polygon2D.new()
-	node.polygon = _visual.polygon
-	node.color = _visual.color
-	return node
+## The blob's outline in body-local space, and the squash to apply to it. Read by
+## `PlayerVisual`, which draws the body wherever the space says the body is —
+## which inside a fold is every band at once.
+func visual_outline() -> PackedVector2Array:
+	return _outline
 
 
-## The blob's current squash, so the copies breathe with the original.
 func visual_squash() -> Vector2:
-	return _visual.scale
+	return _squash
+
+
+func visual_color() -> Color:
+	return Color("ffd27f")
