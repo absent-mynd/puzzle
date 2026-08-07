@@ -55,7 +55,10 @@ The tag is local-only — the remote refuses tag pushes from this session — so
   reintroduce a step log without a design conversation. (The world EDITOR has undo,
   and that is not a contradiction: it edits a file, not play state. `EditorDoc`
   snapshots `WorldData`; the two stacks never meet.)
-- **There are no levels.** One world, many regions. `worlds/overworld.json`.
+- **There are no levels.** One world, many regions. `worlds/overworld.json` — plus
+  `worlds/testbed.json`, a DEBUG world of one-of-everything that you boot with
+  `--world=testbed` (see `docs/features/TESTBED_WORLD.md`). Never balance or design
+  against the testbed; it exists to make a mechanic reachable in thirty seconds.
 - **The player does not ride a tile.** It is a `CharacterBody2D` at a continuous
   position, transported through folds by exact base-frame mapping (`BaseFrame`).
   `Occupants` — the tile-riding model — is for world entities, not the player.

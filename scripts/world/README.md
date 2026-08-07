@@ -17,6 +17,23 @@ The world is authored in `worlds/overworld.json` — regions of ASCII terrain, d
 between them, and pre-placed folds. See `scripts/model/WorldData.gd` for the format
 and `WorldCore.CHARS` for the terrain characters.
 
+**To boot a different world, pass `--world=`:**
+
+```bash
+godot --path . res://scenes/world/World.tscn -- --world=testbed
+```
+
+A bare name means `res://worlds/<name>.json`; a path is taken as written. The editor
+takes the same flag (`./run_editor.sh testbed`), because both read it through
+`WorldData.selected_path` — so the game and the editor cannot disagree about which
+world a run means.
+
+`worlds/testbed.json` is the **debug world**: fourteen regions holding one of
+everything the model can express — every tile character, every hand kind, every
+trigger outcome, pre-folds in every orientation, and door cases the shipped world has
+no room for (two doors in one cell, a pair inside one region, one split by a crease,
+one sealed inside a fold). See [docs/features/TESTBED_WORLD.md](../../docs/features/TESTBED_WORLD.md).
+
 ## Controls
 
 | Input | Action |
@@ -582,8 +599,10 @@ do not want yet.
 - Movable seams are design-agreed but not implemented.
 - Triggers only fire at world level — a trigger inside a subspace would have to
   splice folds into an interior list mid-cascade, which the resolver does not model.
-- Unanchorable tiles (`_`, `X`) and occupants are supported by the format and covered
-  by tests, but the shipped world does not place any yet.
+- Unanchorable tiles (`_`, `X`) are supported by the format and covered by tests, but
+  the SHIPPED world does not place any yet. `worlds/testbed.json` does — its
+  `unanchor` region is nothing else — so the way to see one is `--world=testbed`
+  rather than a code change.
 - **You can strand yourself.** Put both hands into a fold, walk somewhere its seam
   cannot be reached from, and short of finding a loose hand there is no way back to
   them but `R` — which drops every fold and puts your starting pair back in your

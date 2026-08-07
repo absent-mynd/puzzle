@@ -3,6 +3,7 @@
 #
 # Usage:
 #   ./run_editor.sh                          # edit worlds/overworld.json
+#   ./run_editor.sh testbed                  # edit worlds/testbed.json
 #   ./run_editor.sh worlds/other.json        # edit another world
 #   ./run_editor.sh -h, --help
 #
@@ -47,14 +48,16 @@ else
     exit 1
 fi
 
-# A world path may be given as res://... or as a path relative to the project.
+# A world may be given as a bare name (worlds/<name>.json), as res://..., or as a
+# path relative to the project. The bare form matches what `--world=` accepts.
 WORLD_ARGS=()
 if [ -n "$1" ]; then
     WORLD="$1"
     case "$WORLD" in
-        res://*) ;;
-        /*)      WORLD="res://$(realpath --relative-to="$SCRIPT_DIR" "$WORLD")" ;;
-        *)       WORLD="res://$WORLD" ;;
+        res://*)   ;;
+        /*)        WORLD="res://$(realpath --relative-to="$SCRIPT_DIR" "$WORLD")" ;;
+        */*|*.*)   WORLD="res://$WORLD" ;;
+        *)         WORLD="res://worlds/$WORLD.json" ;;
     esac
     WORLD_ARGS=(-- "--world=$WORLD")
     echo "Editing $WORLD"

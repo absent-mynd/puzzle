@@ -32,6 +32,11 @@ extends Resource
 ## for what implementing it would take. Ignoring it is the deliberate choice — applying
 ## a nested fold's anchors at world level would fold a stranger part of the region.
 
+## Prefix of the command-line flag that names a world file to open instead of the
+## shipped one: `-- --world=res://worlds/testbed.json`.
+const WORLD_FLAG := "--world="
+
+
 @export var world_id: String = ""
 @export var world_name: String = ""
 @export var cell_size: float = 64.0
@@ -161,6 +166,32 @@ func from_dict(dict: Dictionary) -> void:
 			"cell": Vector2i(int(c.get("x", 0)), int(c.get("y", 0))),
 			"pair": d.get("pair", ""),
 		}
+
+
+## Which world file this run should open: `--world=...` if the flag was passed after
+## `--`, else `fallback`. A flag rather than a menu because the usual case is "the
+## world", and the unusual one — a debug world, a world you are editing — is a shell
+## away and wants the SAME answer in the game and in the editor. Both call this.
+static func selected_path(fallback: String) -> String:
+	return path_from_args(OS.get_cmdline_user_args(), fallback)
+
+
+## The pure half of `selected_path`, so the flag's spelling is testable without a
+## process to pass it to. A bare name is taken as `res://worlds/<name>.json`, so
+## `--world=testbed` works; anything with a separator or an extension is used as
+## written. The LAST flag wins, which is what a shell alias plus an override means.
+static func path_from_args(args, fallback: String) -> String:
+	var chosen := fallback
+	for arg in args:
+		var text := String(arg)
+		if not text.begins_with(WORLD_FLAG):
+			continue
+		var value := text.substr(WORLD_FLAG.length()).strip_edges()
+		if value.is_empty():
+			continue
+		chosen = value if (value.contains("/") or value.contains(".")) \
+			else "res://worlds/%s.json" % value
+	return chosen
 
 
 ## Load a world from a JSON file. Returns null on any read/parse failure.
