@@ -485,6 +485,70 @@ func test_wrap_moves_the_camera_with_the_body() -> void:
 		0.0, 0.01, "The wrap preserved the camera's offset from the body exactly")
 
 
+## Where each hand you are carrying is drawn, relative to the body.
+func _hand_offsets() -> Array:
+	var out: Array = []
+	for slot in world.hand_orbit._slots:
+		if bool(slot["held"]):
+			out.append(Vector2(slot["pos"]) - world.player.global_position)
+	return out
+
+
+## Pinching yourself in spends both slots, so a player inside a strip is only
+## carrying hands if the fold in question was not theirs or they found a cache in
+## there. Both happen; put a pair back so there is something to watch.
+func _fill_hands() -> void:
+	for i in range(world.hands.size()):
+		world.hands[i] = HandTypes.PLAIN
+
+
+## Settle the orbit springs, as running for a moment would.
+func _settle_orbit(steps := 120) -> void:
+	for _i in range(steps):
+		world.hand_orbit.follow(world.hands, world.player.global_position,
+			world.player.velocity, world.player.facing, 1.0 / 60.0)
+
+
+func test_wrap_carries_the_hands_you_are_holding() -> void:
+	# Same argument as the camera, and the same vector. The floating hands are the
+	# one other thing in the frame holding a world position that nothing re-derives,
+	# so a wrap that moves the body a whole period and leaves them behind strands
+	# them a band away — whereupon the springs haul them back across the space. On
+	# screen that is the hands snapping to the copy you walked in from and chasing
+	# you through it, which was the reported bug.
+	_pinch_over_pit()
+	_fill_hands()
+	world.player.teleport(Vector2(18.9 * CS, 12.5 * CS), false)
+	_settle_orbit()
+	var before := _hand_offsets()
+	assert_eq(before.size(), 2, "Carrying a pair")
+
+	world._wrap_body()
+	var after := _hand_offsets()
+	assert_eq(after.size(), before.size(), "Still carrying the same hands")
+	for i in range(before.size()):
+		assert_almost_eq(Vector2(after[i]).distance_to(before[i]), 0.0, 0.01,
+			"The wrap carried hand %d with the body, offset intact" % i)
+
+
+func test_a_carried_hand_never_swims_a_band_after_a_wrap() -> void:
+	# The symptom rather than the mechanism, and over time rather than in one frame:
+	# for the whole second after a crossing there must be no moment at which a hand
+	# is out near the next copy, because every one of those frames is a frame the
+	# player watches it travel back.
+	_pinch_over_pit()
+	_fill_hands()
+	world.player.teleport(Vector2(18.9 * CS, 12.5 * CS), false)
+	_settle_orbit()
+	world._wrap_body()
+	var gap: float = world.sub_fold.gap_distance()
+	for _f in range(60):
+		_settle_orbit(1)
+		for off in _hand_offsets():
+			assert_lt(Vector2(off).length(), gap * 0.25,
+				"A carried hand stays beside the body rather than out by a band")
+
+
 func test_everything_that_moves_is_drawn_in_every_copy_of_the_strip() -> void:
 	# There is no ghost list any more, and no per-object repeat loop. Everything
 	# that moves is a WrapCanvas and gets the copies handed to it — so the test is

@@ -2142,6 +2142,11 @@ func _wrap_body() -> void:
 	if delta != Vector2.ZERO:
 		player.global_position += delta
 		player.shift_camera(delta)
+		# ...and so does anything drawn beside the body that remembers where it was
+		# last frame. The hands you carry are the case that exists; the dispatch is
+		# over every canvas so the next one does not have to be found the hard way.
+		for canvas in _wrap_canvases():
+			canvas.carry_through_wrap(delta)
 
 	# Running off the far end of a band does NOT force an exit (the exit can be
 	# blocked by a crossing fold): the fold turns you back into itself. Only a

@@ -6,7 +6,7 @@ vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment. The
 world is now **authored in an editor** rather than by hand-editing JSON.
-**Tests:** **745 passing** / 745 (0 failing, 0 risky), 28 scripts, ~22s.
+**Tests:** **747 passing** / 747 (0 failing, 0 risky), 28 scripts, ~29s.
 
 ---
 
@@ -51,17 +51,17 @@ What exists and works today:
 
 ## Test suite
 
-745 passing across 28 scripts. Composition:
+747 passing across 28 scripts. Composition:
 
 | Script | Tests | Covers |
 |---|---:|---|
-| `test_fold_world` | 106 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
+| `test_fold_world` | 110 | **Scene-driven**: riding, pinch, subspaces, doors, pins, plates, lights, camera, the hand economy, the fuse and the burst |
 | `test_editor_doc` | 81 | Editor document: canvases, painting, undo, resize, doors, pre-placed folds, validation, the file round trip |
 | `test_world_core` | 70 | Map parsing, seams, anchor eligibility, camera framing + lookahead, the hand spring, its idle drift, and the falling-hand ball physics |
 | `test_world_editor` | 50 | **Scene-driven**: hit-testing, the camera, and every gesture — stroke, rect, card drag, resize grip, door link, fold link |
 | `test_audio_manager` | 47 | Buses, the volume-applied-once rule, loading + looping, the mix/jitter/throttle registry, fades, persistence |
 | `test_geometry_core` | 41 | Sutherland-Hodgman, epsilon, area/centroid |
-| `test_nested_folds` | 21 | **Scene-driven**: folding yourself deeper, the torus, surfacing a layer at a time, the ledger and the renderer at depth |
+| `test_nested_folds` | 20 | **Scene-driven**: folding yourself deeper, the torus, surfacing a layer at a time, the ledger and the renderer at depth |
 | `test_fold_lattice` | 16 | How a space repeats: descent, orthogonality, wrapping, copies, framing |
 | `test_tile_batch` | 11 | The batched sheet: grouping, UVs, baked copies, per-copy deformation |
 | `test_tile_params` | 34 | The per-tile parameter schema: defaults, coercion, minimal storage, validation |
