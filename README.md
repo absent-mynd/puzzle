@@ -31,10 +31,17 @@ Run it: open the project in Godot and press play (`scenes/world/World.tscn`), or
 
 ```bash
 godot --path . scenes/world/World.tscn
+godot --path . scenes/world/World.tscn -- --world=testbed   # the debug world
 ```
 
 Controls and the design beats are in
 [scripts/world/README.md](scripts/world/README.md).
+
+`worlds/testbed.json` is a **debug world** rather than a level: fourteen regions
+holding one of everything the model can express, wired star-and-ring so nothing is
+more than two doors away — every tile character, every hand kind, every trigger
+outcome, pre-placed folds in every orientation, and door cases the shipped world has
+no room for. See [docs/features/TESTBED_WORLD.md](docs/features/TESTBED_WORLD.md).
 
 Edit the world:
 
@@ -64,7 +71,8 @@ scripts/
 │           #   WorldEditor, EditorUI
 ├── ui/        # PauseMenu, Settings
 └── tests/     # GUT suite — the behavioral spec
-worlds/        # authored worlds (regions, doors, pre-placed folds, lights)
+worlds/        # authored worlds (regions, doors, pre-placed folds, lights):
+           #   overworld.json is the game, testbed.json is the debug world
 scenes/world/  # World.tscn — the main scene
 scenes/editor/ # WorldEditor.tscn — the world editor (./run_editor.sh)
 assets/        # the lighting shader; the tileset layout (assets/sprites/README.md);

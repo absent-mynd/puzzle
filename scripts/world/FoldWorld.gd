@@ -355,9 +355,10 @@ func _setup_all() -> void:
 	# A hand in flight is a hand mid-event. A reset ends the event.
 	hand_balls = []
 
-	world_data = WorldData.load_from(WORLD_PATH)
+	var world_path := WorldData.selected_path(WORLD_PATH)
+	world_data = WorldData.load_from(world_path)
 	if world_data == null:
-		push_error("FoldWorld: could not load %s" % WORLD_PATH)
+		push_error("FoldWorld: could not load %s" % world_path)
 		return
 	hands = world_data.starting_hand_slots()
 

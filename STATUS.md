@@ -36,8 +36,9 @@ What exists and works today:
 | Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
+| **Testbed world** (`worlds/testbed.json`, `--world=testbed`) | ✅ 14 regions of one-of-everything, for poking at mechanics |
 | **World editor** — paint, canvases, doors, folds, per-tile params | ✅ Usable (`./run_editor.sh`) |
-| Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested, not yet placed in the world |
+| Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested; placed in the testbed, not in the shipped world |
 | Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
 | **One wrap for the whole view** (`FoldLattice` / `WrapCanvas`) | ✅ In the world |
 | **Batched sheet** — two canvas items, not one per fragment | ✅ In the world |

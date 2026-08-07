@@ -95,6 +95,39 @@ func test_clone_is_independent():
 
 
 # ---------------------------------------------------------------------------
+# Which world a run opens
+# ---------------------------------------------------------------------------
+
+func test_no_flag_opens_the_shipped_world():
+	assert_eq(WorldData.path_from_args([], WORLD_PATH), WORLD_PATH,
+		"with nothing passed you get the world you always get")
+	assert_eq(WorldData.path_from_args(["--headless", "-v"], WORLD_PATH), WORLD_PATH,
+		"and other arguments are none of its business")
+
+
+func test_a_bare_name_means_a_file_in_worlds():
+	assert_eq(WorldData.path_from_args(["--world=testbed"], WORLD_PATH),
+		"res://worlds/testbed.json", "--world=testbed is the short spelling")
+
+
+func test_a_path_is_taken_as_written():
+	assert_eq(WorldData.path_from_args(["--world=res://worlds/testbed.json"], WORLD_PATH),
+		"res://worlds/testbed.json", "a res:// path is used verbatim")
+	assert_eq(WorldData.path_from_args(["--world=user://scratch.json"], WORLD_PATH),
+		"user://scratch.json", "...whatever scheme it is on")
+
+
+func test_an_empty_flag_is_not_a_choice():
+	assert_eq(WorldData.path_from_args(["--world="], WORLD_PATH), WORLD_PATH,
+		"--world= with nothing after it falls back rather than opening nothing")
+
+
+func test_the_last_flag_wins():
+	assert_eq(WorldData.path_from_args(["--world=testbed", "--world=overworld"], WORLD_PATH),
+		"res://worlds/overworld.json", "an override after an alias is an override")
+
+
+# ---------------------------------------------------------------------------
 # The shipped world
 # ---------------------------------------------------------------------------
 

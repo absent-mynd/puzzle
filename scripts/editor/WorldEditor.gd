@@ -116,12 +116,10 @@ func _ready() -> void:
 
 ## The world to open: `--world=res://...` if given, else the shipped one. A flag
 ## rather than a file dialog because the usual case is "edit the world I am
-## playing", and the unusual one is a shell away.
+## playing", and the unusual one is a shell away. `WorldData` owns the reading of
+## it, so the game and the editor cannot disagree about which world a run means.
 func _startup_path() -> String:
-	for arg in OS.get_cmdline_user_args():
-		if String(arg).begins_with("--world="):
-			return String(arg).substr(8)
-	return WORLD_PATH
+	return WorldData.selected_path(WORLD_PATH)
 
 
 func _open(path: String) -> void:
