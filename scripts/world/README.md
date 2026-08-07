@@ -507,6 +507,13 @@ stays pinned at `PixelArt.CAMERA_ZOOM` forever.
   the whole contract — add a floating object and it turns up in every band without
   knowing folds exist. (The hands orbiting your body are the object that proved
   the point: they used to appear in one copy and nowhere else.)
+
+  The one thing a canvas does have to answer for is state it keeps between frames.
+  Crossing a glue line slides body and camera by a period, and a canvas that
+  remembers a world position is left a band behind — so `carry_through_wrap` offers
+  every canvas that same displacement, and one holding positions of its own adds it.
+  `HandOrbit` is the only one that does; leaving it out was the hands appearing to
+  snap back to the copy you entered from and swim after you.
 - **The seam stays a hard line.** Because the art is cut by the crease exactly
   as the geometry is, two flaps meeting at a seam show two tiles cut mid-pattern
   against each other. Nothing blends, blurs or fades across it. That is
@@ -604,7 +611,8 @@ do not want yet.
   Covered by `scripts/tests/test_fold_lattice.gd`.
 - `WrapCanvas.gd` — a canvas item that paints itself once per copy of the space.
   Subclasses override `paint()` and never mention folds. `paint_once()` is for
-  what belongs to the frame instead (the preview band, the full-extent guides).
+  what belongs to the frame instead (the preview band, the full-extent guides), and
+  `carry_through_wrap()` for whatever a canvas remembers across frames.
 - `TileBatch.gd` — the sheet, batched into two canvas items, with the wrap baked
   into the vertices. Also what the fold transition draws through: three batches,
   two of which move by setting a position. Covered by

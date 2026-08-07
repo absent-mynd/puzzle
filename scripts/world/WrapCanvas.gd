@@ -48,6 +48,23 @@ func _draw() -> void:
 	paint_once()
 
 
+## Carry whatever state this canvas holds through a wrap teleport.
+##
+## Crossing a glue line slides the body back by a whole period, and the camera with
+## it, so the rendered frame is unchanged and the crossing is invisible. That only
+## holds for things the frame re-derives every time it is drawn. A canvas that
+## remembers a world position across frames — a spring, a trail, a hand floating
+## beside you — is left standing a period away from the body it belongs to, and
+## whatever pulls it home then drags it across the space in full view. So the same
+## displacement is offered to every canvas, and one that keeps positions of its own
+## overrides this and adds it. Most keep none, and do nothing.
+##
+## Dispatched over `FoldWorld._wrap_canvases()`, the same list `set_offsets` uses:
+## a new canvas is registered once and is handed both.
+func carry_through_wrap(_offset: Vector2) -> void:
+	pass
+
+
 ## Gather whatever the copies will all draw. Override when a query is worth more
 ## than the loop that would repeat it.
 func prepare() -> void:

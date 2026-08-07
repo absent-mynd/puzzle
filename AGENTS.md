@@ -254,6 +254,16 @@ have written the bug this replaced.**
 Register new canvases in `FoldWorld._wrap_canvases()` — one list, so forgetting
 is visible.
 
+The corollary, which cost a bug: **a canvas that remembers a position between
+frames has to be carried through a wrap.** Crossing a glue line slides body and
+camera by a whole period so the frame is unchanged, and that only holds for what
+is re-derived each draw. `HandOrbit`'s springs are not — left where they were,
+every hand was suddenly a band away and got hauled back across the space, which
+on screen is the hands snapping to the copy you walked in from and swimming after
+you. `WrapCanvas.carry_through_wrap` offers the displacement to every canvas and
+`_wrap_body` dispatches over the same list; keep no state and you inherit the
+no-op.
+
 ### 10. Anything in the world is an occupant, resolved through `BaseFrame`
 Doors and lights have no world position. They store a base identity plus a point
 inside that tile, and where they *are* is a question asked of the current

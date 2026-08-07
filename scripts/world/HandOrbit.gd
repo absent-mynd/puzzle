@@ -74,6 +74,22 @@ func follow(hands: Array, body: Vector2, motion: Vector2, facing: int, delta: fl
 	queue_redraw()
 
 
+## Walk through a glue line and the body slides back by a period; these positions
+## have to slide with it. They are the one thing in this file that outlives a frame,
+## which is exactly what `WrapCanvas.carry_through_wrap` exists for: left behind, a
+## hand sits a band away and the spring hauls it home across the whole space — the
+## hands appearing to jump back to the copy you entered from and swim after you,
+## when they should simply have come through with you.
+##
+## Empty slots move too. A slot keeps its position while empty so the next hand
+## resumes from where its predecessor drifted to, and that only stays true if the
+## remembered spot travels with the body like an occupied one.
+func carry_through_wrap(offset: Vector2) -> void:
+	for slot in _slots:
+		slot["pos"] += offset
+	queue_redraw()
+
+
 func paint() -> void:
 	for i in range(_slots.size()):
 		var slot: Dictionary = _slots[i]
