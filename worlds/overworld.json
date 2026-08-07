@@ -1,10 +1,261 @@
 {
-	"world_id": "overworld",
-	"world_name": "Overworld",
 	"cell_size": 64.0,
-	"start_region": "west",
+	"doors": {
+		"E1": {
+			"cell": {
+				"x": 13,
+				"y": 9
+			},
+			"pair": "W1",
+			"region": "east"
+		},
+		"E2": {
+			"cell": {
+				"x": 2,
+				"y": 9
+			},
+			"pair": "W2",
+			"region": "east"
+		},
+		"W1": {
+			"cell": {
+				"x": 1,
+				"y": 13
+			},
+			"pair": "E1",
+			"region": "west"
+		},
+		"W2": {
+			"cell": {
+				"x": 42,
+				"y": 13
+			},
+			"pair": "E2",
+			"region": "west"
+		},
+		"west_1": {
+			"cell": {
+				"x": 7,
+				"y": 1
+			},
+			"pair": "west_2",
+			"region": "west"
+		},
+		"west_2": {
+			"cell": {
+				"x": 7,
+				"y": 13
+			},
+			"pair": "west_1",
+			"region": "west"
+		}
+	},
+	"metadata": {
+		"note": "West carries the four authored fold beats. East's right wing (base x>=20) teaches pins and fold triggers. Loose hands sit behind beats, never in front of them: a SWIFT one on the pillar top (24,6), a PATIENT one in the sealed chamber (34,13), and a SWIFT one at (14,9) in east, INSIDE the shipped pre-fold and reachable only through door W1. A hand is taken one at a time into a free slot, so it is the second half of a fold you have already started."
+	},
 	"regions": {
+		"east": {
+			"editor": {
+				"pos": {
+					"x": 3008.0,
+					"y": 0.0
+				}
+			},
+			"folds": [
+				{
+					"anchor1": {
+						"x": 10.0,
+						"y": 6.0
+					},
+					"anchor2": {
+						"x": 16.0,
+						"y": 6.0
+					}
+				}
+			],
+			"hands": [
+				{
+					"cell": {
+						"x": 14,
+						"y": 9
+					},
+					"kind": "swift"
+				},
+				{
+					"cell": {
+						"x": 5,
+						"y": 4
+					},
+					"kind": "patient"
+				},
+				{
+					"cell": {
+						"x": 7,
+						"y": 7
+					},
+					"kind": "patient"
+				},
+				{
+					"cell": {
+						"x": 3,
+						"y": 6
+					},
+					"kind": "patient"
+				},
+				{
+					"cell": {
+						"x": 2,
+						"y": 3
+					},
+					"kind": "patient"
+				},
+				{
+					"cell": {
+						"x": 9,
+						"y": 2
+					},
+					"kind": "patient"
+				},
+				{
+					"cell": {
+						"x": 8,
+						"y": 5
+					},
+					"kind": "patient"
+				},
+				{
+					"cell": {
+						"x": 4,
+						"y": 1
+					},
+					"kind": "patient"
+				},
+				{
+					"cell": {
+						"x": 6,
+						"y": 2
+					},
+					"kind": "patient"
+				}
+			],
+			"lights": [
+				{
+					"cell": {
+						"x": 14,
+						"y": 8
+					},
+					"color": "#ffb85c",
+					"energy": 1.2,
+					"flicker": 0.22,
+					"id": "e_vault",
+					"radius": 5.0
+				},
+				{
+					"cell": {
+						"x": 29,
+						"y": 8
+					},
+					"color": "#ffe0a0",
+					"energy": 1.0,
+					"id": "e_reward",
+					"radius": 4.0
+				}
+			],
+			"rows": [
+				"..............................",
+				"..............................",
+				"..............................",
+				"..............................",
+				"..............................",
+				"..............................",
+				"..............................",
+				"...........................#..",
+				".....................P.....#..",
+				"...............G.....P...T.#.G",
+				"##############################",
+				"##############################",
+				"##############################",
+				"##############################"
+			],
+			"spawn": {
+				"x": 5.5,
+				"y": 8.5
+			},
+			"tile_data": {
+				"25,9": {
+					"anchors": [
+						[
+							26.0,
+							9.0
+						],
+						[
+							28.0,
+							9.0
+						]
+					],
+					"channel": "vault"
+				}
+			}
+		},
 		"west": {
+			"editor": {
+				"pos": {
+					"x": 5120.0,
+					"y": -128.0
+				}
+			},
+			"folds": [],
+			"hands": [
+				{
+					"cell": {
+						"x": 24,
+						"y": 6
+					},
+					"kind": "swift"
+				},
+				{
+					"cell": {
+						"x": 34,
+						"y": 13
+					},
+					"kind": "patient"
+				}
+			],
+			"lights": [
+				{
+					"cell": {
+						"x": 3,
+						"y": 13
+					},
+					"color": "#ffd08a",
+					"energy": 1.0,
+					"flicker": 0.12,
+					"id": "w_spawn",
+					"radius": 5.0
+				},
+				{
+					"cell": {
+						"x": 13,
+						"y": 13
+					},
+					"color": "#7fd4ff",
+					"energy": 1.0,
+					"flicker": 0.05,
+					"id": "w_pit",
+					"radius": 6.0
+				},
+				{
+					"cell": {
+						"x": 36,
+						"y": 12
+					},
+					"color": "#ffc65c",
+					"energy": 1.15,
+					"flicker": 0.18,
+					"id": "w_chamber",
+					"radius": 4.0
+				}
+			],
 			"rows": [
 				"............................................",
 				"............................................",
@@ -29,182 +280,14 @@
 				"x": 4.5,
 				"y": 12.5
 			},
-			"tile_data": {},
-			"folds": [],
-			"lights": [
-				{
-					"id": "w_spawn",
-					"cell": {
-						"x": 3,
-						"y": 13
-					},
-					"color": "#ffd08a",
-					"radius": 5.0,
-					"energy": 1.0,
-					"flicker": 0.12
-				},
-				{
-					"id": "w_pit",
-					"cell": {
-						"x": 13,
-						"y": 13
-					},
-					"color": "#7fd4ff",
-					"radius": 6.0,
-					"energy": 1.0,
-					"flicker": 0.05
-				},
-				{
-					"id": "w_chamber",
-					"cell": {
-						"x": 36,
-						"y": 12
-					},
-					"color": "#ffc65c",
-					"radius": 4.0,
-					"energy": 1.15,
-					"flicker": 0.18
-				}
-			],
-			"hands": [
-				{
-					"kind": "swift",
-					"cell": {
-						"x": 24,
-						"y": 6
-					}
-				},
-				{
-					"kind": "patient",
-					"cell": {
-						"x": 34,
-						"y": 13
-					}
-				}
-			]
-		},
-		"east": {
-			"rows": [
-				"..............................",
-				"..............................",
-				"..............................",
-				"..............................",
-				"..............................",
-				"..............................",
-				"..............................",
-				"...........................#..",
-				".....................P.....#..",
-				"...............G.....P...T.#.G",
-				"##############################",
-				"##############################",
-				"##############################",
-				"##############################"
-			],
-			"spawn": {
-				"x": 5.5,
-				"y": 8.5
-			},
-			"tile_data": {
-				"25,9": {
-					"channel": "vault",
-					"anchors": [
-						[
-							26,
-							9
-						],
-						[
-							28,
-							9
-						]
-					]
-				}
-			},
-			"folds": [
-				{
-					"anchor1": {
-						"x": 10,
-						"y": 6
-					},
-					"anchor2": {
-						"x": 16,
-						"y": 6
-					}
-				}
-			],
-			"lights": [
-				{
-					"id": "e_vault",
-					"cell": {
-						"x": 14,
-						"y": 8
-					},
-					"color": "#ffb85c",
-					"radius": 5.0,
-					"energy": 1.2,
-					"flicker": 0.22
-				},
-				{
-					"id": "e_reward",
-					"cell": {
-						"x": 29,
-						"y": 8
-					},
-					"color": "#ffe0a0",
-					"radius": 4.0,
-					"energy": 1.0,
-					"flicker": 0.0
-				}
-			],
-			"hands": [
-				{
-					"kind": "swift",
-					"cell": {
-						"x": 14,
-						"y": 9
-					}
-				}
-			]
+			"tile_data": {}
 		}
 	},
-	"doors": {
-		"W1": {
-			"region": "west",
-			"cell": {
-				"x": 1,
-				"y": 13
-			},
-			"pair": "E1"
-		},
-		"E1": {
-			"region": "east",
-			"cell": {
-				"x": 13,
-				"y": 9
-			},
-			"pair": "W1"
-		},
-		"W2": {
-			"region": "west",
-			"cell": {
-				"x": 42,
-				"y": 13
-			},
-			"pair": "E2"
-		},
-		"E2": {
-			"region": "east",
-			"cell": {
-				"x": 2,
-				"y": 9
-			},
-			"pair": "W2"
-		}
-	},
-	"metadata": {
-		"note": "West carries the four authored fold beats. East's right wing (base x>=20) teaches pins and fold triggers. Loose hands sit behind beats, never in front of them: a SWIFT one on the pillar top (24,6), a PATIENT one in the sealed chamber (34,13), and a SWIFT one at (14,9) in east, INSIDE the shipped pre-fold and reachable only through door W1. A hand is taken one at a time into a free slot, so it is the second half of a fold you have already started."
-	},
+	"start_region": "west",
 	"starting_hands": [
 		"plain",
 		"plain"
-	]
+	],
+	"world_id": "overworld",
+	"world_name": "Overworld"
 }

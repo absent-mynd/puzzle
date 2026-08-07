@@ -443,17 +443,17 @@ world (unchanged: CELL = 64 world units)
 		│
 		▼
   SubViewport, RESIZED per zoom  ← 1 art pixel = 4 world units = WORLD_PER_PIXEL
-        │  320x180 at 1:1          the LENS never moves; the target grows instead
-        │
-        ├── TileBatch   the sheet: ALL fragments of ALL copies in two Polygon2Ds
-        │                 (one per lit material), base-space UVs from TileAtlas,
-        │                 the wrap baked into the vertices
-        ├── StaticBody2D  colliders, domain + the copies one step out
-        └── WrapCanvas×n  everything that moves — the blob, the hands you carry,
-                          the hands in flight, the markers — each painted once
-                          per lattice offset
-        │
-        ▼
+		│  320x180 at 1:1          the LENS never moves; the target grows instead
+		│
+		├── TileBatch   the sheet: ALL fragments of ALL copies in two Polygon2Ds
+		│                 (one per lit material), base-space UVs from TileAtlas,
+		│                 the wrap baked into the vertices
+		├── StaticBody2D  colliders, domain + the copies one step out
+		└── WrapCanvas×n  everything that moves — the blob, the hands you carry,
+						  the hands in flight, the markers — each painted once
+						  per lattice offset
+		│
+		▼
   TextureRect, nearest             HUD renders OUTSIDE this, at window resolution
 ```
 

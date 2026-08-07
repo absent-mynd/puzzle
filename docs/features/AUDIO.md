@@ -122,6 +122,9 @@ moved down a fourth and pulled out of tune with itself — the same room, folded
 The beating between its detuned pairs is the only thing in the mix that tells
 you where you are without a word of UI.
 
+Neither bed is static: both drift continuously, and how they drift is part of
+telling the two apart — see *they drift* below.
+
 ---
 
 ## The assets are code
@@ -139,7 +142,8 @@ disturbs another and the whole set is reproducible from that file alone.
 **Why synthesize rather than source.** No licence question, no attribution to
 track, no binary blob whose provenance is a link in a README. The character of
 each sound is a readable function with a comment saying what it is trying to
-be, and changing one is a diff. About 1.1 MB for the set.
+be, and changing one is a diff. About 1.8 MB for the set, most of it the two
+music beds — they are 32 seconds each, and length is what a bed costs.
 
 **These are placeholders, and they read as placeholders.** They are honest,
 tuned and mixed, but they are synthesized bleeps. Replacing any of them means
@@ -151,11 +155,47 @@ to produce it.
 ### The music loops are seamless by construction
 
 Both beds are built **entirely from harmonics of the loop fundamental**
-(1/12 Hz), so the waveform is exactly periodic over the file and the loop point
+(1/32 Hz), so the waveform is exactly periodic over the file and the loop point
 is sample-exact. That is why the pads are additive rather than sampled noise:
 noise would need a crossfade at the seam, and a crossfade is the one thing you
 can hear. Nothing is faded at the file's edges for the same reason — tapering
 would carve a dip into the one place that must be continuous.
+
+### …and they drift, which is the same rule applied twice
+
+A static sum of sines loops perfectly and is **monotone** — one colour, held
+forever, which the ear stops hearing as sound and starts hearing as a hum. So
+the partials do not sit still: each one swells on its own slow cycle and wavers
+in pitch by hundredths of a Hz (`drift`, which is `pad` with the monotony taken
+out).
+
+That does not cost the seam, because **every modulator is also measured in whole
+cycles per loop**. A swell at 3 cycles and a vibrato at 5 are both exactly back
+where they started at the last sample. Drift and seamlessness are not a
+trade-off here; they are one constraint applied to the modulators as well as the
+carriers. The vibrato is phase modulation for this reason — a frequency ramp
+would accumulate offset and land the carrier somewhere a continuation would not.
+
+Two consequences worth knowing before retuning:
+
+- **Per-partial LFOs, not one global LFO.** A single LFO over the finished sum
+  only changes how *loud* the pad is, which reads as pumping. Independent counts
+  per partial change its *balance*, which reads as the timbre moving. The global
+  `breathe` is still there but shallow (0.18), under the per-voice motion.
+- **The file length is the ceiling on how slow a drift can be.** A motion slower
+  than the loop cannot exist, because it would not close. That — not fidelity —
+  is what sets `LOOP_SECONDS`, and why it is 32s and not 12s: at 12s the ear
+  learns the cycle and waits for it. `MUSIC_RATE` is 12 kHz for the opposite
+  reason: nothing in either bed goes above ~1.8 kHz, so the rate is pure cost
+  and the length is what the bytes should buy.
+
+The overworld's harmony drifts too, not just its colour. Quiet upper voices —
+a ninth and a sixth, at just ratios, mostly absent — swell past each other so
+the chord moves between an open fifth, an added ninth and a sixth. Still no
+third and nothing that resolves: it should be impossible to hum and impossible
+to catch repeating. `subspace` drifts more slowly and flatly on purpose, because
+its detuned beating already supplies movement and a fold's interior should feel
+like it is the thing holding still.
 
 `AudioManager` sets the loop flag at load time rather than relying on the import
 settings, because `.import` files are gitignored and so nothing on disk can
@@ -209,7 +249,7 @@ the defaults.
 |---|---|
 | `AudioManager` — buses, pool, fades, loading, persistence | ✅ |
 | `Sounds` — vocabulary, mix, jitter, throttling | ✅ |
-| Assets — 21 effects + 2 music beds, generated | ✅ placeholders |
+| Assets — 21 effects + 2 music beds, generated | ✅ placeholders, beds drift |
 | `FoldWorld` — the whole fold vocabulary | ✅ wired |
 | `PlayerBody` — jump, land, footsteps | ✅ wired |
 | `PauseMenu` / `Settings` | ✅ wired, ⚠️ **unreachable** |

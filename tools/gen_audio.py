@@ -20,6 +20,9 @@ track is an exact integer multiple of 1/loop_seconds, so the waveform is
 periodic over exactly the file's length and the loop point is sample-exact.
 This is why the pads are additive rather than sampled noise: a noise bed would
 need a crossfade at the seam, and a crossfade is the one thing you can hear.
+The same rule applies to every modulator that makes the beds drift — see the
+music section, where it is the reason drift and a seamless loop are not in
+tension.
 
 The names written here are the vocabulary in `Sounds.gd`, and
 `test_audio_manager` asserts the two agree — a sound added on one side and not
@@ -33,7 +36,13 @@ import struct
 import wave
 
 SFX_RATE = 22050
-MUSIC_RATE = 16000
+
+## The beds are long (see LOOP_SECONDS) and a long file at a high rate is a big
+## file for nothing: nothing in either track goes above ~1.8 kHz, so 12 kHz
+## leaves 6 kHz of headroom over the highest partial and the downsample is
+## inaudible rather than a compromise. Raise it if a track ever wants real air
+## up top — but then check the file size, because it scales with the product.
+MUSIC_RATE = 12000
 
 ## Peak every SFX is normalized to. Below full scale so that several playing at
 ## once (the pool is 8 deep) do not sum into the clipper.
@@ -427,9 +436,27 @@ SFX = {
 # here is snapped to the nearest such harmonic before it is used — see
 # `harmonic`. That snap is the whole trick, and it is why there is no fade,
 # no crossfade and no sampled noise anywhere below.
+#
+# THE SAME RULE COVERS EVERY MODULATOR. A bed that is a static sum of sines is
+# seamless but monotone — it has one colour and holds it, and the ear gives up
+# on it. So the partials here swell and waver instead of sitting still. What
+# keeps that compatible with the seam is that every modulator is ALSO measured
+# in whole cycles per loop: a swell at 3 cycles and a vibrato at 5 are both
+# exactly back where they started at the last sample, so drift costs nothing at
+# the loop point. Drift and seamlessness are not in tension; they are the same
+# constraint applied twice.
+#
+# The one real limit is that the file length is the ceiling on how slow a drift
+# can be — a motion slower than the loop cannot exist here, because it would
+# not close. That, not fidelity, is what sets LOOP_SECONDS.
 # ---------------------------------------------------------------------------
 
-LOOP_SECONDS = 12.0
+## Long, because the loop period is itself the most audible thing about an
+## ambient bed: at 12s the ear learns the cycle and starts waiting for it. 32s
+## is enough room for a one-cycle swell to read as "the room changed" rather
+## than "the track is wobbling". It also costs: file size scales with
+## LOOP_SECONDS * MUSIC_RATE, and generation time with it.
+LOOP_SECONDS = 32.0
 
 
 def harmonic(f):
@@ -456,6 +483,49 @@ def pad(rate, partials, rng):
     return out
 
 
+def drift(rate, voices, rng):
+    """Sum of partials that each swell and waver on their OWN slow cycle.
+
+    This is `pad` with the monotony taken out. A voice is
+
+        (freq, amp, swell_cycles, swell_depth, waver_hz)
+
+    `swell_cycles` is whole cycles per loop, so no two voices at different
+    counts ever line up the same way twice within the file, and every one of
+    them is home again at the seam. Giving each partial its own count is the
+    point: a single LFO over the whole sum only changes how LOUD the pad is,
+    which reads as pumping. Independent counts change its BALANCE, which reads
+    as the timbre moving.
+
+    `waver_hz` is peak pitch deviation, in Hz, applied as phase modulation at
+    the same slow rate. Tiny amounts (hundredths of a Hz on a low partial) are
+    what separate a sine from a voice — held perfectly still, a sine sounds
+    synthetic no matter what else is going on around it. It stays periodic for
+    the usual reason: the modulator completes whole cycles too, so the carrier
+    ends the buffer at exactly the phase a continuation would demand.
+    """
+    n = int(rate * LOOP_SECONDS)
+    out = [0.0] * n
+    for f, amp, cycles, depth, waver_hz in voices:
+        fh = harmonic(f)
+        ph = rng.uniform(0.0, 2.0 * math.pi)
+        step = 2.0 * math.pi * fh / rate
+        # Swell and waver share the voice's cycle count but not its phase, so a
+        # partial is not always brightest exactly when it is also sharpest.
+        lfo = 2.0 * math.pi * cycles / n
+        swell_ph = rng.uniform(0.0, 2.0 * math.pi)
+        waver_ph = rng.uniform(0.0, 2.0 * math.pi)
+        # Phase-modulation index for the requested deviation: a deviation of
+        # `waver_hz` at `cycles / LOOP_SECONDS` Hz needs this many radians.
+        beta = waver_hz * LOOP_SECONDS / max(1, cycles)
+        floor = 1.0 - depth
+        for i in range(n):
+            a = floor + depth * 0.5 * (1.0 + math.sin(swell_ph + lfo * i))
+            out[i] += amp * a * math.sin(
+                ph + step * i + beta * math.sin(waver_ph + lfo * i))
+    return out
+
+
 def breathe(rate, depth, cycles, phase=0.0):
     """A slow amplitude LFO that also completes whole cycles in the loop."""
     n = int(rate * LOOP_SECONDS)
@@ -464,21 +534,52 @@ def breathe(rate, depth, cycles, phase=0.0):
 
 
 def music_overworld(rng):
-    """The overworld bed: open, low, and almost still.
+    """The overworld bed: open, low, and almost still — but never quite still.
 
     Ambient to the point of being barely there. The game's own vocabulary is
     quiet and sparse, and a track with any melodic opinion would be competing
-    with the fuse — the one sound the player genuinely has to hear.
+    with the fuse — the one sound the player genuinely has to hear. So the
+    motion here is all colour and no tune: the harmony drifts between an open
+    fifth, an added ninth and a sixth as quiet upper voices swell past each
+    other, and there is still no third and nothing that resolves. It should be
+    impossible to hum and impossible to catch repeating.
     """
     root = 55.0                       # A1
-    partials = [(root, 0.50), (root * 2, 0.34), (root * 3, 0.14),
-                (root * 4, 0.10), (root * 5, 0.05),
-                (root * 1.5, 0.22),                      # the fifth
-                (root * 6.0, 0.045), (root * 8.0, 0.03)]
-    body = pad(MUSIC_RATE, partials, rng)
-    body = mul(body, breathe(MUSIC_RATE, 0.35, 2))
-    shimmer = pad(MUSIC_RATE, [(880, 0.05), (1320, 0.035), (1760, 0.02)], rng)
-    shimmer = mul(shimmer, breathe(MUSIC_RATE, 0.85, 3, math.pi * 0.5))
+    # (freq, amp, swell cycles, swell depth, waver Hz). The low partials barely
+    # move — the root going in and out is the one thing that would read as the
+    # music doing something. Motion is pushed up the spectrum, where it is
+    # colour instead of level.
+    voices = [
+        (root,          0.50, 1,  0.10, 0.004),
+        (root * 2,      0.34, 2,  0.18, 0.010),
+        (root * 3,      0.14, 3,  0.35, 0.020),
+        (root * 4,      0.10, 5,  0.45, 0.030),
+        (root * 5,      0.05, 7,  0.55, 0.040),
+        (root * 1.5,    0.22, 2,  0.22, 0.010),   # the fifth
+        (root * 6.0,   0.045, 5,  0.60, 0.045),
+        (root * 8.0,    0.03, 7,  0.70, 0.060),
+        # The drifting voices. Both from the mode, both quiet, both mostly
+        # absent: at these depths they are gone for the larger part of the loop
+        # and arrive rather than sit. Just ratios (9/8, 5/3) rather than
+        # tempered ones, because everything around them is a pure harmonic
+        # series and a tempered third against that beats audibly.
+        (root * 2 * 9 / 8,  0.085, 1, 0.92, 0.012),   # the ninth, B
+        (root * 2 * 5 / 3,  0.065, 2, 0.88, 0.016),   # the sixth, F#
+        (root * 4 * 9 / 8,  0.030, 3, 0.90, 0.025),   # the ninth, an octave up
+    ]
+    body = drift(MUSIC_RATE, voices, rng)
+    # One gentle LFO over the whole body still, on top of the per-voice ones:
+    # the pad as a thing has a breath, the partials inside it have their own.
+    # Shallower than it was, because the per-voice swells now carry the motion
+    # and stacking two deep LFOs is how a bed starts to pump.
+    body = mul(body, breathe(MUSIC_RATE, 0.18, 1))
+    # The shimmer drifts too, and at counts coprime with the body's so the two
+    # layers never settle into a shared rhythm.
+    shimmer = drift(MUSIC_RATE, [
+        (880,  0.050, 3,  0.75, 0.06),
+        (1320, 0.035, 5,  0.85, 0.09),
+        (1760, 0.020, 7,  0.90, 0.12),
+    ], rng)
     return add(body, shimmer)
 
 
@@ -490,21 +591,39 @@ def music_subspace(rng):
     out of tune with itself: the same room, folded. The beating between the
     detuned pairs is the point — it is the only thing in the mix that tells you
     where you are without a word of UI.
+
+    The drift here is deliberately slower and flatter than the overworld's. The
+    beating already supplies movement, and a fold's interior should feel like it
+    is holding still while something else moves — swelling it as freely as the
+    overworld would make the two beds read as the same room after all.
     """
     root = 41.25                      # E1, a fourth below the overworld
-    partials = []
-    for mult, amp in ((1.0, 0.50), (2.0, 0.32), (3.0, 0.12), (4.0, 0.08)):
+    voices = []
+    for mult, amp, cycles in ((1.0, 0.50, 1), (2.0, 0.32, 2),
+                              (3.0, 0.12, 3), (4.0, 0.08, 5)):
         # Two partials a hair apart, each snapped to its own loop harmonic, so
-        # they beat at the (also periodic) difference between them.
-        partials.append((root * mult, amp))
-        partials.append((root * mult + 0.58, amp * 0.8))
-    partials.append((root * 1.5, 0.16))
-    body = pad(MUSIC_RATE, partials, rng)
-    body = mul(body, breathe(MUSIC_RATE, 0.30, 1))
+        # they beat at the (also periodic) difference between them. The pair
+        # swells on the same cycle count but drifts apart in phase, so the
+        # beating itself fades in and out rather than grinding on forever.
+        voices.append((root * mult, amp, cycles, 0.12 + 0.05 * mult, 0.0))
+        voices.append((root * mult + 0.58, amp * 0.8, cycles,
+                       0.20 + 0.05 * mult, 0.0))
+    voices.append((root * 1.5, 0.16, 2, 0.25, 0.008))
+    # One drifting voice, and only one: the fourth above the root, which is the
+    # interval the whole bed is transposed by. It is the fold quoting itself.
+    voices.append((root * 4 / 3, 0.070, 1, 0.90, 0.010))
+    body = drift(MUSIC_RATE, voices, rng)
+    body = mul(body, breathe(MUSIC_RATE, 0.18, 1))
     # A high wash, built the same additive way rather than from noise: dense
-    # enough to read as air, still exactly periodic.
-    wash = pad(MUSIC_RATE, [(600 + 37 * i, 0.016) for i in range(26)], rng)
-    wash = mul(wash, breathe(MUSIC_RATE, 0.7, 2, math.pi))
+    # enough to read as air, still exactly periodic. Split into three bands on
+    # separate swell counts so the air moves through the room instead of
+    # brightening all at once.
+    wash_voices = []
+    for i in range(26):
+        wash_voices.append((600 + 37 * i, 0.016, (3, 5, 7)[i % 3],
+                            0.65, 0.0))
+    wash = drift(MUSIC_RATE, wash_voices, rng)
+    wash = mul(wash, breathe(MUSIC_RATE, 0.45, 2, math.pi))
     return add(body, gain(wash, 0.8))
 
 

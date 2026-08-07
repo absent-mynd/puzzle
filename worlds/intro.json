@@ -1,0 +1,133 @@
+{
+	"cell_size": 64.0,
+	"doors": {
+		"region_2_1": {
+			"cell": {
+				"x": 2,
+				"y": 7
+			},
+			"pair": "start_1",
+			"region": "region_2"
+		},
+		"start_1": {
+			"cell": {
+				"x": 9,
+				"y": 8
+			},
+			"pair": "region_2_1",
+			"region": "start"
+		}
+	},
+	"metadata": {},
+	"regions": {
+		"region_2": {
+			"editor": {
+				"anchors": [],
+				"pos": {
+					"x": 2304.0,
+					"y": 512.0
+				}
+			},
+			"folds": [],
+			"hands": [],
+			"lights": [],
+			"rows": [
+				"................................",
+				"................................",
+				"................................",
+				"................................",
+				"................................",
+				"................................",
+				"................................",
+				"................................",
+				"..X.............................",
+				"..X.X...........................",
+				"..X...X.........................",
+				"..X.....X.......................",
+				"..X.......X.....................",
+				"..X.........X...................",
+				"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+				"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+				"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+				"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			],
+			"spawn": {
+				"x": 16.0,
+				"y": 9.0
+			},
+			"tile_data": {}
+		},
+		"start": {
+			"editor": {
+				"anchors": [],
+				"pos": {
+					"x": 1280.0,
+					"y": 512.0
+				}
+			},
+			"folds": [],
+			"hands": [],
+			"lights": [
+				{
+					"cell": {
+						"x": 4,
+						"y": 4
+					},
+					"color": "#ffd185",
+					"energy": 1.0,
+					"id": "s_light_1",
+					"radius": 5.0
+				},
+				{
+					"cell": {
+						"x": 8,
+						"y": 4
+					},
+					"color": "#ffd185",
+					"energy": 1.0,
+					"id": "s_light_2",
+					"radius": 5.0
+				}
+			],
+			"rows": [
+				"XXXXXXXXXXXXX",
+				"XX____X____XX",
+				"XXT___X____XX",
+				"XXX___X___XXX",
+				"XX___XXX___XX",
+				"XX____X.___XX",
+				"XXX___X___XXX",
+				"XX___XXX___XX",
+				"XX____X____XX",
+				"XXXXXXXXXXXXX",
+				"XXXXXXXXXXXXX"
+			],
+			"spawn": {
+				"x": 3.5,
+				"y": 8.5
+			},
+			"tile_data": {
+				"2,2": {
+					"anchors": [
+						[
+							5,
+							6
+						],
+						[
+							7,
+							6
+						]
+					],
+					"channel": "a"
+				}
+			}
+		}
+	},
+	"start_region": "start",
+	"starting_hands": [
+		"plain",
+		"plain"
+	],
+	"world_id": "world",
+	"world_name": "World"
+}

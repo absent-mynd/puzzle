@@ -65,7 +65,7 @@ extends Node2D
 
 enum Mode { WORLD, SUBSPACE }
 
-const WORLD_PATH := "res://worlds/overworld.json"
+const WORLD_PATH := "res://worlds/intro.json"
 const CS := WorldCore.CELL
 ## Anchors are pinned at arm's length: the cell immediately in the pointed
 ## direction. What you can fold is exactly what you can stand next to.
