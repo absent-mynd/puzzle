@@ -46,6 +46,17 @@ var _hands_down: Array = []
 ## The preview band and the guides, already clipped to one copy of the space.
 var _bands: Array = []
 var _guides: Array = []
+## The glue segments and the hands lying about, gathered once.
+##
+## These were asked of the world inside `paint()`, which `WrapCanvas` runs ONCE PER
+## COPY — and its docstring says exactly why not to: "a question that costs something
+## is asked once rather than once per band". `glue_lines()` scans every base piece per
+## period and `loose_hand_points()` resolves every hand against every fragment, so on
+## a torus of 77 copies the pair cost 16.3ms of a 16.6ms frame. Gathered here they
+## cost 212us. Nothing about the drawing changed.
+var _glue: Array = []
+var _loose: Array = []
+var _balls: Array = []
 
 
 func _process(_delta: float) -> void:
@@ -59,8 +70,15 @@ func prepare() -> void:
 	_hands_down = []
 	_bands = []
 	_guides = []
+	_glue = []
+	_loose = []
+	_balls = []
 	if world == null or world.animating():
 		return
+	if not world.lattice.is_flat():
+		_glue = world.glue_lines()
+	_loose = world.loose_hand_points()
+	_balls = world.hand_ball_points()
 	_markers = world.seam_markers()
 	for fold in world.seams_within_burst():
 		_in_reach.append({"fold": fold, "ok": world.can_unfold_fold(fold)})
@@ -175,14 +193,14 @@ func _draw_doors() -> void:
 ## hand is picked up where it lies; the drift is only ever how it is drawn, which is why
 ## its radius is a fraction of the pickup range.
 func _draw_loose_hands() -> void:
-	for entry in world.loose_hand_points():
+	for entry in _loose:
 		var pickup: HandPickup = entry["pickup"]
 		HandOrbit.draw_hand(self, Vector2(entry["pos"]), pickup.kind,
 			WorldCore.hand_drift_seed(pickup.base_id, pickup.bp))
 	# Hands still in the air, drawn from their own live position — the one kind of thing
 	# in the world that has one. Same glyph as a resting hand, because it is the same
 	# hand: what is different is that it is still moving.
-	for ball in world.hand_ball_points():
+	for ball in _balls:
 		HandOrbit.draw_hand(
 			self, Vector2(ball["pos"]), int(ball["kind"]), float(ball["seed"]))
 
@@ -292,7 +310,7 @@ func _band_polygon(a_center: Vector2, b_center: Vector2,
 ## rather than a rendering glitch. One pair per axis of the lattice: two lines
 ## down a cylinder, and all four walls of a torus when you are folded in twice.
 func _draw_glue() -> void:
-	for seg in world.glue_lines():
+	for seg in _glue:
 		draw_line(seg[0], seg[1], Color("59e0d0", 0.55), HAIR)
 
 
@@ -306,3 +324,4 @@ func _draw_diamond(center: Vector2, r: float, col: Color) -> void:
 		c + Vector2(0, r), c + Vector2(-r, 0),
 	])
 	draw_colored_polygon(pts, col)
+
