@@ -23,27 +23,18 @@ jobs:
           use-dotnet: false
 
       - name: Verify Godot installation
-        run: |
-          godot --version
-          godot --help
+        run: godot --version
 
-      - name: Import project assets
-        run: |
-          echo "Importing project assets in headless mode..."
-          godot --headless --path . --import --quit
-          echo "Asset import complete"
-
+      # One runner, one invocation. run_tests.sh imports the project, picks the
+      # bundled 4.3 binary (falling back to the `godot` installed above), and
+      # propagates GUT's exit code. Do not inline a godot call here: when CI and
+      # the script drift, CI is the copy that stops telling the truth.
+      #
+      # In particular this must never be run with `-d`. Under the debugger a
+      # runtime error in any test breaks, finds no stdin, and terminates the
+      # process with exit code 0 — before GUT prints its totals. That is not a
+      # hypothetical: it hid a red main behind a green check.
       - name: Run GUT tests
         env:
           GODOT_DISABLE_LEAK_CHECKS: "1"
-        run: |
-          echo "Running GUT tests..."
-          godot --headless -d --display-driver headless \
-            --audio-driver Dummy --disable-render-loop --path . \
-            -s res://addons/gut/gut_cmdln.gd \
-            -gdir=res://scripts/tests/ -ginclude_subdirs -gexit
-
-      - name: Test results summary
-        if: always()
-        run: |
-          echo "::notice::GUT tests completed. Check logs above for detailed results."
+        run: ./run_tests.sh

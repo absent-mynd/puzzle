@@ -107,7 +107,10 @@ else
     echo ""
     echo "Note: the bundled binary is Linux x86-64. On macOS, install via Homebrew"
     echo "      ('brew install godot') or add Godot.app's binary to your PATH."
-    exit 1
+    # 127 ("command not found") rather than 1, so callers can tell "no engine
+    # here" apart from "the suite failed". The pre-push hook relies on this to
+    # skip gracefully without ever mistaking a missing Godot for a green run.
+    exit 127
 fi
 
 # Check Godot version
@@ -121,6 +124,19 @@ echo "Importing project..."
 echo ""
 
 # Run tests
+#
+# This is the ONE place the suite is invoked. CI (.github/workflows/gut-tests.yml)
+# and the pre-push hook (.githooks/setup via setup-hooks.sh) both call this script
+# rather than spelling out their own godot command, because when those copies drift
+# it is always the automated gate that stops telling the truth.
+#
+# Never add `-d` here. Under the debugger a runtime error in a test breaks, finds no
+# stdin in CI, and terminates the process with exit code 0 BEFORE GUT prints its
+# totals or sets its own exit code — so a red suite reports green and the scripts
+# after the failure never run at all.
+#
+# Test selection comes from .gutconfig.json (dirs + should_exit) unless TEST_ARGS
+# overrides it.
 echo "Running GUT tests..."
 echo "===================="
 if [ -z "$TEST_ARGS" ]; then
