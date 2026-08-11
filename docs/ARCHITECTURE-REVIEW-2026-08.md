@@ -9,26 +9,28 @@
 > **795/795 green**, the gates now actually gate, and a full run emits **0 errors**
 > where it emitted 1,964.
 >
-> Closing finding 01 turned up **two** further holes this document did not predict,
-> both noted below. The recurring lesson: every gate here was believed to work until
-> something was made to fail on purpose.
+> Three things are worth reading before the findings themselves, because each one
+> changed what got built:
 >
-> The follow-up work then closed 07 and 10 as well: a `Level` value object unblocked
-> the hand-physics extraction, and the log storm under finding 05 turned out not to
-> be a logging problem at all. Suite: **792/792**, and a full run now emits **0
-> errors** where it emitted 1,964.
+> **Closing finding 01 turned up two further holes this document did not predict.**
+> Removing `-d` stops the run being truncated but does not make a crashed test fail,
+> and a test script that fails to parse is skipped with a warning while the run still
+> exits 0. Every gate here was believed to work until something was made to fail on
+> purpose — and the third hole was found by luck rather than by looking.
 >
-> **Correction.** This document claimed extracting `Level` would collapse most of
-> finding 08's reach-throughs. It does not — it covers 3 of `WorldOverlay`'s 24
-> (`base`, `lattice`, `sub_fold`). The other 21 are gameplay queries, which no
-> amount of level state answers. Finding 08 still wants the per-frame view-model
-> originally prescribed, and remains open.
+> **Finding 05's log storm was not a logging problem.** Instrumenting it rather than
+> reasoning about it found an infinite recovery loop. Fixing the logging as this
+> document prescribed would have left the loop running and removed its only outward
+> sign.
 >
-> **And it was underrated.** Filed P2 on structural grounds, finding 08 was hiding
-> the most expensive thing in the frame: two allocating queries on the per-copy draw
-> path cost most of a 60fps budget two folds deep. Both the symptom and the cause are
-> now fixed — see the note under it — but the lesson stands: **price a coupling
-> finding before you schedule it.** I would have got to this one last.
+> **Finding 08 was underrated, and one claim about it here was wrong.** Extracting
+> `Level` does *not* collapse most of its reach-throughs — it covers 3 of 24, and the
+> other 21 are gameplay queries no amount of level state answers. More importantly,
+> the finding was filed P2 on structural grounds while quietly being the most
+> expensive thing in the frame: two allocating queries on the per-copy draw path cost
+> most of a 60fps budget two folds deep. Both symptom and cause are now fixed.
+> **Price a coupling finding before you schedule it** — I would have got to this one
+> last.
 
 ---
 
@@ -408,23 +410,24 @@ also breaks the cycle for real, at which point the type annotation comes back.
    second, hand physics third.
 7. **Delete or rewrite `docs/DEVELOPMENT.md`.**
 
-**All seven landed on 2026-08-11**, with one deliberate partial: step 6 stopped
-after the camera, because the third seam needs a `Level` value object first (see
-finding 07). The suite is 791/791, and the gates fail on four distinct kinds of
-broken test rather than one.
+**Everything in this review is now done**, plus three follow-ups it generated and
+two corrections to its own claims. The suite is 795/795, the gates fail on four
+distinct kinds of broken test rather than one, the kernel's layering rule is enforced
+by a test rather than a paragraph, and a full run emits nothing.
+
+`FoldWorld` is 2,460 lines with 603 more living in five classes that read on their
+own — `WorldHud`, `WorldCamera`, `HandField`, `OverlayView` and the kernel's `Level`.
+It is not smaller than it was, and that is the honest outcome: what changed is that
+five concerns now have names and boundaries instead of being interleaved.
 
 **What I would do next**, in order:
 
-1. **Extract a `Level` value object** from what `_apply_context` scatters across
-   `FoldWorld`'s members. It unblocks the hand-physics extraction *and* most of
-   finding 08 — one change closing the remainder of two findings.
-2. **Fix the error-severity logging in `FoldWorld._land_ball`** (1,964 ERROR lines
-   per suite run over a recoverable state).
-3. **Prune the remaining documentation.** `AGENTS.md` (566 lines) and `STATUS.md`
-   (821) were not touched here and are the last of finding 10.
-
-Items 1–3 are a day's work and buy back the ability to trust the repository.
-Item 6 is the large one, and it is safe to attempt only after 1–4.
+1. **Migrate `FoldWorld`'s internal call sites onto `level.x`** and delete the
+   compatibility properties. Mechanical, and it removes the last place where the
+   level's state can be read two ways.
+2. **Playtest the anchor economy.** Every remaining item in `STATUS.md` §"Next up" is
+   a design question, not an engineering one — which is a better place for this
+   project to be than where it started.
 
 ---
 
