@@ -276,7 +276,7 @@ func test_the_preview_band_is_drawn_in_every_copy() -> void:
 	world.tap_action(Vector2i(0, 1))
 	assert_eq(world.primed.size(), 1, "A pair is armed, so there is a band to preview")
 
-	world.overlay.prepare()
+	world.overlay.set_view(world._build_overlay_view())
 	assert_gt(world.overlay._bands.size(), 0, "The band is prepared")
 	var domain: PackedVector2Array = world.lattice.domain_polygon(1.0e6)
 	for poly in world.overlay._bands:
@@ -300,6 +300,6 @@ func test_the_preview_is_one_band_in_a_world_that_does_not_repeat() -> void:
 	world.tap_action(Vector2i(1, 0))
 	world.tap_action(Vector2i(-1, 0))
 	assert_eq(world.primed.size(), 1, "A pair is armed")
-	world.overlay.prepare()
+	world.overlay.set_view(world._build_overlay_view())
 	assert_eq(world.overlay._bands.size(), 1, "One band, unclipped")
 	assert_eq(world.overlay.offsets, [Vector2.ZERO], "...painted once")

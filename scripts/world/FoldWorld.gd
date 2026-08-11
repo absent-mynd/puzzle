@@ -356,7 +356,6 @@ func _ready() -> void:
 	pixel_view.add_child(hand_orbit)
 
 	overlay = WorldOverlay.new()
-	overlay.world = self
 	overlay.z_index = 50
 	pixel_view.add_child(overlay)
 
@@ -1967,6 +1966,11 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 
 func _process(delta: float) -> void:
 	_tick_hold(delta)
+	# The overlay draws a description of the frame, not this object. Building it here
+	# is also what makes it a per-FRAME cost: it used to gather itself from inside
+	# `paint()`, which WrapCanvas runs once per copy of the space.
+	if overlay != null:
+		overlay.set_view(_build_overlay_view())
 	if hand_orbit != null and player != null:
 		hand_orbit.follow(hands, player.global_position, player.velocity, player.facing, delta)
 	# Before the early-out: the lens has to keep working while a fold plays.
@@ -2005,6 +2009,82 @@ func _apply_anim_frame() -> void:
 		(batches["strip"] as TileBatch).deform(func(v: Vector2) -> Vector2:
 			return v + n * ((meet_d - (v - c1).dot(n)) * t))
 	player.global_position = Vector2(_anim["p_from"]).lerp(Vector2(_anim["p_to"]), eased)
+
+
+# ---------------------------------------------------------------------------
+# What the overlay draws
+# ---------------------------------------------------------------------------
+# One value per frame describing the markers, previews and rings — see OverlayView.
+# The overlay receives it and can do nothing else; it holds no reference back.
+#
+# Everything expensive is asked exactly once here. That is not an optimisation, it
+# is the reason this function exists: when the overlay held this object it asked
+# `glue_lines()` and `loose_hand_points()` from inside `paint()`, and WrapCanvas runs
+# `paint()` once per copy — 77 copies two folds deep, at 16.3ms of a 16.6ms frame.
+
+func _build_overlay_view() -> OverlayView:
+	var v := OverlayView.new()
+	if base == null or animating():
+		return v                        # mid-fold: the markers describe a configuration in flight
+
+	v.active = true
+	v.flat = lattice.is_flat()
+	v.cell_size = base.cell_size
+	v.world_px = Vector2(base.grid_size) * v.cell_size
+	v.domain = lattice.domain_polygon(v.world_px.length())
+
+	v.markers = seam_markers()
+	for fold in seams_within_burst():
+		v.in_reach.append({
+			"at": (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * v.cell_size,
+			"ok": can_unfold_fold(fold),
+		})
+
+	for id in doors:
+		var wp = door_point_here(id)
+		if wp != null:
+			v.doors.append(Vector2(wp))
+
+	# A hand that is down but not armed has no fuse; one in an armed pair carries its
+	# pair's progress, and both halves get the same number so they throb together.
+	for entry in unpaired:
+		v.hands_down.append(
+			{"at": anchor_point(entry), "kind": int(entry["hand"]), "fuse": -1.0})
+	for pair in primed:
+		var fuse := fuse_progress_of(pair)
+		for entry in [pair["a"], pair["b"]]:
+			v.hands_down.append(
+				{"at": anchor_point(entry), "kind": int(entry["hand"]), "fuse": fuse})
+		var ca = anchor_point(pair["a"])
+		var cb = anchor_point(pair["b"])
+		if ca != null and cb != null:
+			v.pairs.append({"a": Vector2(ca), "b": Vector2(cb)})
+
+	for entry in loose_hand_points():
+		var pickup: HandPickup = entry["pickup"]
+		v.loose.append({
+			"pos": Vector2(entry["pos"]),
+			"kind": pickup.kind,
+			"seed": WorldCore.hand_drift_seed(pickup.base_id, pickup.bp),
+		})
+	v.balls = hand_ball_points()
+
+	if not v.flat:
+		v.glue = glue_lines()
+		if sub_fold != null:
+			v.exit_at = sub_fold.crease_point1
+			v.exit_ok = exit_blocker() == null
+			v.exit_in_burst = glue_within_burst()
+
+	v.aim_at = (Vector2(candidate_anchor()) + Vector2(0.5, 0.5)) * v.cell_size
+	v.aim_hand = next_hand_type()
+	v.hold = hold_progress()
+
+	v.burst_t = burst_flash()
+	v.burst_radius = BURST_RADIUS
+	if player != null:
+		v.burst_at = player.global_position
+	return v
 
 
 # ---------------------------------------------------------------------------

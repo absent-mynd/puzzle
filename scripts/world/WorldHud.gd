@@ -9,11 +9,14 @@ class_name WorldHud extends Node
 ## that is a statement about game state; this decides how it appears.
 ##
 ## The interface is deliberately four setters and a tick, all taking plain values.
-## That is the point of the split: contrast `WorldOverlay`, which holds an untyped
-## back-reference to `FoldWorld` and reaches into two dozen of its members, and had
-## to give up its type annotation to avoid the load-order cycle that creates. A
-## view that takes what it needs as arguments cannot form a cycle in the first
-## place.
+## That is the point of the split, and `WorldOverlay` is what it looks like when the
+## split is not made: it held an untyped back-reference to `FoldWorld` and reached
+## into two dozen of its members, having given up its type annotation to avoid the
+## load-order cycle that creates. Two of those reaches turned out to be allocating
+## queries sitting on a path that runs once per copy of the space, which cost most of
+## a frame on a torus. It now takes an `OverlayView` like this takes strings. A view
+## that receives what it needs cannot form the cycle, and cannot quietly acquire a
+## cost inside a draw call.
 ##
 ## The HUD lives OUTSIDE the pixel viewport, at window resolution, so text stays
 ## legible rather than being scaled up as art pixels. See PixelArt.

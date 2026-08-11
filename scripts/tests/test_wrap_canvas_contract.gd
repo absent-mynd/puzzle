@@ -11,18 +11,20 @@ extends GutTest
 ## called `world.glue_lines()` — which scans every base piece for every period — and
 ## `_draw_loose_hands` called `world.loose_hand_points()`, which resolves every hand
 ## against every fragment. Both from inside `paint()`. Measured on a torus of 77
-## copies, the pair cost **16.3 ms of a 16.6 ms frame**; hoisted into `prepare()` they
-## cost 212 µs. The drawing was identical either way.
+## copies, the pair cost most of the frame; gathered once, the whole per-frame
+## description costs about 200 µs. The drawing was identical either way.
 ##
 ## Nothing detected it, because nothing about it is wrong except *where it happens* —
-## and the reason it could happen at all is that the overlay holds the whole world and
-## may ask it anything at any point, which is the coupling recorded as finding 08 of
-## the August 2026 review.
+## and the reason it could happen at all was that the overlay held the whole world and
+## could ask it anything at any point. That coupling is now gone: the overlay draws an
+## `OverlayView` handed to it by `FoldWorld` and has no way to ask for anything else.
 ##
-## So this file checks the shape rather than the timing: no query that ALLOCATES a
-## fresh container may be reached from a canvas's per-copy path. Cheap reads
-## (`world.lattice`, `world.player`, `world.base.cell_size`) are fine and are not
-## listed — the rule is about work that scales with the world, done once per band.
+## Both halves are checked here. The general rule — no query that ALLOCATES a fresh
+## container may be reached from any canvas's per-copy path — because the next
+## `WrapCanvas` subclass will not have a view-model. And the specific one, that the
+## overlay still holds no reference back, because that is what made the general rule
+## breakable in the first place. Cheap reads were never the problem; work that scales
+## with the world, done once per band, was.
 
 ## Queries that build a new Array or Dictionary every call. Adding one here is how you
 ## keep the next `glue_lines()` out of a draw loop.
@@ -134,13 +136,33 @@ func test_no_allocating_query_runs_once_per_copy() -> void:
 		"no allocating query is asked once per copy\n%s" % "\n".join(violations))
 
 
-func test_the_overlay_gathers_the_expensive_answers_once() -> void:
-	# The specific regression: these three were in the draw path and are now in
-	# prepare(). Asserted by name because they are the ones that were measured.
-	var funcs := _functions("res://scripts/world/WorldOverlay.gd")
-	assert_true(funcs.has("prepare"), "WorldOverlay overrides prepare()")
+func test_the_overlay_holds_no_reference_to_the_world() -> void:
+	# The closure condition for finding 08. The overlay used to hold FoldWorld itself
+	# — untyped, because naming it would have closed a load-order cycle — and reach
+	# into two dozen members whenever it liked. That is how two allocating queries
+	# ended up on the per-copy draw path without anyone deciding they should be.
+	#
+	# It now receives an OverlayView and cannot ask for anything else. Checked by
+	# source rather than by behaviour because "cannot" is the property that matters:
+	# a test that merely draws correctly would pass with the reference restored.
+	var text := FileAccess.get_file_as_string("res://scripts/world/WorldOverlay.gd")
+	var code: Array[String] = []
+	for raw in text.split("\n"):
+		code.append(_strip_comment(String(raw)))
+	var body := "\n".join(code)
 
-	var gathered := "\n".join(funcs.get("prepare", []))
+	assert_false(RegEx.create_from_string("\\bvar\\s+world\\b").search(body) != null,
+		"WorldOverlay declares no `world` member")
+	assert_false(RegEx.create_from_string("\\bworld\\.\\w+").search(body) != null,
+		"...and reaches into no world member")
+
+
+func test_the_view_is_built_where_it_can_be_built_once() -> void:
+	# The other half: FoldWorld owns the gathering, so the expensive queries happen
+	# once per frame in a function whose whole purpose is to be called once.
+	var text := FileAccess.get_file_as_string("res://scripts/world/FoldWorld.gd")
+	assert_string_contains(text, "func _build_overlay_view() -> OverlayView:",
+		"FoldWorld builds the view")
 	for query in ["glue_lines", "loose_hand_points", "hand_ball_points"]:
-		assert_string_contains(gathered, query,
-			"prepare() is where %s() is asked" % query)
+		assert_string_contains(text, query,
+			"...and %s() is asked there" % query)

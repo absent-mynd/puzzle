@@ -167,12 +167,22 @@ tile type should be one row in one table.
 
 ### 4. Giving a view a reference to the world
 
-`WorldOverlay` holds `var world  # untyped to avoid a load-order cycle` and reaches
-into two dozen members of `FoldWorld`. The missing type annotation is the receipt: a
-real dependency cycle is being suppressed by giving up static typing.
+`WorldOverlay` used to hold `var world  # untyped to avoid a load-order cycle` and
+reach into two dozen members of `FoldWorld`. The missing type annotation was the
+receipt: a real dependency cycle suppressed by giving up static typing.
 
-Prefer what `WorldHud` and `WorldCamera` do — take the facts you need as arguments.
-A view that receives what it needs cannot form that cycle in the first place.
+That was not a tidiness problem. Because the overlay could ask the world anything at
+any point, two allocating queries drifted into the per-copy draw path, where
+`WrapCanvas` runs them once per copy of the space — 77 copies two folds deep. They
+cost most of a frame. Nothing about the drawing was wrong; only where the question
+was asked, and with no boundary between the two objects there was no wrong side to
+be on.
+
+Do what `WorldHud`, `WorldCamera` and `OverlayView` do: **take the facts you need as
+arguments.** A view that receives what it needs cannot form the cycle, and cannot
+quietly acquire a cost inside a draw call. If a view needs a new fact, add a field to
+its view-model — a decision made once, in a file whose purpose is to list what a
+frame contains.
 
 ---
 
