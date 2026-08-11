@@ -5,10 +5,9 @@
 **Date:** 2026-08-11
 **Status:** point-in-time diagnosis. Not a document to maintain.
 
-> **Remediation status — everything in this review is closed except finding 08.**
-> The suite is **792/792 green**, the gates now actually gate, and a full run emits
-> **0 errors** where it emitted 1,964. Findings 01–07 and 09–11 are resolved.
-> Finding 08 (the `WorldOverlay` cycle) is not — see the correction below.
+> **Remediation status — every finding in this review is closed.** The suite is
+> **795/795 green**, the gates now actually gate, and a full run emits **0 errors**
+> where it emitted 1,964.
 >
 > Closing finding 01 turned up **two** further holes this document did not predict,
 > both noted below. The recurring lesson: every gate here was believed to work until
@@ -27,9 +26,9 @@
 >
 > **And it was underrated.** Filed P2 on structural grounds, finding 08 was hiding
 > the most expensive thing in the frame: two allocating queries on the per-copy draw
-> path cost **97.9% of a 60fps budget** two folds deep. Fixed; the finding stays
-> open because the cause did not change. See the note under it — and price a
-> coupling finding before scheduling it.
+> path cost most of a 60fps budget two folds deep. Both the symptom and the cause are
+> now fixed — see the note under it — but the lesson stands: **price a coupling
+> finding before you schedule it.** I would have got to this one last.
 
 ---
 
@@ -344,15 +343,26 @@ also breaks the cycle for real, at which point the type annotation comes back.
 > itself. When a view holds the whole world and may ask it anything at any point,
 > there is no boundary for a gather to be on the wrong side of.
 >
-> Fixed, with `test_wrap_canvas_contract.gd` to keep it fixed: it walks every
-> `WrapCanvas` subclass, computes what is reachable from `paint()`, and fails if any
-> of it calls a query that allocates. **The finding itself stays open** — the
-> overlay still holds an untyped reference and still reaches into 24 distinct
-> members, 12 of them per copy. This removed the worst consequence, not the cause.
+> **Closed (2026-08-11).** `OverlayView` is the view-model this section asked for: a
+> plain value listing what one frame contains — markers, doors, placed hands, preview
+> pairs, glue, the aim ring, the burst. `FoldWorld` fills one in per frame and hands
+> it over; the overlay draws it and can do nothing else.
 >
-> The general lesson is the one worth keeping: **a coupling finding is worth pricing
-> before it is scheduled.** This one was filed P2 on structural grounds and was
-> quietly the most expensive thing in the frame.
+> | | Before | After |
+> |---|---:|---:|
+> | Reach-throughs into `FoldWorld` | 24 | **0** |
+> | …of those, once per copy | 15 | **0** |
+> | Per-frame cost, 77 copies | 11.0 ms (65.8%) | **199 µs (1.2%)** |
+>
+> The 199 µs builds the *entire* view and re-clips the preview polygons —
+> `Geometry2D.intersect_polygons` was also running per copy. The drawing is identical.
+>
+> `test_wrap_canvas_contract.gd` holds both halves: the general rule that no
+> allocating query may be reached from any canvas's per-copy path, because the next
+> `WrapCanvas` subclass will not have a view-model; and the specific one that the
+> overlay declares no `world` member and reaches into none. The second is checked by
+> source rather than behaviour, because **"cannot" is the property that matters** — a
+> test that merely draws correctly would pass with the reference restored.
 
 ---
 
