@@ -1083,7 +1083,6 @@ func _release_anchor(entry, into_hand: bool) -> void:
 	p.bp = entry["bp"]
 	_ensure_pickups(p.region).append(p)
 	AudioManager.play_sfx(Sounds.HAND_DROP)
-	_refresh_pickup_visuals()
 
 
 ## Break a primed pair without folding it. Anchors within `reach` of `origin` come
@@ -1498,8 +1497,6 @@ func _toss_hand(kind: int, at: Vector2) -> void:
 ## the fold it is inside is not a place where time is passing for you either.
 func _step_hand_balls(delta: float) -> void:
 	hand_field.step(level, delta)
-	# The overlay draws in-flight balls, so it has to redraw while any is moving.
-	_refresh_pickup_visuals()
 
 
 ## Wake any resting hand whose ground has gone.
@@ -1531,7 +1528,6 @@ func _wake_unsupported_hands() -> void:
 		# drift phase rather than one that depends on how many are already up.
 		hand_field.launch(pickup.kind, Vector2(wp), level, Vector2.ZERO,
 			WorldCore.hand_drift_seed(pickup.base_id, pickup.bp))
-	_refresh_pickup_visuals()
 
 
 ## A hand that fell out of the sheet, put back somewhere it can be found.
@@ -1576,7 +1572,6 @@ func _land_ball(ball: Dictionary) -> void:
 			_ensure_pickups(String(ball["region"])).append(
 				HandPickup.dropped_at(
 					int(ball["kind"]), piece, rest + off, String(ball["region"])))
-			_refresh_pickup_visuals()
 			return
 	# No sheet within reach of where it stopped. This used to warn and RETURN, which
 	# destroyed the hand — the only place in the game that could, and invisible because a
@@ -1587,7 +1582,6 @@ func _land_ball(ball: Dictionary) -> void:
 		_ensure_pickups(String(ball["region"])).append(
 			HandPickup.dropped_at(
 				int(ball["kind"]), fallback, _spawn, String(ball["region"])))
-		_refresh_pickup_visuals()
 		push_warning("FoldWorld: a hand came to rest on nothing at %s; returned to spawn"
 			% rest)
 		return
@@ -2307,7 +2301,6 @@ func _check_pickups() -> void:
 			continue
 		hands[AnchorStock.first_empty(hands)] = int(ball["kind"])
 		hand_balls.remove_at(i)
-		_refresh_pickup_visuals()
 		AudioManager.play_sfx(Sounds.HAND_PICKUP)
 		_show_flash("Caught a %s hand." % HandTypes.type_name(int(ball["kind"])))
 		return
@@ -2322,7 +2315,6 @@ func _check_pickups() -> void:
 			continue
 		hands[AnchorStock.first_empty(hands)] = pickup.kind
 		loose_hands.remove_at(i)
-		_refresh_pickup_visuals()
 		AudioManager.play_sfx(Sounds.HAND_PICKUP)
 		_show_flash("Picked up a %s hand." % HandTypes.type_name(pickup.kind))
 		return
@@ -2343,14 +2335,6 @@ func loose_hand_points() -> Array:
 ## Balls flying in the other view are not here: they are not in this space.
 func hand_ball_points() -> Array:
 	return hand_field.points_in(level)
-
-
-## Loose hands are drawn by the overlay, which redraws itself every frame, so there is
-## nothing to rebuild — but taking or dropping one should also relight the scene, since
-## a hand is a thing the player is looking for.
-func _refresh_pickup_visuals() -> void:
-	if overlay != null:
-		overlay.queue_redraw()
 
 
 func _check_goal() -> void:
