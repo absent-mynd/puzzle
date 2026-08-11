@@ -65,8 +65,8 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | **The window-resolution overlay**: background, controls line, status readout, the centre flash and its lifetime. Told what to say; holds no reference back | `WorldHud.gd` |
 | **What the camera should be showing**: the lead, the lens, and the render-target size that stands in for zoom. Takes the world's facts as a context dictionary | `WorldCamera.gd` |
 | **Hands in the air**: the flight, the wrap, the turn-back at a band's end. Emits `landed` / `lost`; a hand at rest is an occupant and belongs to `FoldWorld` | `HandField.gd` |
-| Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing) | `PlayerBody.gd` |
-| Anchors, fold preview band, seam diamonds, glue lines, the hold-progress ring, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
+| Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing); wears the loading burst as a colour (`charge_color`) | `PlayerBody.gd` |
+| Anchors, fold preview band, seam diamonds, glue lines, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
 | The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |
 | **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping | `PixelArt.gd` |
 | **The tileset.** Kinds, variants, and base-space UVs for cut fragments | `TileAtlas.gd` |

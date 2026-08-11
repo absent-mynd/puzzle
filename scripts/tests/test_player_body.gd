@@ -249,3 +249,54 @@ func test_frozen_reports_still_however_stale_the_velocity_is() -> void:
 	assert_gt(body.motion_intensity(), 0.0, "Moving hard while free")
 	body.frozen = true
 	assert_eq(body.motion_intensity(), 0.0, "Frozen reads as still")
+
+
+# ---------------------------------------------------------------------------
+# The release charge, worn as a colour
+# ---------------------------------------------------------------------------
+# The body is the burst indicator. It is handed a 0..1 charge by the world and
+# knows nothing else about folding; the SHAPE of the blend is the whole of what a
+# player reads off it, so the shape is what these pin.
+
+
+## How far along BODY_COLOR -> CHARGE_COLOR a given charge lands, 0..1. Read off
+## blue, which is the channel the two colours are furthest apart in.
+func _tint(charge: float) -> float:
+	var col := PlayerBody.charge_color(charge)
+	return (col.b - PlayerBody.BODY_COLOR.b) \
+		/ (PlayerBody.CHARGE_COLOR.b - PlayerBody.BODY_COLOR.b)
+
+
+func test_an_uncharged_body_is_its_own_colour() -> void:
+	assert_eq(PlayerBody.charge_color(0.0), PlayerBody.BODY_COLOR,
+		"Nothing held, nothing to say")
+	assert_eq(body.visual_color(), PlayerBody.BODY_COLOR, "...and that is the default state")
+
+
+func test_the_charge_shows_late_rather_than_early() -> void:
+	# Squared on the way up, on purpose: taps are the common press by a wide margin,
+	# and a body that flickered on every hand you put down would be noise. The tint
+	# arrives near the threshold, which is where the thing it warns about is.
+	assert_lt(_tint(0.25), 0.05, "A quarter in — the length of a tap — is invisible")
+	assert_gt(_tint(0.9), _tint(0.5) * 2.0, "...and it is well underway by the end")
+	assert_lt(_tint(0.99), PlayerBody.LOADED_TINT,
+		"Never as far as loaded until it actually is")
+
+
+func test_loaded_is_a_step_and_not_the_top_of_the_ramp() -> void:
+	# "Ready" is a different fact from "nearly ready", and the pop waits for your
+	# finger now — so it has to be legible with nothing to compare against.
+	assert_almost_eq(_tint(1.0), PlayerBody.LOADED_TINT, 0.001, "Loaded wears the full tint")
+	assert_gt(_tint(1.0) - _tint(0.99), 0.3, "...and arrives in a step you cannot miss")
+
+
+func test_the_charge_is_clamped_at_both_ends() -> void:
+	assert_eq(PlayerBody.charge_color(-1.0), PlayerBody.BODY_COLOR, "Below zero is idle")
+	assert_eq(PlayerBody.charge_color(4.0), PlayerBody.charge_color(1.0),
+		"Holding longer does not tint harder — loaded is loaded")
+
+
+func test_the_body_wears_whatever_charge_it_is_handed() -> void:
+	body.fold_charge = 1.0
+	assert_eq(body.visual_color(), PlayerBody.charge_color(1.0),
+		"visual_color is the charge, and nothing else feeds it")
