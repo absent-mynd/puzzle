@@ -188,6 +188,11 @@ var context: Array[Fold] = []
 ## and they go off in the order their fuses run out rather than the order you placed
 ## them. A swift pair laid second fires before a patient pair laid first.
 ##
+## The traffic between the two lists runs BOTH ways: pairing takes an anchor out of
+## `unpaired`, and bursting one half of a pair puts the other half back into it
+## (`_disarm_pair`). A hand you did not reach has not moved and is not spent, so the
+## only list it can be in is the one for hands waiting on a partner.
+##
 ## There is no fixed number of either. Two registers is what wedged the game: an
 ## anchor left in another region sat in one of them forever, so every pair you formed
 ## afterwards contained a partner you could not reach and never fired.
@@ -924,7 +929,9 @@ func tap_action(dir: Vector2i) -> void:
 ## (`BURST_RADIUS`, about a tile and a third). Everything of yours inside it comes loose
 ## at once:
 ##
-##   - hands you have placed as anchors come back;
+##   - hands you have placed as anchors come back — and ONLY the ones inside it, so
+##     reaching one half of an armed pair disarms the pair and pops that half while
+##     the other stays pinned where you put it;
 ##   - folds whose seam is in reach come apart, if nothing newer is blocking them;
 ##   - inside a subspace, the glue anchor in reach is the way out;
 ##   - and any hand with nowhere to go POPS INTO THE WORLD at your feet.
@@ -932,6 +939,9 @@ func tap_action(dir: Vector2i) -> void:
 ## That last clause is what makes the burst safe to fire blind. Nothing is ever
 ## refused for want of a slot and nothing is ever destroyed: a hand that cannot be
 ## caught is simply a hand on the ground, which is the same object a cache is.
+##
+## The first clause is what makes it safe to fire NEAR something: the sphere is the
+## whole of what it touches, so nothing you cannot see moves when you press the key.
 ##
 ## Folds come apart one at a time and the first to animate takes the burst with it,
 ## so a stack under one diamond clears over several bursts rather than all at once.
@@ -949,14 +959,13 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 			_release_anchor(unpaired[i], true)
 			unpaired.remove_at(i)
 			freed += 1
-	# A primed pair with EITHER anchor in reach is broken: you cannot half-defuse a
-	# fold. What you can reach comes back to your hands, what you cannot drops where
-	# it was pinned — so reaching into an armed pair always costs you the far hand.
+	# A primed pair with EITHER anchor in reach is DISARMED — a fold needs two hands,
+	# so there is no such thing as half an armed pair — but only the halves you can
+	# actually reach come off. The far one stays pinned exactly where you put it.
 	for pair in primed.duplicate():
 		if _anchor_within(pair["a"], origin, BURST_RADIUS) \
 				or _anchor_within(pair["b"], origin, BURST_RADIUS):
-			_break_pair(pair, origin, BURST_RADIUS)
-			freed += 1
+			freed += _disarm_pair(pair, origin, BURST_RADIUS)
 
 	# Inside a fold, the glue anchor in reach is the exit.
 	if mode == Mode.SUBSPACE and _glue_within(origin, BURST_RADIUS):
@@ -1086,18 +1095,27 @@ func _release_anchor(entry, into_hand: bool) -> void:
 	AudioManager.play_sfx(Sounds.HAND_DROP)
 
 
-## Break a primed pair without folding it. Anchors within `reach` of `origin` come
-## back to your hands; the rest drop where they were pinned.
+## Disarm a primed pair without folding it: anchors within `reach` of `origin` are
+## POPPED and come back to your hands, and every other anchor of the pair STAYS
+## PINNED where it is. Returns how many hands came off.
 ##
-## An anchor is already stored as exactly what a loose hand is — a base identity plus
-## a point in that tile — so dropping one is a conversion rather than a placement, and
-## it lands on the spot you chose rather than at your feet.
-func _break_pair(pair: Dictionary, origin: Vector2, reach: float) -> void:
+## Reaching into an armed pair costs you the fuse, not the hand at the far end of it.
+## A hand you did not reach is a hand nothing happened to, and knocking it loose from
+## across the region would mean the only way to correct one badly placed end was to
+## walk to both. So the survivor simply goes back to `unpaired` — still on the spot you
+## chose, still yours to pair with — and being the newest entry there, it is the one
+## your next tap pairs with. Re-aiming a pair is now "burst the end you got wrong,
+## walk, tap": the end you got right never moves.
+func _disarm_pair(pair: Dictionary, origin: Vector2, reach: float) -> int:
 	primed.erase(pair)
+	var popped := 0
 	for entry in [pair["a"], pair["b"]]:
-		var wp = anchor_point(entry)
-		var caught: bool = wp != null and Vector2(wp).distance_to(origin) <= reach
-		_release_anchor(entry, caught)
+		if _anchor_within(entry, origin, reach):
+			_release_anchor(entry, true)
+			popped += 1
+		else:
+			unpaired.append(entry)
+	return popped
 
 
 ## A fold that would not go: every anchor of the pair drops where it was pinned.
