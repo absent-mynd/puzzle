@@ -255,7 +255,7 @@ func test_two_pairs_can_be_armed_at_once() -> void:
 	world.tap_action(Vector2i(1, 0))                        # (5,12)
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                        # (9,12) — pair one is armed
-	assert_eq(world.primed.size(), 1, "One pair counting down")
+	assert_eq(world.armed.size(), 1, "One pair counting down")
 
 	world.hands[0] = HandTypes.PLAIN                        # as if picked up
 	world.hands[1] = HandTypes.PLAIN
@@ -263,7 +263,7 @@ func test_two_pairs_can_be_armed_at_once() -> void:
 	world.tap_action(Vector2i(1, 0))                        # (21,5)
 	world.player.teleport(Vector2(25.5 * CS, 5.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                        # (26,5) — pair two is armed
-	assert_eq(world.primed.size(), 2, "Two folds armed at the same time")
+	assert_eq(world.armed.size(), 2, "Two folds armed at the same time")
 	assert_eq(world.hands_pending(), 4, "Four hands are out")
 
 
@@ -283,7 +283,7 @@ func test_pairs_fire_in_fuse_order_not_placement_order() -> void:
 	world.tap_action(Vector2i(1, 0))
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                        # swift pair, laid second
-	assert_eq(world.primed.size(), 2, "Both armed")
+	assert_eq(world.armed.size(), 2, "Both armed")
 
 	# Stand clear of the swift strip, or its fold swallows you and the patient pair —
 	# left at world level — stops resolving and quietly pauses.
@@ -291,24 +291,24 @@ func test_pairs_fire_in_fuse_order_not_placement_order() -> void:
 
 	# Long enough for swift (0.65s), nowhere near patient (3.2s).
 	world._tick_fuse(HandTypes.fuse(HandTypes.SWIFT) + 0.01)
-	assert_eq(world.primed.size(), 1, "The swift pair went first, though it was laid second")
+	assert_eq(world.armed.size(), 1, "The swift pair went first, though it was laid second")
 	assert_eq(world.folds.size(), 1, "...and its fold is in the world")
 
 	world._tick_fuse(HandTypes.fuse(HandTypes.PATIENT) + 0.01)
-	assert_eq(world.primed.size(), 0, "The patient pair follows in its own time")
+	assert_eq(world.armed.size(), 0, "The patient pair follows in its own time")
 
 
 func test_an_armed_pair_in_another_region_waits_for_you() -> void:
 	world.tap_action(Vector2i(1, 0))                        # (5,12)
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                        # (9,12) — armed in west
-	assert_eq(world.primed.size(), 1, "Armed")
+	assert_eq(world.armed.size(), 1, "Armed")
 
 	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
 	world._check_doors()
 	assert_eq(world.region_id, "east", "Left the region with a fold ticking")
 	world._tick_fuse(100.0)
-	assert_eq(world.primed.size(), 1, "It waits rather than firing where you cannot see")
+	assert_eq(world.armed.size(), 1, "It waits rather than firing where you cannot see")
 
 	# Arriving through a door latches it; stepping off is what clears the latch.
 	world.player.teleport(Vector2(6.5 * CS, 9.5 * CS), false)
@@ -317,7 +317,7 @@ func test_an_armed_pair_in_another_region_waits_for_you() -> void:
 	world._check_doors()
 	assert_eq(world.region_id, "west", "Back in west")
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
-	assert_eq(world.primed.size(), 0, "...and it resumes and fires when you return")
+	assert_eq(world.armed.size(), 0, "...and it resumes and fires when you return")
 
 
 func test_a_burst_into_an_armed_pair_breaks_the_whole_pair() -> void:
@@ -326,12 +326,12 @@ func test_a_burst_into_an_armed_pair_breaks_the_whole_pair() -> void:
 	world.tap_action(Vector2i(1, 0))                        # (5,12)
 	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                        # (21,12), far from the first
-	assert_eq(world.primed.size(), 1, "Armed")
+	assert_eq(world.armed.size(), 1, "Armed")
 	var loose_before: int = world.hands_loose()
 
 	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)   # stand on the near hand
 	world.hold_action()
-	assert_eq(world.primed.size(), 0, "The pair is broken")
+	assert_eq(world.armed.size(), 0, "The pair is broken")
 	assert_eq(world.hands_held(), 1, "The hand you reached came back")
 	assert_eq(world.hands_loose(), loose_before + 1, "...and the far one fell where it was")
 	assert_eq(_total(), _start_total, "Conserved")

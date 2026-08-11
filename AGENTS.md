@@ -367,7 +367,7 @@ Consequences worth keeping in mind when designing:
   hand at that tile's centre — half a cell in the air. Without settling, the first fold
   near a cache would drop it, since it was never really on the ground.
 - **There is no fixed number of placed anchors.** `unpaired` holds hands waiting for
-  a partner and `primed` holds pairs, each with its OWN fuse. Two fixed registers is
+  a partner and `armed` holds pairs, each with its OWN fuse. Two fixed registers is
   what wedged the game: a hand left in another region sat in one forever, so every
   pair formed afterwards contained an unreachable partner and never fired. Do not
   reintroduce a bound here — the bound is how many hands you are carrying.

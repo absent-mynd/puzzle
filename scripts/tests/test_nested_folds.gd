@@ -190,7 +190,7 @@ func test_you_can_pin_and_fold_at_depth_two() -> void:
 	world.tap_action(Vector2i(1, 0))
 	assert_eq(world.anchor_cells(), [Vector2i(14, 12)], "A hand pins to the sheet in here")
 	world.tap_action(Vector2i(-1, 0))
-	assert_eq(world.primed.size(), 1, "...and the second lights a fuse two layers down")
+	assert_eq(world.armed.size(), 1, "...and the second lights a fuse two layers down")
 
 
 func test_the_renderer_asks_the_lattice_and_nothing_else() -> void:
@@ -274,7 +274,7 @@ func test_the_preview_band_is_drawn_in_every_copy() -> void:
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(0, -1))
 	world.tap_action(Vector2i(0, 1))
-	assert_eq(world.primed.size(), 1, "A pair is armed, so there is a strip to preview")
+	assert_eq(world.armed.size(), 1, "A pair is armed, so there is a strip to preview")
 
 	world.overlay.set_view(world._build_overlay_view())
 	assert_gt(world.overlay._strips.size(), 0, "The strip is prepared")
@@ -299,7 +299,7 @@ func test_the_preview_is_one_band_in_a_world_that_does_not_repeat() -> void:
 	# the single full-extent strip it always was.
 	world.tap_action(Vector2i(1, 0))
 	world.tap_action(Vector2i(-1, 0))
-	assert_eq(world.primed.size(), 1, "A pair is armed")
+	assert_eq(world.armed.size(), 1, "A pair is armed")
 	world.overlay.set_view(world._build_overlay_view())
 	assert_eq(world.overlay._strips.size(), 1, "One strip, unclipped")
 	assert_eq(world.overlay.offsets, [Vector2.ZERO], "...painted once")

@@ -187,7 +187,7 @@ var context: Array[Fold] = []
 ## A pinned anchor is a hand that has LEFT you: out of its slot from the moment you
 ## place it, back only when you go and release it.
 ##
-## `unpaired` holds anchors still waiting for a partner. `primed` holds PAIRS, each
+## `unpaired` holds anchors still waiting for a partner. `armed` holds PAIRS, each
 ## counting its own fuse down independently — so several folds can be armed at once,
 ## and they go off in the order their fuses run out rather than the order you placed
 ## them. A swift pair laid second fires before a patient pair laid first.
@@ -196,7 +196,7 @@ var context: Array[Fold] = []
 ## anchor left in another region sat in one of them forever, so every pair you formed
 ## afterwards contained a partner you could not reach and never fired.
 var unpaired: Array = []
-var primed: Array = []
+var armed: Array = []
 
 ## The hands you are carrying: one entry per slot, a `HandTypes` id or null.
 ## See `HandStock` — this array is the whole of your possession.
@@ -239,7 +239,7 @@ var _hold_elapsed := 0.0
 ## Seconds left on the burst ring the overlay draws.
 var _burst_flash_left := 0.0
 
-# --- The fuse lives on each primed pair; see `primed`. ---
+# --- The fuse lives on each armed pair; see `armed`. ---
 
 # --- The CURRENT LEVEL (derived from `context` by _apply_context) ---
 # One set of these, not one per mode. The region world is the level whose context
@@ -414,7 +414,7 @@ func _setup_all() -> void:
 	region_lights = {}
 	_door_latch = {}
 	unpaired = []
-	primed = []
+	armed = []
 	hand_pickups = {}
 	# A hand in flight is a hand mid-event. A reset ends the event.
 	hand_field.clear()
@@ -836,7 +836,7 @@ func anchor_cells() -> Array:
 func all_anchors() -> Array:
 	var out: Array = []
 	out.append_array(unpaired)
-	for pair in primed:
+	for pair in armed:
 		out.append(pair["a"])
 		out.append(pair["b"])
 	return out
@@ -953,10 +953,10 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 			_release_anchor(unpaired[i], true)
 			unpaired.remove_at(i)
 			freed += 1
-	# A primed pair with EITHER anchor in reach is broken: you cannot half-defuse a
+	# An armed pair with EITHER anchor in reach is broken: you cannot half-defuse a
 	# fold. What you can reach comes back to your hands, what you cannot drops where
 	# it was pinned — so reaching into an armed pair always costs you the far hand.
-	for pair in primed.duplicate():
+	for pair in armed.duplicate():
 		if _anchor_within(pair["a"], origin, BURST_RADIUS) \
 				or _anchor_within(pair["b"], origin, BURST_RADIUS):
 			_break_pair(pair, origin, BURST_RADIUS)
@@ -1049,7 +1049,7 @@ func burst_flash() -> float:
 ## out, not the order you laid them.
 func _prime(a, b) -> void:
 	var total: float = HandTypes.fuse_for(int(a["hand"]), int(b["hand"]))
-	primed.append({"a": a, "b": b, "left": total, "total": total})
+	armed.append({"a": a, "b": b, "left": total, "total": total})
 	# The fuse is the one thing in this game that goes off without you: it is
 	# the only warning there is, and it plays over the hand you just placed.
 	AudioManager.play_sfx(Sounds.PAIR_ARMED)
@@ -1090,14 +1090,14 @@ func _release_anchor(entry, into_hand: bool) -> void:
 	AudioManager.play_sfx(Sounds.HAND_DROP)
 
 
-## Break a primed pair without folding it. Anchors within `reach` of `origin` come
+## Break an armed pair without folding it. Anchors within `reach` of `origin` come
 ## back to your hands; the rest drop where they were pinned.
 ##
 ## An anchor is already stored as exactly what a loose hand is — a base identity plus
 ## a point in that tile — so dropping one is a conversion rather than a placement, and
 ## it lands on the spot you chose rather than at your feet.
 func _break_pair(pair: Dictionary, origin: Vector2, reach: float) -> void:
-	primed.erase(pair)
+	armed.erase(pair)
 	for entry in [pair["a"], pair["b"]]:
 		var wp = anchor_point(entry)
 		var caught: bool = wp != null and Vector2(wp).distance_to(origin) <= reach
@@ -1109,7 +1109,7 @@ func _break_pair(pair: Dictionary, origin: Vector2, reach: float) -> void:
 ## free, and the hands lying on the spots you chose still hold the shape of the fold
 ## you tried to make. Go and pick them up, or leave them and pin somewhere better.
 func _scatter_pair(pair: Dictionary) -> void:
-	primed.erase(pair)
+	armed.erase(pair)
 	# The one place a refused fold is heard. Every refusal in `fire_pair` and
 	# `do_fold` funnels through here, so the sound sits where the OUTCOME is
 	# rather than being repeated at each of the six ways to reach it — and it
@@ -1119,7 +1119,7 @@ func _scatter_pair(pair: Dictionary) -> void:
 		_release_anchor(entry, false)
 
 
-## Fire one primed pair. Called by its fuse, never by a keypress.
+## Fire one armed pair. Called by its fuse, never by a keypress.
 func fire_pair(pair: Dictionary) -> void:
 	if animating():
 		return
@@ -1145,7 +1145,7 @@ func fire_pair(pair: Dictionary) -> void:
 	if committed:
 		# The fold is holding the SAME two hands that were pinned — they went from
 		# your slots to the anchors to the fold without ever being duplicated.
-		primed.erase(pair)
+		armed.erase(pair)
 	else:
 		# `do_fold` has already said why. The hands falling where they stood is the
 		# rest of the answer, and it needs no words.
@@ -1190,7 +1190,7 @@ func hands_in_folds() -> int:
 
 
 func hands_pending() -> int:
-	return unpaired.size() + primed.size() * HandStock.HANDS_PER_FOLD
+	return unpaired.size() + armed.size() * HandStock.HANDS_PER_FOLD
 
 
 func can_place_hand() -> bool:
@@ -1232,7 +1232,7 @@ func hands_total() -> int:
 
 ## Is any pair counting down?
 func fuse_running() -> bool:
-	return not primed.is_empty()
+	return not armed.is_empty()
 
 
 ## How far through its fuse a pair is, 0 (just lit) to 1 (folding now). The overlay
@@ -1248,7 +1248,7 @@ func fuse_progress_of(pair: Dictionary) -> float:
 ## The progress of whichever pair is closest to firing, or 0 if none is armed.
 func fuse_progress() -> float:
 	var best := 0.0
-	for pair in primed:
+	for pair in armed:
 		best = maxf(best, fuse_progress_of(pair))
 	return best
 
@@ -1261,10 +1261,10 @@ func fuse_progress() -> float:
 ## Iterated over a copy: firing a pair re-derives the world and can scatter or move
 ## the others, so the list must not be mutated underneath the loop.
 func _tick_fuse(delta: float) -> void:
-	for pair in primed.duplicate():
+	for pair in armed.duplicate():
 		if animating():
 			return
-		if not primed.has(pair):
+		if not armed.has(pair):
 			continue
 		if not anchor_here(pair["a"]) or not anchor_here(pair["b"]):
 			continue
@@ -2055,7 +2055,7 @@ func _build_overlay_view() -> OverlayView:
 	for entry in unpaired:
 		v.hands_down.append(
 			{"at": anchor_point(entry), "kind": int(entry["hand"]), "fuse": -1.0})
-	for pair in primed:
+	for pair in armed:
 		var fuse := fuse_progress_of(pair)
 		for entry in [pair["a"], pair["b"]]:
 			v.hands_down.append(
@@ -2404,8 +2404,8 @@ func _update_status() -> void:
 		kinds.append("—" if h == null else HandTypes.type_name(int(h)))
 	var stock := "Hands: %s   (%d down, %d in folds)" \
 		% [" ".join(kinds), hands_pending(), hands_in_folds()]
-	if not primed.is_empty():
-		stock += "   %d armed" % primed.size()
+	if not armed.is_empty():
+		stock += "   %d armed" % armed.size()
 	if context.is_empty():
 		hud.set_status("Region: %s   Folds: %d   Mode: WORLD\n%s"
 			% [region_id, folds.size(), stock])
