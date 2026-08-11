@@ -66,7 +66,16 @@ func run() -> void:
 
 
 ## Test files present on disk that GUT did not collect.
+##
+## Returns nothing for a FILTERED run. `./run_tests.sh world` (which becomes
+## `-gselect=world`) deliberately runs a subset, so "these files did not run" is the
+## requested outcome rather than a fault — checking it there would make the everyday
+## narrow-it-down loop fail every time. The check that matters is on the full run,
+## which is what CI and the pre-push hook do.
 func _scripts_that_never_loaded() -> Array[String]:
+	if String(gut._select_script) != "":
+		return []
+
 	var config := _config()
 	var prefix := String(config.get("prefix", DEFAULT_PREFIX))
 	var suffix := String(config.get("suffix", DEFAULT_SUFFIX))

@@ -242,8 +242,6 @@ var free_extent: Dictionary = {}
 ## `context.back()`.
 var sub_fold: Fold = null
 
-var _on_screen_lights: Array = []
-
 # --- Animation ---
 var anim_enabled := true
 var _anim: Dictionary = {}
@@ -1484,13 +1482,18 @@ func _step_hand_balls(delta: float) -> void:
 			# The one direction a space may NOT repeat in is the one direction a thing
 			# can genuinely leave by. Turn it back the way the fold turns the player
 			# back — and on a torus there is no such direction, so nothing to do.
-			var free := lattice.free_axis()
-			if free != Vector2.ZERO and not free_extent.is_empty():
-				var tproj := Vector2(ball["pos"]).dot(free)
-				if tproj < float(free_extent["min"]) - 4.0 * CS \
-						or tproj > float(free_extent["max"]) + 4.0 * CS:
-					hand_balls.remove_at(i)
-					_recover_lost_hand(int(ball["kind"]))
+			#
+			# This used to call `_recover_lost_hand`, which is the WORLD-level answer:
+			# it settles the hand at the player's feet. Inside a fold that point is
+			# routinely outside the strip, so the hand bound to nothing, was put back
+			# in the air, drifted out again and was recovered again — the exact loop
+			# `_recover_lost_hand`'s own comment says it exists to prevent, moved from
+			# the world level into subspaces. It was invisible because the ledger
+			# stayed correct throughout and the hand really was still in the band; the
+			# only outward sign was 1,964 identical ERROR lines per suite run.
+			if _left_the_band(Vector2(ball["pos"])):
+				ball["pos"] = _turn_back_point()
+				ball["vel"] = Vector2.ZERO
 		elif Vector2(ball["pos"]).y > (base.grid_size.y + 8) * CS:
 			# At world level there is a bottom to fall off. Rather than lose the hand —
 			# the one thing this system must never do — put it back somewhere findable.
@@ -1596,6 +1599,15 @@ func _land_ball(ball: Dictionary) -> void:
 		return
 	# Nothing anywhere — a world with no sheet under its own spawn. Keep the hand in the
 	# air rather than deleting it: an orbiting hand is still countable and catchable.
+	#
+	# `homeless` marks a ball that has already been through here, and it is load-bearing
+	# for the LOG rather than for the physics. This state is stable: the ball is put back
+	# in flight, comes to rest on the same geometry next step, fails to bind again, and
+	# arrives back here — so reporting on every attempt reports the same hand forever. It
+	# did: one hand at (864, 1568) produced 1,964 identical ERROR lines in a 16-second
+	# suite run, which is not an error message, it is a screen that hides the next real
+	# one. Say it once, when the hand ENTERS the state.
+	var already: bool = bool(ball.get("homeless", false))
 	hand_balls.append({
 		"kind": int(ball["kind"]),
 		"pos": rest,
@@ -1604,8 +1616,12 @@ func _land_ball(ball: Dictionary) -> void:
 		"region": String(ball["region"]),
 		"in_sub": mode == Mode.SUBSPACE,
 		"seed": WorldCore.hand_drift_seed(0, rest),
+		"homeless": true,
 	})
-	push_error("FoldWorld: nowhere at all to land a hand near %s" % rest)
+	if not already:
+		push_error(("FoldWorld: nowhere at all to land a hand near %s — no sheet under it, "
+			+ "and none under the spawn either. Keeping it in flight so it stays "
+			+ "countable and catchable.") % rest)
 
 
 ## Carry every in-flight ball through a fold, exactly as the player is carried.
@@ -2125,6 +2141,27 @@ func _physics_process(delta: float) -> void:
 ##
 ## Every axis at once, so a torus wraps in both directions in one step, and a
 ## region — with no axes at all — does nothing here.
+## Has `point` run off the one end a band actually has?
+##
+## Only a cylinder has such an end: a torus repeats both ways and has nowhere to
+## leave by, and a region uses the fall-out-of-the-world respawn instead. The 4-cell
+## slack keeps a thing that is merely near the end from counting as past it.
+func _left_the_band(point: Vector2) -> bool:
+	var free := lattice.free_axis()
+	if free == Vector2.ZERO or free_extent.is_empty():
+		return false
+	var t := point.dot(free)
+	return t < float(free_extent["min"]) - 4.0 * CS \
+		or t > float(free_extent["max"]) + 4.0 * CS
+
+
+## Where something that ran off the end of a band is put back: the middle of the
+## band it just left.
+func _turn_back_point() -> Vector2:
+	var period: Vector2 = lattice.periods()[0]
+	return sub_fold.crease_point1 + period * 0.5
+
+
 func _wrap_body() -> void:
 	var delta := lattice.wrap_delta(player.global_position)
 	if delta != Vector2.ZERO:
@@ -2140,14 +2177,8 @@ func _wrap_body() -> void:
 	# blocked by a crossing fold): the fold turns you back into itself. Only a
 	# cylinder has such an end — a torus has nowhere to go, and a region has the
 	# fall-out-of-the-world respawn instead.
-	var free := lattice.free_axis()
-	if free == Vector2.ZERO or free_extent.is_empty():
-		return
-	var tproj := player.global_position.dot(free)
-	if tproj < float(free_extent["min"]) - 4.0 * CS \
-			or tproj > float(free_extent["max"]) + 4.0 * CS:
-		var period: Vector2 = lattice.periods()[0]
-		var back := sub_fold.crease_point1 + period * 0.5
+	if _left_the_band(player.global_position):
+		var back := _turn_back_point()
 		var landed := WorldCore.depenetrate(back, PlayerBody.RADIUS, wall_polys)
 		player.teleport(back if landed == Vector2.INF else landed, false)
 		_cut_camera()

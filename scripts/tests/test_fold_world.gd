@@ -1338,6 +1338,46 @@ func test_a_hand_in_orbit_stays_within_the_band_it_orbits() -> void:
 		assert_between(d, -1.0, gap + 1.0, "Stays in the fundamental band")
 
 
+func test_a_hand_that_runs_off_the_end_of_a_band_is_turned_back_into_it() -> void:
+	# A cylinder has exactly one end you can leave by, and the fold turns you back into
+	# itself rather than letting you go. That is the rule for the body (`_wrap_body`),
+	# and it has to be the rule for a hand, because they are the same event.
+	#
+	# It was not. The ball took the WORLD-level answer instead — `_recover_lost_hand`,
+	# which settles the hand at the player's feet. Inside a fold that point is routinely
+	# outside the strip, so the hand bound to nothing, was put back in the air, drifted
+	# out again and was recovered again, indefinitely. Nothing caught it: the ledger
+	# stayed correct, the hand really was still in the band, and the tests that watched
+	# the WRAP axis saw nothing wrong because the escape was along the free one. The
+	# only outward sign was 1,964 identical ERROR lines in a 16-second suite run.
+	world.hands[0] = null
+	world._drop_hand(HandTypes.PLAIN, Vector2(13.5 * CS, 12.2 * CS))
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
+	assert_eq(world.mode, world.Mode.SUBSPACE, "The fold swallowed the player")
+
+	var free: Vector2 = world.lattice.free_axis()
+	assert_ne(free, Vector2.ZERO, "A strip is a cylinder, so it has one free axis")
+	assert_false(world.free_extent.is_empty(), "...and a measured extent along it")
+
+	var lo: float = float(world.free_extent["min"]) - 4.0 * CS
+	var hi: float = float(world.free_extent["max"]) + 4.0 * CS
+	var escaped_to := INF
+	for _i in range(1200):
+		world._step_hand_balls(1.0 / 60.0)
+		if world.hand_balls.is_empty():
+			break
+		var t: float = Vector2(world.hand_balls[0]["pos"]).dot(free)
+		if t < lo or t > hi:
+			escaped_to = t
+			break
+
+	assert_eq(escaped_to, INF,
+		"Never posted outside the band along its free axis (reached %s, band is %s..%s)"
+			% [escaped_to, lo, hi])
+	assert_eq(_total(), _start_total, "and it is still one of the world's hands throughout")
+
+
 func test_a_hand_in_orbit_can_still_be_caught() -> void:
 	# It is a real object in a real place, so it is collectable like any other. This is
 	# what makes an orbiting hand a feature rather than a hand you have lost.
