@@ -434,10 +434,11 @@ func _setup_all() -> void:
 		var pieces: Array = FoldReplay.identity_pieces(rbase)
 		for pair in world_data.fold_pairs(id):
 			var f := Fold.create(_take_fold_id(), pair[0], pair[1], CS)
-			var dropped := WorldCore.capture_strip(pieces, f, CS)
-			rsegs[f.fold_id] = WorldCore.seam_segment(f, dropped, CS)
+			# One clip pass, both halves — see FoldReplay.fold_and_capture.
+			var cut := FoldReplay.fold_and_capture(pieces, f, CS)
+			rsegs[f.fold_id] = WorldCore.seam_segment(f, cut["dropped"], CS)
 			rfolds.append(f)
-			pieces = FoldReplay.apply_one_fold(pieces, f, CS)
+			pieces = cut["pieces"]
 		regions[id] = {"base": rbase, "folds": rfolds, "seam_segs": rsegs,
 			"interiors": {}, "spawn": world_data.spawn_px(id)}
 
@@ -1320,9 +1321,15 @@ func _hands_for_fold(pinned: Array[int]) -> Array[int]:
 func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS)
 	var pre: Array = current_pieces
+	# ONE clip pass for both halves. The flaps become the new fragment list and the
+	# strip between them becomes the subspace; `CollisionCore.fold_polygons` produces
+	# both from the same cut, and asking for them separately clipped the whole world
+	# twice. See FoldReplay.fold_and_capture.
+	#
 	# Cut from the same content `_compute_level` will hand you when it swallows
 	# you, so the refusal here and the place you land agree.
-	var dropped := WorldCore.capture_strip(pre, fold, CS)
+	var cut := FoldReplay.fold_and_capture(pre, fold, CS)
+	var dropped: Array = cut["dropped"]
 	if dropped.is_empty():
 		_show_flash("Nothing there to fold.")
 		return false
@@ -1331,7 +1338,7 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 		return false
 
 	var from_piece = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
-	var new_pieces := FoldReplay.apply_one_fold(pre, fold, CS)
+	var new_pieces: Array = cut["pieces"]
 	var dest = null
 	if from_piece != null:
 		dest = BaseFrame.world_point_from_base(

@@ -46,10 +46,45 @@ rebuild_world()     # re-derive
 There is no inverse to get wrong, no snapshot to go stale, and no ordering constraint
 — any fold can be removed at any time.
 
-**Cost:** re-deriving is O(pieces × folds) on every change. At current world sizes
-this is microseconds and not worth optimizing. If it ever matters, the fix is
-incremental extension (`FoldReplay.apply_one_fold` already exists for exactly that),
-not a return to mutation.
+**Cost:** re-deriving is O(pieces × folds) on every change, and it is the most
+expensive thing the game does. Measured 2026-08-11 on the shipped region (792
+fragments, headless): one replay of one fold is **~15 ms** — the clip is
+Sutherland-Hodgman per fragment, so the O() is not a formality. A whole `do_fold`
+is ~68 ms, about four frames at 60fps, masked by the 0.24 s fold animation.
+
+> An earlier version of this paragraph said "at current world sizes this is
+> microseconds and not worth optimizing." That was wrong by four orders of
+> magnitude, and it is the sentence that would stop someone profiling here. It is
+> corrected rather than deleted because the mistake is instructive: the decision is
+> still right, and the number attached to it was never checked.
+
+**This does not change the decision.** The cost buys the property the decision
+exists for — no inverse to get wrong, no snapshot to go stale, no ordering
+constraint — and that property has already paid for itself several times over.
+
+**Where the remaining cost is, if you come here to optimize.** A fold used to clip
+every fragment *twice*: `capture_strip` and `apply_one_fold` are the same loop over
+`CollisionCore.fold_polygons`, keeping different parts of the same answer.
+`FoldReplay.fold_and_capture` now does it once, which took a fold from ~82 ms to
+~68 ms with no cached state. What is left is ~16 ms of clip and ~17 ms of view
+rebuild (terrain batch + collision shapes).
+
+**What has been tried and does not work.** Pooling the `CollisionPolygon2D` nodes
+instead of recreating them is *slower* (5.7 ms vs 4.2 ms — assigning `.polygon` on a
+parented node triggers the same physics-shape rebuild). Caching `TileAtlas.uv_for`
+by base polygon is *slower* (8.5 ms vs 3.8 ms — hashing the polygon costs more than
+the computation it saves), even though 95% of fragments do keep their base polygon
+through a fold. Rediscovering *what changed* by comparing geometry costs more than
+recomputing it.
+
+**The one real option left**, and the reason it has not been taken: `do_fold`
+already holds the derived list that `rebuild()` then recomputes, so handing it over
+would save another ~15 ms. It is safe *today* — every mutator guards on
+`animating()`, and `_reset` cancels a pending finalize — but it would make those
+~16 scattered guards load-bearing for the correctness of the rendered world rather
+than merely for input sanity, and no test would catch a future path that missed
+one. That is the snapshot this decision exists to avoid. Take it only with a test
+that pins the invariant.
 
 ---
 
