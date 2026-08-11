@@ -80,62 +80,6 @@
 						"y": 9
 					},
 					"kind": "swift"
-				},
-				{
-					"cell": {
-						"x": 5,
-						"y": 4
-					},
-					"kind": "patient"
-				},
-				{
-					"cell": {
-						"x": 7,
-						"y": 7
-					},
-					"kind": "patient"
-				},
-				{
-					"cell": {
-						"x": 3,
-						"y": 6
-					},
-					"kind": "patient"
-				},
-				{
-					"cell": {
-						"x": 2,
-						"y": 3
-					},
-					"kind": "patient"
-				},
-				{
-					"cell": {
-						"x": 9,
-						"y": 2
-					},
-					"kind": "patient"
-				},
-				{
-					"cell": {
-						"x": 8,
-						"y": 5
-					},
-					"kind": "patient"
-				},
-				{
-					"cell": {
-						"x": 4,
-						"y": 1
-					},
-					"kind": "patient"
-				},
-				{
-					"cell": {
-						"x": 6,
-						"y": 2
-					},
-					"kind": "patient"
 				}
 			],
 			"lights": [
