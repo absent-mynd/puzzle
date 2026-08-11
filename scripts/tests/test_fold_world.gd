@@ -267,6 +267,31 @@ func test_two_pairs_can_be_armed_at_once() -> void:
 	assert_eq(world.hands_pending(), 4, "Four hands are out")
 
 
+func test_two_hands_on_one_cell_arm_a_pair_the_preview_can_survive() -> void:
+	# Placement asks only that there be sheet to pin to, so both hands CAN come down
+	# on one cell, and the pair then stands armed for a whole fuse before anything
+	# refuses it. The overlay has to be able to draw that frame: a pair whose anchors
+	# coincide implies no crease direction and so no band, and `draw_colored_polygon`
+	# errors on a polygon with no points — once per copy of the space, every frame the
+	# fuse is running.
+	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	world.tap_action(Vector2i(1, 0))                        # (5,12) again — one cell, two hands
+	assert_eq(world.primed.size(), 1, "Both hands on one cell still arm a pair")
+
+	world._process(0.0)                                     # the real per-frame overlay refresh
+	var view: OverlayView = world.overlay._view
+	assert_eq(view.pairs.size(), 1, "The frame describes the armed pair")
+	assert_true(Vector2(view.pairs[0]["a"]).is_equal_approx(Vector2(view.pairs[0]["b"])),
+		"...as two anchors resolving to one point")
+	assert_eq(world.overlay._bands, [], "...and the preview draws no band for it")
+
+	# The fuse is still what refuses it — see WorldCore.anchors_valid.
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.folds.size(), 0, "No fold: the pair had no crease direction")
+	assert_eq(world.primed.size(), 0, "...and it is gone rather than left ticking")
+	assert_eq(_total(), _start_total, "Conserved")
+
+
 func test_pairs_fire_in_fuse_order_not_placement_order() -> void:
 	# The behaviour that falls out of per-pair fuses: a swift pair laid SECOND goes
 	# off before a patient pair laid first.
