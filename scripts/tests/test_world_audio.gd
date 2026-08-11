@@ -154,9 +154,10 @@ func test_a_fold_that_will_not_go_is_heard_to_fail_and_scatter() -> void:
 	assert_false(_heard(Sounds.FOLD), "a refusal must never sound like a fold")
 
 
-func test_a_hand_caught_by_a_burst_is_silent_but_a_dropped_one_is_not() -> void:
-	# One anchor in reach, one far away: the burst catches the near hand and
-	# drops the far one. Only the drop should be heard.
+func test_a_burst_that_pops_one_half_of_a_pair_drops_nothing() -> void:
+	# One anchor in reach, one far away: the burst pops the near hand and leaves the
+	# far one pinned. A hand caught is silent and a hand untouched is silent, so the
+	# whole gesture is — the ground is not involved.
 	world.tap_action(Vector2i(1, 0))                            # (5,12)
 	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                            # (21,12)
@@ -165,8 +166,26 @@ func test_a_hand_caught_by_a_burst_is_silent_but_a_dropped_one_is_not() -> void:
 	world.hold_action()
 
 	assert_eq(world.hands_held(), 1, "the reachable hand came back")
-	assert_eq(_count(Sounds.HAND_DROP), 1,
-		"only the hand that reached the ground is heard")
+	assert_true(_heard(Sounds.BURST), "the burst itself is heard")
+	assert_eq(_count(Sounds.HAND_DROP), 0,
+		"the far hand never moved, so nothing is heard to fall")
+
+
+func test_a_popped_hand_with_no_slot_to_go_to_is_heard_to_fall() -> void:
+	# The other half of the same claim: what makes a hand audible is being LET GO OF,
+	# not being popped. Fill both slots while the pair ticks — as if you had walked
+	# over two caches — and the hand you pop has nowhere to land but the floor.
+	world.tap_action(Vector2i(1, 0))                            # (5,12)
+	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                            # (21,12)
+	world.hands[0] = HandTypes.PLAIN
+	world.hands[1] = HandTypes.PLAIN
+	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)
+	_listen()
+	world.hold_action()
+
+	assert_eq(world.hands_held(), 2, "your slots were already full")
+	assert_eq(_count(Sounds.HAND_DROP), 1, "so the hand you popped is heard to fall")
 
 
 # ---------------------------------------------------------------------------

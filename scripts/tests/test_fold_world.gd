@@ -320,9 +320,10 @@ func test_an_armed_pair_in_another_region_waits_for_you() -> void:
 	assert_eq(world.primed.size(), 0, "...and it resumes and fires when you return")
 
 
-func test_a_burst_into_an_armed_pair_breaks_the_whole_pair() -> void:
-	# You cannot half-defuse a fold. What you can reach comes back; the far hand
-	# drops where it was pinned, so reaching into an armed pair always costs you one.
+func test_a_burst_pops_the_half_it_reaches_and_leaves_the_other_pinned() -> void:
+	# Reaching into an armed pair costs you the FUSE, not the hand at the far end of
+	# it. The half you stood on comes back; the half across the region was not inside
+	# the sphere, so nothing happened to it.
 	world.tap_action(Vector2i(1, 0))                        # (5,12)
 	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
 	world.tap_action(Vector2i(1, 0))                        # (21,12), far from the first
@@ -331,9 +332,48 @@ func test_a_burst_into_an_armed_pair_breaks_the_whole_pair() -> void:
 
 	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)   # stand on the near hand
 	world.hold_action()
-	assert_eq(world.primed.size(), 0, "The pair is broken")
+	assert_eq(world.primed.size(), 0, "Disarmed — one hand alone cannot fold")
 	assert_eq(world.hands_held(), 1, "The hand you reached came back")
-	assert_eq(world.hands_loose(), loose_before + 1, "...and the far one fell where it was")
+	assert_eq(world.hands_loose(), loose_before, "...and nothing was knocked loose")
+	assert_eq(world.anchor_cells(), [Vector2i(21, 12)],
+		"The far hand is still pinned on the spot you chose")
+	assert_eq(world.hands_pending(), 1, "...and it is still a hand you have out")
+	assert_eq(_total(), _start_total, "Conserved")
+
+
+func test_the_half_left_behind_is_what_your_next_hand_pairs_with() -> void:
+	# So re-aiming a pair is "burst the end you got wrong, walk, tap again" — the end
+	# you got right never moves.
+	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                        # (21,12)
+	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)
+	world.hold_action()                                     # pop the west end only
+	assert_eq(world.primed.size(), 0, "Disarmed")
+
+	world.player.teleport(Vector2(25.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                        # (26,12)
+	assert_eq(world.primed.size(), 1, "The hand it was left waiting for arrived")
+	assert_eq(world.anchor_cells(), [Vector2i(21, 12), Vector2i(26, 12)],
+		"...and the pair is the survivor plus the new hand, not two new ones")
+	assert_eq(_total(), _start_total, "Conserved")
+
+
+func test_a_burst_that_reaches_both_halves_takes_both() -> void:
+	# The rule is only ever "what is inside the sphere": stand between two hands a
+	# cell apart and both are inside it.
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	world.player.teleport(Vector2(6.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                        # (7,12) — armed, and adjacent
+	assert_eq(world.primed.size(), 1, "Armed")
+	var loose_before: int = world.hands_loose()
+
+	world.hold_action()                                     # standing between them
+	assert_eq(world.primed.size(), 0, "Disarmed")
+	assert_eq(world.anchor_cells(), [], "Both halves were in reach, so both came off")
+	assert_eq(world.hands_held(), 2, "...and both are back in your slots")
+	assert_eq(world.hands_loose(), loose_before, "Nothing fell")
 	assert_eq(_total(), _start_total, "Conserved")
 
 

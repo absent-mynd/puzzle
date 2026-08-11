@@ -122,8 +122,9 @@ about a tile and a third — tune it in `FoldWorld`). It is **not aimed**: where
 the whole input. Everything of yours inside it comes loose at once —
 
 - unpaired hands you placed come back;
-- armed pairs you can reach either half of come apart — what you can reach comes
-  back, the far hand falls where it was pinned;
+- armed pairs you can reach either half of are **disarmed** — the halves inside
+  the sphere come back, and any half outside it stays pinned exactly where it
+  was, waiting for a partner again;
 - folds whose seam is in reach come apart, if nothing newer is blocking them;
 - inside a fold, the glue anchor in reach is the way out;
 - and **any hand with nowhere to go pops into the world at your feet.**
@@ -160,9 +161,13 @@ What they tell you is how many you have and what **kind** they are.
   counts its own fuse, so they go off in the order their fuses run out rather
   than the order you laid them: a swift pair laid second fires before a patient
   pair laid first.
-- **Bursting takes back** whatever is in reach. Reaching either half of an armed
-  pair breaks the whole pair — the far hand drops where it was pinned, so
-  reaching into one always costs you a hand.
+- **Bursting takes back** whatever is in reach, and *only* that. Reaching either
+  half of an armed pair disarms the pair — a fold needs two hands — but takes
+  back only the halves you actually reached. The far one stays pinned where you
+  put it and goes back to waiting for a partner, so reaching into an armed pair
+  costs you the fuse, not a hand. Since the survivor is the newest hand waiting,
+  it is the one your next tap pairs with: **re-aim a pair by bursting the end
+  you got wrong, walking, and tapping again.**
 - A pair that **fails at the fuse** drops both hands from where they were pinned.
 - **Unfolding gives back the same two hands that went in** — kinds and all.
 - Hands with nowhere to go **land on the ground** rather than being refused.
