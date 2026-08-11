@@ -80,7 +80,17 @@ func _rebuild_preview() -> void:
 
 ## `poly` cut down to one copy of the space. A domain of fewer than three points
 ## means the space does not repeat, and then there is nothing to cut it down to.
+##
+## Nothing undrawable comes out of here. Fewer than three points is not a polygon
+## and `draw_colored_polygon` refuses one — once per copy of the space, every frame,
+## for as long as it sits in the view. The clipping branch dropped a degenerate
+## polygon for free, since `intersect_polygons` returns nothing for one; the branch
+## that does NOT clip passed it straight through. So two anchors pinned to a single
+## cell errored for the whole length of their fuse in a region, and not at all
+## inside a fold. Both branches answer alike now: no polygon in, no polygons out.
 func _clip(poly: PackedVector2Array) -> Array:
+	if poly.size() < 3:
+		return []
 	if _view.domain.size() < 3:
 		return [poly]
 	return Geometry2D.intersect_polygons(poly, _view.domain)
@@ -242,6 +252,11 @@ func _draw_preview() -> void:
 
 ## The parallelogram an armed pair would excise: spanning well past the view, at
 ## whatever angle the pair implies.
+##
+## Two anchors on ONE cell imply no angle, so there is no band and this returns no
+## polygon. That pair is legal right up to the fuse — placement asks only whether
+## there is sheet to pin to, and `fire_pair` is what refuses it — so the preview has
+## to hold a frame it cannot draw, rather than assume it never sees one.
 func _band_polygon(a_center: Vector2, b_center: Vector2,
 		world_px: Vector2) -> PackedVector2Array:
 	if a_center.is_equal_approx(b_center):
