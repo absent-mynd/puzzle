@@ -139,7 +139,7 @@ instead.
 | Sutherland-Hodgman, epsilon, area | `scripts/utils/GeometryCore.gd` |
 | Lights as occupants of the sheet | `scripts/model/LightSource.gd` |
 | **The game**: regions, subspaces, doors, input | `scripts/world/FoldWorld.gd` |
-| Pure world logic (maps, seams, depenetration) | `scripts/world/WorldCore.gd` |
+| Pure world logic (maps, seams, depenetration) | `scripts/model/WorldCore.gd` |
 | Player physics body | `scripts/world/PlayerBody.gd` |
 | Anchors, previews, seam markers, the fuse pulse | `scripts/world/WorldOverlay.gd` |
 | The hands that float beside you (style only) | `scripts/world/HandOrbit.gd` |
