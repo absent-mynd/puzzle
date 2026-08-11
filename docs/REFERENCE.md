@@ -29,6 +29,8 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 
 | Concern | File |
 |---|---|
+| **The current level**: what space the player is in — its pieces, collision geometry, how it repeats, how far the one non-repeating axis runs. The value that lets a collaborator be handed "where you are" instead of the whole world | `Level.gd` |
+| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
 | Immutable base level: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
 | One base tile: stable `base_id`, `grid_position`, `type`, per-instance `data` | `BaseTile.gd` |
 | One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel`, `held_hands` | `Fold.gd` |
@@ -60,7 +62,9 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | Concern | File |
 |---|---|
 | **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/burst verb, the hand ledger, the auto-commit fuse, loose hands, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
-| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
+| **The window-resolution overlay**: background, controls line, status readout, the centre flash and its lifetime. Told what to say; holds no reference back | `WorldHud.gd` |
+| **What the camera should be showing**: the lead, the lens, and the render-target size that stands in for zoom. Takes the world's facts as a context dictionary | `WorldCamera.gd` |
+| **Hands in the air**: the flight, the wrap, the turn-back at a band's end. Emits `landed` / `lost`; a hand at rest is an occupant and belongs to `FoldWorld` | `HandField.gd` |
 | Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing) | `PlayerBody.gd` |
 | Anchors, fold preview band, seam diamonds, glue lines, the hold-progress ring, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
 | The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |

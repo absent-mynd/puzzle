@@ -2,7 +2,7 @@
 
 **START HERE.** Essential context for anyone (human or agent) working on this project.
 
-**Last Updated:** 2026-08-06
+**Last Updated:** 2026-08-11
 **Engine:** Godot 4.3 · **Language:** GDScript · **Approach:** TDD
 
 ---
@@ -109,53 +109,26 @@ halves meet at a common line. The seam sits at `anchor_a + shift_a_grid`.
 | **World** (view, physics, input, rendering) | `scripts/world/` | kernel |
 | **UI / systems** | `scripts/ui/`, `scripts/systems/` | kernel |
 
-**The kernel must never reference the world.** This is why `BaseFrame` exists as
-kernel rather than living in `WorldCore`: `TriggerResolver` needs point transport
-during a pure derivation, and a model→view dependency would be a cycle. If you find
-yourself wanting to import `WorldCore` from `scripts/model/`, extract the pure part
-instead.
+**The kernel must never reference the world**, and `scripts/tests/test_layering.gd`
+fails the build if it does. This is why `BaseFrame` exists as kernel rather than
+living inside `WorldCore`: `TriggerResolver` needs point transport during a pure
+derivation, and a model→view dependency would be a cycle.
+
+When you find yourself wanting to reach upward, check whether the thing you are
+reaching for is actually pure. Usually it is, and it is simply in the wrong
+directory — that was the whole of the one violation this rule ever had. `WorldCore`
+is `RefCounted`, every function static, no scene-tree contact, and it lived in
+`scripts/world/` while `WorldData` had to reach up for it. Moving the file down was
+the entire fix. **Move it down; do not relax the rule.**
 
 ---
 
 ## Key files
 
-| Concern | File |
-|---|---|
-| Immutable base grid / tiles | `scripts/model/BaseGrid.gd`, `BaseTile.gd` |
-| One fold (anchors, creases, shifts) | `scripts/model/Fold.gd` |
-| The derivation engine | `scripts/model/FoldReplay.gd` |
-| Derived fragments / queryable state | `scripts/model/FoldedPiece.gd`, `FoldedState.gd` |
-| **Base ↔ derived point transport** | `scripts/model/BaseFrame.gd` |
-| **How a space repeats** (cylinder / torus) | `scripts/model/FoldLattice.gd` |
-| What a tile IS and DOES (the registry) | `scripts/model/TileTypes.gd` |
-| What a tile's per-instance params MEAN | `scripts/model/TileParams.gd` |
-| **The hand registry** (one file per kind) | `scripts/model/HandTypes.gd` |
-| A hand lying in the world (an occupant) | `scripts/model/HandPickup.gd` |
-| **The slot ledger** (conservation arithmetic) | `scripts/model/AnchorStock.gd` |
-| Entities that ride tiles through folds | `scripts/model/Occupants.gd` |
-| Fold-on-enter cascade | `scripts/model/TriggerResolver.gd` |
-| Authored world (regions, doors, folds) | `scripts/model/WorldData.gd` |
-| Polygon clipping under folds | `scripts/utils/CollisionCore.gd` |
-| Sutherland-Hodgman, epsilon, area | `scripts/utils/GeometryCore.gd` |
-| Lights as occupants of the sheet | `scripts/model/LightSource.gd` |
-| **The game**: regions, subspaces, doors, input | `scripts/world/FoldWorld.gd` |
-| Pure world logic (maps, seams, depenetration) | `scripts/model/WorldCore.gd` |
-| Player physics body | `scripts/world/PlayerBody.gd` |
-| Anchors, previews, seam markers, the fuse pulse | `scripts/world/WorldOverlay.gd` |
-| The hands that float beside you (style only) | `scripts/world/HandOrbit.gd` |
-| **A canvas that repeats with the space** | `scripts/world/WrapCanvas.gd` |
-| The sheet, batched into two canvas items | `scripts/world/TileBatch.gd` |
-| The blob, drawn wherever the space says it is | `scripts/world/PlayerVisual.gd` |
-| How big an art pixel is | `scripts/world/PixelArt.gd` |
-| The tileset: kinds, variants, base-space UVs | `scripts/world/TileAtlas.gd` |
-| Lit materials, light uniforms, lamp glyphs | `scripts/world/LightRig.gd` |
-| The lighting shader | `assets/shaders/pixel_lit.gdshader` |
-| **The sound registry** (vocabulary + the whole mix) | `scripts/systems/Sounds.gd` |
-| Buses, voices, fades, volume persistence | `scripts/systems/AudioManager.gd` (autoload) |
-| **The world editor**: every mutation + undo | `scripts/editor/EditorDoc.gd` |
-| Editor: palette, raster ops, fold guides (pure) | `scripts/editor/EditorTools.gd` |
-| Editor: the board, the cards, the overlays | `scripts/editor/EditorBoard.gd` |
-| Editor: mouse, camera, tools | `scripts/editor/WorldEditor.gd` |
+The code map is [docs/REFERENCE.md](docs/REFERENCE.md) — one table per layer, with
+what each file is responsible for. It used to be duplicated here in shorter form,
+which meant two lists to update whenever a file moved, and only one of them ever got
+updated.
 
 See `scripts/world/README.md` for controls and the design beats, and
 `docs/features/WORLD_EDITOR.md` for the editor (`./run_editor.sh`).
@@ -164,17 +137,27 @@ See `scripts/world/README.md` for controls and the design beats, and
 
 ## Critical decisions — do not deviate without thought
 
-### 1. Derive, never mutate
-Fold state is `(BaseGrid, Array[Fold])`. To change the world, change the fold list
-and re-derive. Never edit a `FoldedPiece` in place and expect it to persist.
+Seven of these are argued in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with the
+alternatives that were rejected and why. They are not restated here: two copies of a
+decision are two things to keep in step, and this file used to carry its own
+numbering that did not even correspond — its "9" was the wrap, ARCHITECTURE's is
+layering, and there were two sections numbered 9.
 
-### 2. The registry owns per-type behavior
-`TileTypes` is the single authority for walkable / merge rank / `blocks_fold` /
-`blocks_anchor` / `on_enter` / `name` / `params`. Adding a tile type should mean
-editing **one** file. If you are about to write `if piece.type == TileTypes.WALL`,
-ask whether you want `TileTypes.is_walkable(piece.type)` instead — almost always yes.
+| Rule | Argued in |
+|---|---|
+| Derive, never mutate — change the fold list and re-derive | Decision 1 |
+| Transport by `BaseFrame`, not crease arithmetic | Decision 2 |
+| `TileTypes` is the only authority on what a tile does | Decision 5 |
+| Unfold blocking is one rule at every level | Decision 6 |
+| Never compare floats with `==`; use `GeometryCore.EPSILON` | Decision 8 |
+| The kernel never sees the world — enforced by `test_layering.gd` | Decision 9 |
+| Anything in the world is an occupant, resolved through `BaseFrame` | Decision 10 |
 
-`params` extends that rule to a tile's PER-INSTANCE data (`tile_data`): the
+What follows is the part that is only here.
+
+### 1. A tile's per-instance params are registry rows too
+
+`params` extends the registry rule to a tile's PER-INSTANCE data (`tile_data`): the
 registry declares each parameter's key, value type, default and label, and
 `TileParams` says what those declarations mean. The editor's tile inspector is
 generated from them and names no tile type, so declaring a parameter is the whole
@@ -182,20 +165,8 @@ job — it becomes editable, validated, drawn on the board and saved with nothin
 else touched. Do not add a bespoke editor panel for a new parameter; add a row to
 the schema. See `docs/features/WORLD_EDITOR.md` §"Per-tile parameters".
 
-### 3. Transport by base frame, not by crease math
-When something must survive a fold, map it through `BaseFrame`. Crease arithmetic
-(`fold_shift_for_side`) is a fallback for points over void only — it is approximate
-and does not compose across multiple folds.
+### 2. The hand ledger is derived, never stored
 
-### 4. Unfold blocking is uniform
-A fold cannot be unfolded while a **newer** fold's excision band crosses its seam
-segment. The same test against a fold's glue lines gates exiting a subspace. One
-rule, applied at every level — world, strip, interior.
-
-### 5. Never compare floats with `==`
-Use `GeometryCore.EPSILON`.
-
-### 6. The hand ledger is derived, never stored
 `AnchorStock` computes; it does not remember. A hand is only ever in one of three
 places — your slots (`FoldWorld.hands`), pinned but uncommitted (the two pending
 anchors), or held by a standing fold (`Fold.held_hands`) — and every number is summed
@@ -212,7 +183,8 @@ authored pre-folds and trigger folds — hold none.
 **late**, at the point of no return: a fold refused for a pin in its span must not
 have cost you the hands it never took.
 
-### 7. A fold in flight owns the frame
+### 3. A fold in flight owns the frame
+
 `_play_transition` freezes the body at where it started and does not rebuild the
 geometry until it finalizes, so for the length of a fold animation BOTH the player's
 position and the fragment list are halfway between two states. Anything that reads
@@ -228,7 +200,8 @@ region they had just left. Stuck in a wall, or off the map.
 If you add anything to that tail, ask whether it can start a transition; if it can,
 the same guard has to follow it.
 
-### 8. One space is on screen, and `FoldLattice` says how it repeats
+### 4. One space is on screen, and `FoldLattice` says how it repeats
+
 There is no world path and subspace path. There is the **current level** — the
 region is simply the level whose `context` is empty — and one set of everything
 derived from it. `FoldLattice` is the whole of what "this space repeats" means:
@@ -239,7 +212,8 @@ wrap-around, the camera's framing and the lights all come off that one object.
 This is why folding yourself deeper needed no new rendering, and why `do_fold`
 handles a pinch at depth three the same way it handles one at the surface.
 
-### 9. The wrap is not each object's problem
+### 5. The wrap is not each object's problem
+
 Two mechanisms, and the rule between them is short:
 
 > **Anything that MOVES repeats through `WrapCanvas`. Anything STATIC bakes its
@@ -267,15 +241,8 @@ you. `WrapCanvas.carry_through_wrap` offers the displacement to every canvas and
 `_wrap_body` dispatches over the same list; keep no state and you inherit the
 no-op.
 
-### 10. Anything in the world is an occupant, resolved through `BaseFrame`
-Doors and lights have no world position. They store a base identity plus a point
-inside that tile, and where they *are* is a question asked of the current
-fragment list. That is why a light folded away leaves the overworld and lights
-the fold's interior instead — nobody wrote that; it falls out of asking. When you
-add a new thing that lives in the world, store it that way. Do not cache a
-world position and try to keep it up to date through folds.
+### 6. Audio is a leaf, and `Sounds` is its registry
 
-### 9. Audio is a leaf, and `Sounds` is its registry
 `AudioManager.play_sfx(...)` is a statement, never a question: nothing reads back
 from audio and no gameplay decision may depend on it, which is what lets a call
 site be one line in the middle of world logic. The game is fully playable silent.
@@ -546,7 +513,9 @@ registry picks it up, or you will get spurious "Identifier not declared" errors.
 **Write the test first.** The suite is the behavioral spec — when you want to know
 how something behaves, read its `test_*.gd` before reading the implementation.
 
-See `STATUS.md` for the current suite size.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for what each gate catches — a run
+fails on a crashed test, a test that asserts nothing, and a test script that never
+loaded, not only on a failed assertion.
 
 ---
 
