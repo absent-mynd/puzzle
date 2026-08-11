@@ -5,15 +5,25 @@
 **Date:** 2026-08-11
 **Status:** point-in-time diagnosis. Not a document to maintain.
 
-> **Remediation status — all seven steps landed 2026-08-11.** The suite is
-> **791/791 green** and the gates now actually gate. Findings 01–06 and 09–10 are
-> resolved. Finding 07 (`FoldWorld`) is **partly** resolved: two of three seams are
-> out, and the third is deliberately left with its blocker recorded — see the note
-> under it. Finding 08 (the `WorldOverlay` cycle) is untouched.
+> **Remediation status — everything in this review is closed except finding 08.**
+> The suite is **792/792 green**, the gates now actually gate, and a full run emits
+> **0 errors** where it emitted 1,964. Findings 01–07 and 09–11 are resolved.
+> Finding 08 (the `WorldOverlay` cycle) is not — see the correction below.
 >
 > Closing finding 01 turned up **two** further holes this document did not predict,
 > both noted below. The recurring lesson: every gate here was believed to work until
 > something was made to fail on purpose.
+>
+> The follow-up work then closed 07 and 10 as well: a `Level` value object unblocked
+> the hand-physics extraction, and the log storm under finding 05 turned out not to
+> be a logging problem at all. Suite: **792/792**, and a full run now emits **0
+> errors** where it emitted 1,964.
+>
+> **Correction.** This document claimed extracting `Level` would collapse most of
+> finding 08's reach-throughs. It does not — it covers 3 of `WorldOverlay`'s 24
+> (`base`, `lattice`, `sub_fold`). The other 21 are gameplay queries, which no
+> amount of level state answers. Finding 08 still wants the per-frame view-model
+> originally prescribed, and remains open.
 
 ---
 
@@ -176,6 +186,29 @@ the code handles deliberately (it keeps the hand catchable rather than deleting
 it), reported at ERROR severity from inside a loop. An error-severity message
 emitted 1,964 times is not an error message — it is noise that will hide the next
 real one. It wants to be a once-per-hand warning, or a counter.
+
+> **Second correction (2026-08-11).** It wanted neither. Instrumenting the path
+> rather than reasoning about it showed `_recover_lost_hand` entering **1,965
+> times**, always at the same point, always from a freshly built ball — an
+> infinite recovery loop, not a chatty log. A hand that ran off the free axis
+> inside a fold took the *world-level* answer (settle at the player's feet), which
+> inside a fold is routinely outside the strip, so it bound to nothing, was put
+> back in the air, drifted out and was recovered again.
+>
+> This is precisely the loop `_recover_lost_hand`'s own docstring says it exists
+> to prevent; it had moved from the world level into subspaces. Nothing caught it
+> — the ledger stayed correct, the hand really was still in the band, and the two
+> tests watching an orbiting hand watched the *wrap* axis while the escape was
+> along the *free* one.
+>
+> The fix was three lines above the bug, in a comment: *"Turn it back the way the
+> fold turns the player back."* `_wrap_body` already did exactly that for the
+> body. The body and the ball now share that code.
+>
+> The lesson is the same one finding 01 kept teaching: **a symptom that looks like
+> noise is worth instrumenting rather than tidying.** Had I fixed the logging as
+> written here, the loop would still be running and would have been harder to find
+> afterwards, because its only outward sign would be gone.
 
 ---
 
