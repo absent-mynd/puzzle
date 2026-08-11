@@ -253,7 +253,7 @@ func test_how_deep_you_are_tints_the_sheet() -> void:
 func test_a_fold_that_swallows_you_at_depth_says_how_deep_you_are() -> void:
 	_pinch_over_pit()
 	_pinch_again()
-	assert_string_contains(world._flash.text, "2 deep",
+	assert_string_contains(world.hud.flash_text(), "2 deep",
 		"Being folded in again is a different event from being folded in")
 
 

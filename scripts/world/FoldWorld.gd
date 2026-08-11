@@ -258,11 +258,13 @@ var overlay: WorldOverlay
 var light_rig: LightRig
 ## The low-resolution render target everything in the world is drawn into.
 var pixel_view: SubViewport
+## Decides what the camera should be showing; drives the body's lens and the
+## render target. See WorldCamera.
+var camera: WorldCamera
 var _atlas: Texture2D
-var _bg: ColorRect
-var _status: Label
-var _flash: Label
-var _flash_left := 0.0
+## The window-resolution overlay (background, controls line, status, flash).
+## It is told what to say; it does not read this object. See WorldHud.
+var hud: WorldHud
 
 
 func _ready() -> void:
@@ -292,6 +294,8 @@ func _ready() -> void:
 	player = PlayerBody.new()
 	player.z_index = 40
 	pixel_view.add_child(player)
+
+	camera = WorldCamera.new(player, pixel_view)
 
 	# Everything that MOVES is a WrapCanvas, so it stands in every copy of the
 	# space without being told there is more than one.
@@ -652,7 +656,7 @@ func _apply_context() -> void:
 	free_extent = WorldCore.strip_extent(level_base, free) if free != Vector2.ZERO else {}
 
 	# Deeper reads darker and more lavender; the sheet's tint follows in the rig.
-	_bg.color = Color("0a0b12").lerp(Color("140a2a"), minf(float(context.size()) * 0.7, 1.0))
+	hud.set_depth(context.size())
 	geo.visible = true
 	rebuild()
 	_update_music()
@@ -2021,59 +2025,33 @@ func _apply_anim_frame() -> void:
 
 ## `center` overrides where the BODY is taken to be — the cut path needs the
 ## framing of where it is going, not of where the lens still is.
-func _update_camera(center: Vector2 = Vector2.INF) -> void:
-	if player == null:
-		return
-	var body: Vector2 = player.global_position if center == Vector2.INF else center
-	# The lead first: it moves the camera, and the zoom's focus distances are
-	# measured from where the camera ends up. Decided in the other order, a hard
-	# lead would quietly crop the very things the focus set exists to keep on screen.
-	player.lookahead_target = WorldCore.camera_lookahead_for({
-		"velocity": player.motion_fraction(),
-		"look": player.look_dir(),
-		# A repeating space already shows every copy there is along the axes it
-		# repeats on, so leading along one slides the view across identical bands
-		# for nothing. On a torus that is both axes, and the lead is the body's
-		# alone.
-		"flat_axes": lattice.periods(),
-		"frozen": animating(),
-	})
-	var eye := (player.camera_position() if center == Vector2.INF
-		else body + player.lookahead_target)
-	player.zoom_target = WorldCore.camera_zoom_for({
-		"viewport": get_viewport_rect().size,
-		"center": eye,
-		"motion": player.motion_intensity(),
-		# A fold rearranging the world is its own reason to step back and watch.
-		"widen": 1.0 if animating() else 0.0,
+## The facts the camera needs about this moment. Everything here is world
+## knowledge — what must stay on screen, how the space repeats, whether a fold is
+## mid-flight — which is exactly the part `WorldCamera` cannot work out for itself.
+func _camera_context() -> Dictionary:
+	return {
 		"focus": _camera_focus(),
-	})
-	_size_pixel_view()
+		"periods": lattice.periods(),
+		"frozen": animating(),
+		"viewport": get_viewport_rect().size,
+	}
 
 
-## Give the render target the resolution the CURRENT zoom asks for. The camera's
-## lens never moves — inside a render target, zoom is what sets the size of an art
-## pixel, so moving it would resample the 16px tileset and soften the world. A
-## wider frame is therefore MORE pixels, not bigger ones.
-##
-## Sized from `camera_zoom()` (the eased value) rather than the target, so the
-## buffer tracks what is actually on screen while the frame is still opening.
-func _size_pixel_view() -> void:
-	if pixel_view == null:
+## `center` overrides where the BODY is taken to be.
+func _update_camera(center: Vector2 = Vector2.INF) -> void:
+	if camera == null:
 		return
-	var want := PixelArt.target_size(get_viewport_rect().size, player.camera_zoom())
-	# Only on change: assigning size re-allocates the render target.
-	if pixel_view.size != want:
-		pixel_view.size = want
+	camera.frame(_camera_context(), center)
 
 
-## Cut the camera — position, lens AND lead — to where the body now is. For hard
-## relocations (spawn, doors, being turned back by the fold): the destination's
-## framing is computed first, because easing into it would read as the new room
-## inflating around you.
+func _size_pixel_view() -> void:
+	if camera != null:
+		camera.size_render_target(get_viewport_rect().size)
+
+
 func _cut_camera() -> void:
-	_update_camera(player.global_position)
-	player.snap_camera()
+	if camera != null:
+		camera.cut(_camera_context())
 
 
 ## World points that would be a mistake to leave off screen right now.
@@ -2103,9 +2081,7 @@ func _camera_focus() -> PackedVector2Array:
 
 func _physics_process(delta: float) -> void:
 	_burst_flash_left = maxf(_burst_flash_left - delta, 0.0)
-	_flash_left = maxf(_flash_left - delta, 0.0)
-	if _flash_left == 0.0 and _flash != null:
-		_flash.visible = false
+	hud.tick(delta)
 	_update_status()
 	# Only the nearest handful of lights reach the shader; "nearest" is measured
 	# from the player, not the origin.
@@ -2350,47 +2326,14 @@ func _reset() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_hud() -> void:
-	var bg_layer := CanvasLayer.new()
-	bg_layer.layer = -10
-	add_child(bg_layer)
-	_bg = ColorRect.new()
-	_bg.color = Color("0a0b12")
-	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	# Controls default to MOUSE_FILTER_STOP; a full-screen rect would eat every
-	# click before _unhandled_input sees it. HUD must never take the mouse.
-	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg_layer.add_child(_bg)
-
-	var hud := CanvasLayer.new()
-	hud.layer = 10
+	hud = WorldHud.new()
+	hud.name = "Hud"
 	add_child(hud)
-
-	# Controls only — what the keys are, not what they mean. The mechanics are the
-	# game's to teach: the aim ring, the preview band, the seam diamonds and the
-	# anchor readout all say their piece in place, and a wall of text on top of
-	# them explains away the thing the player is meant to work out.
-	var help := Label.new()
-	help.text = "A/D move   Space tap/hold: jump   W/S aim   F tap: place hand · hold: pull back   R reset"
-	help.position = Vector2(12, 8)
-	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
-	hud.add_child(help)
-
-	_status = Label.new()
-	_status.position = Vector2(12, 30)
-	_status.add_theme_color_override("font_color", Color("59e0d0"))
-	hud.add_child(_status)
-
-	_flash = Label.new()
-	_flash.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_flash.position = Vector2(340, 130)
-	_flash.add_theme_font_size_override("font_size", 22)
-	_flash.add_theme_color_override("font_color", Color("ffd27f"))
-	_flash.visible = false
-	hud.add_child(_flash)
+	hud.build()
 
 
 func _update_status() -> void:
-	if _status == null:
+	if hud == null:
 		return
 	var kinds: Array = []
 	for h in hands:
@@ -2400,14 +2343,14 @@ func _update_status() -> void:
 	if not primed.is_empty():
 		stock += "   %d armed" % primed.size()
 	if context.is_empty():
-		_status.text = "Region: %s   Folds: %d   Mode: WORLD\n%s" \
-			% [region_id, folds.size(), stock]
+		hud.set_status("Region: %s   Folds: %d   Mode: WORLD\n%s"
+			% [region_id, folds.size(), stock])
 	else:
 		# How deep, and what shape the space you are in has come out: one period is
 		# a cylinder you can run off the ends of, two is a torus with no outside.
-		_status.text = "Region: %s   Folds: %d   Mode: INSIDE FOLD x%d — %s (%d inner)\n%s" \
+		hud.set_status("Region: %s   Folds: %d   Mode: INSIDE FOLD x%d — %s (%d inner)\n%s"
 			% [region_id, folds.size(), context.size(), _space_name(),
-				level_folds().size(), stock]
+				level_folds().size(), stock])
 
 
 ## What shape the space you are standing in is, from how many ways it repeats.
@@ -2419,11 +2362,7 @@ func _space_name() -> String:
 
 
 func _show_flash(text: String) -> void:
-	if text.is_empty():
-		return
-	_flash.text = text
-	_flash.visible = true
-	_flash_left = 2.5
+	hud.flash(text)
 
 
 ## A refusal: the message, and the sound that goes with every refusal that has
