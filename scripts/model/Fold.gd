@@ -28,7 +28,7 @@ class_name Fold extends Resource
 ## Symbolic tag for trigger-created folds (F3); "" for ordinary player folds.
 @export var channel: String = ""
 
-## The PLAYER'S hands this fold is holding, as `HandTypes` ids (see `AnchorStock`).
+## The PLAYER'S hands this fold is holding, as `HandTypes` ids (see `HandStock`).
 ## Two for a fold the player pinned, EMPTY for folds the world made — authored
 ## pre-folds and trigger folds are anchored by the world, not out of your hands.
 ##

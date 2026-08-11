@@ -29,7 +29,7 @@ What exists and works today:
 | Regions + doors (recursive partner resolution) | ✅ Playable |
 | Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
 | Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
-| Hands: two slots, typed, conserved (`AnchorStock`/`HandTypes`) | ✅ Playable, **in the world** |
+| Hands: two slots, typed, conserved (`HandStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
 | One-key verb (tap = place a hand, hold = release burst) | ✅ Playable |
 | Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
@@ -91,10 +91,10 @@ For the reasoning behind the *shape* of the code rather than its history, see
 
 Roughly in priority order — nothing here is committed to yet:
 
-1. **Playtest the anchor economy.** The allowance (4) and cache grant (2) are first
-   guesses, and west's beats were authored when folding was free. The question to
-   answer by feel: does scarcity make the world read as *considered*, or merely
-   fussy? Tuning is a playtesting job, not an editing one.
+1. **Playtest the hand economy.** Two slots, and fuses of 0.65 / 1.6 / 3.2 seconds,
+   are first guesses, and west's beats were authored when folding was free. The
+   question to answer by feel: does scarcity make the world read as *considered*, or
+   merely fussy? Tuning is a playtesting job, not an editing one.
 2. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
    and drop-in path are done, so this is now an art job, not an engineering one.
 3. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
@@ -105,8 +105,8 @@ Roughly in priority order — nothing here is committed to yet:
    the leading candidate.
 5. **Save / checkpoints.** Undo is gone by design; respawn currently sends you to the
    region spawn. Real save points are the replacement — and they are now also what
-   collected caches need to outlive a session, and the answer to stranding yourself
-   with no anchors and no reachable seam.
+   the loose hands you have moved need to outlive a session, and the answer to
+   stranding yourself with no hands and no reachable seam.
 6. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
 7. ~~**Authoring tooling.**~~ Done — `./run_editor.sh`, see
    `docs/features/WORLD_EDITOR.md`. Terrain, canvases, doors, pre-placed folds and
@@ -130,13 +130,14 @@ Roughly in priority order — nothing here is committed to yet:
 - The shipped sounds are generated placeholders (`tools/gen_audio.py`), not art.
 - Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
   the world yet. Pins and triggers now are — see east's right wing.
-- **You can strand yourself.** Spend your last anchors on a fold, walk somewhere its
+- **You can strand yourself.** Spend your last hands on a fold, walk somewhere its
   seam cannot be reached from, and `R` is the only way back. `R` is survivable by
-  design — it refunds every anchor and keeps your caches — but it still costs your
-  position and fold configuration. Save points are the real fix.
-- Collected anchor caches are runtime-only state (`FoldWorld.collected_caches`) — the
-  first thing that is not `(base, folds)`. They survive `R` but not the session; a save
-  system is what they need next.
+  design — it drops every fold and respawns the authored loose hands — but it still
+  costs your position, your fold configuration, and any hand you had dropped
+  somewhere deliberately. Save points are the real fix.
+- Loose hands are runtime-only state (`FoldWorld.hand_pickups`) — the first thing that
+  is not `(base, folds)`. `R` rebuilds them from the authored world and nothing carries
+  them across a session; a save system is what they need next.
 - Lights do not cast shadows: they pass through walls. Occluders would have to be
   re-derived per fold and would want to soften the seam, which the art is currently
   committed to keeping hard.

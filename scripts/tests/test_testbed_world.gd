@@ -230,7 +230,7 @@ func test_it_starts_you_with_a_mixed_pair():
 	# the first fold you make rather than being something you have to go and find.
 	var wd := _world()
 	var slots := wd.starting_hand_slots()
-	assert_eq(AnchorStock.held_count(slots), AnchorStock.SLOTS, "both slots are full")
+	assert_eq(HandStock.held_count(slots), HandStock.SLOTS, "both slots are full")
 	assert_ne(slots[0], slots[1], "and they are not the same kind")
 
 

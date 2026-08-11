@@ -33,19 +33,23 @@ extends Node2D
 ##     fold folded, interior state and all. Unfold blocking is uniform:
 ##     newer folds crossing a seam block it, interior folds crossing a glue
 ##     block the outer fold from either side.
-##   - ANCHORS ARE A CARRIED, CONSERVED RESOURCE (`AnchorStock`). A standing
+##   - HANDS ARE A CARRIED, CONSERVED RESOURCE (`HandStock`). A standing
 ##     fold is holding two of yours, so the budget is how many folds may stand
 ##     at once, not how many you may ever make; unfolding refunds them because
-##     the fold leaves the list. Anchor caches raise the ceiling permanently.
+##     the fold leaves the list. A loose hand you walk over does NOT raise the
+##     ceiling — two slots is forever; it refills one you emptied by pinning.
 ##   - LIGHTS are occupants like doors: base identity + a point in the tile,
 ##     resolved through BaseFrame against whatever is on screen. Fold a lamp
 ##     away and it leaves the overworld and lights the fold's interior
 ##     instead (see LightSource). Fold something else and it rides the flap.
 ##
-## ONE KEY drives all of it. Tap = push anchors in (pin, pin, commit); hold =
-## pull them back out (retrieve a pending anchor, unfold the fold you point at,
-## or exit a subspace by its glue anchor). There is no remote unfold: to get the
-## anchors out of a fold you must go back to its seam.
+## ONE KEY drives all of it, and it runs the hands both ways. Tap pins a hand as
+## an anchor; a second one within reach pairs with it and lights a fuse, and the
+## pair folds itself — there is no committing press. Hold fires a BURST, which
+## pulls back whatever is in reach: an anchor still waiting for a partner, either
+## half of an armed pair, the fold you are standing at the seam of, or the glue
+## anchor you surface a subspace by. There is no remote unfold: to get the hands
+## out of a fold you must go back to its seam.
 ##
 ## Rendering is a PIXEL pass: the world draws into a low-resolution SubViewport
 ## (see PixelArt) that is scaled up with nearest filtering, tiles are textured
@@ -195,7 +199,7 @@ var unpaired: Array = []
 var primed: Array = []
 
 ## The hands you are carrying: one entry per slot, a `HandTypes` id or null.
-## See `AnchorStock` — this array is the whole of your possession.
+## See `HandStock` — this array is the whole of your possession.
 var hands: Array = []
 
 ## Hands currently IN FLIGHT: light balls falling, rolling and settling.
@@ -859,7 +863,7 @@ func place_hand(dir: Vector2i) -> void:
 	# Placing puts a HAND down: it leaves your slot now, and its kind travels with
 	# the anchor because the fold will need to know what it was pinned with. Re-siting
 	# an anchor you already placed reuses the hand already in it.
-	var from_slot := AnchorStock.first_held(hands)
+	var from_slot := HandStock.first_held(hands)
 	if from_slot < 0:
 		_deny("No hand to place.")
 		return
@@ -1065,8 +1069,8 @@ func _prime(a, b) -> void:
 ## end up drawn buried inside the tile — and that "hands behave like objects" has no
 ## exceptions to learn.
 func _release_anchor(entry, into_hand: bool) -> void:
-	if into_hand and AnchorStock.first_empty(hands) >= 0:
-		hands[AnchorStock.first_empty(hands)] = int(entry["hand"])
+	if into_hand and HandStock.first_empty(hands) >= 0:
+		hands[HandStock.first_empty(hands)] = int(entry["hand"])
 		return
 	# An anchor is stored in the BASE frame; a ball needs a point in the view it is
 	# falling through. A hand whose tile is folded away has no "here" to fall in, so it
@@ -1149,7 +1153,7 @@ func fire_pair(pair: Dictionary) -> void:
 
 
 # ---------------------------------------------------------------------------
-# The anchor ledger (see AnchorStock)
+# The hand ledger (see HandStock)
 # ---------------------------------------------------------------------------
 # Nothing is stored. `held` is summed from the live fold lists and `pending` from
 # the two slots, so unfolding refunds without any bookkeeping — the fold leaves the
@@ -1171,32 +1175,32 @@ func _all_fold_lists() -> Array:
 
 ## Hands in your slots right now.
 func hands_held() -> int:
-	return AnchorStock.held_count(hands)
+	return HandStock.held_count(hands)
 
 
 ## Empty slots — how many hands you could be given, and so whether a fold's two can
 ## come home.
 func hands_free_slots() -> int:
-	return AnchorStock.free_slots(hands)
+	return HandStock.free_slots(hands)
 
 
 ## Hands committed to standing folds, everywhere in the world.
 func hands_in_folds() -> int:
-	return AnchorStock.held_in(_all_fold_lists())
+	return HandStock.held_in(_all_fold_lists())
 
 
 func hands_pending() -> int:
-	return unpaired.size() + primed.size() * AnchorStock.HANDS_PER_FOLD
+	return unpaired.size() + primed.size() * HandStock.HANDS_PER_FOLD
 
 
 func can_place_hand() -> bool:
-	return AnchorStock.has_hand(hands)
+	return HandStock.has_hand(hands)
 
 
 ## The kind of hand the next tap would put down, or -1 if you have none. Drives the
 ## aim ring's colour: what you are about to spend is visible before you spend it.
 func next_hand_type() -> int:
-	var i := AnchorStock.first_held(hands)
+	var i := HandStock.first_held(hands)
 	return -1 if i < 0 else int(hands[i])
 
 
@@ -1207,7 +1211,7 @@ func next_hand_type() -> int:
 ## mid-fall is exactly that. Counting it anywhere else, or nowhere, would make a hand
 ## appear destroyed for the second or two it is falling and then created again when it
 ## landed — and conservation is the one property of this system that must never wobble,
-## including mid-flight. `AnchorStock.total` is what states it and `test_anchor_stock`
+## including mid-flight. `HandStock.total` is what states it and `test_hand_stock`
 ## what pins it.
 func hands_loose() -> int:
 	var n := hand_balls.size()
@@ -1219,7 +1223,7 @@ func hands_loose() -> int:
 ## Every hand that exists, in all four places. NOTHING in the game changes this:
 ## placing, committing, unfolding, bursting and picking up all just move one.
 func hands_total() -> int:
-	return AnchorStock.total(hands, hands_pending(), _all_fold_lists(), hands_loose())
+	return HandStock.total(hands, hands_pending(), _all_fold_lists(), hands_loose())
 
 
 # ---------------------------------------------------------------------------
@@ -1288,11 +1292,11 @@ func _tick_fuse(delta: float) -> void:
 ## It empties slots, and a fold that gets rejected for a pin in its span or nowhere to
 ## land must not have cost you the hands it never took.
 func _hands_for_fold(pinned: Array[int]) -> Array[int]:
-	if pinned.size() == AnchorStock.HANDS_PER_FOLD:
+	if pinned.size() == HandStock.HANDS_PER_FOLD:
 		return pinned.duplicate()
 	var out: Array[int] = []
-	for _i in range(AnchorStock.HANDS_PER_FOLD):
-		var from_slot := AnchorStock.first_held(hands)
+	for _i in range(HandStock.HANDS_PER_FOLD):
+		var from_slot := HandStock.first_held(hands)
 		if from_slot < 0:
 			break
 		out.append(int(hands[from_slot]))
@@ -1462,7 +1466,7 @@ func _interior_glue_blocker(fold: Fold, lvl_base: Array, list: Array, idx: int) 
 ## hand lying where you were standing, which is exactly the object an authored cache
 ## already is. Conservation holds without anyone having to check for room first.
 func _give_hand(kind: int) -> void:
-	var into := AnchorStock.first_empty(hands)
+	var into := HandStock.first_empty(hands)
 	if into >= 0:
 		hands[into] = kind
 		return
@@ -2294,7 +2298,7 @@ func _check_triggers() -> void:
 ## Works at world level AND inside a subspace: a hand the fold swallowed is lying in
 ## there with everything else, and taking it in there counts.
 func _check_pickups() -> void:
-	if AnchorStock.first_empty(hands) < 0:
+	if HandStock.first_empty(hands) < 0:
 		return                      # full hands walk over it, and it waits
 	# A hand still in the air is a hand you can catch. It would be strange to be able to
 	# collect one the instant it stopped moving but not a moment earlier, when it is
@@ -2306,7 +2310,7 @@ func _check_pickups() -> void:
 			continue
 		if player.global_position.distance_to(Vector2(ball["pos"])) > PlayerBody.RADIUS + 8.0:
 			continue
-		hands[AnchorStock.first_empty(hands)] = int(ball["kind"])
+		hands[HandStock.first_empty(hands)] = int(ball["kind"])
 		hand_balls.remove_at(i)
 		AudioManager.play_sfx(Sounds.HAND_PICKUP)
 		_show_flash("Caught a %s hand." % HandTypes.type_name(int(ball["kind"])))
@@ -2320,7 +2324,7 @@ func _check_pickups() -> void:
 			continue                # folded away — not here to be picked up
 		if player.global_position.distance_to(Vector2(wp)) > PlayerBody.RADIUS + 8.0:
 			continue
-		hands[AnchorStock.first_empty(hands)] = pickup.kind
+		hands[HandStock.first_empty(hands)] = pickup.kind
 		loose_hands.remove_at(i)
 		AudioManager.play_sfx(Sounds.HAND_PICKUP)
 		_show_flash("Picked up a %s hand." % HandTypes.type_name(pickup.kind))

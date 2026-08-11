@@ -325,7 +325,7 @@ func resize_region(id: String, offset: Vector2i, size: Vector2i, tag: String = "
 	r["folds"] = folds
 
 	var anchors: Array = []
-	for a in world.loose_anchors(id):
+	for a in world.unpaired_anchors(id):
 		var dst: Vector2i = a + offset
 		if EditorTools.in_bounds(dst, size):
 			anchors.append({"x": dst.x, "y": dst.y})
@@ -601,11 +601,11 @@ func _unique_door_id(region_id: String) -> String:
 ## a design left half-finished on Friday is still half-finished on Monday.
 
 func anchors_of(id: String) -> Array:
-	return world.loose_anchors(id)
+	return world.unpaired_anchors(id)
 
 
 func has_anchor(id: String, cell: Vector2i) -> bool:
-	return world.loose_anchors(id).has(cell)
+	return world.unpaired_anchors(id).has(cell)
 
 
 func add_anchor(id: String, cell: Vector2i, tag: String = "") -> bool:
@@ -625,7 +625,7 @@ func remove_anchor(id: String, cell: Vector2i, tag: String = "") -> bool:
 		return false
 	_snapshot(tag)
 	var list: Array = []
-	for a in world.loose_anchors(id):
+	for a in world.unpaired_anchors(id):
 		if a != cell:
 			list.append({"x": a.x, "y": a.y})
 	_editor_block(id)["anchors"] = list
@@ -807,7 +807,7 @@ func remove_hand(id: String, cell: Vector2i, tag: String = "") -> bool:
 
 
 ## The hands the player sets out with, as `HandTypes` ids. A world may start you
-## short-handed, so a shorter list than `AnchorStock.SLOTS` is legal.
+## short-handed, so a shorter list than `HandStock.SLOTS` is legal.
 func set_starting_hands(kinds: Array, tag: String = "") -> bool:
 	_snapshot(tag)
 	var out: Array = []
@@ -873,14 +873,14 @@ func validate() -> Array:
 				out.append({"level": "warn", "region": id,
 					"message": "nested pre-placed fold at %s is saved but not applied at load" % a})
 
-		for cell in world.loose_anchors(id):
+		for cell in world.unpaired_anchors(id):
 			if not EditorTools.in_bounds(cell, size):
 				out.append({"level": "error", "region": id,
 					"message": "loose fold anchor %s is outside the region" % cell})
-		if not world.loose_anchors(id).is_empty():
+		if not world.unpaired_anchors(id).is_empty():
 			out.append({"level": "warn", "region": id,
 				"message": "%d fold anchor(s) placed but not connected" %
-					world.loose_anchors(id).size()})
+					world.unpaired_anchors(id).size()})
 
 		for light in world.regions[id].get("lights", []):
 			if not EditorTools.in_bounds(light.cell, size):

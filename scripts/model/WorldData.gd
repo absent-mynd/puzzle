@@ -45,11 +45,11 @@ const WORLD_FLAG := "--world="
 @export var start_region: String = ""
 
 ## The hands the player starts the world holding, as `HandTypes` authoring keys —
-## e.g. `["plain", "plain"]`. One entry per filled slot; fewer than `AnchorStock.SLOTS`
+## e.g. `["plain", "plain"]`. One entry per filled slot; fewer than `HandStock.SLOTS`
 ## entries starts you short-handed, which is a legitimate thing for a world to do.
 ## Entries beyond `SLOTS` are ignored, since you cannot hold them.
 ##
-## This is not a capacity: the number you can hold is fixed (`AnchorStock.SLOTS`).
+## This is not a capacity: the number you can hold is fixed (`HandStock.SLOTS`).
 ## What a world chooses here is which KINDS you set out with.
 @export var starting_hands: Array = ["plain", "plain"]
 
@@ -279,7 +279,7 @@ func board_pos(id: String) -> Vector2:
 
 ## Fold anchors placed in a region but not yet connected to a partner, as Vector2i
 ## cells. Authoring only: an unpaired anchor is a design in progress, not a fold.
-func loose_anchors(id: String) -> Array:
+func unpaired_anchors(id: String) -> Array:
 	var out: Array = []
 	if not regions.has(id):
 		return out
@@ -302,10 +302,10 @@ func region_size(id: String) -> Vector2i:
 
 
 ## The starting hands as a slot array: `HandTypes` ids, one entry per slot, `null`
-## where the world starts you empty-handed. Always exactly `AnchorStock.SLOTS` long,
+## where the world starts you empty-handed. Always exactly `HandStock.SLOTS` long,
 ## so callers never have to think about a short or over-long authored list.
 func starting_hand_slots() -> Array:
-	var out: Array = AnchorStock.empty_slots()
+	var out: Array = HandStock.empty_slots()
 	for i in range(mini(starting_hands.size(), out.size())):
 		out[i] = HandTypes.from_name(String(starting_hands[i]))
 	return out

@@ -167,7 +167,7 @@ the schema. See `docs/features/WORLD_EDITOR.md` §"Per-tile parameters".
 
 ### 2. The hand ledger is derived, never stored
 
-`AnchorStock` computes; it does not remember. A hand is only ever in one of three
+`HandStock` computes; it does not remember. A hand is only ever in one of three
 places — your slots (`FoldWorld.hands`), pinned but uncommitted (the two pending
 anchors), or held by a standing fold (`Fold.held_hands`) — and every number is summed
 from where the hands actually are. That is why unfolding gives them back with no
@@ -275,7 +275,7 @@ itself. The input mirrors the economy on purpose.
 
 Those four places always sum to the same number. **Nothing in the game creates or
 destroys a hand** — placing, committing, unfolding, bursting and picking up all just
-move one — which is what `AnchorStock.total` states and `test_anchor_stock` pins.
+move one — which is what `HandStock.total` states and `test_hand_stock` pins.
 
 Consequences worth keeping in mind when designing:
 

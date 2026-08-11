@@ -248,7 +248,7 @@ mechanically enforceable — a grep for `scripts/world/` identifiers inside
 
 2,441 lines, 103 functions, one `Node2D`. Its own header comment needs 64 lines
 to introduce it, and its internal section banners enumerate thirteen distinct
-responsibilities: region loading, level derivation, input, the anchor ledger, the
+responsibilities: region loading, space derivation, input, the hand ledger, the
 fuse, folding, unfolding, hand physics, doors, animation, camera framing,
 per-frame world logic, and the HUD.
 

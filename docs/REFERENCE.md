@@ -41,7 +41,7 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | **The tile registry.** walkable / merge_rank / blocks_fold / blocks_anchor / on_enter / grant | `TileTypes.gd` |
 | **The hand registry.** One entry per kind: colour, fuse, authoring key. `fuse_for()` mixes a pair | `HandTypes.gd` |
 | A hand lying in the world: base identity + point in tile, `dropped_at()`, `resolve_all()`. One object for authored caches and hands a burst popped out | `HandPickup.gd` |
-| **The slot ledger.** `SLOTS`, `free_slots()`, `first_empty()`, `held_in()`, `total()` — conservation across slots / pinned / folds / ground, nothing stored | `AnchorStock.gd` |
+| **The hand ledger.** `SLOTS`, `free_slots()`, `first_empty()`, `held_in()`, `total()` — conservation across slots / pinned / folds / ground, nothing stored | `HandStock.gd` |
 | Entities that ride base tiles: split-on-unfold latents, carried geometry, footprints | `Occupants.gd` |
 | Fold-on-enter cascade: channels, fire-once guard, bounded fixpoint | `TriggerResolver.gd` |
 | Authored world: regions (ASCII rows), doors, pre-placed folds, lights, `starting_hands`; JSON round trip | `WorldData.gd` |

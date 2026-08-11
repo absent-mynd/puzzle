@@ -223,7 +223,7 @@ door or a lamp, a loose hand is an **occupant of the sheet**: it stores a base
 identity rather than a position, so it rides flaps, folds away with its tile,
 and is found again inside the fold.
 
-`AnchorStock` owns the arithmetic and stores nothing: committed hands are read
+`HandStock` owns the arithmetic and stores nothing: committed hands are read
 off the folds themselves, so unfolding gives them back by removing the fold, and
 the four places a hand can be — slot, pinned, in a fold, on the ground — always
 sum to the same total. Nothing in the game changes that number.
@@ -619,8 +619,8 @@ do not want yet.
 
 - `HandTypes.gd` (kernel) — the hand registry: one file per kind (colour, fuse).
   Covered by `scripts/tests/test_hand_types.gd`.
-- `AnchorStock.gd` (kernel) — the slot ledger: conservation arithmetic, nothing
-  stored. Covered by `scripts/tests/test_anchor_stock.gd`.
+- `HandStock.gd` (kernel) — the slot ledger: conservation arithmetic, nothing
+  stored. Covered by `scripts/tests/test_hand_stock.gd`.
 - `HandPickup.gd` (kernel) — a hand lying in the world: base identity + point in
   tile, exactly like a door or a lamp. One object for authored caches and dropped
   hands alike.
@@ -657,7 +657,7 @@ do not want yet.
 - `FoldWorld.gd` — scene driver. ONE space at a time (the region is the level
   whose context is empty): derived geometry → batched tiles + colliders,
   fold/unfold with player riding, folding yourself in to any depth, wrap and exit,
-  regions, doors, triggers, the tap/hold verb, the anchor ledger, and the pixel
+  regions, doors, triggers, the tap/hold verb, the hand ledger, and the pixel
   render target (which it resizes as the zoom changes).
 - `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, the
   variable-height jump, squash) and the pixel-snapped camera, whose smoothing is

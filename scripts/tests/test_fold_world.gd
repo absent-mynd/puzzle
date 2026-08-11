@@ -765,7 +765,7 @@ func _total() -> int:
 
 
 func test_you_start_with_a_full_pair() -> void:
-	assert_eq(world.hands.size(), AnchorStock.SLOTS, "One entry per slot")
+	assert_eq(world.hands.size(), HandStock.SLOTS, "One entry per slot")
 	assert_eq(world.hands_held(), 2, "Both slots full at the start")
 	assert_eq(world.hands_in_folds(), 0, "Nothing committed yet")
 	assert_eq(world.hands_loose(), _start_loose, "...and the world's own lie where it put them")

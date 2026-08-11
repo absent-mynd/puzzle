@@ -1,6 +1,6 @@
-class_name AnchorStock extends RefCounted
+class_name HandStock extends RefCounted
 
-## AnchorStock
+## HandStock
 ##
 ## The ledger of HANDS — where each one is, and whether there is room for another.
 ##
@@ -10,13 +10,13 @@ class_name AnchorStock extends RefCounted
 ##     your slots  ←→  pinned but uncommitted  ←→  held by a standing fold
 ##
 ## Nothing here is stored as a balance. Slot contents live on the world as an array,
-## committed hands are read off `Fold.held_hands`, and the pending pair is read off the
-## two anchor slots — so unfolding gives hands back by simply removing the fold, with
-## no bookkeeping of its own. A separate "hands spent" counter would be a second source
-## of truth that could drift from the fold list.
+## committed hands are read off `Fold.held_hands`, and the pending ones are counted off
+## the anchors that are down — so unfolding gives hands back by simply removing the
+## fold, with no bookkeeping of its own. A separate "hands spent" counter would be a
+## second source of truth that could drift from the fold list.
 ##
-## The number you can hold never grows. This is not a capacity you upgrade: pickups in
-## the world hand you *another hand* for a slot you have emptied, and what a pickup
+## The number you can hold never grows. This is not a capacity you upgrade: a loose
+## hand in the world gives you *another hand* for a slot you have emptied, and what it
 ## changes is which KINDS you are carrying, not how many. That is why unfolding can be
 ## refused — two hands are coming back and there may not be room for them.
 ##
