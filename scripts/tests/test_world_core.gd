@@ -71,9 +71,9 @@ func test_capture_strip_area_matches_excised_band() -> void:
 		total += a
 		if entry.type == BaseTile.TYPE_WALL:
 			wall_area += a
-	# Band is gap(192px) x full map height(256px); map is fully tiled.
-	assert_almost_eq(total, 192.0 * 256.0, 1.0, "Captured area equals the band")
-	# The band (x in 160..352) cuts the wall pair at (2,1),(3,1): 1.5 cells of
+	# Strip is gap(192px) x full map height(256px); map is fully tiled.
+	assert_almost_eq(total, 192.0 * 256.0, 1.0, "Captured area equals the strip")
+	# The strip (x in 160..352) cuts the wall pair at (2,1),(3,1): 1.5 cells of
 	# wall, and half a ground-row cell per column => 3 cells of ground wall.
 	assert_almost_eq(wall_area, 4.5 * CS * CS, 1.0, "Wall content rides into the strip")
 
@@ -121,7 +121,7 @@ func test_base_frame_mapping_round_trips_through_a_fold() -> void:
 	assert_almost_eq(Vector2(mapped).x, start.x + 128.0, 0.01,
 		"Mapped point rides shift_a exactly")
 
-	var strip_point := Vector2(200, 50)  # in the excised band
+	var strip_point := Vector2(200, 50)  # in the excised strip
 	var strip_piece = BaseFrame.piece_containing(index, strip_point, CS)
 	var gone = BaseFrame.world_point_from_base(
 		folded, strip_piece.base_id, strip_point - strip_piece.src_offset)
@@ -148,14 +148,14 @@ func test_resolve_base_point_strict_disables_split_centers() -> void:
 
 
 func test_segment_intersects_band() -> void:
-	var fold := Fold.create(0, Vector2i(2, 1), Vector2i(5, 1), CS)  # band x in (160,352)
-	assert_true(WorldCore.segment_intersects_band(
-		Vector2(200, 0), Vector2(200, 100), fold), "Segment inside the band")
-	assert_true(WorldCore.segment_intersects_band(
-		Vector2(100, 50), Vector2(400, 50), fold), "Segment crossing the band")
-	assert_false(WorldCore.segment_intersects_band(
-		Vector2(100, 0), Vector2(100, 100), fold), "Segment left of the band")
-	assert_false(WorldCore.segment_intersects_band(
+	var fold := Fold.create(0, Vector2i(2, 1), Vector2i(5, 1), CS)  # strip x in (160,352)
+	assert_true(WorldCore.segment_intersects_strip(
+		Vector2(200, 0), Vector2(200, 100), fold), "Segment inside the strip")
+	assert_true(WorldCore.segment_intersects_strip(
+		Vector2(100, 50), Vector2(400, 50), fold), "Segment crossing the strip")
+	assert_false(WorldCore.segment_intersects_strip(
+		Vector2(100, 0), Vector2(100, 100), fold), "Segment left of the strip")
+	assert_false(WorldCore.segment_intersects_strip(
 		Vector2(160, 0), Vector2(160, 100), fold), "Segment ON a crease grazes, no block")
 
 
@@ -527,7 +527,7 @@ func test_a_one_cell_fold_is_geometrically_sound() -> void:
 	var fold := Fold.create(0, Vector2i(2, 0), Vector2i(3, 0), CS)
 	assert_gt(fold.gap_distance(), 0.0, "A one-cell pair has a real gap")
 	var dropped := WorldCore.capture_strip(pieces, fold, CS)
-	assert_gt(dropped.size(), 0, "...and excises a one-cell band")
+	assert_gt(dropped.size(), 0, "...and excises a one-cell strip")
 	var folded := FoldReplay.apply_one_fold(pieces, fold, CS)
 	assert_gt(folded.size(), 0, "...leaving a world behind")
 
@@ -584,7 +584,7 @@ func test_fold_blocked_by_a_pin_in_the_span() -> void:
 	var pieces := FoldReplay.derive_pieces(bg, [])
 	var over_pin := Fold.create(0, Vector2i(1, 0), Vector2i(5, 0), CS)
 	assert_true(WorldCore.fold_blocked_by_tile(pieces, over_pin, CS),
-		"a fold whose band swallows the pin is refused")
+		"a fold whose strip swallows the pin is refused")
 	var clear := Fold.create(1, Vector2i(4, 0), Vector2i(7, 0), CS)
 	assert_false(WorldCore.fold_blocked_by_tile(pieces, clear, CS),
 		"a fold clear of the pin is allowed")
@@ -676,7 +676,7 @@ func test_camera_widen_pulls_out_during_a_fold() -> void:
 
 
 func test_camera_view_radius_covers_the_frame_corner() -> void:
-	# Everything drawn must reach the corner of the frame, or the repeated bands
+	# Everything drawn must reach the corner of the frame, or the repeated copies
 	# inside a fold would visibly run out.
 	var r := WorldCore.camera_view_radius(VIEW, 0.5)
 	assert_almost_eq(r, Vector2(1280.0, 720.0).length(), 0.01,
@@ -752,8 +752,8 @@ func test_peeking_and_moving_add_but_stay_bounded() -> void:
 
 func test_lookahead_is_flat_along_a_folded_band() -> void:
 	# Inside a fold the strip repeats along the crease normal, so the frame is
-	# already showing every band there is in that direction: leading along it
-	# would slide the view for nothing. Across the band is what still moves.
+	# already showing every copy there is in that direction: leading along it
+	# would slide the view for nothing. Across the strip is what still moves.
 	var n := Vector2(1, 0)
 	var lead := _lead({"velocity": Vector2(1, 1), "flat_axis": n})
 	assert_almost_eq(lead.dot(n), 0.0, 0.001, "No lead along the repeating axis")

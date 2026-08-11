@@ -282,7 +282,7 @@ func test_shipped_trigger_is_fully_specified():
 
 
 func test_shipped_pins_survive_the_preplaced_fold():
-	# A pin inside a pre-folded band would be excised, contradicting what a pin is.
+	# A pin inside a pre-folded strip would be excised, contradicting what a pin is.
 	var e := _east()
 	for t in (e["base"] as BaseGrid).tiles:
 		if t.type != TileTypes.PIN:

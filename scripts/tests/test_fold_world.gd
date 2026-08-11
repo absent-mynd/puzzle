@@ -86,7 +86,7 @@ func test_pinch_applies_fold_for_real_and_exit_restores() -> void:
 	assert_eq(world.folds.size(), 1, "The pinch fold IS applied to the world")
 	assert_gt(world.geo.layers().size(), 0, "The strip's geometry is what is drawn")
 	var inside: int = world.current_pieces.size()
-	assert_false(world.lattice.is_flat(), "...and the space it draws repeats: you are in a band")
+	assert_false(world.lattice.is_flat(), "...and the space it draws repeats: you are in a strip")
 
 	world.player.teleport(Vector2(15.5 * CS, 12.5 * CS), false)
 	world.try_exit()
@@ -113,7 +113,7 @@ func test_one_key_places_both_hands_and_the_fuse_does_the_rest() -> void:
 
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	assert_eq(world.mode, world.Mode.SUBSPACE,
-		"The fuse folds it, and the player inside the band is folded in")
+		"The fuse folds it, and the player inside the strip is folded in")
 	assert_eq(world.hands_pending(), 0, "The hands went from the anchors into the fold")
 
 
@@ -207,13 +207,13 @@ func test_the_fuse_is_a_window_to_make_a_doubtful_fold_work() -> void:
 	# put you, then move somewhere it can before it fires.
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)   # mid-air over the pit
 	world.tap_action(Vector2i(-1, 0))               # (12,12)
-	world.tap_action(Vector2i(1, 0))                # (14,12) — you are inside the band
+	world.tap_action(Vector2i(1, 0))                # (14,12) — you are inside the strip
 	assert_true(world.fuse_running(), "Both down, counting")
 
-	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)    # run clear of the band
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)    # run clear of the strip
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	assert_eq(world.mode, world.Mode.WORLD,
-		"Having left the band before it fired, you ride a flap instead of being swallowed")
+		"Having left the strip before it fired, you ride a flap instead of being swallowed")
 	assert_eq(world.folds.size(), 1, "And the fold went ahead")
 
 
@@ -285,7 +285,7 @@ func test_pairs_fire_in_fuse_order_not_placement_order() -> void:
 	world.tap_action(Vector2i(1, 0))                        # swift pair, laid second
 	assert_eq(world.primed.size(), 2, "Both armed")
 
-	# Stand clear of the swift band, or its fold swallows you and the patient pair —
+	# Stand clear of the swift strip, or its fold swallows you and the patient pair —
 	# left at world level — stops resolving and quietly pauses.
 	world.player.teleport(Vector2(2.5 * CS, 12.5 * CS), false)
 
@@ -359,7 +359,7 @@ func test_a_tap_at_a_seam_places_and_the_burst_clears_everything() -> void:
 
 func test_unfold_blocked_by_newer_crossing_fold() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))  # X: vertical seam at x=22.5c
-	world.do_fold(Vector2i(30, 8), Vector2i(30, 11))   # Y: horizontal band, crosses X's seam
+	world.do_fold(Vector2i(30, 8), Vector2i(30, 11))   # Y: horizontal strip, crosses X's seam
 	assert_eq(world.folds.size(), 2, "Both folds applied")
 	assert_false(world.can_unfold_fold(world.folds[0]), "Newer crossing fold blocks X")
 
@@ -377,7 +377,7 @@ func test_stacked_seams_unfold_the_one_that_can_actually_come_out() -> void:
 	# whose halves happen to join at one spot. The diamond there is one marker for
 	# both, and the older of the two is blocked by the newer crossing its seam. F
 	# must act on the fold that can come out, not on the buried one.
-	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)   # clear of both bands
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)   # clear of both strips
 	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))           # X: seam cell (22,12)
 	world.do_fold(Vector2i(22, 10), Vector2i(22, 14))           # Y: the SAME seam cell
 	assert_eq(world.folds.size(), 2, "Both folds applied")
@@ -450,8 +450,8 @@ func test_interior_fold_rides_player_and_persists_on_exit() -> void:
 
 func test_exit_blocked_by_glue_crossing_interior_fold() -> void:
 	_pinch_over_pit()
-	# Interior fold whose band CROSSES the glue (horizontal band in a
-	# vertical-band subspace): the outer seam is no longer the newest fold
+	# Interior fold whose strip CROSSES the glue (horizontal strip in a
+	# vertical-strip subspace): the outer seam is no longer the newest fold
 	# affecting itself, so the exit locks until the inner fold is unfolded.
 	var ok: bool = world.do_sub_fold(Vector2i(12, 8), Vector2i(12, 11))
 	assert_true(ok, "Crossing interior fold commits")
@@ -480,11 +480,11 @@ func test_placed_hands_survive_subspace_exit() -> void:
 func test_subspace_wrap_teleports_across_the_glue() -> void:
 	_pinch_over_pit()
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Pinched in")
-	# Band along x is (10.5, 18.5) cells. Step past the far crease and wrap.
+	# Strip along x is (10.5, 18.5) cells. Step past the far crease and wrap.
 	world.player.teleport(Vector2(18.9 * CS, 12.5 * CS), false)
 	world._wrap_body()
 	assert_almost_eq(world.player.global_position.x, (18.9 - 8.0) * CS, 0.01,
-		"Crossing the glue wraps one band width back")
+		"Crossing the glue wraps one period back")
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Wrap does not eject")
 
 
@@ -531,7 +531,7 @@ func test_wrap_carries_the_hands_you_are_holding() -> void:
 	# Same argument as the camera, and the same vector. The floating hands are the
 	# one other thing in the frame holding a world position that nothing re-derives,
 	# so a wrap that moves the body a whole period and leaves them behind strands
-	# them a band away — whereupon the springs haul them back across the space. On
+	# them a copy away — whereupon the springs haul them back across the space. On
 	# screen that is the hands snapping to the copy you walked in from and chasing
 	# you through it, which was the reported bug.
 	_pinch_over_pit()
@@ -564,7 +564,7 @@ func test_a_carried_hand_never_swims_a_band_after_a_wrap() -> void:
 		_settle_orbit(1)
 		for off in _hand_offsets():
 			assert_lt(Vector2(off).length(), gap * 0.25,
-				"A carried hand stays beside the body rather than out by a band")
+				"A carried hand stays beside the body rather than out by a copy")
 
 
 func test_everything_that_moves_is_drawn_in_every_copy_of_the_strip() -> void:
@@ -587,7 +587,7 @@ func test_everything_that_moves_is_drawn_in_every_copy_of_the_strip() -> void:
 		var k: float = Vector2(off).dot(n) / gap
 		assert_almost_eq(Vector2(off).distance_to(n * (k * gap)), 0.01, 0.02,
 			"Copies are displaced along the crease normal only")
-		assert_almost_eq(k, roundf(k), 0.01, "...by a whole number of band widths")
+		assert_almost_eq(k, roundf(k), 0.01, "...by a whole number of periods")
 
 	world.try_exit()
 	assert_eq(world.wrap_offsets, [Vector2.ZERO], "One copy of a world that does not repeat")
@@ -986,7 +986,7 @@ func test_a_loose_hand_rides_folds_like_any_occupant() -> void:
 	assert_gte(Vector2(before).y, Vector2(_plane_point(Vector2i(24, 6))).y,
 		"...resting on the ground of that cell, not hovering at its centre")
 
-	# A fold clear of the player (spawn is at x=4.5c, west of the band) so nobody
+	# A fold clear of the player (spawn is at x=4.5c, west of the strip) so nobody
 	# gets pinched: the hand is B-side and rides inward.
 	world.do_fold(Vector2i(14, 6), Vector2i(20, 6))
 	assert_eq(world.mode, world.Mode.WORLD, "The player rode a flap rather than being folded in")
@@ -1335,7 +1335,7 @@ func test_a_hand_in_orbit_stays_within_the_band_it_orbits() -> void:
 		if world.hand_balls.is_empty():
 			break
 		var d: float = Vector2(world.hand_balls[0]["pos"]).dot(n) - c1
-		assert_between(d, -1.0, gap + 1.0, "Stays in the fundamental band")
+		assert_between(d, -1.0, gap + 1.0, "Stays in the fundamental strip")
 
 
 func test_a_hand_that_runs_off_the_end_of_a_band_is_turned_back_into_it() -> void:
@@ -1347,7 +1347,7 @@ func test_a_hand_that_runs_off_the_end_of_a_band_is_turned_back_into_it() -> voi
 	# which settles the hand at the player's feet. Inside a fold that point is routinely
 	# outside the strip, so the hand bound to nothing, was put back in the air, drifted
 	# out again and was recovered again, indefinitely. Nothing caught it: the ledger
-	# stayed correct, the hand really was still in the band, and the tests that watched
+	# stayed correct, the hand really was still in the strip, and the tests that watched
 	# the WRAP axis saw nothing wrong because the escape was along the free one. The
 	# only outward sign was 1,964 identical ERROR lines in a 16-second suite run.
 	world.hands[0] = null
@@ -1373,7 +1373,7 @@ func test_a_hand_that_runs_off_the_end_of_a_band_is_turned_back_into_it() -> voi
 			break
 
 	assert_eq(escaped_to, INF,
-		"Never posted outside the band along its free axis (reached %s, band is %s..%s)"
+		"Never posted outside the strip along its free axis (reached %s, strip is %s..%s)"
 			% [escaped_to, lo, hi])
 	assert_eq(_total(), _start_total, "and it is still one of the world's hands throughout")
 
@@ -1460,7 +1460,7 @@ func test_the_spare_hand_can_actually_be_picked_up_afterwards() -> void:
 
 
 func test_the_spare_lands_on_ground_that_still_exists() -> void:
-	# The mechanism, stated directly: the hand must not be left over the band the unfold
+	# The mechanism, stated directly: the hand must not be left over the strip the unfold
 	# moved away, and must not end up inside the geometry either.
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
 	world.hands[0] = HandTypes.SWIFT
@@ -1696,7 +1696,7 @@ func test_tiles_are_drawn_from_the_tileset_and_lit() -> void:
 
 
 func test_the_sheet_is_batched_rather_than_a_node_per_piece() -> void:
-	# A region is ~800 tiles and a strip is drawn again in every band it repeats
+	# A region is ~800 tiles and a strip is drawn again in every copy it repeats
 	# into. One Polygon2D per piece per copy meant thousands of nodes torn down
 	# and rebuilt on EVERY fold, which was the most expensive thing the game did.
 	# Only the lit material forces a second canvas item, so two is the ceiling.
@@ -1740,7 +1740,7 @@ func test_a_lamp_rides_the_flap_that_carries_its_tile() -> void:
 	var before = _light_pos("w_spawn")
 	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
 	var after = _light_pos("w_spawn")
-	assert_not_null(after, "the spawn lamp is outside the band and survives")
+	assert_not_null(after, "the spawn lamp is outside the strip and survives")
 	assert_almost_eq(Vector2(after).x, Vector2(before).x + 4 * CS, 0.001,
 		"it moved by exactly its flap's shift — a light is an occupant, not an overlay")
 
@@ -1753,8 +1753,8 @@ func test_a_lamp_folded_in_with_you_lights_the_inside() -> void:
 	# The strip repeats across the glue, so its lights repeat with it — walking
 	# through the cylinder must not walk into a dark copy of a lit room. The near
 	# copies only: the shader takes the nearest handful, so copying every visible
-	# band would crowd out the ones actually lighting you.
-	assert_gt(world.lights_here().size(), 1, "the lamp repeats with the band it is in")
+	# copy would crowd out the ones actually lighting you.
+	assert_gt(world.lights_here().size(), 1, "the lamp repeats with the copy it is in")
 	assert_lte(world.lights_here().size(), LightRig.MAX_LIGHTS,
 		"...but no further than the shader can carry")
 
@@ -1826,7 +1826,7 @@ func test_inside_a_fold_the_band_is_framed_glue_to_glue() -> void:
 	for p in focus:
 		seen[snappedf(Vector2(p).dot(n), 0.01)] = true
 	assert_true(seen.has(snappedf(near, 0.01)), "The near glue line is held in frame")
-	assert_true(seen.has(snappedf(far, 0.01)), "...and so is the far one: the band is the room")
+	assert_true(seen.has(snappedf(far, 0.01)), "...and so is the far one: the strip is the room")
 
 
 func test_the_fold_animation_draws_where_the_world_draws() -> void:
@@ -1981,7 +1981,7 @@ func test_the_zoom_is_measured_from_the_led_camera_not_the_body() -> void:
 
 func test_inside_a_fold_the_lead_is_flat_along_the_band() -> void:
 	# The strip repeats along the crease normal, so the frame already shows every
-	# band there is that way. Leading along it slides the view for nothing.
+	# copy there is that way. Leading along it slides the view for nothing.
 	_pinch_over_pit()
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
 	world.player.velocity = Vector2(PlayerBody.RUN_SPEED, PlayerBody.MAX_FALL)
@@ -1990,7 +1990,7 @@ func test_inside_a_fold_the_lead_is_flat_along_the_band() -> void:
 	assert_almost_eq(world.player.lookahead_target.dot(n), 0.0, 0.001,
 		"No lead along the repeating axis")
 	assert_gt(world.player.lookahead_target.length(), 0.0,
-		"...but the lead across the band survives")
+		"...but the lead across the strip survives")
 
 
 func test_the_lead_holds_still_while_a_fold_plays() -> void:

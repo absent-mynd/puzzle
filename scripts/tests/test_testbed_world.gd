@@ -342,7 +342,7 @@ func test_the_trigger_region_covers_every_outcome_the_resolver_has():
 
 func test_a_pin_still_vetoes_the_fold_a_plate_would_make():
 	# The plate is on the floor and the pin is in the sky six rows up: a fold's
-	# extent is the whole world, so the nail is in its band anyway.
+	# extent is the whole world, so the nail is in its strip anyway.
 	var wd := _world()
 	var booted := _booted(wd, "triggers")
 	var base: BaseGrid = booted["base"]
@@ -401,7 +401,7 @@ func test_a_nested_pre_placed_fold_is_authored_and_ignored():
 
 func test_the_routing_doors_survive_the_folds_their_region_ships_with():
 	# Doors that are folded away at boot are a case this world is FOR — but only the
-	# ones authored for it. Every door on a region's landing strip (the clear stretch
+	# ones authored for it. Every door on a region's landing run (the clear stretch
 	# of walk line the routing doors sit on) has to still be there, or a spoke of the
 	# hub leads somewhere you cannot come back from.
 	var wd := _world()

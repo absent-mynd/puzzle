@@ -192,14 +192,14 @@ func test_fold_guides_creases_sit_on_the_anchor_centres():
 
 func test_fold_guides_band_is_the_strip_the_fold_excises():
 	var g := _guides(Vector2i(1, 2), Vector2i(6, 2))
-	var band: Array = g["band"]
-	assert_gt(band.size(), 0, "the fold has something to excise")
+	var strip: Array = g["strip"]
+	assert_gt(strip.size(), 0, "the fold has something to excise")
 	var area := 0.0
-	for poly in band:
+	for poly in strip:
 		area += GeometryCore.polygon_area(poly)
 	# Five cells of gap across a six-cell-tall region.
 	assert_almost_eq(area, 5.0 * 64.0 * 6.0 * 64.0, 1.0,
-		"the band is exactly the space between the creases")
+		"the strip is exactly the space between the creases")
 
 
 func test_fold_guides_band_matches_what_the_kernel_would_drop():
@@ -213,17 +213,17 @@ func test_fold_guides_band_matches_what_the_kernel_would_drop():
 	var expected: Array = CollisionCore.fold_polygons([rect], fold, 64.0)["dropped"]
 	var got := 0.0
 	var want := 0.0
-	for poly in g["band"]:
+	for poly in g["strip"]:
 		got += GeometryCore.polygon_area(poly)
 	for poly in expected:
 		want += GeometryCore.polygon_area(poly)
-	assert_almost_eq(got, want, 0.01, "the drawn band is the kernel's excised strip")
+	assert_almost_eq(got, want, 0.01, "the drawn strip is the kernel's excised strip")
 
 
 func test_fold_guides_refuse_a_degenerate_pair():
 	var g := _guides(Vector2i(3, 3), Vector2i(3, 3))
 	assert_true(g["degenerate"], "two anchors on one cell have no crease direction")
-	assert_eq((g["band"] as Array).size(), 0, "and nothing to excise")
+	assert_eq((g["strip"] as Array).size(), 0, "and nothing to excise")
 
 
 func test_clip_line_to_rect_finds_the_crossing():

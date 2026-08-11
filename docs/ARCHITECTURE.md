@@ -127,8 +127,8 @@ keeps `plane_pos` meaningful and lets the door and anchor machinery work in cell
 coordinates.
 
 **Consequence — infinite creases.** A crease is a full line, not a segment, so a fold
-excises a band across the entire world. Close a pit here and a structure on the far
-side of the map loses the same band. **This is deliberately unresolved.** It is the
+excises a strip across the entire world. Close a pit here and a structure on the far
+side of the map loses the same strip. **This is deliberately unresolved.** It is the
 strongest argument for barrier-scoped fold regions, and the design position is that it
 should be *felt* in play before it is engineered away. Do not quietly fix it.
 
@@ -168,7 +168,7 @@ collide correctly without that loop ever having heard of them.
 
 ## Decision 6: Uniform unfold blocking
 
-A fold cannot be unfolded while a **newer** fold's excision band crosses its seam
+A fold cannot be unfolded while a **newer** fold's excision strip crosses its seam
 segment. The same test against a fold's two glue lines gates exiting a subspace.
 
 **Why one rule:** the naive alternative is a stack discipline (only unfold the newest
@@ -213,8 +213,8 @@ it) given an epsilon. Pieces stay convex under repeated folding, so it composes.
 
 **The epsilon discipline:** `GeometryCore.EPSILON = 0.0001`. Never compare floats with
 `==`. Grazing a crease must not count as crossing it — which is why
-`WorldCore.segment_intersects_band` uses a half-pixel margin. Without it, a fold whose
-seam merely *touches* another's band would spuriously block unfolding.
+`WorldCore.segment_intersects_strip` uses a half-pixel margin. Without it, a fold whose
+seam merely *touches* another's strip would spuriously block unfolding.
 
 ---
 

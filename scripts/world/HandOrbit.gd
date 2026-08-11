@@ -18,7 +18,7 @@ class_name HandOrbit extends WrapCanvas
 ## It is a `WrapCanvas`, which is the whole of what it knows about folds: it paints
 ## the hands beside the body and they turn up in every copy of a strip, because the
 ## body does. Before that base class existed this node was the standing example of
-## the problem — a new object added to the world that quietly appeared in one band
+## the problem — a new object added to the world that quietly appeared in one copy
 ## and nowhere else, while the terrain, the body and the markers each carried their
 ## own copy of the repeat loop.
 ##
@@ -77,7 +77,7 @@ func follow(hands: Array, body: Vector2, motion: Vector2, facing: int, delta: fl
 ## Walk through a glue line and the body slides back by a period; these positions
 ## have to slide with it. They are the one thing in this file that outlives a frame,
 ## which is exactly what `WrapCanvas.carry_through_wrap` exists for: left behind, a
-## hand sits a band away and the spring hauls it home across the whole space — the
+## hand sits a copy away and the spring hauls it home across the whole space — the
 ## hands appearing to jump back to the copy you entered from and swim after you,
 ## when they should simply have come through with you.
 ##

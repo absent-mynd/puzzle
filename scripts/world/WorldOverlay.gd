@@ -2,7 +2,7 @@ class_name WorldOverlay extends WrapCanvas
 
 ## WorldOverlay
 ##
-## Draw-only layer for the fold world: anchor markers, the excised-band preview,
+## Draw-only layer for the fold world: anchor markers, the excised-strip preview,
 ## seam-anchor diamonds (with unfoldability tint), the glue lines and outer seam
 ## anchor inside a subspace, doors and hands lying on the ground.
 ##
@@ -14,16 +14,16 @@ class_name WorldOverlay extends WrapCanvas
 ## 16.3 ms of a 16.6 ms frame. See `OverlayView`.
 ##
 ## It is a `WrapCanvas`, so nothing here loops over copies of the space: `paint`
-## draws one band's worth of markers and they appear in every band. What used to
+## draws one copy's worth of markers and they appear in every copy. What used to
 ## be a private `_copy_offsets` threaded through nine draw calls — and had to be
 ## remembered by every new marker — is now the base class's business.
 ##
-## The excised-band preview and the alignment guides repeat like everything else,
+## The excised-strip preview and the alignment guides repeat like everything else,
 ## but they are the one thing that has to be CLIPPED first: both span the whole
 ## world, so unclipped copies would lie on top of each other and stack their alpha
-## into a wash. Clipped to the fundamental domain each copy paints its own band and
+## into a wash. Clipped to the fundamental domain each copy paints its own strip and
 ## the tiling is exact. In a space that does not repeat there is no domain, nothing
-## is clipped, and this is the single band it always was.
+## is clipped, and this is the single strip it always was.
 ##
 ## The overlay draws INSIDE the pixel render target, so every stroke is measured
 ## in art pixels: a 1-unit line would be a quarter of a pixel and would flicker
@@ -40,10 +40,10 @@ const STROKE := HAIR * 2.0
 
 var _view := OverlayView.new()
 
-## The preview band and the guides, clipped to one copy of the space. Built when the
+## The preview strip and the guides, clipped to one copy of the space. Built when the
 ## view arrives — once per frame — rather than per copy, which is the whole lesson of
 ## `OverlayView`: `Geometry2D.intersect_polygons` is not free.
-var _bands: Array = []
+var _strips: Array = []
 var _guides: Array = []
 
 
@@ -54,9 +54,9 @@ func set_view(view: OverlayView) -> void:
 	queue_redraw()
 
 
-## The band an armed pair would excise, and the guides through every placed hand.
+## The strip an armed pair would excise, and the guides through every placed hand.
 func _rebuild_preview() -> void:
-	_bands = []
+	_strips = []
 	_guides = []
 	if not _view.active:
 		return
@@ -74,8 +74,8 @@ func _rebuild_preview() -> void:
 			Vector2(at.x + HAIR * 0.5, world_px.y), Vector2(at.x - HAIR * 0.5, world_px.y),
 		])))
 	for pair in _view.pairs:
-		_bands.append_array(
-			_clip(_band_polygon(Vector2(pair["a"]), Vector2(pair["b"]), world_px)))
+		_strips.append_array(
+			_clip(_strip_polygon(Vector2(pair["a"]), Vector2(pair["b"]), world_px)))
 
 
 ## `poly` cut down to one copy of the space. A domain of fewer than three points
@@ -142,7 +142,7 @@ func _draw_doors() -> void:
 ## they are one object seen several times, and copies bobbing out of phase would say
 ## otherwise. The seed comes from the hand's base identity rather than its place in the
 ## list — see `WorldCore.hand_drift_seed`. (The copies themselves are `WrapCanvas`'s
-## business: this draws one band's worth and they appear in every band.)
+## business: this draws one copy's worth and they appear in every copy.)
 ##
 ## The float does NOT move the hand. `_check_pickups` measures from `position_in`, so a
 ## hand is picked up where it lies; the drift is only ever how it is drawn, which is why
@@ -229,20 +229,20 @@ func _draw_placed_hands() -> void:
 			draw_circle(at, 3.0 + pulse * 2.5, c)
 
 
-## The band an armed pair would excise, and the alignment guides — in every copy
+## The strip an armed pair would excise, and the alignment guides — in every copy
 ## of the space, because the fold reaches into every copy. What the preview shows
-## is what the fold will take, and inside a repeating space that is a band in each
-## band. Folds may be diagonal; the guides just help line up straight ones.
+## is what the fold will take, and inside a repeating space that is a strip in each
+## strip. Folds may be diagonal; the guides just help line up straight ones.
 func _draw_preview() -> void:
 	for poly in _guides:
 		draw_colored_polygon(poly, Color(1, 1, 1, 0.08))
-	for poly in _bands:
+	for poly in _strips:
 		draw_colored_polygon(poly, Color(0.95, 0.25, 0.3, 0.22))
 
 
 ## The parallelogram an armed pair would excise: spanning well past the view, at
 ## whatever angle the pair implies.
-func _band_polygon(a_center: Vector2, b_center: Vector2,
+func _strip_polygon(a_center: Vector2, b_center: Vector2,
 		world_px: Vector2) -> PackedVector2Array:
 	if a_center.is_equal_approx(b_center):
 		return PackedVector2Array()

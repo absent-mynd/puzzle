@@ -64,9 +64,9 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/burst verb, the hand ledger, the auto-commit fuse, loose hands, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
 | **The window-resolution overlay**: background, controls line, status readout, the centre flash and its lifetime. Told what to say; holds no reference back | `WorldHud.gd` |
 | **What the camera should be showing**: the lead, the lens, and the render-target size that stands in for zoom. Takes the world's facts as a context dictionary | `WorldCamera.gd` |
-| **Hands in the air**: the flight, the wrap, the turn-back at a band's end. Emits `landed` / `lost`; a hand at rest is an occupant and belongs to `FoldWorld` | `HandField.gd` |
+| **Hands in the air**: the flight, the wrap, the turn-back at a strip's end. Emits `landed` / `lost`; a hand at rest is an occupant and belongs to `FoldWorld` | `HandField.gd` |
 | Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing) | `PlayerBody.gd` |
-| Anchors, fold preview band, seam diamonds, glue lines, the hold-progress ring, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
+| Anchors, fold preview strip, seam diamonds, glue lines, the hold-progress ring, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
 | The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |
 | **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping | `PixelArt.gd` |
 | **The tileset.** Kinds, variants, and base-space UVs for cut pieces | `TileAtlas.gd` |
@@ -84,7 +84,7 @@ understand how the pieces meet. Its header comment is the map.
 | …the player ride a flap? | `do_fold()` → `BaseFrame.world_point_from_base` → `WorldCore.depenetrate` |
 | …getting pinched into a fold work? | `do_fold()`, the `dest == null` branch |
 | …a subspace get derived? | `FoldWorld._compute_level()` / `_apply_context()` |
-| …unfold blocking work? | `FoldWorld.can_unfold_fold()`, `WorldCore.segment_intersects_band` |
+| …unfold blocking work? | `FoldWorld.can_unfold_fold()`, `WorldCore.segment_intersects_strip` |
 | …exiting a subspace work? | `FoldWorld.try_exit()`, `exit_blocker()` |
 | …a door find its partner? | `FoldWorld._check_doors()`, `BaseFrame.resolve_base_point` |
 | …a trigger fire? | `FoldWorld._check_triggers()` → `TriggerResolver.resolve` |

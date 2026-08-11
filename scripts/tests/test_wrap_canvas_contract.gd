@@ -3,7 +3,7 @@ extends GutTest
 ## `WrapCanvas` has a contract, and it is a performance contract.
 ##
 ## Its own docstring states it: `prepare()` runs once before any copy, "so a question
-## that costs something is asked once rather than once per band"; `paint()` runs once
+## that costs something is asked once rather than once per copy"; `paint()` runs once
 ## per copy. A space repeats 7 times inside one fold and 77 two folds deep, and the
 ## ceiling is `FoldWorld.MAX_WRAP_COPIES` = 121.
 ##
@@ -24,7 +24,7 @@ extends GutTest
 ## `WrapCanvas` subclass will not have a view-model. And the specific one, that the
 ## overlay still holds no reference back, because that is what made the general rule
 ## breakable in the first place. Cheap reads were never the problem; work that scales
-## with the world, done once per band, was.
+## with the world, done once per copy, was.
 
 ## Queries that build a new Array or Dictionary every call. Adding one here is how you
 ## keep the next `glue_lines()` out of a draw loop.

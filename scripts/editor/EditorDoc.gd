@@ -694,7 +694,7 @@ func remove_fold(id: String, index: int, keep_anchors: bool = true, tag: String 
 
 
 ## The fold whose anchor sits on `cell`, or -1. Folds are hit-tested by their
-## anchors rather than their band: bands overlap, anchors are where you clicked.
+## anchors rather than their strip: strips overlap, anchors are where you clicked.
 func fold_at(id: String, cell: Vector2i) -> int:
 	var folds := folds_of(id)
 	for i in range(folds.size()):

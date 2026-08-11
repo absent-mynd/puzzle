@@ -196,7 +196,7 @@ a half-finished design is still half-finished tomorrow.
 shown as:
 
 - the two **crease lines**, where the sheet will be cut;
-- the **band** between them, shaded — the space the fold excises;
+- the **strip** between them, shaded — the space the fold excises;
 - the **meeting line**, drawn bright: where the two halves come to rest;
 - a dashed line joining the two anchors.
 
@@ -204,7 +204,7 @@ A card that shipped already folded would show you a hole and no way to reason
 about what is sealed inside it, which is the opposite of what a pre-placed fold
 is for.
 
-The band is not a lookalike. `EditorTools.fold_guides` builds a real `Fold` from
+The strip is not a lookalike. `EditorTools.fold_guides` builds a real `Fold` from
 the two anchors and asks `CollisionCore.fold_polygons` what it drops — the same
 call `FoldReplay` makes when the fold is applied for real. `test_editor_tools`
 pins that equality.

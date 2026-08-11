@@ -145,7 +145,7 @@ Roughly in priority order — nothing here is committed to yet:
   authored. The layout is fixed and a drawn sheet drops in without code changes.
 - The pin/trigger wing lives in **east**, not west, and is reached through a door.
   West's four authored beats depend on its exact geometry and infinite creases make
-  a pin a global veto on a band of folds, so nothing was placed there without
+  a pin a global veto on every fold whose strip spans it, so nothing was placed there
   playtesting. See the note in `scripts/world/README.md`.
 
 ---

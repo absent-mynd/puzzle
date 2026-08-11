@@ -16,7 +16,7 @@ func test_the_region_world_does_not_repeat() -> void:
 	assert_true(lat.is_flat(), "A region is a plane, not a cylinder")
 	assert_eq(lat.offsets(10000.0), [Vector2.ZERO], "One copy of everything")
 	assert_eq(lat.wrap_delta(Vector2(9999, -9999)), Vector2.ZERO, "Nothing to wrap into")
-	assert_eq(lat.free_axis(), Vector2.ZERO, "No band to run off the end of")
+	assert_eq(lat.free_axis(), Vector2.ZERO, "No strip to run off the end of")
 
 
 func test_one_fold_makes_a_cylinder() -> void:
@@ -25,7 +25,7 @@ func test_one_fold_makes_a_cylinder() -> void:
 	assert_eq(lat.depth(), 1, "One period")
 	assert_eq(lat.periods()[0], Vector2(8 * CS, 0), "...exactly the span the fold excised")
 	assert_almost_eq(lat.free_axis().abs(), Vector2(0, 1), Vector2(0.001, 0.001),
-		"The band runs along the crease, and that is the way out of it")
+		"The strip runs along the crease, and that is the way out of it")
 
 
 func test_a_period_is_a_whole_number_of_cells_even_diagonally() -> void:
@@ -38,17 +38,17 @@ func test_a_period_is_a_whole_number_of_cells_even_diagonally() -> void:
 func test_wrapping_folds_a_point_back_into_the_band() -> void:
 	var f := _fold(Vector2i(10, 12), Vector2i(18, 12))
 	var lat := FoldLattice.flat().push(f, CS)
-	# The band spans x in [10.5, 18.5) cells.
+	# The strip spans x in [10.5, 18.5) cells.
 	var out := Vector2(18.9 * CS, 12.5 * CS)
-	assert_almost_eq(lat.wrap(out).x, (18.9 - 8.0) * CS, 0.01, "One band width back")
+	assert_almost_eq(lat.wrap(out).x, (18.9 - 8.0) * CS, 0.01, "One period back")
 	assert_almost_eq(lat.wrap(Vector2(10.2 * CS, 0)).x, (10.2 + 8.0) * CS, 0.01,
 		"...and the other way across the near glue")
 	assert_eq(lat.wrap_delta(Vector2(13.5 * CS, 12.5 * CS)), Vector2.ZERO,
-		"A point already in the band does not move")
+		"A point already in the strip does not move")
 
 
 func test_wrapping_crosses_as_many_copies_as_it_needs_to() -> void:
-	# Not one band per call: a body flung far out of the domain (a fold landing it
+	# Not one strip per call: a body flung far out of the domain (a fold landing it
 	# there, a debug teleport) has to come all the way back, not one lap.
 	var lat := FoldLattice.flat().push(_fold(Vector2i(10, 12), Vector2i(18, 12)), CS)
 	var far := Vector2(10.5 * CS + 8.0 * CS * 5 + 30.0, 0)
@@ -56,7 +56,7 @@ func test_wrapping_crosses_as_many_copies_as_it_needs_to() -> void:
 
 
 func test_a_perpendicular_inner_fold_makes_a_torus() -> void:
-	# THE nested case. The outer fold's band runs vertically; folding across it
+	# THE nested case. The outer fold's strip runs vertically; folding across it
 	# horizontally excises a strip that reaches both outer glue lines, so walking
 	# along the outer normal still wraps — and now so does walking across it.
 	var outer := _fold(Vector2i(10, 12), Vector2i(18, 12))     # normal +x
@@ -71,7 +71,7 @@ func test_a_perpendicular_inner_fold_makes_a_torus() -> void:
 
 
 func test_a_parallel_inner_fold_stays_a_cylinder() -> void:
-	# A band inside the band, not touching the glue: the outer identification is
+	# A strip inside the strip, not touching the glue: the outer identification is
 	# not part of this space, so only the inner fold's period is left.
 	var outer := _fold(Vector2i(10, 12), Vector2i(18, 12))
 	var inner := _fold(Vector2i(12, 8), Vector2i(15, 8))       # normal +x, like the outer
@@ -103,7 +103,7 @@ func test_copies_fill_the_frame_and_start_at_home() -> void:
 	assert_eq(offs.size(), 7, "Three either side of it")
 	for off in offs:
 		var k: float = float(off.x) / (8.0 * CS)
-		assert_almost_eq(k, roundf(k), 0.001, "Every copy is a whole number of bands out")
+		assert_almost_eq(k, roundf(k), 0.001, "Every copy is a whole number of periods out")
 		assert_almost_eq(float(off.y), 0.0, 0.001, "...along the period, and nowhere else")
 
 
@@ -123,7 +123,7 @@ func test_neighbour_copies_are_what_the_colliders_need() -> void:
 	var flat := FoldLattice.flat()
 	assert_eq(flat.neighbour_offsets().size(), 1, "A flat world collides once")
 	var cyl := flat.push(_fold(Vector2i(10, 12), Vector2i(18, 12)), CS)
-	assert_eq(cyl.neighbour_offsets().size(), 3, "A cylinder needs the band either side")
+	assert_eq(cyl.neighbour_offsets().size(), 3, "A cylinder needs the copy either side")
 	var torus := cyl.push(_fold(Vector2i(12, 8), Vector2i(12, 11)), CS)
 	assert_eq(torus.neighbour_offsets().size(), 9, "A torus needs all eight around it")
 
@@ -145,7 +145,7 @@ func test_the_domain_edges_follow_you_into_the_copy_you_are_in() -> void:
 	# looking: the edges have to be the ones around THAT point, not around home.
 	var lat := FoldLattice.flat().push(_fold(Vector2i(10, 12), Vector2i(18, 12)), CS)
 	var edges: PackedVector2Array = lat.domain_edges(Vector2((13.5 + 8.0) * CS, 0))
-	assert_almost_eq(edges[0].x, (10.5 + 8.0) * CS, 0.01, "One band along")
+	assert_almost_eq(edges[0].x, (10.5 + 8.0) * CS, 0.01, "One period along")
 	assert_almost_eq(edges[1].x, (18.5 + 8.0) * CS, 0.01, "...and its far side")
 
 
@@ -155,9 +155,9 @@ func test_the_domain_edges_follow_you_into_the_copy_you_are_in() -> void:
 
 func test_only_a_period_along_the_band_descends() -> void:
 	# The tempting generalisation — that a period sitting a WHOLE NUMBER of gaps
-	# across the band should descend sheared, since sliding by a gap is the
+	# across the strip should descend sheared, since sliding by a gap is the
 	# identity inside a fold — is false. The gluing identifies POSITIONS, not the
-	# content at them: the shear lands on the parent's sheet a band over along the
+	# content at them: the shear lands on the parent's sheet a period over along the
 	# normal, and the parent is not periodic that way. Only k = 0 survives.
 	var inner := _fold(Vector2i(0, 0), Vector2i(3, 4))          # normal (0.6,0.8), gap 5
 	var one_gap_across := FoldLattice.flat() \
@@ -167,7 +167,7 @@ func test_only_a_period_along_the_band_descends() -> void:
 
 	var along := FoldLattice.flat().push(_fold(Vector2i(0, 0), Vector2i(-4, 3)), CS)
 	assert_eq(along.push(inner, CS).depth(), 2,
-		"...and a period ALONG the band does, because the content follows it")
+		"...and a period ALONG the strip does, because the content follows it")
 
 
 func test_the_domain_polygon_is_what_a_full_world_overlay_gets_clipped_to() -> void:
@@ -189,4 +189,4 @@ func test_the_domain_polygon_is_what_a_full_world_overlay_gets_clipped_to() -> v
 	assert_eq(box.size(), 4, "A torus's domain is bounded both ways")
 	for p in box:
 		assert_between(Vector2(p).y, 8.5 * CS - 0.01, 11.5 * CS + 0.01,
-			"...including across the band")
+			"...including across the strip")

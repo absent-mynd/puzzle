@@ -240,7 +240,7 @@ at one point on the glue line — the white diamond. A burst in reach of it open
 the subspace (exit), and the diamond lights when you are close enough. You can pin anchors and fold *within* the subspace; interior
 folds persist into the world when you exit, and pending anchors ride along
 and land where the strip content lands. **Unfold blocking** applies
-everywhere: a fold cannot be unfolded while a newer fold's band crosses its
+everywhere: a fold cannot be unfolded while a newer fold's strip crosses its
 seam — so an interior fold that crosses the glue (its creases are not
 parallel to the outer fold's) locks the exit until you unfold it; the white
 diamond turns red to show it. Player and anchors move by **exact base-tile
@@ -250,7 +250,7 @@ onto — or springs from — the seam.
 
 ## Folding yourself deeper
 
-Being inside a fold does not stop you folding. Stand in the band of a fold you
+Being inside a fold does not stop you folding. Stand in the strip of a fold you
 make *in there* and it swallows you again, and you are **two folds deep** — and
 there is no limit but the hands to do it with. The status line says how deep,
 the sheet tints further with every layer, and surfacing by the glue diamond
@@ -260,10 +260,10 @@ What is worth going in for is what the space becomes. It depends entirely on
 which way the second fold runs:
 
 - **With the grain** — the inner creases parallel to the glue you came in
-  through — and the inner band never reaches that glue. You are in a narrower
-  band inside the band: still a **cylinder**, wrapping one way, with two ends
+  through — and the inner strip never reaches that glue. You are in a narrower
+  strip inside the strip: still a **cylinder**, wrapping one way, with two ends
   you can run off (the fold turns you back).
-- **Across the grain** — the inner creases perpendicular — and the inner band
+- **Across the grain** — the inner creases perpendicular — and the inner strip
   spans the outer one glue to glue. Walking along the outer normal still wraps,
   and now walking across it wraps too. You are on a **torus**: every direction
   comes back to where you started, there are no ends at all, and the frame is
@@ -273,17 +273,17 @@ which way the second fold runs:
   space is a plain cylinder with the inner fold's period alone.
 
 None of that is authored. Which periods survive is one line of geometry — a
-translation descends exactly when it runs *along* the new band — and everything
+translation descends exactly when it runs *along* the new strip — and everything
 else (how many copies to draw, where the colliders go, which way the camera
 refuses to lead, how you wrap) is read off it. See `FoldLattice`, which sets out
 why "a whole number of gaps across" is *not* a weaker condition that also works.
 
 **A fold takes what is in front of it in the sheet it is cut from; it does not
-reach around the cylinder.** A band that runs past its own glue line finds the
+reach around the cylinder.** A strip that runs past its own glue line finds the
 end of the stored sheet rather than the next copy of it. What you get is always
 really there — the strip is a genuine piece of the space — but for a fold that
 is not perpendicular to the one outside it, it is not *everything* that is there.
-The preview band is drawn in every copy (clipped to one), so what you see before
+The preview strip is drawn in every copy (clipped to one), so what you see before
 the fuse burns is what the fold will actually take.
 
 A hand committed to a fold three layers down is counted by the same ledger as one
@@ -301,8 +301,8 @@ closes in on you unasked):
 - **The fold you are composing.** Pin an anchor and walk away, and the view
   opens to keep it on screen. The camera is showing you how big the fold has
   got — that span *is* the decision you are about to make.
-- **The band you are inside.** In a subspace the fundamental domain is framed
-  glue to glue, so a wide band reads as the cylinder it is rather than a corridor
+- **The strip you are inside.** In a subspace the fundamental domain is framed
+  glue to glue, so a wide strip reads as the cylinder it is rather than a corridor
   with no visible walls — and on a torus that is all four walls, out of the same
   call.
 - **A fold rearranging the world.** The transition steps the camera back so you
@@ -328,7 +328,7 @@ view sits ahead of you, and the asymmetries are the design:
   wanting to see up there is a thing you can ask for without moving.
 - **The lead is flat along every axis the space repeats on.** A repeating space
   already shows every copy there is that way, so leading along it slides the view
-  across identical bands for nothing. One axis inside a fold — and on a torus,
+  across identical copies for nothing. One axis inside a fold — and on a torus,
   both, so the lead is the body's own motion and nothing else.
 
 The lead eases even more lazily than the zoom, because it *flips sign* the
@@ -381,13 +381,13 @@ pinned and resolve again when you return.
    closed. Also try a
    *vertical* fold (same column): fold the sky down / the floor up to climb —
    this is the gravity-specific verb.
-2. **Get folded in.** Stand *inside* the red preview band and commit the fold:
+2. **Get folded in.** Stand *inside* the red preview strip and commit the fold:
    instead of blocking, the fold swallows you. You're inside the excised strip,
    rendered repeating across the glue lines (cyan) — **and so are you.** Every
-   visible copy of the strip shows you at the same place in its own band,
-   because they are all the same band: the strip is a cylinder and you are one
+   visible copy of the strip shows you at the same place in it,
+   because they are all the same strip: the strip is a cylinder and you are one
    point on it. Walking "through" a glue line slides body and camera together
-   by exactly one band width, so the frame does not change and the crossing is
+   by exactly one period, so the frame does not change and the crossing is
    invisible — there is no seam to cross, only a lap to finish.
 3. **Dive-traverse.** While inside, walk somewhere else along the strip, then
    hold F on the white glue diamond. The fold springs open and you emerge
@@ -397,7 +397,7 @@ pinned and resolve again when you return.
    sealed — no straight fold can excise its shell, because one anchor would
    have to be pinned from inside. Diagonal folds are the crack in that logic:
    a fold pinned from two *outside* positions at different heights can lay a
-   slanted band across the chamber's corner and bite it off. One of the two
+   slanted strip across the chamber's corner and bite it off. One of the two
    anchors has to be pinned mid-jump. (Note the fold stays active: unfold it
    from inside and you've sealed yourself in.) This is the beat where the
    economy bites: being in there means **leaving that fold standing**, so both
@@ -414,7 +414,7 @@ pinned and resolve again when you return.
    shipped pre-fold, and there is a cache in there with the goal. Folded-away
    space is real space, and it holds real things.
 8. **Fold yourself in twice, across the grain.** Get pinched into the pit fold
-   (beat 2), then — standing in the band — fold *across* it: a vertical anchor
+   (beat 2), then — standing in the strip — fold *across* it: a vertical anchor
    pair, so the new creases run the other way. It swallows you again. You are two
    folds deep, and the space you are in has no ends: walk any direction far enough
    and you come back to yourself. The status line calls it a **torus**, because
@@ -434,7 +434,7 @@ there is a short teaching run for the two behavioural tile types:
 - **The pressure plate** (pink, base x25) and the wall it opens (base x27). The wall
   is three tiles tall — above jump height — so folding is the only way through, and
   you do not do the folding: stepping on the plate fires a `TRIGGER_FOLD` that
-  excises the wall's band. The reward sits behind it.
+  excises the wall's strip. The reward sits behind it.
 
 Two details worth noticing, because both fall out of the model rather than being
 special-cased:
@@ -450,7 +450,7 @@ come back and the wall is still open.
 ## Why the west region has no pins
 
 Fold extent is infinite-crease (see below), which makes a pin a **global veto on a
-band of folds** — a pin anywhere in a column forbids every horizontal fold spanning
+strip of folds** — a pin anywhere in a column forbids every horizontal fold spanning
 it, at any height. West carries the four authored beats and its geometry is load
 bearing for all of them, so pins went in east, where there is room to be wrong.
 Placing them in west is a playtesting job, not an editing one.
@@ -514,20 +514,20 @@ stays pinned at `PixelArt.CAMERA_ZOOM` forever.
   look never changes because it was folded, ridden or cut.
 - **The whole sheet is two canvas items** (`TileBatch`). A region is ~800 tiles,
   folds cut those into more pieces, and inside a fold the strip is drawn again
-  in every band it repeats into. `Polygon2D` holds many sub-polygons over one
+  in every copy it repeats into. `Polygon2D` holds many sub-polygons over one
   vertex array and the tileset is one texture, so the only thing forcing a second
   node is the lit material: foreground and background. A fold rebuild touches two
   nodes instead of thousands.
 - **The wrap is a property of the space, not of the things in it.** Static content
   bakes its copies into vertices; anything that moves is a `WrapCanvas` and is
   painted once per copy by its base class, in ordinary world coordinates. That is
-  the whole contract — add a floating object and it turns up in every band without
+  the whole contract — add a floating object and it turns up in every copy without
   knowing folds exist. (The hands orbiting your body are the object that proved
   the point: they used to appear in one copy and nowhere else.)
 
   The one thing a canvas does have to answer for is state it keeps between frames.
   Crossing a glue line slides body and camera by a period, and a canvas that
-  remembers a world position is left a band behind — so `carry_through_wrap` offers
+  remembers a world position is left a copy behind — so `carry_through_wrap` offers
   every canvas that same displacement, and one holding positions of its own adds it.
   `HandOrbit` is the only one that does; leaving it out was the hands appearing to
   snap back to the copy you entered from and swim after you.
@@ -555,7 +555,7 @@ from that:
 
 Lighting is evaluated **per art pixel**: the shaded point and the light position
 are both snapped to the pixel grid, the accumulated intensity is quantized into
-bands, and the band edges are ordered-dithered — so light arrives in chunky
+steps, and the step edges are ordered-dithered — so light arrives in chunky
 rings rather than as a smooth glow. Ambient is generous on purpose.
 
 Where the shipped lights are, and what each is for:
@@ -630,7 +630,7 @@ do not want yet.
   Covered by `scripts/tests/test_fold_lattice.gd`.
 - `WrapCanvas.gd` — a canvas item that paints itself once per copy of the space.
   Subclasses override `paint()` and never mention folds. `paint_once()` is for
-  what belongs to the frame instead (the preview band, the full-extent guides), and
+  what belongs to the frame instead (the preview strip, the full-extent guides), and
   `carry_through_wrap()` for whatever a canvas remembers across frames.
 - `TileBatch.gd` — the sheet, batched into two canvas items, with the wrap baked
   into the vertices. Also what the fold transition draws through: three batches,
@@ -661,14 +661,14 @@ do not want yet.
   render target (which it resizes as the zoom changes).
 - `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, the
   variable-height jump, squash) and the pixel-snapped camera, whose smoothing is
-  driven here so the wrap can displace it by a whole band width without losing its
+  driven here so the wrap can displace it by a whole period without losing its
   lag. It does not draw itself — `PlayerVisual` does, once per copy of the space.
   Its readings (`look_dir`, `take_jump_press`, `motion_fraction`,
   `motion_intensity`) and its jump arithmetic (`gravity_scale`, `step_fall`,
   `jump_height_for_hold`) are covered by `scripts/tests/test_player_body.gd`.
-- `WorldOverlay.gd` — anchors, strip preview band, seam markers, glue lines,
-  doors, loose hands. A `WrapCanvas`: it draws one band's worth and they appear
-  in every band. Seam diamonds are one per meeting CELL, since folds can share one
+- `WorldOverlay.gd` — anchors, strip preview strip, seam markers, glue lines,
+  doors, loose hands. A `WrapCanvas`: it draws one copy's worth and they appear
+  in every copy. Seam diamonds are one per meeting CELL, since folds can share one
   (`FoldWorld.seam_markers`). Stroke widths are multiples of one art pixel.
 - `PixelArt.gd` — how big an art pixel is; the one place that says so, including
   the target size a given zoom needs (`target_size`).

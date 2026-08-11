@@ -143,8 +143,8 @@ list, or `WorldData` — never in a derived piece.
 ### 2. Comparing floats with `==`
 
 `GeometryCore.EPSILON` is `0.0001`. Grazing a crease must not count as crossing it,
-which is why `WorldCore.segment_intersects_band` carries a half-pixel margin.
-Without it, a fold whose seam merely *touches* another's band spuriously blocks
+which is why `WorldCore.segment_intersects_strip` carries a half-pixel margin.
+Without it, a fold whose seam merely *touches* another's strip spuriously blocks
 unfolding.
 
 ```gdscript

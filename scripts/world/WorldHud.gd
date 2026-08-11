@@ -67,7 +67,7 @@ func build() -> void:
 	add_child(hud)
 
 	# Controls only — what the keys are, not what they mean. The mechanics are the
-	# game's to teach: the aim ring, the preview band, the seam diamonds and the
+	# game's to teach: the aim ring, the preview strip, the seam diamonds and the
 	# anchor readout all say their piece in place, and a wall of text on top of
 	# them explains away the thing the player is meant to work out.
 	var help := Label.new()

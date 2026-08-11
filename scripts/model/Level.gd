@@ -74,7 +74,7 @@ var wrap_offsets: Array = [Vector2.ZERO]
 ## Only a cylinder has such an end: a torus repeats both ways and has nowhere to go,
 ## and a region has the fall-out-of-the-world respawn instead. `slack` keeps a thing
 ## that is merely near the end from counting as past it.
-func left_the_band(point: Vector2, slack: float) -> bool:
+func left_the_strip(point: Vector2, slack: float) -> bool:
 	var free := lattice.free_axis()
 	if free == Vector2.ZERO or free_extent.is_empty():
 		return false
@@ -82,8 +82,8 @@ func left_the_band(point: Vector2, slack: float) -> bool:
 	return t < float(free_extent["min"]) - slack or t > float(free_extent["max"]) + slack
 
 
-## Where something that ran off the end of a band is put back: the middle of the band
-## it just left. Only meaningful when `left_the_band` is true, which implies both a
+## Where something that ran off the end of a strip is put back: the middle of the strip
+## it just left. Only meaningful when `left_the_strip` is true, which implies both a
 ## free axis and a `sub_fold`.
 func turn_back_point() -> Vector2:
 	if sub_fold == null or lattice.periods().is_empty():

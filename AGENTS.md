@@ -221,7 +221,7 @@ Two mechanisms, and the rule between them is short:
 
 `WrapCanvas` subclasses override `paint()` and draw in ordinary world
 coordinates; the base class repeats those commands at every lattice offset. Put
-a new thing in the world and it appears in every band without being asked.
+a new thing in the world and it appears in every copy without being asked.
 Before this there were four separate repeat loops — terrain copies, a player
 ghost list, light offsets, the overlay's `_copy_offsets` — and `HandOrbit`, the
 newest object, had none, so the hands you carry vanished from every copy but
@@ -235,7 +235,7 @@ The corollary, which cost a bug: **a canvas that remembers a position between
 frames has to be carried through a wrap.** Crossing a glue line slides body and
 camera by a whole period so the frame is unchanged, and that only holds for what
 is re-derived each draw. `HandOrbit`'s springs are not — left where they were,
-every hand was suddenly a band away and got hauled back across the space, which
+every hand was suddenly a copy away and got hauled back across the space, which
 on screen is the hands snapping to the copy you walked in from and swimming after
 you. `WrapCanvas.carry_through_wrap` offers the displacement to every canvas and
 `_wrap_body` dispatches over the same list; keep no state and you inherit the
@@ -331,7 +331,7 @@ Consequences worth keeping in mind when designing:
 
   **A strip is a cylinder, so a falling thing wraps** (`WorldCore.wrap_into_strip`, the
   same rule the player crosses the glue by, as a modulo because a falling object can cross
-  more than one band in a frame). When the wrap axis has a vertical component a hand
+  more than one period in a frame). When the wrap axis has a vertical component a hand
   **orbits indefinitely** — that is a real object in a closed space, not a leak: still
   counted, still catchable, and it lands the moment a fold puts ground in its way. Only
   the tangential ends are open, and a ball leaving one is returned to the player's feet.
@@ -465,10 +465,10 @@ These are live, not settled. Do not close them silently in a refactor.
   no ends at all — every direction wraps. Whether that reads as elegant or as being
   lost is a playtesting question.
 - **A fold does not reach around the cylinder.** Fold across the glue you came in
-  through and the band finds the end of the stored sheet rather than the next copy
+  through and the strip finds the end of the stored sheet rather than the next copy
   of it. That is a design choice, not a geometric necessity — the alternative (cut
   the strip out of the parent's full orbit) was implemented and reverted. What it
-  costs is that a band past the glue is emptier than the space it sits in; what it
+  costs is that a strip past the glue is emptier than the space it sits in; what it
   buys is that the glue line means something.
 - **Triggers are world-level only.** A trigger inside a subspace would have to
   splice folds into an interior list mid-cascade; the resolver does not model that.

@@ -119,7 +119,7 @@ func test_a_flap_moves_by_a_position_not_by_its_vertices() -> void:
 
 func test_deforming_applies_about_each_copys_own_position() -> void:
 	# The strip of a fold collapses onto the meeting line — and inside a fold every
-	# band collapses onto ITS OWN seam, not all of them onto one. So the copy
+	# copy collapses onto ITS OWN seam, not all of them onto one. So the copy
 	# offset comes off before the deformation and goes back on after.
 	var piece = _all_pieces()[0]
 	var period := Vector2(4 * CS, 0)

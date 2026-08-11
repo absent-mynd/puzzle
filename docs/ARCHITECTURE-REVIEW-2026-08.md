@@ -204,7 +204,7 @@ real one. It wants to be a once-per-hand warning, or a counter.
 >
 > This is precisely the loop `_recover_lost_hand`'s own docstring says it exists
 > to prevent; it had moved from the world level into subspaces. Nothing caught it
-> — the ledger stayed correct, the hand really was still in the band, and the two
+> — the ledger stayed correct, the hand really was still in the strip, and the two
 > tests watching an orbiting hand watched the *wrap* axis while the escape was
 > along the *free* one.
 >
@@ -317,7 +317,7 @@ also breaks the cycle for real, at which point the type annotation comes back.
 >
 > `WrapCanvas` splits drawing into `prepare()` — once, before any copy — and
 > `paint()` — once per copy. Its own docstring says why: *"so a question that costs
-> something is asked once rather than once per band."* `WorldOverlay` overrides both,
+> something is asked once rather than once per copy."* `WorldOverlay` overrides both,
 > gathers eighteen answers correctly in `prepare()`, and then asks **fifteen more
 > from inside `paint()`**. Two of those are not cheap: `glue_lines()` scans every
 > base piece for every period of the lattice, and `loose_hand_points()` resolves

@@ -265,11 +265,11 @@ static func _paint_water(img: Image, o: Vector2i, v: int) -> void:
 	for y in range(TILE_PX):
 		for x in range(TILE_PX):
 			var wobble := int(round(1.5 * sin(float(x) * 0.55 + float(v) * 1.3)))
-			var band := (y + wobble) % 5
+			var stripe := (y + wobble) % 5
 			var c: Color = pal[0]
-			if band == 0:
+			if stripe == 0:
 				c = pal[2]
-			elif band == 3:
+			elif stripe == 3:
 				c = pal[1]
 			if _hash01(x, y, v + 53) > 0.93:
 				c = pal[2]

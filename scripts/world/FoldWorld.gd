@@ -88,7 +88,7 @@ const BURST_RADIUS := 1.3 * CS
 const BURST_FLASH := 0.35
 ## How far out the lamps of a repeating space are copied. The space repeats
 ## forever; only the nearest `LightRig.MAX_LIGHTS` reach the shader anyway, so
-## copying every visible band would just crowd the near ones out.
+## copying every visible copy would just crowd the near ones out.
 const LIGHT_COPY_REACH := 10.0 * CS
 ## Ceiling on how many copies of a repeating space are drawn. A one-cell fold
 ## repeats every cell and a torus squares whatever a cylinder costs, so the
@@ -278,7 +278,7 @@ var wrap_offsets: Array:
 	get: return level.wrap_offsets
 	set(v): level.wrap_offsets = v
 ## Content extent along the one direction a cylinder does NOT repeat in — the way
-## you can run off the end of a band. Unused when the space is flat or a torus.
+## you can run off the end of a strip. Unused when the space is flat or a torus.
 var free_extent: Dictionary:
 	get: return level.free_extent
 	set(v): level.free_extent = v
@@ -568,7 +568,7 @@ func rebuild() -> void:
 
 ## Draw the sheet. Every piece of every visible copy goes into one batch, which
 ## resolves to two Polygon2Ds — one for what stops you, one for what you move
-## through. A region is ~800 tiles and a strip is drawn in every band it repeats
+## through. A region is ~800 tiles and a strip is drawn in every copy it repeats
 ## into; a node per piece per copy was thousands of nodes torn down and rebuilt
 ## on every fold, and it was the most expensive thing the game did.
 func _build_terrain() -> void:
@@ -582,7 +582,7 @@ func _build_terrain() -> void:
 ## Colliders for the fundamental domain and the copies immediately around it.
 ##
 ## One body, many shapes: the player is wrapped back into the domain every frame,
-## so it can never be more than one copy out — three bands down a cylinder, nine
+## so it can never be more than one copy out — three copies down a cylinder, nine
 ## around a torus, and exactly one in a region, where `neighbour_offsets` is just
 ## the origin and this reads as the plain world it is.
 func _build_colliders() -> void:
@@ -622,7 +622,7 @@ func _refresh_lights() -> void:
 ##
 ## A repeating space repeats its lamps, or you would walk through the cylinder
 ## into a dark copy of a lit room. Only the near copies: the shader takes the
-## nearest `LightRig.MAX_LIGHTS`, so copying every visible band would crowd out
+## nearest `LightRig.MAX_LIGHTS`, so copying every visible copy would crowd out
 ## the ones actually lighting you.
 func lights_here() -> Array:
 	var lights: Array = region_lights.get(region_id, [])
@@ -674,7 +674,7 @@ func _compute_level(path: Array) -> Dictionary:
 		for k in range(i):
 			prefix = FoldReplay.apply_one_fold(prefix, lvl_folds[k], CS)
 		# A fold takes what is in front of it in the sheet it is cut FROM. Where a
-		# band runs past a glue line it finds the end of that sheet rather than the
+		# strip runs past a glue line it finds the end of that sheet rather than the
 		# next copy of it — see `FoldLattice` §"What the strip contains".
 		lvl_base = WorldCore.capture_strip(prefix, F, CS)
 		lvl_folds = _ensure_interiors(F.fold_id)
@@ -702,7 +702,7 @@ func _apply_context() -> void:
 		canvas.set_offsets(wrap_offsets)
 
 	# The one direction a cylinder does not repeat in — the way you can run off
-	# the end of a band, and so the only one that needs a turn-back.
+	# the end of a strip, and so the only one that needs a turn-back.
 	var free := lattice.free_axis()
 	free_extent = WorldCore.strip_extent(level_base, free) if free != Vector2.ZERO else {}
 
@@ -1316,7 +1316,7 @@ func _hands_for_fold(pinned: Array[int]) -> Array[int]:
 ## Two outcomes, and which one you get is decided by where the fold leaves YOU:
 ##
 ##   - **Ride.** Your base tile survives the fold, so you go where it goes.
-##   - **PINCH.** It does not: you were in the band being excised, and the fold
+##   - **PINCH.** It does not: you were in the strip being excised, and the fold
 ##     swallows you. The fold is applied for real and the space it cut out becomes
 ##     the place you are standing in — pushed onto the context stack, however
 ##     many folds deep that already is. Folding yourself deeper used to be
@@ -1349,7 +1349,7 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 			new_pieces, from_piece.base_id, player.global_position - from_piece.src_offset)
 	else:
 		# Over void: no piece to ride, so fall back to crease arithmetic. Only
-		# a point in the excised band has no side at all, and that is the pinch.
+		# a point in the excised strip has no side at all, and that is the pinch.
 		var side := WorldCore.side_of_fold(player.global_position, fold)
 		if side != 0:
 			dest = player.global_position + WorldCore.fold_shift_for_side(side, fold, CS)
@@ -1413,7 +1413,7 @@ func _commit_fold(fold: Fold, dropped: Array, pinned: Array[int]) -> void:
 # Unfolding (uniform blocking rules at every level)
 # ---------------------------------------------------------------------------
 
-## Newer folds in the same list whose band crosses this fold's seam block it.
+## Newer folds in the same list whose strip crosses this fold's seam block it.
 func can_unfold_fold(fold: Fold) -> bool:
 	var list: Array = level_folds()
 	var idx := list.find(fold)
@@ -1423,7 +1423,7 @@ func can_unfold_fold(fold: Fold) -> bool:
 	if seg.size() < 2:
 		return true
 	for j in range(idx + 1, list.size()):
-		if WorldCore.segment_intersects_band(seg[0], seg[1], list[j]):
+		if WorldCore.segment_intersects_strip(seg[0], seg[1], list[j]):
 			return false
 	return true
 
@@ -1440,7 +1440,7 @@ func seam_markers() -> Dictionary:
 	return out
 
 
-## An interior fold of `fold` whose band crosses `fold`'s glue blocks
+## An interior fold of `fold` whose strip crosses `fold`'s glue blocks
 ## unfolding it from EITHER side (the outer seam isn't the newest fold
 ## affecting itself). Returns the blocker or null.
 func _interior_glue_blocker(fold: Fold, lvl_base: Array, list: Array, idx: int) -> Fold:
@@ -1453,7 +1453,7 @@ func _interior_glue_blocker(fold: Fold, lvl_base: Array, list: Array, idx: int) 
 	var strip := WorldCore.capture_strip(prefix, fold, CS)
 	for seg in WorldCore.glue_segments(fold, strip):
 		for kf in kids:
-			if WorldCore.segment_intersects_band(seg[0], seg[1], kf):
+			if WorldCore.segment_intersects_strip(seg[0], seg[1], kf):
 				return kf
 	return null
 
@@ -1730,7 +1730,7 @@ func exit_blocker() -> Fold:
 		return null
 	for fold in level_folds():
 		for seg in WorldCore.glue_segments(sub_fold, level_base):
-			if WorldCore.segment_intersects_band(seg[0], seg[1], fold):
+			if WorldCore.segment_intersects_strip(seg[0], seg[1], fold):
 				return fold
 	return null
 
@@ -1756,7 +1756,7 @@ func try_exit() -> void:
 	var seg: PackedVector2Array = seam_segs.get(outer.fold_id, PackedVector2Array())
 	if seg.size() >= 2:
 		for j in range(idx + 1, plist.size()):
-			if WorldCore.segment_intersects_band(seg[0], seg[1], plist[j]):
+			if WorldCore.segment_intersects_strip(seg[0], seg[1], plist[j]):
 				_deny("Blocked — a newer fold outside crosses this seam.")
 				return
 
@@ -2006,7 +2006,7 @@ func _apply_anim_frame() -> void:
 	(batches["b"] as Node2D).position = fold.shift_b_px(CS) * t
 	if _anim["collapse"]:
 		# The strip: a scale along the crease normal, about the meeting line. Applied
-		# per COPY (see `TileBatch.deform`), because inside a fold every band
+		# per COPY (see `TileBatch.deform`), because inside a fold every copy
 		# collapses onto its own seam rather than all of them onto one.
 		var n := fold.crease_normal
 		var meet_d := fold.shift_a_px(CS).dot(n)
@@ -2142,7 +2142,7 @@ func _camera_focus() -> PackedVector2Array:
 		var wp = anchor_point(entry)
 		if wp != null:
 			pts.append(Vector2(wp))
-	# Inside a fold the band IS the room: frame the fundamental domain, so a wide
+	# Inside a fold the strip IS the room: frame the fundamental domain, so a wide
 	# strip reads as the cylinder it is rather than a corridor with no visible
 	# walls. On a torus that is all four walls, and it comes out of the same call.
 	pts.append_array(lattice.domain_edges(player.global_position))
@@ -2203,12 +2203,12 @@ func _physics_process(delta: float) -> void:
 ##
 ## Every axis at once, so a torus wraps in both directions in one step, and a
 ## region — with no axes at all — does nothing here.
-## How much slack a thing gets before it counts as having left the band.
-const BAND_SLACK := 4.0 * CS
+## How much slack a thing gets before it counts as having left the strip.
+const STRIP_SLACK := 4.0 * CS
 
 
-func _left_the_band(point: Vector2) -> bool:
-	return level.left_the_band(point, BAND_SLACK)
+func _left_the_strip(point: Vector2) -> bool:
+	return level.left_the_strip(point, STRIP_SLACK)
 
 
 func _turn_back_point() -> Vector2:
@@ -2226,11 +2226,11 @@ func _wrap_body() -> void:
 		for canvas in _wrap_canvases():
 			canvas.carry_through_wrap(delta)
 
-	# Running off the far end of a band does NOT force an exit (the exit can be
+	# Running off the far end of a strip does NOT force an exit (the exit can be
 	# blocked by a crossing fold): the fold turns you back into itself. Only a
 	# cylinder has such an end — a torus has nowhere to go, and a region has the
 	# fall-out-of-the-world respawn instead.
-	if _left_the_band(player.global_position):
+	if _left_the_strip(player.global_position):
 		var back := _turn_back_point()
 		var landed := WorldCore.depenetrate(back, PlayerBody.RADIUS, wall_polys)
 		player.teleport(back if landed == Vector2.INF else landed, false)

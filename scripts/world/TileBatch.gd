@@ -91,7 +91,7 @@ func shift_group(type_key: String, by: Vector2) -> void:
 
 ## Move every vertex of this batch, given a function of its position within its
 ## own copy. The copy offset is taken off before the call and put back after, so
-## a deformation that is defined about a crease line applies to each band about
+## a deformation that is defined about a crease line applies to each strip about
 ## its OWN crease — which is what a fold looks like from inside one.
 func deform(fn: Callable) -> void:
 	for key in _groups:

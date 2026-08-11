@@ -30,10 +30,10 @@ class_name FoldLattice extends RefCounted
 ## For a parent period `P` to be a period of the child too, the child's content has
 ## to satisfy `C(x + P) == C(x)` for `x` in `B`. It is tempting to argue that
 ## sliding by a whole gap is the identity inside F, so a `P` sitting `k` gaps
-## across the band should descend sheared to `P - k·(n_F·gap)`. It does map `B` to
+## across the strip should descend sheared to `P - k·(n_F·gap)`. It does map `B` to
 ## itself. But the content does not follow it: the parent's content is invariant
 ## under `P`, not under the shear, so `C(x + P - k·n_F·gap) = C(x - k·n_F·gap)`,
-## which is the parent's content `k` bands over — a different piece of sheet.
+## which is the parent's content `k` copies over — a different piece of sheet.
 ##
 ## The gluing identifies POSITIONS, not the content those positions carry. Only
 ## `k == 0` leaves both intact, and then the shear is the identity and `P` descends
@@ -57,7 +57,7 @@ class_name FoldLattice extends RefCounted
 ## overworld (no periods at all) and the perpendicular nesting case (the torus).
 ##
 ## When a parent period is NOT perpendicular, `content ∩ B` is a strict SUBSET of
-## what the parent's full orbit puts in the band: a band running past its own glue
+## what the parent's full orbit puts in the strip: a strip running past its own glue
 ## line finds the end of the stored sheet rather than the next copy of it. That is
 ## a deliberate limit, not an oversight — **a fold takes what is in front of it in
 ## the sheet it is cut from; it does not reach around the cylinder.** What it shows
@@ -71,8 +71,8 @@ class_name FoldLattice extends RefCounted
 ## starts — so the domain along that axis is `[base, base + len)`.
 var axes: Array = []
 
-## A translation is treated as "along the band" when its component across the
-## band is under this. Periods are whole cells, so nothing lands near the line
+## A translation is treated as "along the strip" when its component across the
+## strip is under this. Periods are whole cells, so nothing lands near the line
 ## by accident.
 const PARALLEL_EPS := 0.001
 
@@ -212,7 +212,7 @@ func neighbour_offsets() -> Array:
 
 ## The edges of the fundamental domain through `p`, one pair per axis.
 ##
-## Inside a fold the band IS the room, so this is what the camera frames: glue to
+## Inside a fold the strip IS the room, so this is what the camera frames: glue to
 ## glue on a cylinder, and all four walls on a torus. Empty when the space does
 ## not repeat — there is no domain to hold in view, only a world.
 func domain_edges(p: Vector2) -> PackedVector2Array:
@@ -233,9 +233,9 @@ func domain_edges(p: Vector2) -> PackedVector2Array:
 ## space does NOT repeat in.
 ##
 ## What it is for: anything drawn once per copy that would otherwise span the
-## whole world — the excised-band preview, the alignment guides. Repeated
+## whole world — the excised-strip preview, the alignment guides. Repeated
 ## unclipped they tile the screen and stack their alpha into a wash; clipped to
-## this, each copy paints its own band and the tiling is exact. Empty for a space
+## this, each copy paints its own strip and the tiling is exact. Empty for a space
 ## that does not repeat, which means "do not clip".
 func domain_polygon(reach: float) -> PackedVector2Array:
 	if axes.is_empty():
@@ -274,7 +274,7 @@ func domain_start(dir: Vector2) -> float:
 
 ## The one direction the space does NOT repeat along, when it repeats along
 ## exactly one axis — the axis a body can run off the end of, and so the only one
-## that needs a turn-back. ZERO when the space is flat (there is no band to leave)
+## that needs a turn-back. ZERO when the space is flat (there is no strip to leave)
 ## or a torus (there is nowhere to go).
 func free_axis() -> Vector2:
 	if axes.size() != 1:

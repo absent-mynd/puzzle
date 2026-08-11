@@ -46,7 +46,7 @@ func frame(ctx: Dictionary, center: Vector2 = Vector2.INF) -> void:
 		"velocity": _player.motion_fraction(),
 		"look": _player.look_dir(),
 		# A repeating space already shows every copy there is along the axes it
-		# repeats on, so leading along one slides the view across identical bands
+		# repeats on, so leading along one slides the view across identical copies
 		# for nothing. On a torus that is both axes, and the lead is the body's
 		# alone.
 		"flat_axes": ctx.get("periods", Vector2.ZERO),

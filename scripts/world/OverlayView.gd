@@ -61,8 +61,8 @@ var doors: Array = []
 ## the overlay turns it into a throb.
 var hands_down: Array = []
 
-## Armed pairs, as the two points a preview band spans: `{"a": Vector2, "b": Vector2}`.
-## Only pairs with both halves in this frame; half a pair has no band to draw.
+## Armed pairs, as the two points a preview strip spans: `{"a": Vector2, "b": Vector2}`.
+## Only pairs with both halves in this frame; half a pair has no strip to draw.
 var pairs: Array = []
 
 ## Hands lying in the world, and hands still in the air. Same shape and the same

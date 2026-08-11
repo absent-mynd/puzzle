@@ -65,7 +65,7 @@ const C_DOOR := Color(0.55, 0.80, 1.0)
 const C_DOOR_LOOSE := Color(1.0, 0.45, 0.45)
 const C_ANCHOR := Color(1.00, 0.62, 0.36)
 const C_FOLD := Color(0.72, 0.55, 1.00)
-const C_BAND := Color(0.72, 0.55, 1.00, 0.16)
+const C_STRIP := Color(0.72, 0.55, 1.00, 0.16)
 const C_HOVER := Color(1, 1, 1, 0.22)
 const C_PARAM := Color(0.92, 0.55, 0.85)
 const C_PARAM_UNSET := Color(0.55, 0.58, 0.68)
@@ -234,15 +234,15 @@ func _build_tiles(rows: Array) -> Texture2D:
 ##
 ## They are drawn, not applied. The point of a pre-placed fold in the editor is to
 ## see the space you are about to seal — a card that shipped already folded would
-## show you a hole and no way to reason about what is in it. So the band is shaded
+## show you a hole and no way to reason about what is in it. So the strip is shaded
 ## rather than removed, the creases are drawn as the hard lines they will be, and
 ## the meeting line shows where the two halves will come to rest.
 func _draw_folds(doc: EditorDoc, id: String, cell: float) -> void:
 	var size := doc.size_of(id)
 	for entry in doc.folds_of(id):
 		var guides := EditorTools.fold_guides(entry["a"], entry["b"], size, cell)
-		for poly in guides["band"]:
-			draw_colored_polygon(poly, C_BAND)
+		for poly in guides["strip"]:
+			draw_colored_polygon(poly, C_STRIP)
 		for key in ["crease1", "crease2"]:
 			var seg: PackedVector2Array = guides[key]
 			if seg.size() == 2:
@@ -285,7 +285,7 @@ func _anchor_dot(at: Vector2, cell: float, color: Color, filled: bool) -> void:
 ##
 ## The tile being INSPECTED additionally gets the full fold preview, when its
 ## type reacts by folding. Drawing that for every configured plate at once would
-## be a wall of overlapping bands; drawing it for the one you are editing is the
+## be a wall of overlapping strips; drawing it for the one you are editing is the
 ## answer to "what will this actually do".
 func _draw_tile_params(doc: EditorDoc, id: String, cell: float) -> void:
 	var focus: Dictionary = editor.inspected()
@@ -332,7 +332,7 @@ func _draw_reaction_preview(doc: EditorDoc, id: String, a: Vector2i, b: Vector2i
 	if a == TileParams.UNSET or b == TileParams.UNSET or a == b:
 		return
 	var guides := EditorTools.fold_guides(a, b, doc.size_of(id), cell)
-	for poly in guides["band"]:
+	for poly in guides["strip"]:
 		draw_colored_polygon(poly, Color(C_PARAM, 0.10))
 	for key in ["crease1", "crease2"]:
 		var seg: PackedVector2Array = guides[key]

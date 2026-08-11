@@ -28,7 +28,7 @@ still covers the ground claimed below.
 
 **`hub` is the router.** Thirteen doors along one concourse, one per region, so
 nothing is ever more than two doors away. Every other region opens with a
-**landing strip** — a clear stretch of walk line at `x = 1..13` carrying its
+**landing run** — a clear stretch of walk line at `x = 1..13` carrying its
 routing doors — which is what lets the terrain past it be as impassable as it
 likes without stranding you.
 
@@ -41,7 +41,7 @@ so region loading gets entered from more than one direction.
 | `hub` | **doors**, in every arrangement the model allows |
 | `plain` | bare terrain — the shapes the jump and the fold are measured against |
 | `water` | `~` — walkable, so it is air you can see |
-| `pins` | `P` — one pin vetoes a whole *band* of folds, at every height |
+| `pins` | `P` — one pin vetoes every fold whose *strip* spans it, at every height |
 | `unanchor` | `_` and `X` — space and wall you cannot pin to |
 | `triggers` | `T` — every outcome `TriggerResolver` has |
 | `prefold` | regions that ship already folded, in every orientation |
@@ -76,7 +76,7 @@ Every door case at once, which no single shipped region can show you:
   lamp and the patient hand sealed in there are waiting.
 
 There is also a two-tall pin on the concourse: jumpable, and a standing veto on
-every horizontal fold whose band spans its column.
+every horizontal fold whose strip spans its column.
 
 ### `plain` — terrain
 
@@ -102,7 +102,7 @@ A single pin, a two-tall one (the thing blocking your fold is also your
 stepping stone), a four-tall one that is neither jumpable nor foldable — with a
 platform routing you over the top, because "route around, do not erase" is the
 whole point of the tile. Then two extremes: **a nail in the sky** at `24,3`,
-nowhere near anything, which vetoes every fold whose band spans column 24 at
+nowhere near anything, which vetoes every fold whose strip spans column 24 at
 any height; and a **pin ring around a goal**, which is sealed for good.
 
 ### `unanchor` — `_` and `X`
@@ -122,11 +122,11 @@ the index:
 |---|---|
 | `gate_a` | the plain case: a plate, and the three-tall wall its fold excises |
 | `gate_b` | **two plates, one channel** — whichever fires first makes the fold, the other finds it standing |
-| `pinned` | **a pin vetoes it.** The plate is on the floor, the nail is six rows up in the sky, and the fold's band spans it anyway — a trigger is not a back door around a pin |
+| `pinned` | **a pin vetoes it.** The plate is on the floor, the nail is six rows up in the sky, and the fold's strip spans it anyway — a trigger is not a back door around a pin |
 | `degenerate` | both anchors on one cell: no fold, and the plate still counts as fired |
 | *(blank)* | **no channel at all**, so nothing makes it idempotent and it stacks a new fold every time |
-| `swallow` | a fold whose band contains the plate: it would pinch in whoever fired it, so it is refused |
-| `ghost` | **order-dependent** — its anchors sit inside `gate_a`'s band, so it folds if you reach it first and finds nothing if you do not |
+| `swallow` | a fold whose strip contains the plate: it would pinch in whoever fired it, so it is refused |
+| `ghost` | **order-dependent** — its anchors sit inside `gate_a`'s strip, so it folds if you reach it first and finds nothing if you do not |
 
 Trigger anchors are authored in **BASE** cells (`TriggerResolver` maps them
 through the current fold state itself), unlike pre-placed fold anchors — see
@@ -137,9 +137,9 @@ below.
 Five world-level pre-folds in one region: horizontal (sealing a vault whole,
 and splitting the dormant door's tile), horizontal again (swallowing a door),
 one **straight through a pin** — authored folds are applied without the block
-check, so it goes, and it will not come apart — vertical (a band of *rows*
+check, so it goes, and it will not come apart — vertical (a strip of *rows*
 across the whole width), and a **diagonal**, which is the one to look at: a
-crease has infinite extent, so a diagonal band takes a wide swath of the region
+crease has infinite extent, so a diagonal strip takes a wide swath of the region
 rather than the corner you aimed at. Roughly half this region is inside a fold
 at boot. That is not a bug in the authoring; it is what infinite-crease means,
 and it is much easier to believe once you have stood in it.
@@ -200,10 +200,10 @@ rather than `(28,18)` for exactly this reason. Trigger anchors are the other
 way round — base cells, resolved through the fold state at fire time. If you
 move a pre-fold in the editor, the ones after it in the list move with it.
 
-**A fold's extent is the whole world.** Every band spans the region
+**A fold's extent is the whole world.** Every strip spans the region
 perpendicular to its anchors: a horizontal pair takes whole columns from sky to
 floor, a vertical pair takes whole rows wall to wall, and a diagonal pair takes
 a diagonal swath of everything. So a pre-fold placed to seal one vault will
 also take whatever else shares its columns — including doors, which is how the
 dormant and vault door cases here are authored, and which is why every routing
-door sits on the landing strip well clear of any band.
+door sits on the landing run well clear of any strip.

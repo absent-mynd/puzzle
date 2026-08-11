@@ -223,22 +223,22 @@ static func shift_cell_keys(data: Dictionary, offset: Vector2i, size: Vector2i) 
 ##
 ## A fold anchored at two cells is fully determined by `Fold.create`, so the editor
 ## does not model crease geometry — it asks the kernel and draws the answer. That
-## is also why the band comes back from `CollisionCore.fold_polygons`: the strip
-## this fold would excise is by definition what the real fold drops, so the shaded
+## is also why the shaded area comes back from `CollisionCore.fold_polygons`: the
+## strip this fold would excise is by definition what the real fold drops, so the
 ## area on the board is the same computation the game runs, not a lookalike.
 ##
 ## Returns, all in the region's LOCAL px space:
 ##   "crease1"/"crease2" : PackedVector2Array of 2 points — the cut lines, clipped
 ##                         to the region rect (empty if the line misses it)
 ##   "meeting"           : the line the two halves will come to rest along
-##   "band"              : Array of polygons — the space the fold excises
+##   "strip"              : Array of polygons — the space the fold excises
 ##   "orientation"       : "horizontal" / "vertical" / "diagonal"
 ##   "degenerate"        : true when both anchors are the same cell, which has no
 ##                         crease direction and is the one pair that is never a fold
 static func fold_guides(a: Vector2i, b: Vector2i, size: Vector2i, cell: float) -> Dictionary:
 	var out := {
 		"crease1": PackedVector2Array(), "crease2": PackedVector2Array(),
-		"meeting": PackedVector2Array(), "band": [],
+		"meeting": PackedVector2Array(), "strip": [],
 		"orientation": "", "degenerate": a == b,
 	}
 	if a == b:
@@ -251,7 +251,7 @@ static func fold_guides(a: Vector2i, b: Vector2i, size: Vector2i, cell: float) -
 	out["crease2"] = clip_line_to_rect(fold.crease_point2, tangent, rect)
 	out["meeting"] = clip_line_to_rect(
 		fold.crease_point1 + fold.shift_a_px(cell), tangent, rect)
-	out["band"] = CollisionCore.fold_polygons([rect_polygon(rect)], fold, cell)["dropped"]
+	out["strip"] = CollisionCore.fold_polygons([rect_polygon(rect)], fold, cell)["dropped"]
 	return out
 
 

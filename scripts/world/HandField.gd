@@ -28,8 +28,8 @@ signal landed(ball: Dictionary)
 ## hand back somewhere findable — never destroys it.
 signal lost(kind: int)
 
-## How much slack a ball gets before it counts as having left the band.
-const BAND_SLACK := 4.0 * WorldCore.CELL
+## How much slack a ball gets before it counts as having left the strip.
+const STRIP_SLACK := 4.0 * WorldCore.CELL
 
 ## How far below the sheet counts as having fallen out of the world.
 const FALL_OUT_MARGIN := 8.0 * WorldCore.CELL
@@ -118,7 +118,7 @@ func step(level: Level, delta: float) -> void:
 			# thing can genuinely leave by. Turn it back the way the fold turns the
 			# player back — and on a torus there is no such direction, so nothing to
 			# do.
-			if level.left_the_band(Vector2(ball["pos"]), BAND_SLACK):
+			if level.left_the_strip(Vector2(ball["pos"]), STRIP_SLACK):
 				ball["pos"] = level.turn_back_point()
 				ball["vel"] = Vector2.ZERO
 		elif Vector2(ball["pos"]).y > level.base.grid_size.y * WorldCore.CELL + FALL_OUT_MARGIN:

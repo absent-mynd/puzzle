@@ -36,9 +36,9 @@ const JUMP_CUT_GRAVITY := 2.0
 ## earned it reads as weight; a symmetric arc reads as the moon. Deliberately
 ## small — the fall is also the part of the arc you steer a landing in.
 const FALL_GRAVITY := 1.12
-## The band around the apex, in vertical speed, that gets `APEX_GRAVITY`.
+## The window around the apex, in vertical speed, that gets `APEX_GRAVITY`.
 const APEX_SPEED := 200.0
-## Gravity multiplier inside that band. The top of a jump is where you are barely
+## Gravity multiplier inside that window. The top of a jump is where you are barely
 ## moving vertically and entirely occupied with where you are going to land — and
 ## with pinning the mid-air anchor the sealed chamber wants. Lightening it buys
 ## more of those frames without raising the arc much (about 6 units, which is why
@@ -74,7 +74,7 @@ var _coyote := 0.0
 var _buffer := 0.0
 ## The blob's outline, in body-local space, and the squash currently applied to
 ## it. The body does NOT draw itself: `PlayerVisual` does, once per copy of the
-## space, so that inside a fold you appear in every band without this file
+## space, so that inside a fold you appear in every copy without this file
 ## knowing that folds have insides. See `WrapCanvas`.
 var _outline := PackedVector2Array()
 var _squash := Vector2.ONE
@@ -434,7 +434,7 @@ func camera_position() -> Vector2:
 
 ## The blob's outline in body-local space, and the squash to apply to it. Read by
 ## `PlayerVisual`, which draws the body wherever the space says the body is —
-## which inside a fold is every band at once.
+## which inside a fold is every copy at once.
 func visual_outline() -> PackedVector2Array:
 	return _outline
 
