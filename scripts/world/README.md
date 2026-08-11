@@ -2,7 +2,7 @@
 
 The side-view gravity world: `FoldWorld` drives the fold kernel (`BaseGrid` /
 `Fold` / `FoldReplay` / `CollisionCore` / `BaseFrame`) with a physics player over
-colliders generated from derived fragments.
+colliders generated from derived pieces.
 
 ## Run it
 
@@ -244,7 +244,7 @@ everywhere: a fold cannot be unfolded while a newer fold's band crosses its
 seam — so an interior fold that crosses the glue (its creases are not
 parallel to the outer fold's) locks the exit until you unfold it; the white
 diamond turns red to show it. Player and anchors move by **exact base-tile
-riding** (each fragment knows its base identity and offset), not approximate
+riding** (each piece knows its base identity and offset), not approximate
 crease math. Folds and unfolds animate: flaps slide, the strip collapses
 onto — or springs from — the seam.
 
@@ -507,13 +507,13 @@ pixel stays 4.0 at every zoom, so a cell always spans a whole tile. The camera's
 stays pinned at `PixelArt.CAMERA_ZOOM` forever.
 
 - **Tiles come from a 16px tileset** (`TileAtlas`, and `assets/sprites/README.md`
-  for the layout). Fragments are textured through **base-space UVs**: a fragment
+  for the layout). Pieces are textured through **base-space UVs**: a piece
   is sent back to its base tile by subtracting `src_offset`, so it carries the
   patch of art it was cut from. A tile's variant is hashed from its `base_id`,
   and the "open sky above" edge tile is read from the base grid — so a tile's
   look never changes because it was folded, ridden or cut.
 - **The whole sheet is two canvas items** (`TileBatch`). A region is ~800 tiles,
-  folds cut those into more fragments, and inside a fold the strip is drawn again
+  folds cut those into more pieces, and inside a fold the strip is drawn again
   in every band it repeats into. `Polygon2D` holds many sub-polygons over one
   vertex array and the tileset is one texture, so the only thing forcing a second
   node is the lit material: foreground and background. A fold rebuild touches two
@@ -543,7 +543,7 @@ stays pinned at `PixelArt.CAMERA_ZOOM` forever.
 
 A light is an **occupant of the sheet**, stored the way a door is: a base tile
 identity plus a point inside it (`LightSource`). It has no world position; where
-it burns is a question asked of the current fragment list. Everything follows
+it burns is a question asked of the current piece list. Everything follows
 from that:
 
 - Fold a lamp's tile away and it is **gone from the overworld** — no glyph, no
@@ -672,7 +672,7 @@ do not want yet.
   (`FoldWorld.seam_markers`). Stroke widths are multiples of one art pixel.
 - `PixelArt.gd` — how big an art pixel is; the one place that says so, including
   the target size a given zoom needs (`target_size`).
-- `TileAtlas.gd` — the tileset: kinds, variants, and base-space UVs for fragments.
+- `TileAtlas.gd` — the tileset: kinds, variants, and base-space UVs for pieces.
 - `LightRig.gd` — lit materials, per-frame light uniforms, lamp glyphs.
 - Audio lives outside this directory: `scripts/systems/Sounds.gd` is the
   vocabulary and the mix, `AudioManager` is the autoload that plays it. `FoldWorld`

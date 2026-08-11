@@ -1,6 +1,6 @@
 extends GutTest
 
-## TileBatch: every drawn fragment of the sheet in as few canvas items as the
+## TileBatch: every drawn piece of the sheet in as few canvas items as the
 ## materials allow. It carries the whole look of the world, so its invariants —
 ## one UV per vertex, indices that point at real vertices, sub-polygons that can
 ## actually be triangulated, and the wrap baked in — are worth stating.
@@ -40,7 +40,7 @@ func test_the_whole_sheet_becomes_two_canvas_items_at_most() -> void:
 	assert_gt(batch.layers().size(), 0, "...and it did draw something")
 
 
-func test_fragments_are_grouped_by_what_they_do_not_by_their_type() -> void:
+func test_pieces_are_grouped_by_what_they_do_not_by_their_type() -> void:
 	# Walkability, from the registry: a new blocking tile lands in the foreground
 	# group without this file being touched.
 	batch.rebuild(_frags(_all_pieces()), [Vector2.ZERO])
@@ -56,14 +56,14 @@ func test_fragments_are_grouped_by_what_they_do_not_by_their_type() -> void:
 		counts.append(vis.polygons.size())
 	counts.sort()
 	assert_eq(counts, [mini(walls, air), maxi(walls, air)],
-		"Every fragment is in exactly one of the two groups")
+		"Every piece is in exactly one of the two groups")
 
 
 func test_every_vertex_carries_its_own_uv() -> void:
 	batch.rebuild(_frags(_all_pieces()), [Vector2.ZERO])
 	for vis in batch.layers():
 		assert_eq(vis.uv.size(), vis.polygon.size(),
-			"A fragment's art comes from its own base tile, per vertex")
+			"A piece's art comes from its own base tile, per vertex")
 
 
 func test_sub_polygons_index_real_vertices_and_can_be_drawn() -> void:
@@ -110,7 +110,7 @@ func test_a_copy_sits_exactly_one_period_from_the_original() -> void:
 
 func test_a_flap_moves_by_a_position_not_by_its_vertices() -> void:
 	# Why the fold transition is cheap: a flap's shift is a translation, so it is
-	# one assignment per frame however many fragments it carries.
+	# one assignment per frame however many pieces it carries.
 	batch.rebuild(_frags(_all_pieces()), [Vector2.ZERO])
 	var before: PackedVector2Array = batch.layers()[0].polygon
 	batch.shift_group(LightRig.FG, Vector2(100, 0))
@@ -152,7 +152,7 @@ func test_without_a_tileset_the_flat_colours_travel_per_vertex() -> void:
 			"...so every vertex carries its own type's colour")
 
 
-func test_degenerate_fragments_are_dropped_rather_than_drawn() -> void:
+func test_degenerate_pieces_are_dropped_rather_than_drawn() -> void:
 	var piece = _all_pieces()[0]
 	batch.rebuild([{"piece": piece, "poly": PackedVector2Array([Vector2.ZERO, Vector2.ONE])}],
 		[Vector2.ZERO])

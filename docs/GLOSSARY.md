@@ -77,7 +77,7 @@ Grep for these; each is a leftover.
 | anchor stock, anchor economy | hand ledger, **hand economy** | The ledger counts hands, wherever they are. |
 | anchor cache, hand cache, pickup | **loose hand** | |
 | primed | **armed** | |
-| fragment | **piece** | |
+| fragment | **piece** | The one exception is `void fragment()` in the shaders, which is GLSL and means something else entirely. |
 | band | **strip** or **copy** | Whichever it meant; they are not the same. |
 | excision band | **excised strip** | |
 | fold interior, strip interior | **subspace** | |

@@ -33,7 +33,7 @@ func _world() -> WorldData:
 
 
 ## A region with its pre-placed folds applied, exactly as `FoldWorld._setup_all`
-## does it: each fold created from the CURRENT fragment list, in order.
+## does it: each fold created from the CURRENT piece list, in order.
 func _booted(wd: WorldData, id: String) -> Dictionary:
 	var base := wd.build_base(id)
 	var pieces: Array = FoldReplay.identity_pieces(base)
@@ -364,7 +364,7 @@ func test_a_pin_still_vetoes_the_fold_a_plate_would_make():
 # ---------------------------------------------------------------------------
 
 func test_every_region_survives_booting_its_pre_placed_folds():
-	# A region's fold list is applied in order against the ALREADY-FOLDED fragment
+	# A region's fold list is applied in order against the ALREADY-FOLDED piece
 	# list, so a second fold's anchors are plane cells, not base ones. Getting that
 	# wrong is how a region folds itself out of existence.
 	var wd := _world()

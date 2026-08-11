@@ -35,7 +35,7 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | One base tile: stable `base_id`, `grid_position`, `type`, per-instance `data` | `BaseTile.gd` |
 | One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel`, `held_hands` | `Fold.gd` |
 | **The derivation engine.** `derive()`, `derive_pieces()`, `apply_one_fold()` — replays a fold list over the base grid | `FoldReplay.gd` |
-| A derived fragment: `base_id`, `type`, `polygon`, `plane_pos`, **`src_offset`** | `FoldedPiece.gd` |
+| A derived piece: `base_id`, `type`, `polygon`, `plane_pos`, **`src_offset`** | `FoldedPiece.gd` |
 | Queryable derived state: per-position stacks, `dominant_type_at`, `pieces_of_base` | `FoldedState.gd` |
 | **Base ↔ derived point transport.** `transport()`, `world_point_from_base()`, `resolve_base_point()`, `piece_at()` | `BaseFrame.gd` |
 | **The tile registry.** walkable / merge_rank / blocks_fold / blocks_anchor / on_enter / grant | `TileTypes.gd` |
@@ -69,7 +69,7 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | Anchors, fold preview band, seam diamonds, glue lines, the hold-progress ring, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
 | The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |
 | **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping | `PixelArt.gd` |
-| **The tileset.** Kinds, variants, and base-space UVs for cut fragments | `TileAtlas.gd` |
+| **The tileset.** Kinds, variants, and base-space UVs for cut pieces | `TileAtlas.gd` |
 | Lit materials, per-frame light uniforms, lamp glyphs | `LightRig.gd` |
 | Controls and the design beats | `README.md` |
 

@@ -3,20 +3,20 @@ class_name BaseFrame extends RefCounted
 ## BaseFrame
 ##
 ## Exact mapping between BASE space (the immutable grid) and any DERIVED
-## configuration (a fragment list produced by replaying folds).
+## configuration (a piece list produced by replaying folds).
 ##
-## Every fragment satisfies `polygon == base_polygon + src_offset`, so a point in
-## current space maps to base space by subtracting the offset of the fragment
+## Every piece satisfies `polygon == base_polygon + src_offset`, so a point in
+## current space maps to base space by subtracting the offset of the piece
 ## containing it, and maps back into ANY other derived configuration by finding the
-## fragment with the same `base_id` that contains the base point. That round trip is
+## piece with the same `base_id` that contains the base point. That round trip is
 ## what makes continuous transport — the player, entities, pinned anchors, door
 ## points — exact through arbitrary fold/unfold sequences, rather than approximate
 ## crease arithmetic.
 ##
-## This is kernel-level: it depends only on the fragment list, so both the world
+## This is kernel-level: it depends only on the piece list, so both the world
 ## view and the pure derivation (trigger cascades) can use it.
 
-## Index fragments by their plane cell for point queries.
+## Index pieces by their plane cell for point queries.
 static func index_by_pos(pieces: Array) -> Dictionary:
 	var out: Dictionary = {}
 	for piece in pieces:
@@ -26,7 +26,7 @@ static func index_by_pos(pieces: Array) -> Dictionary:
 	return out
 
 
-## The fragment containing a current-space point (strict first, then with a sub-pixel
+## The piece containing a current-space point (strict first, then with a sub-pixel
 ## edge tolerance), or null if the point lies in void.
 static func piece_containing(index: Dictionary, point: Vector2, cell_size: float):
 	var cell := Vector2i((point / cell_size).floor())
@@ -39,15 +39,15 @@ static func piece_containing(index: Dictionary, point: Vector2, cell_size: float
 	return null
 
 
-## Convenience: the fragment containing a point, indexing the list on the fly. Use
+## Convenience: the piece containing a point, indexing the list on the fly. Use
 ## `index_by_pos` + `piece_containing` when querying the same list repeatedly.
 static func piece_at(pieces: Array, point: Vector2, cell_size: float):
 	return piece_containing(index_by_pos(pieces), point, cell_size)
 
 
-## Map a base-frame point back into current space via the fragment of `base_id` that
+## Map a base-frame point back into current space via the piece of `base_id` that
 ## contains it. Returns Vector2, or null if that part of the base tile has no
-## surviving fragment (it is folded away in this configuration).
+## surviving piece (it is folded away in this configuration).
 static func world_point_from_base(pieces: Array, base_id: int, bp: Vector2):
 	for tolerance in [0.0, 0.75]:
 		for piece in pieces:
@@ -60,7 +60,7 @@ static func world_point_from_base(pieces: Array, base_id: int, bp: Vector2):
 
 
 ## STRICT point resolution, for warp points (doors). The base-frame point must lie
-## strictly inside a fragment, `margin` away from every edge. A point exactly on a cut
+## strictly inside a piece, `margin` away from every edge. A point exactly on a cut
 ## — a door split down the middle — resolves nowhere: the door is dormant until its
 ## halves rejoin. Returns Vector2 (current space) or null.
 static func resolve_base_point(pieces: Array, base_id: int, bp: Vector2, margin := 0.5):
@@ -77,7 +77,7 @@ static func resolve_base_point(pieces: Array, base_id: int, bp: Vector2, margin 
 
 ## Transport a current-space point from one configuration to another, through base
 ## space. Returns null if the point is over void in `from_pieces`, or if its base
-## location has no surviving fragment in `to_pieces`.
+## location has no surviving piece in `to_pieces`.
 static func transport(from_pieces: Array, to_pieces: Array, point: Vector2, cell_size: float):
 	var src = piece_at(from_pieces, point, cell_size)
 	if src == null:

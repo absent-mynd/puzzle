@@ -41,7 +41,7 @@ What exists and works today:
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested; placed in the testbed, not in the shipped world |
 | Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
 | **One wrap for the whole view** (`FoldLattice` / `WrapCanvas`) | ✅ In the world |
-| **Batched sheet** — two canvas items, not one per fragment | ✅ In the world |
+| **Batched sheet** — two canvas items, not one per piece | ✅ In the world |
 | Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
 | Hand-drawn tilesheet | ⚙️ Layout + drop-in path done; sheet is generated in code |
 | Audio | ✅ Whole fold vocabulary wired; 21 SFX + 2 music beds ship (generated placeholders) |

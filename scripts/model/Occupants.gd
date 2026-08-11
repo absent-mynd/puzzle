@@ -81,7 +81,7 @@ static func positions(occ: Dictionary, state: FoldedState) -> Array:
 
 
 ## The occupant's current geometry (plane-space polygons). A body normally takes the
-## shape of the tile fragment it rides; once it has a CARRIED shape (a rigid cut piece)
+## shape of the tile piece it rides; once it has a CARRIED shape (a rigid cut piece)
 ## it uses that instead, anchored to the base tile's current position so it repositions
 ## automatically through folds and unfolds. `shapes[bid]` is stored RELATIVE to bid's
 ## origin (plane_pos * cell_size).
@@ -116,7 +116,7 @@ static func _origin(state: FoldedState, bid: int, cell_size: float) -> Vector2:
 
 
 ## Absolute polygons of ONE body (base id): its carried shape if present, else the tile
-## fragment(s) it rides.
+## piece(s) it rides.
 static func _body_abs(bid: int, shapes: Dictionary, state: FoldedState, cell_size: float) -> Array:
 	if shapes.has(bid):
 		return [CollisionCore.shift(shapes[bid], _origin(state, bid, cell_size))]
@@ -206,7 +206,7 @@ static func on_unfold(occ: Dictionary, fold_id: int, state: FoldedState, cell_si
 			remaining_fp.append(fpl)
 	for bid in restore.keys():
 		if was_active.has(bid):
-			shapes.erase(bid)  # rejoin: the whole base tile fragment covers it again
+			shapes.erase(bid)  # rejoin: the whole base tile piece covers it again
 			continue
 		var merged := CollisionCore.union_all(restore[bid])
 		if merged.size() >= 1:

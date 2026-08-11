@@ -321,7 +321,7 @@ also breaks the cycle for real, at which point the type annotation comes back.
 > gathers eighteen answers correctly in `prepare()`, and then asks **fifteen more
 > from inside `paint()`**. Two of those are not cheap: `glue_lines()` scans every
 > base piece for every period of the lattice, and `loose_hand_points()` resolves
-> every loose hand against every fragment.
+> every loose hand against every piece.
 >
 > A region does not repeat, so at world level this costs one extra call and is
 > invisible. Inside a fold the space repeats **7** times. Two folds deep it repeats

@@ -193,7 +193,7 @@ kitchen→kitchen loop. One place to stand and watch everything interact at once
 ## Two things worth knowing before editing it
 
 **Pre-placed fold anchors are PLANE cells, not base cells.** The loader applies
-a region's fold list *in order against the already-folded fragment list*
+a region's fold list *in order against the already-folded piece list*
 (`FoldWorld._setup_all`), so the second fold's anchors mean "where the sheet is
 now", not "where it started". In `prefold`, fold 2 is authored at `(25,18)`
 rather than `(28,18)` for exactly this reason. Trigger anchors are the other

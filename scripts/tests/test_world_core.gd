@@ -63,7 +63,7 @@ func test_capture_strip_area_matches_excised_band() -> void:
 	var pieces := FoldReplay.identity_pieces(bg)
 	var fold := Fold.create(0, Vector2i(2, 1), Vector2i(5, 1), CS)
 	var strip := WorldCore.capture_strip(pieces, fold, CS)
-	assert_gt(strip.size(), 0, "Strip capture yields fragments")
+	assert_gt(strip.size(), 0, "Strip capture yields pieces")
 	var total := 0.0
 	var wall_area := 0.0
 	for entry in strip:
@@ -112,7 +112,7 @@ func test_base_frame_mapping_round_trips_through_a_fold() -> void:
 
 	var start := Vector2(100, 100)  # in cell (1,1), A-side
 	var piece = BaseFrame.piece_containing(index, start, CS)
-	assert_not_null(piece, "Point over a tile resolves to its fragment")
+	assert_not_null(piece, "Point over a tile resolves to its piece")
 	var bp: Vector2 = start - piece.src_offset
 
 	var folded := FoldReplay.apply_one_fold(pieces, fold, CS)
@@ -125,7 +125,7 @@ func test_base_frame_mapping_round_trips_through_a_fold() -> void:
 	var strip_piece = BaseFrame.piece_containing(index, strip_point, CS)
 	var gone = BaseFrame.world_point_from_base(
 		folded, strip_piece.base_id, strip_point - strip_piece.src_offset)
-	assert_null(gone, "Excised base point has no fragment after the fold")
+	assert_null(gone, "Excised base point has no piece after the fold")
 
 
 func test_resolve_base_point_strict_disables_split_centers() -> void:
@@ -137,7 +137,7 @@ func test_resolve_base_point_strict_disables_split_centers() -> void:
 		"Whole tile: center resolves")
 
 	# A fold anchored ON the tile cuts it exactly through its center: the
-	# point sits on the cut in every fragment -> dormant (null) everywhere.
+	# point sits on the cut in every piece -> dormant (null) everywhere.
 	var fold := Fold.create(0, Vector2i(1, 1), Vector2i(4, 1), CS)
 	var folded := FoldReplay.apply_one_fold(pieces, fold, CS)
 	assert_null(BaseFrame.resolve_base_point(folded, bid, bp),

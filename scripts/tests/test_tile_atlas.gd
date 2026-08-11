@@ -1,10 +1,10 @@
 ## TileAtlas tests — the tileset and its base-space UVs
 ##
 ## Folds cut tiles into arbitrary polygons, so tiles cannot be blitted on a grid. The
-## atlas maps a fragment back to its BASE cell and reads the art from there. The tests
-## that matter are the invariants that follow from that: a fragment carries the patch of
+## atlas maps a piece back to its BASE cell and reads the art from there. The tests
+## that matter are the invariants that follow from that: a piece carries the patch of
 ## art it was cut from, a tile's look never changes because it was folded or ridden, and
-## a cut fragment gets a proper sub-rectangle of its tile — which is what makes the seam
+## a cut piece gets a proper sub-rectangle of its tile — which is what makes the seam
 ## a clean cut through the art rather than a smear across it.
 
 extends GutTest
@@ -98,7 +98,7 @@ func test_a_whole_tile_covers_its_whole_atlas_cell():
 
 
 func test_uvs_are_read_from_the_base_cell_not_the_plane_cell():
-	# The fragment for base tile (3,4) sits at plane (3,4); its UVs must not
+	# The piece for base tile (3,4) sits at plane (3,4); its UVs must not
 	# depend on that. Same tile, same art, wherever a fold puts it.
 	var base := _base()
 	var identity := FoldReplay.derive_pieces(base, [])
@@ -115,9 +115,9 @@ func test_uvs_are_read_from_the_base_cell_not_the_plane_cell():
 			"riding a flap moves the geometry and takes the art with it")
 
 
-func test_a_cut_fragment_gets_a_sub_rectangle_of_its_tile():
+func test_a_cut_piece_gets_a_sub_rectangle_of_its_tile():
 	# A diagonal crease cuts tiles mid-cell. Each piece must take the part of the
-	# art it was cut from — never the whole tile squeezed into the fragment.
+	# art it was cut from — never the whole tile squeezed into the piece.
 	var base := _base()
 	var fold := Fold.create(0, Vector2i(2, 2), Vector2i(5, 4), CELL)
 	var pieces := FoldReplay.derive_pieces(base, [fold])
@@ -136,13 +136,13 @@ func test_a_cut_fragment_gets_a_sub_rectangle_of_its_tile():
 			"and none bleeds into the neighbouring tile")
 		if b.size.x < float(TP) - 0.5 or b.size.y < float(TP) - 0.5:
 			found_partial = true
-	assert_true(found_partial, "a diagonal fold does produce partial fragments")
+	assert_true(found_partial, "a diagonal fold does produce partial pieces")
 
 
 func test_a_degenerate_polygon_yields_no_uvs():
 	assert_eq(TileAtlas.uv_for(PackedVector2Array([Vector2.ZERO, Vector2.ONE]),
 		Vector2.ZERO, TileAtlas.K_WALL, 0, CELL).size(), 0,
-		"fewer than three vertices is not a fragment")
+		"fewer than three vertices is not a piece")
 
 
 func test_quad_uv_addresses_one_whole_tile():

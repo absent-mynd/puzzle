@@ -22,8 +22,8 @@ class_name FoldLattice extends RefCounted
 ##
 ## ## Why `P · n_F == 0` and not "a whole number of gaps"
 ##
-## A level is a pair (stored fragments, lattice), and the content it really has is
-## the ORBIT of the stored fragments under the lattice. Descending into F stores
+## A level is a pair (stored pieces, lattice), and the content it really has is
+## the ORBIT of the stored pieces under the lattice. Descending into F stores
 ## `content ∩ B`, where `B = {0 < (p - c)·n_F < gap}` — which is a fundamental
 ## domain of `⟨n_F·gap⟩`, so the glue is exact.
 ##

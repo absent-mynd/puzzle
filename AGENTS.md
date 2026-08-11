@@ -80,17 +80,17 @@ worlds/overworld.json
                         FoldReplay.derive_pieces(base, folds)
                                         │
                                         ▼
-                          Array[FoldedPiece]  ← the fragment list
+                          Array[FoldedPiece]  ← the piece list
                           (base_id, type, polygon, plane_pos, src_offset)
                             │                          │
                    Polygon2D + colliders          BaseFrame
                      (FoldWorld view)        (exact point transport)
 ```
 
-**The invariant everything rests on:** every fragment satisfies
+**The invariant everything rests on:** every piece satisfies
 `polygon == base_polygon + src_offset`. So a point in current space maps to base
-space by subtracting its fragment's offset, and back into *any* other configuration
-by finding the fragment with the same `base_id` containing it. That round trip is
+space by subtracting its piece's offset, and back into *any* other configuration
+by finding the piece with the same `base_id` containing it. That round trip is
 what carries the player, entities, pinned anchors and door points through arbitrary
 fold/unfold sequences — exactly, with no crease arithmetic.
 
@@ -187,7 +187,7 @@ have cost you the hands it never took.
 
 `_play_transition` freezes the body at where it started and does not rebuild the
 geometry until it finalizes, so for the length of a fold animation BOTH the player's
-position and the fragment list are halfway between two states. Anything that reads
+position and the piece list are halfway between two states. Anything that reads
 either one during that window is reading a world that does not exist.
 
 `_physics_process` therefore returns the moment `_tick_fuse` starts a transition. It
@@ -318,7 +318,7 @@ Consequences worth keeping in mind when designing:
 
   **A ball is the one thing in the world that holds a live position, and it is
   deliberately transient.** §8 forbids caching one on anything that persists, because the
-  fragment list is the only authority on where things are. A ball holds one for a second
+  piece list is the only authority on where things are. A ball holds one for a second
   or two and nothing outlives that. While flying it is still transported like everything
   else: `_carry_balls_through` maps it through `BaseFrame` exactly as the player is, so a
   fold carries a hand in flight — and a hand the fold sweeps into a strip goes on flying
@@ -344,7 +344,7 @@ Consequences worth keeping in mind when designing:
   **`_take_back` must run AFTER the rebuild and the teleport.** A hand a fold cannot give
   you is a hand it DROPS, and a hand is dropped at the player's position in the current
   geometry — so returning hands before the unfold has moved the player launches the
-  overflow one from a stale position into the old fragment list. It was the reported
+  overflow one from a stale position into the old piece list. It was the reported
   "one hand vanishes on unfold" bug, and `hands_total` was correct throughout, which is
   why no conservation test caught it: the hand existed, it was just cells away from where
   you ended up. Same trap on the subspace-exit path, worse — the ball was tagged
@@ -412,7 +412,7 @@ world (unchanged: CELL = 64 world units)
   SubViewport, RESIZED per zoom  ← 1 art pixel = 4 world units = WORLD_PER_PIXEL
 		│  320x180 at 1:1          the LENS never moves; the target grows instead
 		│
-		├── TileBatch   the sheet: ALL fragments of ALL copies in two Polygon2Ds
+		├── TileBatch   the sheet: ALL pieces of ALL copies in two Polygon2Ds
 		│                 (one per lit material), base-space UVs from TileAtlas,
 		│                 the wrap baked into the vertices
 		├── StaticBody2D  colliders, domain + the copies one step out
@@ -426,7 +426,7 @@ world (unchanged: CELL = 64 world units)
 
 **Cost.** The sheet is two canvas items whatever the region size and however many
 copies a wrap draws; a fold transition is three batches, and two of the three move
-by setting a position. What this replaced built one `Polygon2D` per fragment per
+by setting a position. What this replaced built one `Polygon2D` per piece per
 copy — ~800 for a region, ×49 inside a fold — and tore the whole lot down on every
 single fold.
 

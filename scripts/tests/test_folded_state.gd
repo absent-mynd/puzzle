@@ -83,7 +83,7 @@ func test_stack_order_later_fold_on_top():
 	assert_eq(arr[0].stack_order, 0, "top has stack_order 0")
 
 
-func test_base_to_piece_prefers_largest_fragment():
+func test_base_to_piece_prefers_largest_piece():
 	var s := FoldedState.new()
 	var big := _piece(7, T_EMPTY, Vector2i(1, 0))          # full square, area 4096
 	var small := FoldedPiece.new(7, T_EMPTY, PackedVector2Array([
@@ -91,7 +91,7 @@ func test_base_to_piece_prefers_largest_fragment():
 	s.add_piece(small)
 	s.add_piece(big)
 	s.finalize()
-	assert_eq(s.plane_pos_of_base(7), Vector2i(1, 0), "primary fragment is the largest one")
+	assert_eq(s.plane_pos_of_base(7), Vector2i(1, 0), "primary piece is the largest one")
 
 
 func test_plane_pos_of_missing_base_is_sentinel():

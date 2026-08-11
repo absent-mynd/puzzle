@@ -6,7 +6,7 @@ class_name HandField extends RefCounted
 ## only ever implicit: **a hand is either a ball or an occupant, never both.** In
 ## flight it has a position of its own and gravity acts on it — that is this class.
 ## At rest it has no position of its own; where it lies is a question asked of the
-## fragment list, so it rides flaps and folds away exactly like a door or a lamp —
+## piece list, so it rides flaps and folds away exactly like a door or a lamp —
 ## that is `FoldWorld`, and it is what keeps ARCHITECTURE.md Decision 10 true.
 ##
 ## So this owns the flight and nothing else. The two moments a ball stops being a

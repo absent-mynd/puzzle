@@ -5,7 +5,7 @@
 ## trigger. These tests pin: firing, anchors following earlier folds, idempotence per
 ## channel, the reserved id range, and the bounded-fixpoint cap.
 ##
-## The resolver works on a fragment list and a continuous player position, so these are
+## The resolver works on a piece list and a continuous player position, so these are
 ## pure — no scene, no physics.
 
 extends GutTest
@@ -61,7 +61,7 @@ func test_geometry_actually_changes():
 	var before := FoldReplay.derive_pieces(base, [])
 	var out := TriggerResolver.resolve(base, _ctx(base, Vector2i(5, 5)))
 	assert_ne((out["pieces"] as Array).size(), before.size(),
-		"the triggered fold is applied to the fragment list, not just recorded")
+		"the triggered fold is applied to the piece list, not just recorded")
 
 
 func test_channel_is_idempotent():

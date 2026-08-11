@@ -115,13 +115,13 @@ entire fix. **Move it down; don't relax the rule.**
 
 ### 1. Mutating derived state — the most common
 
-Editing a `FoldedPiece` (or the fragment list) and expecting it to stick.
+Editing a `FoldedPiece` (or the piece list) and expecting it to stick.
 
 **Symptom:** your change works for one frame and vanishes on the next fold, unfold,
 region load, or subspace transition.
 
 **Why:** derived state is rebuilt from scratch by
-`FoldReplay.derive_pieces(base, folds)` on every change. Fragments are outputs, not
+`FoldReplay.derive_pieces(base, folds)` on every change. Pieces are outputs, not
 storage. See ARCHITECTURE.md Decision 1.
 
 ```gdscript
@@ -138,7 +138,7 @@ rebuild_world()
 ```
 
 **Rule of thumb:** if you want it to survive, it belongs in `BaseGrid`, the fold
-list, or `WorldData` — never in a derived fragment.
+list, or `WorldData` — never in a derived piece.
 
 ### 2. Comparing floats with `==`
 

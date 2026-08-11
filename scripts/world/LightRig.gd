@@ -35,7 +35,7 @@ const SHADER_PATH := "res://assets/shaders/pixel_lit.gdshader"
 const MAX_LIGHTS := 12
 
 ## The two material groups. Strings rather than an enum because they are also the
-## keys `TileBatch` groups its fragments by.
+## keys `TileBatch` groups its pieces by.
 const FG := "fg"
 const BG := "bg"
 
@@ -99,7 +99,7 @@ func material_for_key(key: String) -> ShaderMaterial:
 	return _materials.get(key, null)
 
 
-## The material a fragment of `type` should draw with.
+## The material a piece of `type` should draw with.
 ##
 ## The split follows the registry's walkability, not the type list: what stops
 ## you is foreground, what you move through is background. Asking `TileTypes`

@@ -25,9 +25,9 @@ func test_fold_polygons_splits_a_between_b():
 	# A wide rect on row 5 spanning both creases -> A + between + B.
 	var wide := _rect(100, 320, 400, 384)
 	var res := CollisionCore.fold_polygons([wide], fold, CELL)
-	assert_eq(res["a"].size(), 1, "one A-side fragment")
-	assert_eq(res["b"].size(), 1, "one B-side fragment")
-	assert_eq(res["dropped"].size(), 1, "one between fragment (dropped)")
+	assert_eq(res["a"].size(), 1, "one A-side piece")
+	assert_eq(res["b"].size(), 1, "one B-side piece")
+	assert_eq(res["dropped"].size(), 1, "one between piece (dropped)")
 
 
 func test_fold_polygons_dropped_is_pre_fold_frame():
@@ -49,7 +49,7 @@ func test_fold_polygons_wholly_on_a_flap_untouched_shape():
 	var fold := Fold.create(0, Vector2i(2, 5), Vector2i(5, 5), CELL)
 	var res := CollisionCore.fold_polygons([_square(Vector2i(0, 5))], fold, CELL)
 	assert_eq(res["a"].size(), 1, "A-side only")
-	assert_eq(res["b"].size(), 0, "no B fragment")
+	assert_eq(res["b"].size(), 0, "no B piece")
 	assert_eq(res["dropped"].size(), 0, "nothing excised")
 
 

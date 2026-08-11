@@ -19,13 +19,13 @@ const QUANT := 0.001         # px vertex quantization for determinism
 
 
 # ---------------------------------------------------------------------------
-# Fold transform (shared by tile fragments AND occupant footprints)
+# Fold transform (shared by tile pieces AND occupant footprints)
 # ---------------------------------------------------------------------------
 
 ## Clip a set of polygons by a fold's two parallel creases, meet-in-the-middle:
-##   a       = A-side fragments (d<=0), translated by shift_a  (kept, moved inward)
-##   b       = B-side fragments (d>=gap), translated by shift_b (kept, moved inward)
-##   dropped = the between-strip fragments (0<d<gap), in the PRE-fold frame (untranslated)
+##   a       = A-side pieces (d<=0), translated by shift_a  (kept, moved inward)
+##   b       = B-side pieces (d>=gap), translated by shift_b (kept, moved inward)
+##   dropped = the between-strip pieces (0<d<gap), in the PRE-fold frame (untranslated)
 ## Tiles keep a+b and discard dropped; occupants keep a+b as footprint and store dropped
 ## as a latent (restored, in its original frame, on unfold).
 static func fold_polygons(polys: Array, fold: Fold, cell_size: float) -> Dictionary:

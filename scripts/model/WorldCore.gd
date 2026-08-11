@@ -99,7 +99,7 @@ static func unfold_shift(pos: Vector2, fold: Fold, cell_size: float) -> Vector2:
 
 ## Everything a fold would excise, in the PRE-fold frame: the subspace's content, as
 ## real FoldedPieces (keeping base_id / src_offset so identity and base-frame mapping
-## survive INTO the subspace). Captured from the current fragment list BEFORE the fold
+## survive INTO the subspace). Captured from the current piece list BEFORE the fold
 ## is applied, so it composes over earlier folds.
 static func capture_strip(pieces: Array, fold: Fold, cell_size: float) -> Array:
 	return FoldReplay.capture_strip(pieces, fold, cell_size)
@@ -120,7 +120,7 @@ static func strip_extent(strip: Array, dir: Vector2) -> Dictionary:
 	return {"min": lo, "max": hi}
 
 
-## Collision polygons of the non-walkable pieces in a fragment list. Walkability comes
+## Collision polygons of the non-walkable pieces in a piece list. Walkability comes
 ## from the registry, so a new blocking tile type needs no change here.
 static func solid_polys_of(pieces: Array) -> Array:
 	var out: Array = []
@@ -322,7 +322,7 @@ static func hand_drift(seed: float, t: float, radius: float = DRIFT_RADIUS) -> V
 #
 # That boundary is the whole design, and it is what keeps `AGENTS.md` §8 intact. §8
 # forbids caching a world position on a thing that lives in the world, because the
-# fragment list is the only authority on where anything is. A ball in flight does hold
+# piece list is the only authority on where anything is. A ball in flight does hold
 # a position — but it holds it for a second or two and nothing persists it, and while
 # it is in flight it is transported through `BaseFrame` exactly as the player is. So
 # folds carry a flying hand correctly (a ball folded into a subspace goes on flying

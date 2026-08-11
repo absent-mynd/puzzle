@@ -10,7 +10,7 @@ extends GutTest
 ## `WorldOverlay` broke that contract quietly, and it was expensive. `_draw_glue`
 ## called `world.glue_lines()` — which scans every base piece for every period — and
 ## `_draw_loose_hands` called `world.loose_hand_points()`, which resolves every hand
-## against every fragment. Both from inside `paint()`. Measured on a torus of 77
+## against every piece. Both from inside `paint()`. Measured on a torus of 77
 ## copies, the pair cost most of the frame; gathered once, the whole per-frame
 ## description costs about 200 µs. The drawing was identical either way.
 ##

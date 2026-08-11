@@ -9,10 +9,10 @@ class_name TileAtlas extends RefCounted
 ##
 ## Two things it has to do, and one it deliberately does not:
 ##
-##   - **Map a fragment to texture space.** Folds cut tiles into arbitrary
+##   - **Map a piece to texture space.** Folds cut tiles into arbitrary
 ##     polygons, so tiles cannot be blitted on a grid. `uv_for` uses the fold
 ##     kernel's invariant (`polygon == base_polygon + src_offset`) to send every
-##     vertex back to its BASE cell and read the UV from there. A fragment
+##     vertex back to its BASE cell and read the UV from there. A piece
 ##     therefore carries the exact patch of tile art it was cut from, and the
 ##     art is cut by the crease as cleanly as the geometry is — which is what
 ##     keeps the seam a hard line.
@@ -23,7 +23,7 @@ class_name TileAtlas extends RefCounted
 ##     re-carve it.
 ##
 ## What it does not do is autotiling against the FOLDED neighbourhood. A 47-tile
-## blob set assumes a fragment has neighbours; after a diagonal fold it may have
+## blob set assumes a piece has neighbours; after a diagonal fold it may have
 ## a hypotenuse instead. Base-space edge kinds are the honest version of that.
 ##
 ## The texture is generated procedurally so the tileset ships as readable code
@@ -131,11 +131,11 @@ static func base_color(type: int) -> Color:
 	return _PALETTE[kind][0]
 
 
-## Texture-space UVs for a fragment polygon, in atlas pixels.
+## Texture-space UVs for a piece polygon, in atlas pixels.
 ##
-## `src_offset` is the fragment's cumulative fold translation, so subtracting it
+## `src_offset` is the piece's cumulative fold translation, so subtracting it
 ## lands the polygon back on its base tile; the base CELL is taken from the
-## centroid rather than a vertex, because a fragment's vertices can sit exactly
+## centroid rather than a vertex, because a piece's vertices can sit exactly
 ## on a cell boundary while its interior cannot.
 static func uv_for(poly: PackedVector2Array, src_offset: Vector2, kind: int,
 		variant: int, cell_size: float) -> PackedVector2Array:

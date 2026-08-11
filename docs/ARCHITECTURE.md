@@ -31,7 +31,7 @@ entities cut in half — falls out without special-casing.
 **State is `(BaseGrid, Array[Fold])`. Everything else is a pure function of it.**
 
 `FoldReplay.derive_pieces(base, folds)` replays the fold list over the immutable base
-grid and returns a fresh fragment list. There is no in-place mutation in the kernel.
+grid and returns a fresh piece list. There is no in-place mutation in the kernel.
 
 **Why:** the predecessor was ~2000 lines of in-place mutation that had to implement
 *unfold* as a hand-written inverse of every forward operation — reversing shifts,
@@ -48,8 +48,8 @@ There is no inverse to get wrong, no snapshot to go stale, and no ordering const
 
 **Cost:** re-deriving is O(pieces × folds) on every change, and it is the most
 expensive thing the game does. Measured 2026-08-11 on the shipped region (792
-fragments, headless): one replay of one fold is **~15 ms** — the clip is
-Sutherland-Hodgman per fragment, so the O() is not a formality. A whole `do_fold`
+pieces, headless): one replay of one fold is **~15 ms** — the clip is
+Sutherland-Hodgman per piece, so the O() is not a formality. A whole `do_fold`
 is ~68 ms, about four frames at 60fps, masked by the 0.24 s fold animation.
 
 > An earlier version of this paragraph said "at current world sizes this is
@@ -63,7 +63,7 @@ exists for — no inverse to get wrong, no snapshot to go stale, no ordering
 constraint — and that property has already paid for itself several times over.
 
 **Where the remaining cost is, if you come here to optimize.** A fold used to clip
-every fragment *twice*: `capture_strip` and `apply_one_fold` are the same loop over
+every piece *twice*: `capture_strip` and `apply_one_fold` are the same loop over
 `CollisionCore.fold_polygons`, keeping different parts of the same answer.
 `FoldReplay.fold_and_capture` now does it once, which took a fold from ~82 ms to
 ~68 ms with no cached state. What is left is ~16 ms of clip and ~17 ms of view
@@ -73,7 +73,7 @@ rebuild (terrain batch + collision shapes).
 instead of recreating them is *slower* (5.7 ms vs 4.2 ms — assigning `.polygon` on a
 parented node triggers the same physics-shape rebuild). Caching `TileAtlas.uv_for`
 by base polygon is *slower* (8.5 ms vs 3.8 ms — hashing the polygon costs more than
-the computation it saves), even though 95% of fragments do keep their base polygon
+the computation it saves), even though 95% of pieces do keep their base polygon
 through a fold. Rediscovering *what changed* by comparing geometry costs more than
 recomputing it.
 
@@ -90,13 +90,13 @@ that pins the invariant.
 
 ## Decision 2: `src_offset` — the invariant that makes transport exact
 
-**Every derived fragment satisfies `polygon == base_polygon + src_offset`.**
+**Every derived piece satisfies `polygon == base_polygon + src_offset`.**
 
 That one invariant is the load-bearing element of the whole design:
 
 ```
-current point ──(subtract its fragment's src_offset)──► base point
-base point ──(find the fragment with the same base_id containing it)──► any other configuration
+current point ──(subtract its piece's src_offset)──► base point
+base point ──(find the piece with the same base_id containing it)──► any other configuration
 ```
 
 `BaseFrame` is that round trip. It is how the player rides a flap through a fold, how
@@ -107,9 +107,9 @@ follow whatever earlier folds did.
 **The alternative we rejected:** crease arithmetic — classify a point by which side of
 the fold it is on, then apply that side's shift. Simpler, and it works for one fold.
 It does *not* compose: after two folds a point's displacement depends on which
-fragments it passed through, not on its position relative to either crease. Crease
+pieces it passed through, not on its position relative to either crease. Crease
 math survives in `WorldCore.fold_shift_for_side` as a fallback for points over
-**void**, where there is no fragment to ask.
+**void**, where there is no piece to ask.
 
 ---
 
@@ -137,7 +137,7 @@ should be *felt* in play before it is engineered away. Do not quietly fix it.
 ## Decision 4: Subspaces are real places, derived the same way
 
 A fold's excised strip is not deleted — it is captured (`WorldCore.capture_strip`) as
-a real fragment list retaining `base_id` and `src_offset`. Being pinched into a fold
+a real piece list retaining `base_id` and `src_offset`. Being pinched into a fold
 enters that list as a *level* with the same rules as the outside: you can fold within
 it, and interior folds persist into the world when you exit.
 
@@ -205,11 +205,11 @@ those were never about undo.
 ## Decision 8: Sutherland-Hodgman for polygon splitting
 
 Industry-standard convex clipping, used by `CollisionCore.fold_polygons` to split each
-fragment by the two crease lines into up to three parts (A-side, between, B-side).
+piece by the two crease lines into up to three parts (A-side, between, B-side).
 
 **Why:** simple, robust for convex clip regions (a crease half-plane always is), and
 predictable in the degenerate cases (vertex exactly on the line, edge collinear with
-it) given an epsilon. Fragments stay convex under repeated folding, so it composes.
+it) given an epsilon. Pieces stay convex under repeated folding, so it composes.
 
 **The epsilon discipline:** `GeometryCore.EPSILON = 0.0001`. Never compare floats with
 `==`. Grazing a crease must not count as crossing it — which is why
@@ -240,7 +240,7 @@ Extracting the pure part was the fix; importing upward would have been a cycle.
 
 Doors and lights do not store a world position. They store a **base identity plus a
 point inside that tile**, and where they are is a question asked of the current
-fragment list through `BaseFrame`. `LightSource` is the second instance of the
+piece list through `BaseFrame`. `LightSource` is the second instance of the
 pattern, and it is what makes the design work read as inevitable rather than
 implemented: a lamp folded away is not in the overworld, and the same lamp is what
 lights that fold's interior. Nobody wrote either behaviour — both are the answer to
@@ -252,7 +252,7 @@ there is no unambiguous side to arrive on. A light resolves with
 `world_point_from_base` and keeps burning on whichever half its point landed in,
 because a light has no such ambiguity to resolve.
 
-**Rendering follows the same rule.** A fragment's tile art, its variant and its
+**Rendering follows the same rule.** A piece's tile art, its variant and its
 edge kind all come from base space (`TileAtlas.uv_for` sends each vertex back
 through `src_offset`), so a tile looks identical however it has been folded,
 ridden or cut — and a crease cuts the *art* exactly as it cuts the geometry. That

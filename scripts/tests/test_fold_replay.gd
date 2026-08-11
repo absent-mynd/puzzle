@@ -66,7 +66,7 @@ func test_horizontal_fold_merges_at_meeting_column():
 	var state := FoldReplay.derive(base, [_fold(base, Vector2i(2, 5), Vector2i(5, 5))])
 	# Meeting column 4 gets base col2's A-half + base col5's B-half = 2 pieces.
 	var pieces := state.pieces_at(Vector2i(4, 5))
-	assert_eq(pieces.size(), 2, "meeting column merges two half-fragments")
+	assert_eq(pieces.size(), 2, "meeting column merges two half-pieces")
 
 
 func test_horizontal_fold_sides_ride_to_new_positions():

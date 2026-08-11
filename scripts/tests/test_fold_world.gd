@@ -975,7 +975,7 @@ func _loose_pos_of(kind: int):
 
 func test_a_loose_hand_rides_folds_like_any_occupant() -> void:
 	# It is stored as a base identity, not a position, so it moves with its flap —
-	# nobody wrote that; it falls out of asking the fragment list where it is.
+	# nobody wrote that; it falls out of asking the piece list where it is.
 	var before = _loose_pos_of(HandTypes.SWIFT)
 	assert_not_null(before, "The pillar-top hand is in the world")
 	# In its authored COLUMN, but resting on the ground rather than at the tile's exact
@@ -1174,7 +1174,7 @@ func test_a_hand_never_comes_to_rest_inside_a_wall() -> void:
 
 
 func test_falling_to_the_floor_still_conserves_the_hand() -> void:
-	# The fall moves a hand; it must never lose one. `_drop_hand` binds to the fragment
+	# The fall moves a hand; it must never lose one. `_drop_hand` binds to the piece
 	# under where it LANDED, so a landing over void would silently drop it from the
 	# world — the one failure mode this whole path has.
 	world.do_fold(Vector2i(4, 13), Vector2i(8, 13))
@@ -1405,7 +1405,7 @@ func test_a_hand_in_orbit_can_still_be_caught() -> void:
 #
 #   1. `_take_back` ran BEFORE the unfold rebuilt the geometry and teleported the player,
 #      so the overflow hand was let go at the pre-unfold position and into the old
-#      fragment list. `hands_total` was right the whole time; the hand was simply cells
+#      piece list. `hands_total` was right the whole time; the hand was simply cells
 #      away from where you ended up. Same bug on the subspace-exit path, worse: the ball
 #      was tagged as flying inside a strip that no longer existed.
 #   2. `_land_ball` warned and RETURNED when it found no sheet within two cells — the one
@@ -1688,25 +1688,25 @@ func test_tiles_are_drawn_from_the_tileset_and_lit() -> void:
 	assert_gt(layers.size(), 0, "the world drew some tiles")
 	var drawn := 0
 	for vis in layers:
-		assert_not_null(vis.texture, "every drawn fragment samples the tileset")
+		assert_not_null(vis.texture, "every drawn piece samples the tileset")
 		assert_eq(vis.uv.size(), vis.polygon.size(), "with one UV per vertex")
 		assert_not_null(vis.material, "and is drawn with a lit material")
 		drawn += vis.polygons.size()
-	assert_gt(drawn, 100, "a whole region's worth of fragments")
+	assert_gt(drawn, 100, "a whole region's worth of pieces")
 
 
-func test_the_sheet_is_batched_rather_than_a_node_per_fragment() -> void:
+func test_the_sheet_is_batched_rather_than_a_node_per_piece() -> void:
 	# A region is ~800 tiles and a strip is drawn again in every band it repeats
-	# into. One Polygon2D per fragment per copy meant thousands of nodes torn down
+	# into. One Polygon2D per piece per copy meant thousands of nodes torn down
 	# and rebuilt on EVERY fold, which was the most expensive thing the game did.
 	# Only the lit material forces a second canvas item, so two is the ceiling.
 	assert_lte(world.geo.layers().size(), 2,
 		"the whole sheet is at most two canvas items — foreground and background")
-	var fragments := 0
+	var pieces := 0
 	for vis in world.geo.layers():
-		fragments += vis.polygons.size()
-	assert_gt(fragments, world.geo.layers().size() * 50,
-		"...carrying many fragments each, not one apiece")
+		pieces += vis.polygons.size()
+	assert_gt(pieces, world.geo.layers().size() * 50,
+		"...carrying many pieces each, not one apiece")
 
 	_pinch_over_pit()
 	assert_lte(world.geo.layers().size(), 2,
@@ -1715,7 +1715,7 @@ func test_the_sheet_is_batched_rather_than_a_node_per_fragment() -> void:
 	for vis in world.geo.layers():
 		copied += vis.polygons.size()
 	assert_gt(copied, world.wrap_offsets.size(),
-		"...with every copy's fragments batched into them")
+		"...with every copy's pieces batched into them")
 
 
 func test_lights_are_placed_in_the_world() -> void:
@@ -1848,7 +1848,7 @@ func test_the_fold_animation_draws_where_the_world_draws() -> void:
 
 func test_the_fold_animation_is_batched_into_its_three_moving_parts() -> void:
 	# A flap moves by a translation, so it is one assignment per frame however
-	# many fragments it carries. Only the strip — which collapses onto the meeting
+	# many pieces it carries. Only the strip — which collapses onto the meeting
 	# line — touches vertices at all.
 	world.anim_enabled = true
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))

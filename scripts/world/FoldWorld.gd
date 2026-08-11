@@ -211,7 +211,7 @@ var hands: Array = []
 ##
 ## This is the ONE place in the game where something in the world holds a position of
 ## its own, and it is deliberately transient. `AGENTS.md` §8 forbids caching a world
-## position on a thing that lives in the world, because the fragment list is the only
+## position on a thing that lives in the world, because the piece list is the only
 ## authority on where anything is — and that rule is what makes a hand ride flaps and
 ## fold away into subspaces. A ball keeps a position for a second or two of flight and
 ## nothing persists it, so nothing that outlives the flight has one.
@@ -520,7 +520,7 @@ func _load_region(id: String) -> void:
 ## naming a cell actually puts it. Settling at load makes the two agree, so an authored
 ## cache and a hand that fell where it lies are the same kind of thing in every respect.
 ##
-## Rebinds the pickup to whatever fragment it came to rest on, because that is the tile it
+## Rebinds the pickup to whatever piece it came to rest on, because that is the tile it
 ## is now lying on and therefore the one whose folds it must ride.
 func _settle_authored(pickup: HandPickup, pieces: Array) -> void:
 	var wp = pickup.position_in(pieces)
@@ -566,10 +566,10 @@ func rebuild() -> void:
 	_refresh_lights()
 
 
-## Draw the sheet. Every fragment of every visible copy goes into one batch, which
+## Draw the sheet. Every piece of every visible copy goes into one batch, which
 ## resolves to two Polygon2Ds — one for what stops you, one for what you move
 ## through. A region is ~800 tiles and a strip is drawn in every band it repeats
-## into; a node per fragment per copy was thousands of nodes torn down and rebuilt
+## into; a node per piece per copy was thousands of nodes torn down and rebuilt
 ## on every fold, and it was the most expensive thing the game did.
 func _build_terrain() -> void:
 	geo.setup(_atlas, light_rig, base)
@@ -1325,7 +1325,7 @@ func _hands_for_fold(pinned: Array[int]) -> Array[int]:
 func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS)
 	var pre: Array = current_pieces
-	# ONE clip pass for both halves. The flaps become the new fragment list and the
+	# ONE clip pass for both halves. The flaps become the new piece list and the
 	# strip between them becomes the subspace; `CollisionCore.fold_polygons` produces
 	# both from the same cut, and asking for them separately clipped the whole world
 	# twice. See FoldReplay.fold_and_capture.
@@ -1348,7 +1348,7 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 		dest = BaseFrame.world_point_from_base(
 			new_pieces, from_piece.base_id, player.global_position - from_piece.src_offset)
 	else:
-		# Over void: no fragment to ride, so fall back to crease arithmetic. Only
+		# Over void: no piece to ride, so fall back to crease arithmetic. Only
 		# a point in the excised band has no side at all, and that is the pinch.
 		var side := WorldCore.side_of_fold(player.global_position, fold)
 		if side != 0:
@@ -1377,7 +1377,7 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 		return false
 	_commit_fold(fold, dropped, pinned)
 	# Called with the OLD frame still current, because that is what a ball's position is
-	# expressed in: it maps through `BaseFrame` from the fragment it is over now to the
+	# expressed in: it maps through `BaseFrame` from the piece it is over now to the
 	# same spot of sheet in the new configuration, exactly as the player does. A ball
 	# over ground the fold excised has no home out here and flies on inside the strip.
 	_carry_balls_through(new_pieces, false)
@@ -1550,7 +1550,7 @@ func _wake_unsupported_hands() -> void:
 ## loop. The ledger stayed correct the whole time (it was always counted as loose), so
 ## nothing detected it; the hand simply never came to rest and so could never be found.
 ##
-## Binding it to the fragment under the player's feet is what makes it real: if there is
+## Binding it to the piece under the player's feet is what makes it real: if there is
 ## no sheet there either, `_land_ball`'s outward search finds the nearest that has some.
 func _recover_lost_hand(kind: int) -> void:
 	var landing := WorldCore.settle_hand(player.global_position, wall_polys)
@@ -1565,7 +1565,7 @@ func _recover_lost_hand(kind: int) -> void:
 ## A ball has stopped: it stops being a ball and becomes an occupant of the sheet again.
 ##
 ## This is the boundary that keeps §8 true. From here on the hand has no position of its
-## own — where it lies is a question asked of the fragment list, so it rides flaps and
+## own — where it lies is a question asked of the piece list, so it rides flaps and
 ## folds away exactly like a door or a lamp. If there is no sheet under where it landed
 ## (it came to rest over void) we search outward a little, because a hand that bound to
 ## nothing would vanish from the world.
@@ -1701,7 +1701,7 @@ func unfold_level_fold(fold: Fold) -> void:
 		# cannot hand you is a hand it DROPS — and a hand is dropped at the player's
 		# position, in the current geometry. Called before the rebuild (where it used to
 		# be) the ball spawned at the player's PRE-unfold position and into the old
-		# fragment list, so an unfold that moved you left the overflow hand several cells
+		# piece list, so an unfold that moved you left the overflow hand several cells
 		# behind, on ground that had since slid away. It was still counted, which is why
 		# conservation never caught it; it simply was not where you were.
 		#
@@ -1912,7 +1912,7 @@ func _traverse(id: String) -> void:
 # ---------------------------------------------------------------------------
 # Fold / unfold animation
 # ---------------------------------------------------------------------------
-# Fragments of the PRE-state are split by the fold's creases: flaps translate
+# Pieces of the PRE-state are split by the fold's creases: flaps translate
 # toward the meeting line, the strip collapses onto it (or expands from it,
 # reversed). The player rides linearly between its known start/end positions.
 # State math happens BEFORE the animation; visuals rebuild in `finalize`.
@@ -1932,11 +1932,11 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 	# back when the real geometry returns.
 	pixel_view.add_child(layer)
 
-	# Three batches, not a node per fragment. The two flaps move by a TRANSLATION,
-	# so each is one assignment per frame however many thousand fragments it holds;
+	# Three batches, not a node per piece. The two flaps move by a TRANSLATION,
+	# so each is one assignment per frame however many thousand pieces it holds;
 	# only the strip, which collapses onto the meeting line, touches vertices at
 	# all. A fold used to build (and immediately throw away) one Polygon2D per
-	# fragment per copy, which is why folding a large region hitched.
+	# piece per copy, which is why folding a large region hitched.
 	var shift_a := fold.shift_a_px(CS)
 	var shift_b := fold.shift_b_px(CS)
 	var groups := {"a": [], "b": [], "strip": []}
@@ -2176,7 +2176,7 @@ func _physics_process(delta: float) -> void:
 	_tick_fuse(delta)
 	# A fuse that just fired has started a fold TRANSITION, and the rest of this
 	# frame belongs to it. Everything below reads the player's position and the
-	# current fragment list, and during a transition both are mid-flight: the body
+	# current piece list, and during a transition both are mid-flight: the body
 	# is frozen at where it started and the geometry does not rebuild until the
 	# animation finalizes. Letting a door fire from that state teleported the player
 	# to another region and then finalized the fold's landing — computed in the

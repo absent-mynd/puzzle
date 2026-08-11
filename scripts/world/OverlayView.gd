@@ -11,7 +11,7 @@ class_name OverlayView extends RefCounted
 ## 77 two folds deep. Because the overlay could ask the world anything at any point,
 ## two allocating queries drifted into that per-copy path — `glue_lines()`, which
 ## scans every base piece per period, and `loose_hand_points()`, which resolves every
-## hand against every fragment. Measured on a torus they cost **16.3 ms of a 16.6 ms
+## hand against every piece. Measured on a torus they cost **16.3 ms of a 16.6 ms
 ## frame**. Nothing about the drawing was wrong; only where the question was asked.
 ## With no boundary between the two objects, there was no wrong side to be on.
 ##

@@ -1,7 +1,7 @@
 ## LightSource tests — lights as occupants of the sheet
 ##
 ## A light has no world position. It has a base identity and a point inside that tile,
-## and where it burns is always a question asked of the current fragment list. These
+## and where it burns is always a question asked of the current piece list. These
 ## tests pin the consequences the design rests on: fold a light away and it leaves the
 ## world entirely, but it is still there inside the fold; fold something else and it
 ## rides the flap that carried its tile.
@@ -105,7 +105,7 @@ func test_a_light_returns_when_its_fold_is_dropped():
 
 func test_a_split_light_still_burns_on_its_half():
 	# Unlike a door, a light cut through by a crease is not dormant: it resolves
-	# non-strictly, onto whichever fragment holds its point.
+	# non-strictly, onto whichever piece holds its point.
 	var base := _base()
 	var light := _light_at(Vector2i(7, 5), base)
 	var fold := Fold.create(0, Vector2i(2, 5), Vector2i(5, 5), CELL)

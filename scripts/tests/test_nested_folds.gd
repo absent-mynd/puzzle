@@ -214,7 +214,7 @@ func test_the_renderer_asks_the_lattice_and_nothing_else() -> void:
 
 func test_the_sheet_at_depth_two_is_still_two_canvas_items() -> void:
 	# The batching is what makes a torus affordable at all: its copies multiply,
-	# and a node per fragment per copy would not survive that.
+	# and a node per piece per copy would not survive that.
 	_pinch_over_pit()
 	_pinch_again()
 	assert_lte(world.geo.layers().size(), 2,
