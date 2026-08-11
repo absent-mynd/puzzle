@@ -24,6 +24,12 @@
 > (`base`, `lattice`, `sub_fold`). The other 21 are gameplay queries, which no
 > amount of level state answers. Finding 08 still wants the per-frame view-model
 > originally prescribed, and remains open.
+>
+> **And it was underrated.** Filed P2 on structural grounds, finding 08 was hiding
+> the most expensive thing in the frame: two allocating queries on the per-copy draw
+> path cost **97.9% of a 60fps budget** two folds deep. Fixed; the finding stays
+> open because the cause did not change. See the note under it — and price a
+> coupling finding before scheduling it.
 
 ---
 
@@ -304,6 +310,49 @@ cycle is the real finding; the missing type annotation is just the receipt.
 **Fix:** the overlay wants a view-model — one struct produced by `FoldWorld` per
 rebuild describing what should be drawn — rather than 24 reach-throughs. That
 also breaks the cycle for real, at which point the type annotation comes back.
+
+> **This was filed as a coupling problem. It was hiding a performance bug, and the
+> coupling is why nobody could see it. (2026-08-11)**
+>
+> `WrapCanvas` splits drawing into `prepare()` — once, before any copy — and
+> `paint()` — once per copy. Its own docstring says why: *"so a question that costs
+> something is asked once rather than once per band."* `WorldOverlay` overrides both,
+> gathers eighteen answers correctly in `prepare()`, and then asks **fifteen more
+> from inside `paint()`**. Two of those are not cheap: `glue_lines()` scans every
+> base piece for every period of the lattice, and `loose_hand_points()` resolves
+> every loose hand against every fragment.
+>
+> A region does not repeat, so at world level this costs one extra call and is
+> invisible. Inside a fold the space repeats **7** times. Two folds deep it repeats
+> **77**. The ceiling is `MAX_WRAP_COPIES` = 121.
+>
+> Measured on the fixture world, two folds deep:
+>
+> | Query | Cost | Calls/frame | Total |
+> |---|---:|---:|---:|
+> | `glue_lines()` | 187.90 µs | ×77 | 14.5 ms |
+> | `loose_hand_points()` | 23.94 µs | ×77 | 1.8 ms |
+> | | | | **16.3 ms** |
+>
+> A 60fps frame is 16.6 ms. **The torus — the headline mechanic of the whole game —
+> was spending 97.9% of its frame budget re-deriving two answers that had not
+> changed between copies.** Gathered in `prepare()` the same two cost 212 µs: a 45×
+> reduction, and flat in the copy count rather than linear in it.
+>
+> Nothing about the drawing differs. Nothing about the code is wrong except *where
+> the question is asked* — and the reason it could be asked there is finding 08
+> itself. When a view holds the whole world and may ask it anything at any point,
+> there is no boundary for a gather to be on the wrong side of.
+>
+> Fixed, with `test_wrap_canvas_contract.gd` to keep it fixed: it walks every
+> `WrapCanvas` subclass, computes what is reachable from `paint()`, and fails if any
+> of it calls a query that allocates. **The finding itself stays open** — the
+> overlay still holds an untyped reference and still reaches into 24 distinct
+> members, 12 of them per copy. This removed the worst consequence, not the cause.
+>
+> The general lesson is the one worth keeping: **a coupling finding is worth pricing
+> before it is scheduled.** This one was filed P2 on structural grounds and was
+> quietly the most expensive thing in the frame.
 
 ---
 
