@@ -5,6 +5,12 @@
 **Date:** 2026-08-11
 **Status:** point-in-time diagnosis. Not a document to maintain.
 
+> **Remediation status — steps 1–3 landed 2026-08-11.** The gates now fail
+> (`bca4758`) and the suite is 778/778 green (`c38352c`). Findings 01–05 below are
+> resolved; the P2/P3 findings are not. Closing finding 01 turned up a second,
+> independent hole that this document did not predict — see the note under it.
+> Everything else stands as written.
+
 ---
 
 ## Summary
@@ -53,6 +59,22 @@ remaining 18 test scripts never execute. CI calls that a pass.
 **Fix:** delete `-d` from the workflow and from the pre-push hook. One word, two
 files. Do this before anything else in this document, because until it is done
 no other fix can be verified.
+
+> **Follow-up (2026-08-11).** Removing `-d` closes only the loud half of this.
+> GUT derives its exit code from the assertion-failure count alone
+> (`GutRunner._handle_quit` → `gut.get_fail_count()`), so a test that dies of a
+> runtime error before reaching an assert is filed as **risky**, not failing, and
+> the run still exits 0. The run is no longer truncated, but the crash is still
+> invisible — and a crash is exactly what broke this repository.
+>
+> This was found by canarying the fix rather than assuming it: appending a
+> deliberate `empty[0]` access to a real test file still produced exit 0.
+> `tools/gut_strict_exit.gd` now fails the run on a non-zero risky count, via
+> GUT's supported `post_run_script` hook. Pending tests are excluded — `pending()`
+> is a legitimate authoring tool with its own total.
+>
+> Verify a gate by making it fail on purpose. A gate nobody has watched fail is
+> only believed to work.
 
 ### 2. `main` is red, and was merged red
 
@@ -121,10 +143,26 @@ deltas.
 
 Eight of the nine loose hands in the `east` region of `overworld.json` are
 authored floating in mid-air (`test_world_data`: *"hand at (5, 4) in east lies on
-solid ground"* ×8). At runtime this produces
-`ERROR: FoldWorld: nowhere at all to land a hand near (864, 1568)` — logged
-**2,246 times in a 16-second test run**. An error-severity message emitted 2,246
-times is not an error message, it is noise that will hide the next real one.
+solid ground"* ×8).
+
+Separately, a full suite run emits
+`ERROR: FoldWorld: nowhere at all to land a hand near (864, 1568)` **2,246
+times**.
+
+> **Correction (2026-08-11).** The first draft of this review presented the second
+> fact as a consequence of the first. It is not. Removing the eight floating hands
+> dropped the count only from 2,246 to 1,964; they accounted for 282. All 1,964
+> remaining come from `test_fold_world`, via the `push_error` at
+> `FoldWorld.gd:1593` — a hand that can reach neither a sheet nor the spawn tile
+> is kept in the air and re-reports on every landing attempt, and the tests step
+> the flight simulation up to 900 times per test. The two problems are unrelated;
+> the attribution was wrong.
+
+The logging issue is the more durable of the two: this is a *recoverable* state
+the code handles deliberately (it keeps the hand catchable rather than deleting
+it), reported at ERROR severity from inside a loop. An error-severity message
+emitted 1,964 times is not an error message — it is noise that will hide the next
+real one. It wants to be a once-per-hand warning, or a counter.
 
 ---
 
