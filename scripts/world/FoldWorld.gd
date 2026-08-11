@@ -121,7 +121,19 @@ var world_data: WorldData
 # --- Regions ---
 ## region id -> {"base", "folds", "seam_segs", "interiors", "spawn"}
 var regions: Dictionary = {}
-var region_id := ""
+## The space the player is standing in right now. Everything below that describes
+## the current level is a VIEW onto this object rather than a member of its own —
+## the state lives in one place that can be passed to a collaborator, while the
+## hundred-odd existing call sites (and the tests) go on reading `world.lattice`,
+## `world.mode`, `world.pieces_by_pos` exactly as before.
+##
+## Migrating those call sites to `level.x` and deleting these properties is a
+## mechanical follow-up; having the object at all is what unblocks anything else.
+var level := Level.new()
+
+var region_id: String:
+	get: return level.region_id
+	set(v): level.region_id = v
 ## Doors: id -> {"region", "cell", "bid", "bp", "pair"}. Points, not tiles.
 var doors: Dictionary = {}
 var _door_latch: Dictionary = {}
@@ -129,14 +141,18 @@ var _door_latch: Dictionary = {}
 var region_lights: Dictionary = {}
 
 # --- Current region working state (views into regions[region_id]) ---
-var base: BaseGrid
+var base: BaseGrid:
+	get: return level.base
+	set(v): level.base = v
 var folds: Array[Fold] = []
 var seam_segs: Dictionary = {}
 ## fold_id -> Array[Fold]: a fold's interior folds, persistent while it lives.
 var interiors: Dictionary = {}
 ## Loose hands lying in THIS region (a view into `hand_pickups`).
 var loose_hands: Array = []
-var _spawn := Vector2.ZERO
+var _spawn: Vector2:
+	get: return level.spawn
+	set(v): level.spawn = v
 
 ## Loose hands, region id -> Array[HandPickup]. Authored caches and hands that popped
 ## out of a burst are the SAME list and the same object — to the player they are the
@@ -151,7 +167,11 @@ var _next_trigger_id := TriggerResolver.TRIGGER_FOLD_ID_BASE
 ## Base tile the player last fired a trigger check against — triggers are edge-fired
 ## on entering a tile, not re-fired every frame you stand on it.
 var _trigger_latch := -1
-var mode: Mode = Mode.WORLD
+## Kept as the enum the rest of the file and the tests read, backed by the kernel's
+## plain bool — `Level` may not name a view type (Decision 9).
+var mode: Mode:
+	get: return Mode.SUBSPACE if level.in_subspace else Mode.WORLD
+	set(v): level.in_subspace = (v == Mode.SUBSPACE)
 ## Path of entered folds (outermost first). Empty = region world.
 var context: Array[Fold] = []
 
@@ -200,7 +220,12 @@ var hands: Array = []
 ## `in_sub` tags which view a ball is flying in, for the same reason anchors carry
 ## their region: the overworld and a strip interior are different spaces, and a ball
 ## must only be stepped, drawn and collided against the one it is actually in.
-var hand_balls: Array = []
+## Hands in the air. `HandField` owns the flight; this object owns what a hand
+## becomes when it stops flying. See HandField.
+var hand_field := HandField.new()
+
+var hand_balls: Array:
+	get: return hand_field.balls
 
 # --- Fold-key hold tracking (tap = place a hand, hold = pull one back) ---
 var _hold_active := false
@@ -218,29 +243,47 @@ var _burst_flash_left := 0.0
 
 ## Identity pieces of this level: the region's base at the top, the entered
 ## fold's strip content at every level below it.
-var level_base: Array = []
+var level_base: Array:
+	get: return level.base_pieces
+	set(v): level.base_pieces = v
 ## ...with this level's folds replayed over it. The geometry on screen.
-var current_pieces: Array = []
-var pieces_by_pos: Dictionary = {}
-var wall_polys: Array = []
-var goal_polys: Array = []
+var current_pieces: Array:
+	get: return level.pieces
+	set(v): level.pieces = v
+var pieces_by_pos: Dictionary:
+	get: return level.pieces_by_pos
+	set(v): level.pieces_by_pos = v
+var wall_polys: Array:
+	get: return level.wall_polys
+	set(v): level.wall_polys = v
+var goal_polys: Array:
+	get: return level.goal_polys
+	set(v): level.goal_polys = v
 var _on_goal := false
 
 ## How this level repeats. Flat in a region, a cylinder inside a fold, a torus
 ## inside two crossing ones. The single source of truth for the wrap — copies,
 ## colliders, the body's wrap-around, the camera's framing and the lights all
 ## come off this.
-var lattice: FoldLattice = FoldLattice.flat()
+var lattice: FoldLattice:
+	get: return level.lattice
+	set(v): level.lattice = v
 ## Where the copies of this level are drawn, nearest first, always including
 ## ZERO. Handed to every `WrapCanvas` and baked into the terrain batch.
-var wrap_offsets: Array = [Vector2.ZERO]
+var wrap_offsets: Array:
+	get: return level.wrap_offsets
+	set(v): level.wrap_offsets = v
 ## Content extent along the one direction a cylinder does NOT repeat in — the way
 ## you can run off the end of a band. Unused when the space is flat or a torus.
-var free_extent: Dictionary = {}
+var free_extent: Dictionary:
+	get: return level.free_extent
+	set(v): level.free_extent = v
 
 ## The innermost entered fold, or null at region level. Convenience: it is always
 ## `context.back()`.
-var sub_fold: Fold = null
+var sub_fold: Fold:
+	get: return level.sub_fold
+	set(v): level.sub_fold = v
 
 # --- Animation ---
 var anim_enabled := true
@@ -294,6 +337,12 @@ func _ready() -> void:
 	pixel_view.add_child(player)
 
 	camera = WorldCamera.new(player, pixel_view)
+
+	# A ball stops being a ball in exactly two ways, and both are the world's business
+	# rather than the flight's: it comes to rest and becomes an occupant of the sheet,
+	# or it leaves the world and has to be put back somewhere findable.
+	hand_field.landed.connect(_land_ball)
+	hand_field.lost.connect(_recover_lost_hand)
 
 	# Everything that MOVES is a WrapCanvas, so it stands in every copy of the
 	# space without being told there is more than one.
@@ -365,7 +414,7 @@ func _setup_all() -> void:
 	primed = []
 	hand_pickups = {}
 	# A hand in flight is a hand mid-event. A reset ends the event.
-	hand_balls = []
+	hand_field.clear()
 
 	var world_path := world_override if not world_override.is_empty() \
 		else WorldData.selected_path(WORLD_PATH)
@@ -1428,17 +1477,9 @@ func _give_hand(kind: int) -> void:
 ## crease. As a velocity it cannot do that — the ball starts exactly where the hand was
 ## let go and the physics takes it from there.
 func _drop_hand(kind: int, at: Vector2, nudge: Vector2 = Vector2.ZERO) -> void:
-	hand_balls.append({
-		"kind": kind,
-		"pos": at,
-		"vel": nudge,
-		"resting": false,
-		"region": region_id,
-		"in_sub": mode == Mode.SUBSPACE,
-		# A ball's drift phase, so two hands in flight together do not bob in lockstep.
-		# Derived from the launch point, which is stable for the whole flight.
-		"seed": WorldCore.hand_drift_seed(hand_balls.size(), at),
-	})
+	# Seeded from the launch point, which is stable for the whole flight.
+	hand_field.launch(kind, at, level, nudge,
+		WorldCore.hand_drift_seed(hand_field.size(), at))
 	AudioManager.play_sfx(Sounds.HAND_DROP)
 
 
@@ -1446,7 +1487,7 @@ func _drop_hand(kind: int, at: Vector2, nudge: Vector2 = Vector2.ZERO) -> void:
 ## rather than stacking. The kick alternates side, which is what makes a pair read as a
 ## pair.
 func _toss_hand(kind: int, at: Vector2) -> void:
-	var side := 1.0 if hand_balls.size() % 2 == 0 else -1.0
+	var side := hand_field.next_toss_side()
 	_drop_hand(kind, at, Vector2(side * TOSS_SPEED, -TOSS_LIFT))
 
 
@@ -1457,48 +1498,7 @@ func _toss_hand(kind: int, at: Vector2) -> void:
 ## one's floor. A ball in the view you are not in simply waits — which is right, because
 ## the fold it is inside is not a place where time is passing for you either.
 func _step_hand_balls(delta: float) -> void:
-	if hand_balls.is_empty():
-		return
-	var solids := wall_polys
-	var here := mode == Mode.SUBSPACE
-	for i in range(hand_balls.size() - 1, -1, -1):
-		var ball: Dictionary = hand_balls[i]
-		if bool(ball["in_sub"]) != here or String(ball["region"]) != region_id:
-			continue
-		var next := WorldCore.hand_ball_step(ball, solids, delta)
-		ball["pos"] = next["pos"]
-		ball["vel"] = next["vel"]
-		if bool(next["resting"]):
-			hand_balls.remove_at(i)
-			_land_ball(ball)
-		elif here:
-			# In a repeating space, a falling thing WRAPS — the same rule the player
-			# crosses a glue line by, asked of the same lattice, so it holds at any
-			# depth and on a torus it wraps both ways at once. When a wrap axis has a
-			# vertical component that is a hand in orbit, indefinitely, and it is a real
-			# object in a real place rather than a leak: it is still counted, still
-			# catchable, and it still lands the moment a fold puts ground in its way.
-			ball["pos"] = lattice.wrap(Vector2(ball["pos"]))
-			# The one direction a space may NOT repeat in is the one direction a thing
-			# can genuinely leave by. Turn it back the way the fold turns the player
-			# back — and on a torus there is no such direction, so nothing to do.
-			#
-			# This used to call `_recover_lost_hand`, which is the WORLD-level answer:
-			# it settles the hand at the player's feet. Inside a fold that point is
-			# routinely outside the strip, so the hand bound to nothing, was put back
-			# in the air, drifted out again and was recovered again — the exact loop
-			# `_recover_lost_hand`'s own comment says it exists to prevent, moved from
-			# the world level into subspaces. It was invisible because the ledger
-			# stayed correct throughout and the hand really was still in the band; the
-			# only outward sign was 1,964 identical ERROR lines per suite run.
-			if _left_the_band(Vector2(ball["pos"])):
-				ball["pos"] = _turn_back_point()
-				ball["vel"] = Vector2.ZERO
-		elif Vector2(ball["pos"]).y > (base.grid_size.y + 8) * CS:
-			# At world level there is a bottom to fall off. Rather than lose the hand —
-			# the one thing this system must never do — put it back somewhere findable.
-			hand_balls.remove_at(i)
-			_recover_lost_hand(int(ball["kind"]))
+	hand_field.step(level, delta)
 	# The overlay draws in-flight balls, so it has to redraw while any is moving.
 	_refresh_pickup_visuals()
 
@@ -1528,15 +1528,10 @@ func _wake_unsupported_hands() -> void:
 		if WorldCore.hand_ball_supported(Vector2(wp), solids):
 			continue                # still on something; it rode its flap and is fine
 		loose_hands.remove_at(i)
-		hand_balls.append({
-			"kind": pickup.kind,
-			"pos": Vector2(wp),
-			"vel": Vector2.ZERO,
-			"resting": false,
-			"region": region_id,
-			"in_sub": mode == Mode.SUBSPACE,
-			"seed": WorldCore.hand_drift_seed(pickup.base_id, pickup.bp),
-		})
+		# Seeded from the base tile it was lying on, so a woken hand keeps a stable
+		# drift phase rather than one that depends on how many are already up.
+		hand_field.launch(pickup.kind, Vector2(wp), level, Vector2.ZERO,
+			WorldCore.hand_drift_seed(pickup.base_id, pickup.bp))
 	_refresh_pickup_visuals()
 
 
@@ -1608,7 +1603,7 @@ func _land_ball(ball: Dictionary) -> void:
 	# suite run, which is not an error message, it is a screen that hides the next real
 	# one. Say it once, when the hand ENTERS the state.
 	var already: bool = bool(ball.get("homeless", false))
-	hand_balls.append({
+	hand_field.readmit({
 		"kind": int(ball["kind"]),
 		"pos": rest,
 		"vel": Vector2.ZERO,
@@ -1635,27 +1630,9 @@ func _land_ball(ball: Dictionary) -> void:
 ## to the interior from now on. A ball the fold leaves nowhere — its tile excised while
 ## the view stays put — is one the strip captured, and it flies on in there.
 func _carry_balls_through(new_pieces: Array, into_sub: bool) -> void:
-	var here := mode == Mode.SUBSPACE
-	for ball in hand_balls:
-		if bool(ball["in_sub"]) != here or String(ball["region"]) != region_id:
-			continue
-		var from = BaseFrame.piece_containing(pieces_by_pos, Vector2(ball["pos"]), CS)
-		var dest = null
-		if from != null:
-			dest = BaseFrame.world_point_from_base(
-				new_pieces, from.base_id, Vector2(ball["pos"]) - from.src_offset)
-		if dest != null:
-			ball["pos"] = Vector2(dest)
-			if into_sub:
-				ball["in_sub"] = true
-			continue
-		# No home in the new configuration: the fold excised the ground it was over. It
-		# is inside the strip now, which is a real place — so it keeps flying, in there.
-		ball["in_sub"] = true
+	hand_field.carry_through(level, new_pieces, into_sub)
 
 
-## Move a fold's hands back to the player. Call BEFORE the fold leaves the list, so
-## the hands are never in two places at once.
 func _take_back(fold: Fold) -> void:
 	for kind in fold.held_hands:
 		_give_hand(int(kind))
@@ -2141,25 +2118,16 @@ func _physics_process(delta: float) -> void:
 ##
 ## Every axis at once, so a torus wraps in both directions in one step, and a
 ## region — with no axes at all — does nothing here.
-## Has `point` run off the one end a band actually has?
-##
-## Only a cylinder has such an end: a torus repeats both ways and has nowhere to
-## leave by, and a region uses the fall-out-of-the-world respawn instead. The 4-cell
-## slack keeps a thing that is merely near the end from counting as past it.
+## How much slack a thing gets before it counts as having left the band.
+const BAND_SLACK := 4.0 * CS
+
+
 func _left_the_band(point: Vector2) -> bool:
-	var free := lattice.free_axis()
-	if free == Vector2.ZERO or free_extent.is_empty():
-		return false
-	var t := point.dot(free)
-	return t < float(free_extent["min"]) - 4.0 * CS \
-		or t > float(free_extent["max"]) + 4.0 * CS
+	return level.left_the_band(point, BAND_SLACK)
 
 
-## Where something that ran off the end of a band is put back: the middle of the
-## band it just left.
 func _turn_back_point() -> Vector2:
-	var period: Vector2 = lattice.periods()[0]
-	return sub_fold.crease_point1 + period * 0.5
+	return level.turn_back_point()
 
 
 func _wrap_body() -> void:
@@ -2294,17 +2262,7 @@ func loose_hand_points() -> Array:
 ## overlay draws them from their own position rather than by resolving a base point.
 ## Balls flying in the other view are not here: they are not in this space.
 func hand_ball_points() -> Array:
-	var out: Array = []
-	var here := mode == Mode.SUBSPACE
-	for ball in hand_balls:
-		if bool(ball["in_sub"]) != here or String(ball["region"]) != region_id:
-			continue
-		out.append({
-			"kind": int(ball["kind"]),
-			"pos": Vector2(ball["pos"]),
-			"seed": float(ball["seed"]),
-		})
-	return out
+	return hand_field.points_in(level)
 
 
 ## Loose hands are drawn by the overlay, which redraws itself every frame, so there is
