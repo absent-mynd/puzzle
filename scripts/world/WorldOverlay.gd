@@ -197,8 +197,12 @@ func _draw_exit_anchor() -> void:
 		draw_arc(at, 20.0, 0, TAU, 24, col, STROKE)
 
 
-## Where a tap would put a hand, what a burst from here would reach, and how far
-## through a hold the key is.
+## Where a tap would put a hand, and what a burst from here would reach.
+##
+## A burst being CHARGED is drawn nowhere near here: it is a tint on the body. This
+## used to fill a ring at `aim_at`, which said the wrong thing twice over — the
+## burst is not aimed at that cell, and a ring is not subtle enough to be the thing
+## you look at through every tap.
 func _draw_aim() -> void:
 	# The aim ring takes the colour of the hand you would put down, so you can see
 	# what kind of fold you are about to start before you start it — and reddens when
@@ -214,12 +218,6 @@ func _draw_aim() -> void:
 	for entry in _view.in_reach:
 		draw_arc(Vector2(entry["at"]), 20.0, 0, TAU, 24,
 			Color("59e0d0") if bool(entry["ok"]) else Color("e06a6a", 0.7), STROKE)
-
-	# A hold in progress fills a ring: the two gestures are distinguishable while
-	# the key is still down, so a hold never lands as a surprise.
-	if _view.hold > 0.0:
-		draw_arc(_view.aim_at, 23.0, -PI / 2.0, -PI / 2.0 + TAU * _view.hold, 32,
-			Color("ffd27f"), STROKE)
 
 
 ## Every hand you have put down, in its OWN kind's colour, so a mixed pair reads as a

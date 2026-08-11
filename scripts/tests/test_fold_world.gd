@@ -1093,6 +1093,114 @@ func test_reset_puts_both_the_world_and_your_hands_back() -> void:
 
 
 # ---------------------------------------------------------------------------
+# The one-key gesture: both directions land on the RELEASE
+# ---------------------------------------------------------------------------
+# Holding F does not burst — it LOADS one, and the pop happens when you let go.
+# Everything below drives `_unhandled_input` with real key events, because the
+# thing under test is the gesture, not the two actions it chooses between.
+
+func _key_f(down: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_F
+	ev.pressed = down
+	world._unhandled_input(ev)
+
+
+## Press F, hold it for `secs`, let go.
+func _press_f_for(secs: float) -> void:
+	_key_f(true)
+	world._tick_hold(secs)
+	_key_f(false)
+
+
+func test_a_short_press_still_places_a_hand_when_you_let_go() -> void:
+	_press_f_for(world.HOLD_TIME * 0.5)
+	assert_eq(world.anchor_cells(), [Vector2i(5, 12)],
+		"Under the threshold the release is a tap, and a tap puts a hand down")
+
+
+func test_holding_past_the_threshold_loads_the_burst_without_firing_it() -> void:
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))       # seam at (24,12)
+	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+
+	_key_f(true)
+	world._tick_hold(world.HOLD_TIME + 1.0)
+	assert_true(world.hold_loaded(), "Held past the threshold: the burst is loaded")
+	assert_eq(world.folds.size(), 1,
+		"...and the seam under you is untouched — holding does not fire it")
+
+	_key_f(false)
+	assert_eq(world.folds.size(), 0, "Letting go is what pops it")
+	assert_false(world.hold_loaded(), "...and the charge is spent")
+
+
+func test_a_loaded_release_pops_instead_of_placing_a_hand() -> void:
+	# The two gestures are exclusive at the same instant they are decided: one
+	# release cannot both burst and place.
+	var held: int = world.hands_held()
+	_press_f_for(world.HOLD_TIME)
+	assert_eq(world.anchor_cells(), [], "A loaded release put no hand down")
+	assert_eq(world.hands_held(), held, "...and left your slots exactly as they were")
+
+
+func test_a_burst_can_be_charged_in_one_place_and_let_go_in_another() -> void:
+	# What the release-fired pop buys: the reach is measured where you LET GO. The
+	# burst still is not aimed — but it is now something you can carry to a seam.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))       # seam at (24,12)
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+
+	_key_f(true)
+	world._tick_hold(world.HOLD_TIME)
+	assert_eq(world.folds.size(), 1, "Charged across the map: nothing has happened")
+
+	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+	_key_f(false)
+	assert_eq(world.folds.size(), 0, "The pop lands where you released, not where you pressed")
+
+
+func test_a_release_with_no_press_behind_it_is_not_a_gesture() -> void:
+	# A press swallowed mid-fold (or cleared by a reset) leaves a release with
+	# nothing behind it, and it must not fall through to a tap.
+	_key_f(false)
+	assert_eq(world.anchor_cells(), [], "A stray release places nothing")
+	assert_eq(world.hands_held(), 2, "...and spends nothing")
+
+
+func test_the_body_wears_the_charge_and_puts_it_down_again() -> void:
+	# The indicator is the body. `_process` is what hands it the number, so this
+	# drives frames rather than calling `_tick_hold` directly.
+	assert_eq(world.player.fold_charge, 0.0, "Idle: no charge")
+
+	_key_f(true)
+	world._process(world.HOLD_TIME * 0.5)
+	assert_almost_eq(world.player.fold_charge, 0.5, 0.001, "Halfway through the hold")
+	assert_ne(world.player.visual_color(), PlayerBody.BODY_COLOR,
+		"...and the body is already saying so")
+
+	world._process(world.HOLD_TIME)
+	assert_eq(world.player.fold_charge, 1.0, "Loaded — and it does not climb past 1")
+	assert_eq(world.player.visual_color(), PlayerBody.charge_color(1.0),
+		"The body wears the loaded colour")
+
+	_key_f(false)
+	world._process(1.0 / 60.0)
+	assert_eq(world.player.fold_charge, 0.0, "Let go and the charge is gone")
+	assert_eq(world.player.visual_color(), PlayerBody.BODY_COLOR,
+		"...and the body is its own colour again")
+
+
+func test_a_reset_drops_a_charge_you_were_holding() -> void:
+	_key_f(true)
+	world._process(world.HOLD_TIME)
+	assert_true(world.hold_loaded(), "Loaded")
+
+	world._reset()
+	assert_false(world.hold_loaded(), "The reset dropped the charge with everything else")
+	world._process(1.0 / 60.0)
+	assert_eq(world.player.fold_charge, 0.0, "...and the body stopped showing it")
+
+
+# ---------------------------------------------------------------------------
 # The release burst
 # ---------------------------------------------------------------------------
 # Not an aimed action: a small sphere around the body. Everything of yours inside

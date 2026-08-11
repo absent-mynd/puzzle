@@ -42,11 +42,17 @@ one sealed inside a fold). See [docs/features/TESTBED_WORLD.md](../../docs/featu
 | Space | jump — **tap for a hop, hold for full height** |
 | hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
 | **tap F** | put a **hand** down on the cell you point at — the second one lights the fuse |
-| **hold F** | **release burst**: everything of yours within about a tile and a third comes loose at once |
+| **hold F, then let go** | **release burst**: everything of yours within about a tile and a third comes loose at once |
 | R | reset |
 
 One key, two directions. **Tap puts a hand down; hold bursts them loose.** There
 is no committing press: put both hands down and the fold goes off by itself.
+
+**Both directions land when you LET GO.** Holding F does not fire anything — it
+*loads* a burst, and your body cools from amber toward teal as it charges. Once
+it snaps fully teal the burst is loaded and pops the moment you release. So a
+burst is something you can charge where you are and set off where you end up:
+load it, step onto the seam, let go.
 
 ## Moving
 
@@ -117,9 +123,10 @@ behind you is a thing you can choose to do.
 
 ### The burst
 
-Holding F fires a small sphere of influence around your body (`BURST_RADIUS`,
-about a tile and a third — tune it in `FoldWorld`). It is **not aimed**: where you stand is
-the whole input. Everything of yours inside it comes loose at once —
+Releasing a held F fires a small sphere of influence around your body
+(`BURST_RADIUS`, about a tile and a third — tune it in `FoldWorld`). It is **not
+aimed**: where you stand is the whole input. Everything of yours inside it comes
+loose at once —
 
 - unpaired hands you placed come back;
 - armed pairs you can reach either half of are **disarmed** — the halves inside
@@ -133,6 +140,18 @@ That last clause is what makes the burst safe to fire blind. Nothing is refused
 for want of a slot and nothing is destroyed: a hand you cannot catch is a hand
 on the ground, which is the same object a cache is. A ring shows how far the
 burst reached, after the fact — it confirms, it does not aim.
+
+**It fires on the release, and the reach is measured there.** Charging is a
+state you carry: hold F on safe ground, walk to the seam, let go, and the sphere
+is drawn around where you *released*. The one irreversible half of the verb is
+never on a timer you cannot stop — right up to the moment you lift your finger,
+nothing has happened.
+
+The charge is worn **on your body**, not on the cell you are pointing at: the
+blob shades from its amber toward the teal of an openable seam, quietly at first
+(a tap barely moves it) and then in one step to fully teal when the burst is
+loaded. That step is the thing to learn to read — teal body means letting go
+pops.
 
 A burst releases the folds that were unfoldable **when it fired**. A stack of
 two folds under one diamond clears one layer per press, because releasing the
@@ -381,9 +400,9 @@ pinned and resolve again when you return.
 1. **Ride a fold.** Cross the wide pit by folding it away: tap F on one rim, then
    on the other. The pair starts pulsing and folds itself — so where you are
    standing when it goes off is a decision, not a keypress. You ride your flap;
-   the seam diamond marks the meeting line. Walk over it, hold F, and you ride the
-   unfold back — and get both hands back, because you no longer need the pit
-   closed. Also try a
+   the seam diamond marks the meeting line. Walk over it, hold F until you turn
+   teal and let go, and you ride the unfold back — and get both hands back,
+   because you no longer need the pit closed. Also try a
    *vertical* fold (same column): fold the sky down / the floor up to climb —
    this is the gravity-specific verb.
 2. **Get folded in.** Stand *inside* the red preview band and commit the fold:
@@ -395,7 +414,7 @@ pinned and resolve again when you return.
    by exactly one band width, so the frame does not change and the crossing is
    invisible — there is no seam to cross, only a lap to finish.
 3. **Dive-traverse.** While inside, walk somewhere else along the strip, then
-   hold F on the white glue diamond. The fold springs open and you emerge
+   release a held F on the white glue diamond. The fold springs open and you emerge
    **where you walked to** — fold, dive, surface: movement through the inside
    of a fold.
 4. **Break the sealed chamber.** With arm's-length anchors, sealed means

@@ -42,10 +42,12 @@ extends Node2D
 ##     away and it leaves the overworld and lights the fold's interior
 ##     instead (see LightSource). Fold something else and it rides the flap.
 ##
-## ONE KEY drives all of it. Tap = push anchors in (pin, pin, commit); hold =
-## pull them back out (retrieve a pending anchor, unfold the fold you point at,
-## or exit a subspace by its glue anchor). There is no remote unfold: to get the
-## anchors out of a fold you must go back to its seam.
+## ONE KEY drives all of it. Tap = push anchors in (pin, pin, commit); hold and
+## then LET GO = pull them back out (retrieve a pending anchor, unfold the fold
+## you are standing at, or exit a subspace by its glue anchor). Both gestures land
+## on the release: holding only charges the burst, and the body wears the charge as
+## a colour. There is no remote unfold: to get the anchors out of a fold you must
+## go back to its seam.
 ##
 ## Rendering is a PIXEL pass: the world draws into a low-resolution SubViewport
 ## (see PixelArt) that is scaled up with nearest filtering, tiles are textured
@@ -71,8 +73,12 @@ const CS := WorldCore.CELL
 ## direction. What you can fold is exactly what you can stand next to.
 const ANCHOR_REACH := 1
 const ANIM_TIME := 0.24
-## How long the fold key must be held before it reads as "pull back" rather than
-## "push in". Long enough that a committing tap never trips it by accident.
+## How long the fold key must be held before the release reads as "pull back"
+## rather than "push in". Long enough that a tap never trips it by accident.
+##
+## It is a LOADING time, not a delay before something happens: nothing fires at the
+## threshold, it only decides which way the release will go. Lengthening it costs
+## the player nothing but the wait — no window closes while they hold.
 const HOLD_TIME := 0.35
 ## Reach of the release burst, in world units. About a tile and a third — the burst is a
 ## thing you do to the space you are standing in, not a thing you aim, so its reach wants
@@ -233,8 +239,9 @@ var hand_balls: Array:
 	get: return hand_field.balls
 
 # --- Fold-key hold tracking (tap = place a hand, hold = pull one back) ---
+# Both gestures land on the RELEASE; the hold only decides which one it was. There
+# is no "already fired" state any more, because nothing fires while the key is down.
 var _hold_active := false
-var _hold_fired := false
 var _hold_elapsed := 0.0
 
 ## Seconds left on the burst ring the overlay draws.
@@ -741,10 +748,19 @@ func animating() -> bool:
 # ---------------------------------------------------------------------------
 
 ## One key for the whole verb. TAP pushes an anchor in (pin, pin, then commit);
-## HOLD pulls one back out (your last anchor, or the fold you are pointing at).
-## The two directions of a conserved resource are the two ways to press one key.
+## HOLD pulls one back out — everything of yours within reach of where you are
+## standing. The two directions of a conserved resource are the two ways to press
+## one key.
 ##
-## The tap fires on RELEASE, so a press that grows into a hold never also commits.
+## BOTH GESTURES FIRE ON RELEASE, and that is the whole shape of this. Holding does
+## not do anything — it LOADS. The burst is charged while the key is down and pops
+## the moment you let go, so the press is a decision you are still holding and the
+## release is you making it. Firing at the threshold instead made the burst arrive
+## while you were still deciding, and put the one irreversible half of the verb on a
+## timer you could not stop.
+##
+## What you get for it: a loaded burst can be walked. Charge it, step onto the seam,
+## let go — the reach is measured where you release, not where you pressed.
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or event.echo:
 		return
@@ -758,35 +774,51 @@ func _unhandled_input(event: InputEvent) -> void:
 		if animating():
 			return
 		_hold_active = true
-		_hold_fired = false
 		_hold_elapsed = 0.0
 		return
-	var tapped := _hold_active and not _hold_fired
+	# A release with no press behind it — the press landed mid-fold and was refused,
+	# or a reset cleared it — is not a gesture, and must not fall through to a tap.
+	if not _hold_active:
+		return
+	var loaded := hold_loaded()
 	_hold_active = false
-	_hold_fired = false
-	if tapped and not animating():
+	_hold_elapsed = 0.0
+	if animating():
+		return
+	if loaded:
+		hold_action()   # the burst is not aimed; where you stand is the whole input
+	else:
 		tap_action(player.point_dir())
 
 
-## How far through the hold the key currently is (0 = not holding / already fired).
-## Drawn as a filling ring by the overlay so the two gestures are distinguishable
-## before either of them lands.
+## How far through the hold the key currently is: 0 not holding, 1 LOADED. The body
+## wears this as a colour (see `PlayerBody.charge_color`) — the indicator is on the
+## thing the burst comes out of, not on the cell you are pointing at, because the
+## burst is not aimed there.
 func hold_progress() -> float:
-	if not _hold_active or _hold_fired:
+	if not _hold_active:
 		return 0.0
 	return clampf(_hold_elapsed / HOLD_TIME, 0.0, 1.0)
 
 
+## Is the burst loaded — would letting go RIGHT NOW pop rather than place a hand?
+func hold_loaded() -> bool:
+	return _hold_active and _hold_elapsed >= HOLD_TIME
+
+
+## Charge the burst while the key is down. It never fires from here: the release
+## does that. Held past the threshold it simply stays loaded, so you can charge it
+## somewhere safe and carry it to where you want it to go off.
 func _tick_hold(delta: float) -> void:
-	if not _hold_active or _hold_fired:
+	if not _hold_active:
 		return
+	# A fold started under you — a fuse went off, a trigger fired. The gesture is
+	# void: what you charged it against is no longer the world in front of you.
 	if animating():
 		_hold_active = false
+		_hold_elapsed = 0.0
 		return
-	_hold_elapsed += delta
-	if _hold_elapsed >= HOLD_TIME:
-		_hold_fired = true
-		hold_action()   # the burst is not aimed; where you stand is the whole input
+	_hold_elapsed = minf(_hold_elapsed + delta, HOLD_TIME)
 
 
 func player_cell() -> Vector2i:
@@ -1985,6 +2017,10 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 
 func _process(delta: float) -> void:
 	_tick_hold(delta)
+	# The body wears the charge. It is handed the number and nothing else — the body
+	# knows how to be a colour, not what folding is.
+	if player != null:
+		player.fold_charge = hold_progress()
 	# The overlay draws a description of the frame, not this object. Building it here
 	# is also what makes it a per-FRAME cost: it used to gather itself from inside
 	# `paint()`, which WrapCanvas runs once per copy of the space.
@@ -2097,7 +2133,8 @@ func _build_overlay_view() -> OverlayView:
 
 	v.aim_at = (Vector2(candidate_anchor()) + Vector2(0.5, 0.5)) * v.cell_size
 	v.aim_hand = next_hand_type()
-	v.hold = hold_progress()
+	# ...and no hold ring. A charging burst is worn by the BODY, which is both where
+	# it will come from and the one thing on screen you are already watching.
 
 	v.burst_t = burst_flash()
 	v.burst_radius = BURST_RADIUS
@@ -2391,7 +2428,7 @@ func _reset() -> void:
 		light_rig.visible = true
 		geo.visible = true       # the transition had hidden the sheet it stands in for
 	_hold_active = false
-	_hold_fired = false
+	_hold_elapsed = 0.0
 	_burst_flash_left = 0.0
 	context.clear()
 	_setup_all()
