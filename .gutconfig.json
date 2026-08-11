@@ -10,7 +10,7 @@
 	"junit_xml_timestamp": false,
 	"double_strategy": "partial",
 	"pre_run_script": "",
-	"post_run_script": "",
+	"post_run_script": "res://tools/gut_strict_exit.gd",
 	"color_output": true,
 	"hide_orphans": false
 }

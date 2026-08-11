@@ -51,7 +51,8 @@
 		}
 	},
 	"metadata": {
-		"note": "West carries the four authored fold beats. East's right wing (base x>=20) teaches pins and fold triggers. Loose hands sit behind beats, never in front of them: a SWIFT one on the pillar top (24,6), a PATIENT one in the sealed chamber (34,13), and a SWIFT one at (14,9) in east, INSIDE the shipped pre-fold and reachable only through door W1. A hand is taken one at a time into a free slot, so it is the second half of a fold you have already started."
+		"note": "West carries the four authored fold beats. East's right wing (base x>=20) teaches pins and fold triggers. Loose hands sit behind beats, never in front of them: a SWIFT one on the pillar top (24,6), a PATIENT one in the sealed chamber (34,13), and a SWIFT one at (14,9) in east, INSIDE the shipped pre-fold and reachable only through door W1. A hand is taken one at a time into a free slot, so it is the second half of a fold you have already started.",
+		"purpose": "Frozen fixture for the scene-driven kernel tests. Not shipped, not played."
 	},
 	"regions": {
 		"east": {
@@ -232,6 +233,6 @@
 		"plain",
 		"plain"
 	],
-	"world_id": "overworld",
-	"world_name": "Overworld"
+	"world_id": "kernel_fixture",
+	"world_name": "Kernel Fixture"
 }

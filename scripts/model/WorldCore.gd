@@ -102,15 +102,7 @@ static func unfold_shift(pos: Vector2, fold: Fold, cell_size: float) -> Vector2:
 ## survive INTO the subspace). Captured from the current fragment list BEFORE the fold
 ## is applied, so it composes over earlier folds.
 static func capture_strip(pieces: Array, fold: Fold, cell_size: float) -> Array:
-	var out: Array = []
-	for piece in pieces:
-		var res := CollisionCore.fold_polygons([piece.polygon], fold, cell_size)
-		for poly in res["dropped"]:
-			var fp := FoldedPiece.new(
-				piece.base_id, piece.type, poly, piece.plane_pos, piece.source_fold_id)
-			fp.src_offset = piece.src_offset
-			out.append(fp)
-	return out
+	return FoldReplay.capture_strip(pieces, fold, cell_size)
 
 
 ## Bounding interval of piece content along a direction (for the subspace's

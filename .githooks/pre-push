@@ -3,6 +3,11 @@
 # This hook runs the GUT test suite before pushing to remote repository
 # to catch issues early before CI runs.
 #
+# It delegates entirely to ./run_tests.sh — the single invocation shared with CI.
+# Do NOT inline a godot command here: this hook and CI once each carried their own
+# copy with `-d`, which makes Godot break into the debugger on the first runtime
+# error and exit 0 before GUT reports, so both gates silently passed a red suite.
+#
 # To bypass this hook (not recommended): git push --no-verify
 
 set -e
@@ -19,43 +24,28 @@ echo "${BLUE}Running GUT Tests (Pre-Push Hook)${NC}"
 echo "${BLUE}========================================${NC}"
 echo ""
 
-# Check if Godot is available in PATH
-if ! command -v godot &> /dev/null; then
-    echo "${YELLOW}⚠️  Warning: Godot not found in PATH${NC}"
+REPO_ROOT=$(git rev-parse --show-toplevel)
+RUNNER="$REPO_ROOT/run_tests.sh"
+
+if [ ! -x "$RUNNER" ]; then
+    echo "${YELLOW}⚠️  run_tests.sh not found or not executable at $RUNNER${NC}"
     echo "${YELLOW}⚠️  Skipping local tests - they will run in CI instead${NC}"
-    echo ""
-    echo "${BLUE}ℹ️  To run tests locally, ensure Godot 4.3+ is installed and in your PATH${NC}"
-    echo "${BLUE}ℹ️  Download from: https://godotengine.org/download${NC}"
     echo ""
     exit 0
 fi
 
-# Verify Godot version
-GODOT_VERSION=$(godot --version 2>/dev/null | head -n 1)
-echo "${BLUE}ℹ️  Using: ${GODOT_VERSION}${NC}"
-echo ""
-
-# Step 1: Import project assets
-echo "${BLUE}📦 Importing project assets...${NC}"
-if godot --headless --path . --import --quit 2>&1 | grep -i "error" > /dev/null; then
-    echo "${YELLOW}⚠️  Asset import completed with warnings (this is often normal)${NC}"
-else
-    echo "${GREEN}✅ Asset import complete${NC}"
-fi
-echo ""
-
-# Step 2: Run GUT tests
-echo "${BLUE}🧪 Running GUT test suite...${NC}"
-echo "${BLUE}   Test directory: res://scripts/tests/${NC}"
+echo "${BLUE}🧪 Running the suite via run_tests.sh...${NC}"
 echo "${BLUE}   This may take 1-3 minutes...${NC}"
 echo ""
 
-# Run tests with proper environment and flags
-if GODOT_DISABLE_LEAK_CHECKS=1 godot --headless -d --display-driver headless \
-    --audio-driver Dummy --disable-render-loop --path . \
-    -s res://addons/gut/gut_cmdln.gd \
-    -gdir=res://scripts/tests/ -ginclude_subdirs -gexit; then
+# run_tests.sh resolves the engine itself (bundled binary first, then a system
+# godot) and exits 127 when neither is available. That is the only status we
+# treat as "skip" — every other non-zero status is a real failure and blocks the
+# push. `set -e` would abort before we could tell them apart, so guard the call.
+STATUS=0
+GODOT_DISABLE_LEAK_CHECKS=1 "$RUNNER" || STATUS=$?
 
+if [ "$STATUS" -eq 0 ]; then
     echo ""
     echo "${GREEN}========================================${NC}"
     echo "${GREEN}✅ All tests passed!${NC}"
@@ -63,19 +53,29 @@ if GODOT_DISABLE_LEAK_CHECKS=1 godot --headless -d --display-driver headless \
     echo "${GREEN}Proceeding with push...${NC}"
     echo ""
     exit 0
-else
-    echo ""
-    echo "${RED}========================================${NC}"
-    echo "${RED}❌ Tests failed!${NC}"
-    echo "${RED}========================================${NC}"
-    echo ""
-    echo "${YELLOW}Push aborted to prevent pushing failing code.${NC}"
-    echo ""
-    echo "${BLUE}Options:${NC}"
-    echo "  1. Fix the failing tests and try again (recommended)"
-    echo "  2. Use 'git push --no-verify' to bypass this check (not recommended)"
-    echo ""
-    echo "${BLUE}ℹ️  Note: Tests will also run in CI/CD on GitHub Actions${NC}"
-    echo ""
-    exit 1
 fi
+
+if [ "$STATUS" -eq 127 ]; then
+    echo ""
+    echo "${YELLOW}⚠️  No runnable Godot 4 found (see the message above)${NC}"
+    echo "${YELLOW}⚠️  Skipping local tests - they will run in CI instead${NC}"
+    echo ""
+    echo "${BLUE}ℹ️  Download from: https://godotengine.org/download${NC}"
+    echo ""
+    exit 0
+fi
+
+echo ""
+echo "${RED}========================================${NC}"
+echo "${RED}❌ Tests failed! (exit ${STATUS})${NC}"
+echo "${RED}========================================${NC}"
+echo ""
+echo "${YELLOW}Push aborted to prevent pushing failing code.${NC}"
+echo ""
+echo "${BLUE}Options:${NC}"
+echo "  1. Fix the failing tests and try again (recommended)"
+echo "  2. Use 'git push --no-verify' to bypass this check (not recommended)"
+echo ""
+echo "${BLUE}ℹ️  Note: Tests will also run in CI/CD on GitHub Actions${NC}"
+echo ""
+exit 1

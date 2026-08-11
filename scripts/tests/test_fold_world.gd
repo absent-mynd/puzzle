@@ -8,15 +8,32 @@ extends GutTest
 ## synchronous.
 
 const SCENE := "res://scenes/world/World.tscn"
+## The suite's OWN world, not the shipped one. These tests assert against concrete
+## geometry — a pit here, a wall there, a door with that partner — so they must not
+## inherit whichever level happens to be shipping. See worlds/fixtures/README.md.
+const FIXTURE := "res://worlds/fixtures/kernel.json"
 const CS := 64.0
 
 var world
+## The world's hand budget when the test began. Conservation is a DELTA: the total
+## may change only when a hand is picked up or a test injects one. Asserting against
+## these instead of a literal keeps the invariant separate from how many hands the
+## fixture happens to contain — the coupling that turned an edited level into
+## "[13] expected to equal [5]" across a dozen tests that were all working fine.
+var _start_total := 0
+var _start_loose := 0
+## ...and the same for the STARTING REGION alone, which is what `_loose_count` reads.
+var _start_loose_here := 0
 
 
 func before_each() -> void:
 	world = load(SCENE).instantiate()
+	world.world_override = FIXTURE
 	add_child_autofree(world)
 	world.anim_enabled = false
+	_start_total = world.hands_total()
+	_start_loose = world.hands_loose()
+	_start_loose_here = world.loose_hands.size()
 
 
 ## Run the ball simulation until every hand in flight has landed.
@@ -141,7 +158,7 @@ func test_a_fold_that_cannot_go_drops_both_hands_where_they_stood() -> void:
 	assert_eq(world.hands_pending(), 0, "Neither hand is still pinned")
 	assert_eq(world.hands_held(), 0, "...and neither came back to you")
 	assert_eq(world.hands_loose(), loose_before + 2, "Both fell where they were placed")
-	assert_eq(_total(), 5, "Conserved, as ever")
+	assert_eq(_total(), _start_total, "Conserved, as ever")
 
 
 func test_dropped_hands_fall_from_the_cells_they_were_pinned_to() -> void:
@@ -175,10 +192,10 @@ func test_a_failed_folds_hands_come_to_rest_where_you_can_reach_them() -> void:
 	world.tap_action(Vector2i(0, 1))                # into the floor tile below
 	world.tap_action(Vector2i(0, 1))                # same cell — must fail at the fuse
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
-	assert_eq(world.hands_loose(), 5, "Both are loose the instant they are unpinned")
+	assert_eq(world.hands_loose(), _start_total, "Both are loose the instant they are unpinned")
 	_let_hands_land()
 
-	assert_eq(world.hands_loose(), 5, "...and still loose once they have landed")
+	assert_eq(world.hands_loose(), _start_total, "...and still loose once they have landed")
 	for entry in world.loose_hand_points():
 		assert_false(
 			WorldCore.circle_overlaps_solids(Vector2(entry["pos"]), 1.0, world.wall_polys),
@@ -317,7 +334,7 @@ func test_a_burst_into_an_armed_pair_breaks_the_whole_pair() -> void:
 	assert_eq(world.primed.size(), 0, "The pair is broken")
 	assert_eq(world.hands_held(), 1, "The hand you reached came back")
 	assert_eq(world.hands_loose(), loose_before + 1, "...and the far one fell where it was")
-	assert_eq(_total(), 5, "Conserved")
+	assert_eq(_total(), _start_total, "Conserved")
 
 
 func test_a_tap_at_a_seam_places_and_the_burst_clears_everything() -> void:
@@ -336,7 +353,8 @@ func test_a_tap_at_a_seam_places_and_the_burst_clears_everything() -> void:
 	assert_eq(world.anchor_cells(), [], "The burst took the placed hand back")
 	assert_eq(world.folds.size(), 0, "...and opened the seam under the same cell")
 	assert_eq(world.hands_held(), 2, "Two hands in your slots")
-	assert_eq(world.hands_loose(), 4, "...and the one with nowhere to go joined the world's three")
+	assert_eq(world.hands_loose(), _start_loose + 1,
+		"...and the one with nowhere to go joined the ones the world put down")
 
 
 func test_unfold_blocked_by_newer_crossing_fold() -> void:
@@ -750,7 +768,7 @@ func test_you_start_with_a_full_pair() -> void:
 	assert_eq(world.hands.size(), AnchorStock.SLOTS, "One entry per slot")
 	assert_eq(world.hands_held(), 2, "Both slots full at the start")
 	assert_eq(world.hands_in_folds(), 0, "Nothing committed yet")
-	assert_eq(world.hands_loose(), 3, "...and the world's three lie where it put them")
+	assert_eq(world.hands_loose(), _start_loose, "...and the world's own lie where it put them")
 
 
 func test_placing_a_hand_takes_it_out_of_its_slot() -> void:
@@ -758,7 +776,7 @@ func test_placing_a_hand_takes_it_out_of_its_slot() -> void:
 	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "The tap put a hand down")
 	assert_eq(world.hands_held(), 1, "...which left your slots")
 	assert_eq(world.hands_free_slots(), 1, "...freeing the slot it came from")
-	assert_eq(_total(), 5, "and nothing was created or destroyed")
+	assert_eq(_total(), _start_total, "and nothing was created or destroyed")
 
 
 func test_holding_takes_a_placed_hand_back() -> void:
@@ -766,7 +784,7 @@ func test_holding_takes_a_placed_hand_back() -> void:
 	world.hold_action()
 	assert_eq(world.anchor_cells(), [], "The burst pulls it back")
 	assert_eq(world.hands_held(), 2, "...into a slot")
-	assert_eq(_total(), 5, "Conserved")
+	assert_eq(_total(), _start_total, "Conserved")
 
 
 func test_a_second_hand_lights_the_fuse_and_it_folds_itself() -> void:
@@ -783,7 +801,7 @@ func test_a_second_hand_lights_the_fuse_and_it_folds_itself() -> void:
 	assert_eq(world.mode, world.Mode.SUBSPACE,
 		"The fuse committed the fold with nobody pressing anything")
 	assert_false(world.fuse_running(), "And the fuse is spent")
-	assert_eq(_total(), 5, "Still five hands; two of them are now inside the fold")
+	assert_eq(_total(), _start_total, "Every hand still here; two of them are now inside the fold")
 
 
 func test_the_fuse_ticks_down_rather_than_firing_at_once() -> void:
@@ -830,11 +848,11 @@ func test_a_standing_fold_holds_the_hands_and_unfolding_returns_them() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
 	assert_eq(world.folds[0].held_hands.size(), 2, "The fold took both hands")
 	assert_eq(world.hands_held(), 0, "...so you are holding none")
-	assert_eq(_total(), 5, "Conserved")
+	assert_eq(_total(), _start_total, "Conserved")
 
 	world.unfold_level_fold(world.folds[0])
 	assert_eq(world.hands_held(), 2, "Unfolding gave them back")
-	assert_eq(_total(), 5, "Still conserved")
+	assert_eq(_total(), _start_total, "Still conserved")
 
 
 func test_a_fold_gives_back_the_same_kinds_it_took() -> void:
@@ -896,7 +914,8 @@ func test_an_interior_fold_holds_hands_across_the_subspace_boundary() -> void:
 	world.player.teleport(Vector2(11.2 * CS, 12.5 * CS), false)
 	assert_true(world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8)), "Interior fold commits")
 	assert_eq(world.hands_held(), 0, "It took the pair too")
-	assert_eq(_total(), 7, "Seven hands exist; four of them committed")
+	assert_eq(_total(), _start_total + 2,
+		"Two more than you started with — the test refilled both slots by hand; four are committed")
 
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Exited")
@@ -923,14 +942,14 @@ func test_a_loose_hand_gives_one_hand_into_one_free_slot() -> void:
 	world.player.teleport(Vector2(spot), false)
 	world._check_pickups()
 	assert_eq(world.hands_held(), 2, "With both hands full it is left where it is")
-	assert_eq(_loose_count(), 2, "...and stays in the world")
+	assert_eq(_loose_count(), _start_loose_here, "...and stays in the world")
 
 	world.tap_action(Vector2i(1, 0))                        # put one down to free a slot
 	world.player.teleport(Vector2(spot), false)
 	world._check_pickups()
 	assert_eq(world.hands_held(), 2, "The free slot took it")
-	assert_eq(_loose_count(), 1, "...and it is gone from the ground")
-	assert_eq(_total(), 5, "Nothing created — a hand moved from the ground to your slot")
+	assert_eq(_loose_count(), _start_loose_here - 1, "...and it is gone from the ground")
+	assert_eq(_total(), _start_total, "Nothing created — a hand moved from the ground to your slot")
 
 
 func test_a_loose_hand_gives_the_kind_it_was_authored_with() -> void:
@@ -1004,7 +1023,8 @@ func test_reset_puts_both_the_world_and_your_hands_back() -> void:
 	assert_eq(world.folds.size(), 0, "The world is back to its authored folds")
 	assert_eq(world.hands_held(), 2, "You have your starting pair again")
 	assert_eq(world.hands_in_folds(), 0, "Nothing is holding anything")
-	assert_eq(_loose_count(), 2, "And west's authored hands are lying out again")
+	assert_eq(_loose_count(), _start_loose_here,
+		"And this region's authored hands are lying out again")
 
 
 # ---------------------------------------------------------------------------
@@ -1020,7 +1040,7 @@ func test_the_burst_takes_back_a_hand_you_placed_in_reach() -> void:
 	world.hold_action()
 	assert_eq(world.anchor_cells(), [], "The burst took it back")
 	assert_eq(world.hands_held(), 2, "...into a slot")
-	assert_eq(_total(), 5, "Conserved")
+	assert_eq(_total(), _start_total, "Conserved")
 
 
 func test_the_burst_leaves_a_hand_out_of_reach_alone() -> void:
@@ -1316,6 +1336,46 @@ func test_a_hand_in_orbit_stays_within_the_band_it_orbits() -> void:
 			break
 		var d: float = Vector2(world.hand_balls[0]["pos"]).dot(n) - c1
 		assert_between(d, -1.0, gap + 1.0, "Stays in the fundamental band")
+
+
+func test_a_hand_that_runs_off_the_end_of_a_band_is_turned_back_into_it() -> void:
+	# A cylinder has exactly one end you can leave by, and the fold turns you back into
+	# itself rather than letting you go. That is the rule for the body (`_wrap_body`),
+	# and it has to be the rule for a hand, because they are the same event.
+	#
+	# It was not. The ball took the WORLD-level answer instead — `_recover_lost_hand`,
+	# which settles the hand at the player's feet. Inside a fold that point is routinely
+	# outside the strip, so the hand bound to nothing, was put back in the air, drifted
+	# out again and was recovered again, indefinitely. Nothing caught it: the ledger
+	# stayed correct, the hand really was still in the band, and the tests that watched
+	# the WRAP axis saw nothing wrong because the escape was along the free one. The
+	# only outward sign was 1,964 identical ERROR lines in a 16-second suite run.
+	world.hands[0] = null
+	world._drop_hand(HandTypes.PLAIN, Vector2(13.5 * CS, 12.2 * CS))
+	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
+	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
+	assert_eq(world.mode, world.Mode.SUBSPACE, "The fold swallowed the player")
+
+	var free: Vector2 = world.lattice.free_axis()
+	assert_ne(free, Vector2.ZERO, "A strip is a cylinder, so it has one free axis")
+	assert_false(world.free_extent.is_empty(), "...and a measured extent along it")
+
+	var lo: float = float(world.free_extent["min"]) - 4.0 * CS
+	var hi: float = float(world.free_extent["max"]) + 4.0 * CS
+	var escaped_to := INF
+	for _i in range(1200):
+		world._step_hand_balls(1.0 / 60.0)
+		if world.hand_balls.is_empty():
+			break
+		var t: float = Vector2(world.hand_balls[0]["pos"]).dot(free)
+		if t < lo or t > hi:
+			escaped_to = t
+			break
+
+	assert_eq(escaped_to, INF,
+		"Never posted outside the band along its free axis (reached %s, band is %s..%s)"
+			% [escaped_to, lo, hi])
+	assert_eq(_total(), _start_total, "and it is still one of the world's hands throughout")
 
 
 func test_a_hand_in_orbit_can_still_be_caught() -> void:

@@ -65,7 +65,7 @@ extends Node2D
 
 enum Mode { WORLD, SUBSPACE }
 
-const WORLD_PATH := "res://worlds/intro.json"
+const WORLD_PATH := "res://worlds/overworld.json"
 const CS := WorldCore.CELL
 ## Anchors are pinned at arm's length: the cell immediately in the pointed
 ## direction. What you can fold is exactly what you can stand next to.
@@ -105,13 +105,35 @@ const TOSS_SPEED := 55.0
 ## released; one that only slides sideways reads as dropped.
 const TOSS_LIFT := 110.0
 
+## Which world THIS instance loads. Empty means "decide normally": the `--world=`
+## flag if one was passed, else `WORLD_PATH`.
+##
+## Set it before the node enters the tree. It exists so the scene-driven tests can
+## pin themselves to a world the SUITE owns rather than to whichever level happens
+## to be shipping — the coupling that let one commit re-point `WORLD_PATH` and fail
+## 60 kernel tests that had nothing to do with the change. See
+## `worlds/fixtures/README.md`.
+var world_override := ""
+
 ## The authored world (regions, doors, pre-placed folds).
 var world_data: WorldData
 
 # --- Regions ---
 ## region id -> {"base", "folds", "seam_segs", "interiors", "spawn"}
 var regions: Dictionary = {}
-var region_id := ""
+## The space the player is standing in right now. Everything below that describes
+## the current level is a VIEW onto this object rather than a member of its own —
+## the state lives in one place that can be passed to a collaborator, while the
+## hundred-odd existing call sites (and the tests) go on reading `world.lattice`,
+## `world.mode`, `world.pieces_by_pos` exactly as before.
+##
+## Migrating those call sites to `level.x` and deleting these properties is a
+## mechanical follow-up; having the object at all is what unblocks anything else.
+var level := Level.new()
+
+var region_id: String:
+	get: return level.region_id
+	set(v): level.region_id = v
 ## Doors: id -> {"region", "cell", "bid", "bp", "pair"}. Points, not tiles.
 var doors: Dictionary = {}
 var _door_latch: Dictionary = {}
@@ -119,14 +141,18 @@ var _door_latch: Dictionary = {}
 var region_lights: Dictionary = {}
 
 # --- Current region working state (views into regions[region_id]) ---
-var base: BaseGrid
+var base: BaseGrid:
+	get: return level.base
+	set(v): level.base = v
 var folds: Array[Fold] = []
 var seam_segs: Dictionary = {}
 ## fold_id -> Array[Fold]: a fold's interior folds, persistent while it lives.
 var interiors: Dictionary = {}
 ## Loose hands lying in THIS region (a view into `hand_pickups`).
 var loose_hands: Array = []
-var _spawn := Vector2.ZERO
+var _spawn: Vector2:
+	get: return level.spawn
+	set(v): level.spawn = v
 
 ## Loose hands, region id -> Array[HandPickup]. Authored caches and hands that popped
 ## out of a burst are the SAME list and the same object — to the player they are the
@@ -141,7 +167,11 @@ var _next_trigger_id := TriggerResolver.TRIGGER_FOLD_ID_BASE
 ## Base tile the player last fired a trigger check against — triggers are edge-fired
 ## on entering a tile, not re-fired every frame you stand on it.
 var _trigger_latch := -1
-var mode: Mode = Mode.WORLD
+## Kept as the enum the rest of the file and the tests read, backed by the kernel's
+## plain bool — `Level` may not name a view type (Decision 9).
+var mode: Mode:
+	get: return Mode.SUBSPACE if level.in_subspace else Mode.WORLD
+	set(v): level.in_subspace = (v == Mode.SUBSPACE)
 ## Path of entered folds (outermost first). Empty = region world.
 var context: Array[Fold] = []
 
@@ -190,7 +220,12 @@ var hands: Array = []
 ## `in_sub` tags which view a ball is flying in, for the same reason anchors carry
 ## their region: the overworld and a strip interior are different spaces, and a ball
 ## must only be stepped, drawn and collided against the one it is actually in.
-var hand_balls: Array = []
+## Hands in the air. `HandField` owns the flight; this object owns what a hand
+## becomes when it stops flying. See HandField.
+var hand_field := HandField.new()
+
+var hand_balls: Array:
+	get: return hand_field.balls
 
 # --- Fold-key hold tracking (tap = place a hand, hold = pull one back) ---
 var _hold_active := false
@@ -208,31 +243,47 @@ var _burst_flash_left := 0.0
 
 ## Identity pieces of this level: the region's base at the top, the entered
 ## fold's strip content at every level below it.
-var level_base: Array = []
+var level_base: Array:
+	get: return level.base_pieces
+	set(v): level.base_pieces = v
 ## ...with this level's folds replayed over it. The geometry on screen.
-var current_pieces: Array = []
-var pieces_by_pos: Dictionary = {}
-var wall_polys: Array = []
-var goal_polys: Array = []
+var current_pieces: Array:
+	get: return level.pieces
+	set(v): level.pieces = v
+var pieces_by_pos: Dictionary:
+	get: return level.pieces_by_pos
+	set(v): level.pieces_by_pos = v
+var wall_polys: Array:
+	get: return level.wall_polys
+	set(v): level.wall_polys = v
+var goal_polys: Array:
+	get: return level.goal_polys
+	set(v): level.goal_polys = v
 var _on_goal := false
 
 ## How this level repeats. Flat in a region, a cylinder inside a fold, a torus
 ## inside two crossing ones. The single source of truth for the wrap — copies,
 ## colliders, the body's wrap-around, the camera's framing and the lights all
 ## come off this.
-var lattice: FoldLattice = FoldLattice.flat()
+var lattice: FoldLattice:
+	get: return level.lattice
+	set(v): level.lattice = v
 ## Where the copies of this level are drawn, nearest first, always including
 ## ZERO. Handed to every `WrapCanvas` and baked into the terrain batch.
-var wrap_offsets: Array = [Vector2.ZERO]
+var wrap_offsets: Array:
+	get: return level.wrap_offsets
+	set(v): level.wrap_offsets = v
 ## Content extent along the one direction a cylinder does NOT repeat in — the way
 ## you can run off the end of a band. Unused when the space is flat or a torus.
-var free_extent: Dictionary = {}
+var free_extent: Dictionary:
+	get: return level.free_extent
+	set(v): level.free_extent = v
 
 ## The innermost entered fold, or null at region level. Convenience: it is always
 ## `context.back()`.
-var sub_fold: Fold = null
-
-var _on_screen_lights: Array = []
+var sub_fold: Fold:
+	get: return level.sub_fold
+	set(v): level.sub_fold = v
 
 # --- Animation ---
 var anim_enabled := true
@@ -248,11 +299,13 @@ var overlay: WorldOverlay
 var light_rig: LightRig
 ## The low-resolution render target everything in the world is drawn into.
 var pixel_view: SubViewport
+## Decides what the camera should be showing; drives the body's lens and the
+## render target. See WorldCamera.
+var camera: WorldCamera
 var _atlas: Texture2D
-var _bg: ColorRect
-var _status: Label
-var _flash: Label
-var _flash_left := 0.0
+## The window-resolution overlay (background, controls line, status, flash).
+## It is told what to say; it does not read this object. See WorldHud.
+var hud: WorldHud
 
 
 func _ready() -> void:
@@ -283,6 +336,14 @@ func _ready() -> void:
 	player.z_index = 40
 	pixel_view.add_child(player)
 
+	camera = WorldCamera.new(player, pixel_view)
+
+	# A ball stops being a ball in exactly two ways, and both are the world's business
+	# rather than the flight's: it comes to rest and becomes an occupant of the sheet,
+	# or it leaves the world and has to be put back somewhere findable.
+	hand_field.landed.connect(_land_ball)
+	hand_field.lost.connect(_recover_lost_hand)
+
 	# Everything that MOVES is a WrapCanvas, so it stands in every copy of the
 	# space without being told there is more than one.
 	player_visual = PlayerVisual.new()
@@ -295,7 +356,6 @@ func _ready() -> void:
 	pixel_view.add_child(hand_orbit)
 
 	overlay = WorldOverlay.new()
-	overlay.world = self
 	overlay.z_index = 50
 	pixel_view.add_child(overlay)
 
@@ -353,9 +413,10 @@ func _setup_all() -> void:
 	primed = []
 	hand_pickups = {}
 	# A hand in flight is a hand mid-event. A reset ends the event.
-	hand_balls = []
+	hand_field.clear()
 
-	var world_path := WorldData.selected_path(WORLD_PATH)
+	var world_path := world_override if not world_override.is_empty() \
+		else WorldData.selected_path(WORLD_PATH)
 	world_data = WorldData.load_from(world_path)
 	if world_data == null:
 		push_error("FoldWorld: could not load %s" % world_path)
@@ -373,10 +434,11 @@ func _setup_all() -> void:
 		var pieces: Array = FoldReplay.identity_pieces(rbase)
 		for pair in world_data.fold_pairs(id):
 			var f := Fold.create(_take_fold_id(), pair[0], pair[1], CS)
-			var dropped := WorldCore.capture_strip(pieces, f, CS)
-			rsegs[f.fold_id] = WorldCore.seam_segment(f, dropped, CS)
+			# One clip pass, both halves — see FoldReplay.fold_and_capture.
+			var cut := FoldReplay.fold_and_capture(pieces, f, CS)
+			rsegs[f.fold_id] = WorldCore.seam_segment(f, cut["dropped"], CS)
 			rfolds.append(f)
-			pieces = FoldReplay.apply_one_fold(pieces, f, CS)
+			pieces = cut["pieces"]
 		regions[id] = {"base": rbase, "folds": rfolds, "seam_segs": rsegs,
 			"interiors": {}, "spawn": world_data.spawn_px(id)}
 
@@ -641,7 +703,7 @@ func _apply_context() -> void:
 	free_extent = WorldCore.strip_extent(level_base, free) if free != Vector2.ZERO else {}
 
 	# Deeper reads darker and more lavender; the sheet's tint follows in the rig.
-	_bg.color = Color("0a0b12").lerp(Color("140a2a"), minf(float(context.size()) * 0.7, 1.0))
+	hud.set_depth(context.size())
 	geo.visible = true
 	rebuild()
 	_update_music()
@@ -1022,7 +1084,6 @@ func _release_anchor(entry, into_hand: bool) -> void:
 	p.bp = entry["bp"]
 	_ensure_pickups(p.region).append(p)
 	AudioManager.play_sfx(Sounds.HAND_DROP)
-	_refresh_pickup_visuals()
 
 
 ## Break a primed pair without folding it. Anchors within `reach` of `origin` come
@@ -1260,9 +1321,15 @@ func _hands_for_fold(pinned: Array[int]) -> Array[int]:
 func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS)
 	var pre: Array = current_pieces
+	# ONE clip pass for both halves. The flaps become the new fragment list and the
+	# strip between them becomes the subspace; `CollisionCore.fold_polygons` produces
+	# both from the same cut, and asking for them separately clipped the whole world
+	# twice. See FoldReplay.fold_and_capture.
+	#
 	# Cut from the same content `_compute_level` will hand you when it swallows
 	# you, so the refusal here and the place you land agree.
-	var dropped := WorldCore.capture_strip(pre, fold, CS)
+	var cut := FoldReplay.fold_and_capture(pre, fold, CS)
+	var dropped: Array = cut["dropped"]
 	if dropped.is_empty():
 		_show_flash("Nothing there to fold.")
 		return false
@@ -1271,7 +1338,7 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 		return false
 
 	var from_piece = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
-	var new_pieces := FoldReplay.apply_one_fold(pre, fold, CS)
+	var new_pieces: Array = cut["pieces"]
 	var dest = null
 	if from_piece != null:
 		dest = BaseFrame.world_point_from_base(
@@ -1415,17 +1482,9 @@ func _give_hand(kind: int) -> void:
 ## crease. As a velocity it cannot do that — the ball starts exactly where the hand was
 ## let go and the physics takes it from there.
 func _drop_hand(kind: int, at: Vector2, nudge: Vector2 = Vector2.ZERO) -> void:
-	hand_balls.append({
-		"kind": kind,
-		"pos": at,
-		"vel": nudge,
-		"resting": false,
-		"region": region_id,
-		"in_sub": mode == Mode.SUBSPACE,
-		# A ball's drift phase, so two hands in flight together do not bob in lockstep.
-		# Derived from the launch point, which is stable for the whole flight.
-		"seed": WorldCore.hand_drift_seed(hand_balls.size(), at),
-	})
+	# Seeded from the launch point, which is stable for the whole flight.
+	hand_field.launch(kind, at, level, nudge,
+		WorldCore.hand_drift_seed(hand_field.size(), at))
 	AudioManager.play_sfx(Sounds.HAND_DROP)
 
 
@@ -1433,7 +1492,7 @@ func _drop_hand(kind: int, at: Vector2, nudge: Vector2 = Vector2.ZERO) -> void:
 ## rather than stacking. The kick alternates side, which is what makes a pair read as a
 ## pair.
 func _toss_hand(kind: int, at: Vector2) -> void:
-	var side := 1.0 if hand_balls.size() % 2 == 0 else -1.0
+	var side := hand_field.next_toss_side()
 	_drop_hand(kind, at, Vector2(side * TOSS_SPEED, -TOSS_LIFT))
 
 
@@ -1444,45 +1503,7 @@ func _toss_hand(kind: int, at: Vector2) -> void:
 ## one's floor. A ball in the view you are not in simply waits — which is right, because
 ## the fold it is inside is not a place where time is passing for you either.
 func _step_hand_balls(delta: float) -> void:
-	if hand_balls.is_empty():
-		return
-	var solids := wall_polys
-	var here := mode == Mode.SUBSPACE
-	for i in range(hand_balls.size() - 1, -1, -1):
-		var ball: Dictionary = hand_balls[i]
-		if bool(ball["in_sub"]) != here or String(ball["region"]) != region_id:
-			continue
-		var next := WorldCore.hand_ball_step(ball, solids, delta)
-		ball["pos"] = next["pos"]
-		ball["vel"] = next["vel"]
-		if bool(next["resting"]):
-			hand_balls.remove_at(i)
-			_land_ball(ball)
-		elif here:
-			# In a repeating space, a falling thing WRAPS — the same rule the player
-			# crosses a glue line by, asked of the same lattice, so it holds at any
-			# depth and on a torus it wraps both ways at once. When a wrap axis has a
-			# vertical component that is a hand in orbit, indefinitely, and it is a real
-			# object in a real place rather than a leak: it is still counted, still
-			# catchable, and it still lands the moment a fold puts ground in its way.
-			ball["pos"] = lattice.wrap(Vector2(ball["pos"]))
-			# The one direction a space may NOT repeat in is the one direction a thing
-			# can genuinely leave by. Turn it back the way the fold turns the player
-			# back — and on a torus there is no such direction, so nothing to do.
-			var free := lattice.free_axis()
-			if free != Vector2.ZERO and not free_extent.is_empty():
-				var tproj := Vector2(ball["pos"]).dot(free)
-				if tproj < float(free_extent["min"]) - 4.0 * CS \
-						or tproj > float(free_extent["max"]) + 4.0 * CS:
-					hand_balls.remove_at(i)
-					_recover_lost_hand(int(ball["kind"]))
-		elif Vector2(ball["pos"]).y > (base.grid_size.y + 8) * CS:
-			# At world level there is a bottom to fall off. Rather than lose the hand —
-			# the one thing this system must never do — put it back somewhere findable.
-			hand_balls.remove_at(i)
-			_recover_lost_hand(int(ball["kind"]))
-	# The overlay draws in-flight balls, so it has to redraw while any is moving.
-	_refresh_pickup_visuals()
+	hand_field.step(level, delta)
 
 
 ## Wake any resting hand whose ground has gone.
@@ -1510,16 +1531,10 @@ func _wake_unsupported_hands() -> void:
 		if WorldCore.hand_ball_supported(Vector2(wp), solids):
 			continue                # still on something; it rode its flap and is fine
 		loose_hands.remove_at(i)
-		hand_balls.append({
-			"kind": pickup.kind,
-			"pos": Vector2(wp),
-			"vel": Vector2.ZERO,
-			"resting": false,
-			"region": region_id,
-			"in_sub": mode == Mode.SUBSPACE,
-			"seed": WorldCore.hand_drift_seed(pickup.base_id, pickup.bp),
-		})
-	_refresh_pickup_visuals()
+		# Seeded from the base tile it was lying on, so a woken hand keeps a stable
+		# drift phase rather than one that depends on how many are already up.
+		hand_field.launch(pickup.kind, Vector2(wp), level, Vector2.ZERO,
+			WorldCore.hand_drift_seed(pickup.base_id, pickup.bp))
 
 
 ## A hand that fell out of the sheet, put back somewhere it can be found.
@@ -1564,7 +1579,6 @@ func _land_ball(ball: Dictionary) -> void:
 			_ensure_pickups(String(ball["region"])).append(
 				HandPickup.dropped_at(
 					int(ball["kind"]), piece, rest + off, String(ball["region"])))
-			_refresh_pickup_visuals()
 			return
 	# No sheet within reach of where it stopped. This used to warn and RETURN, which
 	# destroyed the hand — the only place in the game that could, and invisible because a
@@ -1575,13 +1589,21 @@ func _land_ball(ball: Dictionary) -> void:
 		_ensure_pickups(String(ball["region"])).append(
 			HandPickup.dropped_at(
 				int(ball["kind"]), fallback, _spawn, String(ball["region"])))
-		_refresh_pickup_visuals()
 		push_warning("FoldWorld: a hand came to rest on nothing at %s; returned to spawn"
 			% rest)
 		return
 	# Nothing anywhere — a world with no sheet under its own spawn. Keep the hand in the
 	# air rather than deleting it: an orbiting hand is still countable and catchable.
-	hand_balls.append({
+	#
+	# `homeless` marks a ball that has already been through here, and it is load-bearing
+	# for the LOG rather than for the physics. This state is stable: the ball is put back
+	# in flight, comes to rest on the same geometry next step, fails to bind again, and
+	# arrives back here — so reporting on every attempt reports the same hand forever. It
+	# did: one hand at (864, 1568) produced 1,964 identical ERROR lines in a 16-second
+	# suite run, which is not an error message, it is a screen that hides the next real
+	# one. Say it once, when the hand ENTERS the state.
+	var already: bool = bool(ball.get("homeless", false))
+	hand_field.readmit({
 		"kind": int(ball["kind"]),
 		"pos": rest,
 		"vel": Vector2.ZERO,
@@ -1589,8 +1611,12 @@ func _land_ball(ball: Dictionary) -> void:
 		"region": String(ball["region"]),
 		"in_sub": mode == Mode.SUBSPACE,
 		"seed": WorldCore.hand_drift_seed(0, rest),
+		"homeless": true,
 	})
-	push_error("FoldWorld: nowhere at all to land a hand near %s" % rest)
+	if not already:
+		push_error(("FoldWorld: nowhere at all to land a hand near %s — no sheet under it, "
+			+ "and none under the spawn either. Keeping it in flight so it stays "
+			+ "countable and catchable.") % rest)
 
 
 ## Carry every in-flight ball through a fold, exactly as the player is carried.
@@ -1604,27 +1630,9 @@ func _land_ball(ball: Dictionary) -> void:
 ## to the interior from now on. A ball the fold leaves nowhere — its tile excised while
 ## the view stays put — is one the strip captured, and it flies on in there.
 func _carry_balls_through(new_pieces: Array, into_sub: bool) -> void:
-	var here := mode == Mode.SUBSPACE
-	for ball in hand_balls:
-		if bool(ball["in_sub"]) != here or String(ball["region"]) != region_id:
-			continue
-		var from = BaseFrame.piece_containing(pieces_by_pos, Vector2(ball["pos"]), CS)
-		var dest = null
-		if from != null:
-			dest = BaseFrame.world_point_from_base(
-				new_pieces, from.base_id, Vector2(ball["pos"]) - from.src_offset)
-		if dest != null:
-			ball["pos"] = Vector2(dest)
-			if into_sub:
-				ball["in_sub"] = true
-			continue
-		# No home in the new configuration: the fold excised the ground it was over. It
-		# is inside the strip now, which is a real place — so it keeps flying, in there.
-		ball["in_sub"] = true
+	hand_field.carry_through(level, new_pieces, into_sub)
 
 
-## Move a fold's hands back to the player. Call BEFORE the fold leaves the list, so
-## the hands are never in two places at once.
 func _take_back(fold: Fold) -> void:
 	for kind in fold.held_hands:
 		_give_hand(int(kind))
@@ -1959,6 +1967,11 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 
 func _process(delta: float) -> void:
 	_tick_hold(delta)
+	# The overlay draws a description of the frame, not this object. Building it here
+	# is also what makes it a per-FRAME cost: it used to gather itself from inside
+	# `paint()`, which WrapCanvas runs once per copy of the space.
+	if overlay != null:
+		overlay.set_view(_build_overlay_view())
 	if hand_orbit != null and player != null:
 		hand_orbit.follow(hands, player.global_position, player.velocity, player.facing, delta)
 	# Before the early-out: the lens has to keep working while a fold plays.
@@ -2000,6 +2013,82 @@ func _apply_anim_frame() -> void:
 
 
 # ---------------------------------------------------------------------------
+# What the overlay draws
+# ---------------------------------------------------------------------------
+# One value per frame describing the markers, previews and rings — see OverlayView.
+# The overlay receives it and can do nothing else; it holds no reference back.
+#
+# Everything expensive is asked exactly once here. That is not an optimisation, it
+# is the reason this function exists: when the overlay held this object it asked
+# `glue_lines()` and `loose_hand_points()` from inside `paint()`, and WrapCanvas runs
+# `paint()` once per copy — 77 copies two folds deep, at 16.3ms of a 16.6ms frame.
+
+func _build_overlay_view() -> OverlayView:
+	var v := OverlayView.new()
+	if base == null or animating():
+		return v                        # mid-fold: the markers describe a configuration in flight
+
+	v.active = true
+	v.flat = lattice.is_flat()
+	v.cell_size = base.cell_size
+	v.world_px = Vector2(base.grid_size) * v.cell_size
+	v.domain = lattice.domain_polygon(v.world_px.length())
+
+	v.markers = seam_markers()
+	for fold in seams_within_burst():
+		v.in_reach.append({
+			"at": (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * v.cell_size,
+			"ok": can_unfold_fold(fold),
+		})
+
+	for id in doors:
+		var wp = door_point_here(id)
+		if wp != null:
+			v.doors.append(Vector2(wp))
+
+	# A hand that is down but not armed has no fuse; one in an armed pair carries its
+	# pair's progress, and both halves get the same number so they throb together.
+	for entry in unpaired:
+		v.hands_down.append(
+			{"at": anchor_point(entry), "kind": int(entry["hand"]), "fuse": -1.0})
+	for pair in primed:
+		var fuse := fuse_progress_of(pair)
+		for entry in [pair["a"], pair["b"]]:
+			v.hands_down.append(
+				{"at": anchor_point(entry), "kind": int(entry["hand"]), "fuse": fuse})
+		var ca = anchor_point(pair["a"])
+		var cb = anchor_point(pair["b"])
+		if ca != null and cb != null:
+			v.pairs.append({"a": Vector2(ca), "b": Vector2(cb)})
+
+	for entry in loose_hand_points():
+		var pickup: HandPickup = entry["pickup"]
+		v.loose.append({
+			"pos": Vector2(entry["pos"]),
+			"kind": pickup.kind,
+			"seed": WorldCore.hand_drift_seed(pickup.base_id, pickup.bp),
+		})
+	v.balls = hand_ball_points()
+
+	if not v.flat:
+		v.glue = glue_lines()
+		if sub_fold != null:
+			v.exit_at = sub_fold.crease_point1
+			v.exit_ok = exit_blocker() == null
+			v.exit_in_burst = glue_within_burst()
+
+	v.aim_at = (Vector2(candidate_anchor()) + Vector2(0.5, 0.5)) * v.cell_size
+	v.aim_hand = next_hand_type()
+	v.hold = hold_progress()
+
+	v.burst_t = burst_flash()
+	v.burst_radius = BURST_RADIUS
+	if player != null:
+		v.burst_at = player.global_position
+	return v
+
+
+# ---------------------------------------------------------------------------
 # Camera framing
 # ---------------------------------------------------------------------------
 # The player owns the camera (see PlayerBody); this decides what it should be
@@ -2010,59 +2099,33 @@ func _apply_anim_frame() -> void:
 
 ## `center` overrides where the BODY is taken to be — the cut path needs the
 ## framing of where it is going, not of where the lens still is.
-func _update_camera(center: Vector2 = Vector2.INF) -> void:
-	if player == null:
-		return
-	var body: Vector2 = player.global_position if center == Vector2.INF else center
-	# The lead first: it moves the camera, and the zoom's focus distances are
-	# measured from where the camera ends up. Decided in the other order, a hard
-	# lead would quietly crop the very things the focus set exists to keep on screen.
-	player.lookahead_target = WorldCore.camera_lookahead_for({
-		"velocity": player.motion_fraction(),
-		"look": player.look_dir(),
-		# A repeating space already shows every copy there is along the axes it
-		# repeats on, so leading along one slides the view across identical bands
-		# for nothing. On a torus that is both axes, and the lead is the body's
-		# alone.
-		"flat_axes": lattice.periods(),
-		"frozen": animating(),
-	})
-	var eye := (player.camera_position() if center == Vector2.INF
-		else body + player.lookahead_target)
-	player.zoom_target = WorldCore.camera_zoom_for({
-		"viewport": get_viewport_rect().size,
-		"center": eye,
-		"motion": player.motion_intensity(),
-		# A fold rearranging the world is its own reason to step back and watch.
-		"widen": 1.0 if animating() else 0.0,
+## The facts the camera needs about this moment. Everything here is world
+## knowledge — what must stay on screen, how the space repeats, whether a fold is
+## mid-flight — which is exactly the part `WorldCamera` cannot work out for itself.
+func _camera_context() -> Dictionary:
+	return {
 		"focus": _camera_focus(),
-	})
-	_size_pixel_view()
+		"periods": lattice.periods(),
+		"frozen": animating(),
+		"viewport": get_viewport_rect().size,
+	}
 
 
-## Give the render target the resolution the CURRENT zoom asks for. The camera's
-## lens never moves — inside a render target, zoom is what sets the size of an art
-## pixel, so moving it would resample the 16px tileset and soften the world. A
-## wider frame is therefore MORE pixels, not bigger ones.
-##
-## Sized from `camera_zoom()` (the eased value) rather than the target, so the
-## buffer tracks what is actually on screen while the frame is still opening.
-func _size_pixel_view() -> void:
-	if pixel_view == null:
+## `center` overrides where the BODY is taken to be.
+func _update_camera(center: Vector2 = Vector2.INF) -> void:
+	if camera == null:
 		return
-	var want := PixelArt.target_size(get_viewport_rect().size, player.camera_zoom())
-	# Only on change: assigning size re-allocates the render target.
-	if pixel_view.size != want:
-		pixel_view.size = want
+	camera.frame(_camera_context(), center)
 
 
-## Cut the camera — position, lens AND lead — to where the body now is. For hard
-## relocations (spawn, doors, being turned back by the fold): the destination's
-## framing is computed first, because easing into it would read as the new room
-## inflating around you.
+func _size_pixel_view() -> void:
+	if camera != null:
+		camera.size_render_target(get_viewport_rect().size)
+
+
 func _cut_camera() -> void:
-	_update_camera(player.global_position)
-	player.snap_camera()
+	if camera != null:
+		camera.cut(_camera_context())
 
 
 ## World points that would be a mistake to leave off screen right now.
@@ -2092,9 +2155,7 @@ func _camera_focus() -> PackedVector2Array:
 
 func _physics_process(delta: float) -> void:
 	_burst_flash_left = maxf(_burst_flash_left - delta, 0.0)
-	_flash_left = maxf(_flash_left - delta, 0.0)
-	if _flash_left == 0.0 and _flash != null:
-		_flash.visible = false
+	hud.tick(delta)
 	_update_status()
 	# Only the nearest handful of lights reach the shader; "nearest" is measured
 	# from the player, not the origin.
@@ -2138,6 +2199,18 @@ func _physics_process(delta: float) -> void:
 ##
 ## Every axis at once, so a torus wraps in both directions in one step, and a
 ## region — with no axes at all — does nothing here.
+## How much slack a thing gets before it counts as having left the band.
+const BAND_SLACK := 4.0 * CS
+
+
+func _left_the_band(point: Vector2) -> bool:
+	return level.left_the_band(point, BAND_SLACK)
+
+
+func _turn_back_point() -> Vector2:
+	return level.turn_back_point()
+
+
 func _wrap_body() -> void:
 	var delta := lattice.wrap_delta(player.global_position)
 	if delta != Vector2.ZERO:
@@ -2153,14 +2226,8 @@ func _wrap_body() -> void:
 	# blocked by a crossing fold): the fold turns you back into itself. Only a
 	# cylinder has such an end — a torus has nowhere to go, and a region has the
 	# fall-out-of-the-world respawn instead.
-	var free := lattice.free_axis()
-	if free == Vector2.ZERO or free_extent.is_empty():
-		return
-	var tproj := player.global_position.dot(free)
-	if tproj < float(free_extent["min"]) - 4.0 * CS \
-			or tproj > float(free_extent["max"]) + 4.0 * CS:
-		var period: Vector2 = lattice.periods()[0]
-		var back := sub_fold.crease_point1 + period * 0.5
+	if _left_the_band(player.global_position):
+		var back := _turn_back_point()
 		var landed := WorldCore.depenetrate(back, PlayerBody.RADIUS, wall_polys)
 		player.teleport(back if landed == Vector2.INF else landed, false)
 		_cut_camera()
@@ -2241,7 +2308,6 @@ func _check_pickups() -> void:
 			continue
 		hands[AnchorStock.first_empty(hands)] = int(ball["kind"])
 		hand_balls.remove_at(i)
-		_refresh_pickup_visuals()
 		AudioManager.play_sfx(Sounds.HAND_PICKUP)
 		_show_flash("Caught a %s hand." % HandTypes.type_name(int(ball["kind"])))
 		return
@@ -2256,7 +2322,6 @@ func _check_pickups() -> void:
 			continue
 		hands[AnchorStock.first_empty(hands)] = pickup.kind
 		loose_hands.remove_at(i)
-		_refresh_pickup_visuals()
 		AudioManager.play_sfx(Sounds.HAND_PICKUP)
 		_show_flash("Picked up a %s hand." % HandTypes.type_name(pickup.kind))
 		return
@@ -2276,25 +2341,7 @@ func loose_hand_points() -> Array:
 ## overlay draws them from their own position rather than by resolving a base point.
 ## Balls flying in the other view are not here: they are not in this space.
 func hand_ball_points() -> Array:
-	var out: Array = []
-	var here := mode == Mode.SUBSPACE
-	for ball in hand_balls:
-		if bool(ball["in_sub"]) != here or String(ball["region"]) != region_id:
-			continue
-		out.append({
-			"kind": int(ball["kind"]),
-			"pos": Vector2(ball["pos"]),
-			"seed": float(ball["seed"]),
-		})
-	return out
-
-
-## Loose hands are drawn by the overlay, which redraws itself every frame, so there is
-## nothing to rebuild — but taking or dropping one should also relight the scene, since
-## a hand is a thing the player is looking for.
-func _refresh_pickup_visuals() -> void:
-	if overlay != null:
-		overlay.queue_redraw()
+	return hand_field.points_in(level)
 
 
 func _check_goal() -> void:
@@ -2339,47 +2386,14 @@ func _reset() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_hud() -> void:
-	var bg_layer := CanvasLayer.new()
-	bg_layer.layer = -10
-	add_child(bg_layer)
-	_bg = ColorRect.new()
-	_bg.color = Color("0a0b12")
-	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	# Controls default to MOUSE_FILTER_STOP; a full-screen rect would eat every
-	# click before _unhandled_input sees it. HUD must never take the mouse.
-	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg_layer.add_child(_bg)
-
-	var hud := CanvasLayer.new()
-	hud.layer = 10
+	hud = WorldHud.new()
+	hud.name = "Hud"
 	add_child(hud)
-
-	# Controls only — what the keys are, not what they mean. The mechanics are the
-	# game's to teach: the aim ring, the preview band, the seam diamonds and the
-	# anchor readout all say their piece in place, and a wall of text on top of
-	# them explains away the thing the player is meant to work out.
-	var help := Label.new()
-	help.text = "A/D move   Space tap/hold: jump   W/S aim   F tap: place hand · hold: pull back   R reset"
-	help.position = Vector2(12, 8)
-	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
-	hud.add_child(help)
-
-	_status = Label.new()
-	_status.position = Vector2(12, 30)
-	_status.add_theme_color_override("font_color", Color("59e0d0"))
-	hud.add_child(_status)
-
-	_flash = Label.new()
-	_flash.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_flash.position = Vector2(340, 130)
-	_flash.add_theme_font_size_override("font_size", 22)
-	_flash.add_theme_color_override("font_color", Color("ffd27f"))
-	_flash.visible = false
-	hud.add_child(_flash)
+	hud.build()
 
 
 func _update_status() -> void:
-	if _status == null:
+	if hud == null:
 		return
 	var kinds: Array = []
 	for h in hands:
@@ -2389,14 +2403,14 @@ func _update_status() -> void:
 	if not primed.is_empty():
 		stock += "   %d armed" % primed.size()
 	if context.is_empty():
-		_status.text = "Region: %s   Folds: %d   Mode: WORLD\n%s" \
-			% [region_id, folds.size(), stock]
+		hud.set_status("Region: %s   Folds: %d   Mode: WORLD\n%s"
+			% [region_id, folds.size(), stock])
 	else:
 		# How deep, and what shape the space you are in has come out: one period is
 		# a cylinder you can run off the ends of, two is a torus with no outside.
-		_status.text = "Region: %s   Folds: %d   Mode: INSIDE FOLD x%d — %s (%d inner)\n%s" \
+		hud.set_status("Region: %s   Folds: %d   Mode: INSIDE FOLD x%d — %s (%d inner)\n%s"
 			% [region_id, folds.size(), context.size(), _space_name(),
-				level_folds().size(), stock]
+				level_folds().size(), stock])
 
 
 ## What shape the space you are standing in is, from how many ways it repeats.
@@ -2408,11 +2422,7 @@ func _space_name() -> String:
 
 
 func _show_flash(text: String) -> void:
-	if text.is_empty():
-		return
-	_flash.text = text
-	_flash.visible = true
-	_flash_left = 2.5
+	hud.flash(text)
 
 
 ## A refusal: the message, and the sound that goes with every refusal that has

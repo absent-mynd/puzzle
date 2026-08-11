@@ -142,3 +142,75 @@ func test_two_horizontal_folds_compose():
 	# First fold alone:
 	var one := FoldReplay.derive(base, [f1])
 	assert_eq(one.occupied_count(), 70, "single fold unchanged by presence of f2 in list order")
+
+
+## One clip pass, two answers — and they must be the same two answers.
+##
+## `apply_one_fold` and `capture_strip` are the same loop over
+## `CollisionCore.fold_polygons`, keeping different parts of the same cut. A fold
+## needs both, so asking separately clipped the whole world twice: measured on the
+## shipped region that was 12.9ms + 14.7ms of a 58ms fold. `fold_and_capture` does
+## it once.
+##
+## This is the test that lets that stay merged. It pins EQUIVALENCE rather than
+## speed: the merged pass must return exactly what the two separate calls did, or
+## the optimisation is a behaviour change wearing a performance costume.
+func test_fold_and_capture_equals_the_two_separate_passes() -> void:
+	var base := _grid(Vector2i(10, 6), 64.0, {
+		Vector2i(3, 2): T_WALL, Vector2i(4, 2): T_WALL, Vector2i(5, 2): T_GOAL,
+	})
+	var pieces: Array = FoldReplay.identity_pieces(base)
+	var fold := _fold(base, Vector2i(2, 2), Vector2i(7, 2), 1)
+	var CELL := base.cell_size
+
+	var separate_pieces: Array = FoldReplay.apply_one_fold(pieces, fold, CELL)
+	var separate_dropped: Array = WorldCore.capture_strip(pieces, fold, CELL)
+	var merged := FoldReplay.fold_and_capture(pieces, fold, CELL)
+
+	assert_eq(merged["pieces"].size(), separate_pieces.size(),
+		"the merged pass keeps the same flaps")
+	assert_eq(merged["dropped"].size(), separate_dropped.size(),
+		"...and excises the same strip")
+	assert_gt(separate_pieces.size(), 0, "the fixture actually folds something")
+	assert_gt(separate_dropped.size(), 0, "...and actually excises something")
+
+	for i in range(separate_pieces.size()):
+		var a = separate_pieces[i]
+		var b = merged["pieces"][i]
+		assert_eq(b.base_id, a.base_id, "flap %d keeps its base identity" % i)
+		assert_eq(b.polygon, a.polygon, "flap %d keeps its geometry" % i)
+		assert_eq(b.src_offset, a.src_offset, "flap %d keeps its offset" % i)
+		assert_eq(b.plane_pos, a.plane_pos, "flap %d keeps its cell" % i)
+
+	for i in range(separate_dropped.size()):
+		var a = separate_dropped[i]
+		var b = merged["dropped"][i]
+		assert_eq(b.base_id, a.base_id, "strip %d keeps its base identity" % i)
+		assert_eq(b.polygon, a.polygon, "strip %d keeps its geometry" % i)
+		# The strip keeps its PRE-fold frame — that is what makes a subspace the
+		# same sheet seen from inside.
+		assert_eq(b.src_offset, a.src_offset, "strip %d keeps its pre-fold offset" % i)
+		assert_eq(b.plane_pos, a.plane_pos, "strip %d keeps its pre-fold cell" % i)
+
+
+func test_asking_for_one_half_does_not_build_the_other() -> void:
+	# The clip runs either way — it is the expensive part — but a caller that wants
+	# only the strip must not pay for wrapping the flaps, or merging the passes would
+	# have made the single-half callers slower.
+	var base := _grid(Vector2i(6, 4), 64.0, {Vector2i(2, 1): T_WALL})
+	var pieces: Array = FoldReplay.identity_pieces(base)
+	var fold := _fold(base, Vector2i(1, 1), Vector2i(4, 1), 1)
+	var CELL := base.cell_size
+
+	var direct: Array = FoldReplay.capture_strip(pieces, fold, CELL)
+	var via_worldcore: Array = WorldCore.capture_strip(pieces, fold, CELL)
+	# Compare CONTENT, not identity: each call wraps fresh FoldedPieces, so the
+	# arrays are never the same objects.
+	assert_eq(direct.size(), via_worldcore.size(),
+		"WorldCore.capture_strip delegates, so there is one clip in the codebase")
+	assert_gt(direct.size(), 0, "the fixture actually excises something")
+	for i in range(direct.size()):
+		assert_eq(via_worldcore[i].polygon, direct[i].polygon,
+			"strip %d is the same geometry either way" % i)
+		assert_eq(via_worldcore[i].base_id, direct[i].base_id,
+			"strip %d is the same tile either way" % i)
