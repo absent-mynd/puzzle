@@ -5,11 +5,15 @@
 **Date:** 2026-08-11
 **Status:** point-in-time diagnosis. Not a document to maintain.
 
-> **Remediation status — steps 1–3 landed 2026-08-11.** The gates now fail
-> (`bca4758`) and the suite is 778/778 green (`c38352c`). Findings 01–05 below are
-> resolved; the P2/P3 findings are not. Closing finding 01 turned up a second,
-> independent hole that this document did not predict — see the note under it.
-> Everything else stands as written.
+> **Remediation status — all seven steps landed 2026-08-11.** The suite is
+> **791/791 green** and the gates now actually gate. Findings 01–06 and 09–10 are
+> resolved. Finding 07 (`FoldWorld`) is **partly** resolved: two of three seams are
+> out, and the third is deliberately left with its blocker recorded — see the note
+> under it. Finding 08 (the `WorldOverlay` cycle) is untouched.
+>
+> Closing finding 01 turned up **two** further holes this document did not predict,
+> both noted below. The recurring lesson: every gate here was believed to work until
+> something was made to fail on purpose.
 
 ---
 
@@ -73,8 +77,17 @@ no other fix can be verified.
 > GUT's supported `post_run_script` hook. Pending tests are excluded — `pending()`
 > is a legitimate authoring tool with its own total.
 >
+> Then a **third** hole, found the same way — by accident, while adding a test file
+> that happened to have a parse error in it. GUT reacts to a script it cannot load
+> by logging "Ignoring script ... because it does not extend GutTest" and carrying
+> on: the file's tests do not fail, they cease to exist. One bad character in
+> `test_base_grid.gd` took the suite from 788 tests to 779 and still exited 0. A
+> test file could be deleted by breaking it. The hook now also compares the test
+> files on disk against the scripts GUT actually collected.
+>
 > Verify a gate by making it fail on purpose. A gate nobody has watched fail is
-> only believed to work.
+> only believed to work — that was true three times here, and the third was found
+> by luck rather than by looking.
 
 ### 2. `main` is red, and was merged red
 
@@ -214,6 +227,30 @@ sit inside the object that does it.
 I would not attempt this until P0 is fixed. Refactoring a god object against a
 test suite that cannot report failure is how you lose a weekend.
 
+> **Outcome (2026-08-11).** Two of the three seams are out. `WorldHud` took the
+> overlay — background, controls line, status readout, flash and its lifetime — and
+> `WorldCamera` took the lead, the lens and the render-target sizing. Both take the
+> facts they need as arguments and hold no reference back, which is the property
+> finding 08 is about. `FoldWorld` is 2,391 lines, down from 2,441.
+>
+> **The hand-ball physics was deliberately not extracted, and that is the more
+> useful result.** It depends on ten separate pieces of current-level state —
+> `wall_polys`, `current_pieces`, `pieces_by_pos`, `lattice`, `free_extent`,
+> `base.grid_size`, `mode`, `region_id`, `_spawn`, the player's position — and
+> mutates two more (`loose_hands`, the pickup lists). Pulling it out today converts
+> that into either a ten-field context object or another back-reference, which is
+> the thing finding 08 says not to do. It would move lines without reducing coupling.
+>
+> The prerequisite is a **`Level` value object**. `_compute_level` already returns
+> `{base_pieces, level_folds, pieces}`; the rest of the level's state is scattered
+> across members that `_apply_context` assigns. Gather them into one value and the
+> hand field becomes `step(level, delta)` with a genuinely narrow interface — and
+> `WorldOverlay`'s two dozen reach-throughs mostly collapse into it too, which is
+> why this is the same fix as finding 08 rather than a different one.
+>
+> Doing a bad extraction to close a finding is worse than leaving the finding open
+> with its blocker written down.
+
 ### 6. A dependency cycle papered over by deleting the type
 
 `scripts/world/WorldOverlay.gd:36`:
@@ -278,6 +315,21 @@ also breaks the cycle for real, at which point the type annotation comes back.
 6. **Then, and only then, start carving up `FoldWorld`** — HUD first, camera
    second, hand physics third.
 7. **Delete or rewrite `docs/DEVELOPMENT.md`.**
+
+**All seven landed on 2026-08-11**, with one deliberate partial: step 6 stopped
+after the camera, because the third seam needs a `Level` value object first (see
+finding 07). The suite is 791/791, and the gates fail on four distinct kinds of
+broken test rather than one.
+
+**What I would do next**, in order:
+
+1. **Extract a `Level` value object** from what `_apply_context` scatters across
+   `FoldWorld`'s members. It unblocks the hand-physics extraction *and* most of
+   finding 08 — one change closing the remainder of two findings.
+2. **Fix the error-severity logging in `FoldWorld._land_ball`** (1,964 ERROR lines
+   per suite run over a recoverable state).
+3. **Prune the remaining documentation.** `AGENTS.md` (566 lines) and `STATUS.md`
+   (821) were not touched here and are the last of finding 10.
 
 Items 1–3 are a day's work and buy back the ability to trust the repository.
 Item 6 is the large one, and it is safe to attempt only after 1–4.
