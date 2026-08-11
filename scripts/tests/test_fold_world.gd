@@ -8,6 +8,10 @@ extends GutTest
 ## synchronous.
 
 const SCENE := "res://scenes/world/World.tscn"
+## The suite's OWN world, not the shipped one. These tests assert against concrete
+## geometry — a pit here, a wall there, a door with that partner — so they must not
+## inherit whichever level happens to be shipping. See worlds/fixtures/README.md.
+const FIXTURE := "res://worlds/fixtures/kernel.json"
 const CS := 64.0
 
 var world
@@ -15,6 +19,7 @@ var world
 
 func before_each() -> void:
 	world = load(SCENE).instantiate()
+	world.world_override = FIXTURE
 	add_child_autofree(world)
 	world.anim_enabled = false
 

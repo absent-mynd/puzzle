@@ -105,6 +105,16 @@ const TOSS_SPEED := 55.0
 ## released; one that only slides sideways reads as dropped.
 const TOSS_LIFT := 110.0
 
+## Which world THIS instance loads. Empty means "decide normally": the `--world=`
+## flag if one was passed, else `WORLD_PATH`.
+##
+## Set it before the node enters the tree. It exists so the scene-driven tests can
+## pin themselves to a world the SUITE owns rather than to whichever level happens
+## to be shipping — the coupling that let one commit re-point `WORLD_PATH` and fail
+## 60 kernel tests that had nothing to do with the change. See
+## `worlds/fixtures/README.md`.
+var world_override := ""
+
 ## The authored world (regions, doors, pre-placed folds).
 var world_data: WorldData
 
@@ -355,7 +365,8 @@ func _setup_all() -> void:
 	# A hand in flight is a hand mid-event. A reset ends the event.
 	hand_balls = []
 
-	var world_path := WorldData.selected_path(WORLD_PATH)
+	var world_path := world_override if not world_override.is_empty() \
+		else WorldData.selected_path(WORLD_PATH)
 	world_data = WorldData.load_from(world_path)
 	if world_data == null:
 		push_error("FoldWorld: could not load %s" % world_path)
