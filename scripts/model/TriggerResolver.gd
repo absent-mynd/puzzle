@@ -4,10 +4,14 @@ class_name TriggerResolver extends RefCounted
 ##
 ## Resolves the fold cascade that follows the player entering a trigger tile.
 ##
-## The only reaction is "fold-on-enter": when the player stands on a TRIGGER_FOLD tile,
-## a fold is created between the anchors named in that tile's per-instance data, tagged
-## with the tile's channel. The cascade iterates because a triggered fold RIDES the
-## player — possibly onto another trigger.
+## The reaction it resolves is "fold-on-enter": when the player stands on a TRIGGER_FOLD
+## tile, a fold is created between the anchors named in that tile's per-instance data,
+## tagged with the tile's channel. The cascade iterates because a triggered fold RIDES
+## the player — possibly onto another trigger.
+##
+## It is not the only reaction a tile can name, only the one that needs a cascade —
+## `FoldWorld._check_triggers` dispatches on the reaction, and one that does not add
+## folds (a burst plate lets go of them) never reaches this file.
 ##
 ## Previously this ran inside the step log, which made it undoable for free. The world
 ## is continuous now, so it runs against a piece list and a continuous player

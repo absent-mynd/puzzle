@@ -219,7 +219,11 @@ loose at once —
 - armed pairs you can reach either half of are **disarmed** — the halves inside
   the sphere come back, and any half outside it stays pinned exactly where it
   was, waiting for a partner again;
-- folds whose seam is in reach come apart, if nothing newer is blocking them;
+- folds whose seam is in reach come apart, if nothing newer is blocking them —
+  and a seam is wherever the folds made since have carried it, which is not
+  always where you made it: fold beside an older seam and it slides in with the
+  flap it is on, fold *over* one and it goes into the new fold's subspace with
+  the sheet it was cut into, where you have to go in after it;
 - inside a fold, the glue anchor in reach is the way out;
 - and **any hand with nowhere to go pops into the world at your feet.**
 
@@ -244,6 +248,33 @@ A burst releases the folds that were unfoldable **when it fired**. A stack of
 two folds under one diamond clears one layer per press, because releasing the
 newer one is what unblocks the older, and one press undoing work you never
 asked it to reach would be a surprise.
+
+### Burst plates — the world firing one for you
+
+A **burst plate** (`B`, teal, walkable) fires exactly that sphere when you step
+on it, centred on the *plate* rather than on you, at a radius the plate carries
+in its own tile data — **in cells**, defaulting to your own reach. It is the one
+thing in the game that reaches a seam you cannot stand next to, which is what a
+wide one is for: it is a remote unfold the *world* owns, and there is still no
+key for one.
+
+It is your gesture with two things taken away. You do not choose when — stepping
+on it is the whole input — and you do not choose where. Everything else is
+identical, because it is the same code: hands come back to your slots, an armed
+pair with one half inside is disarmed and the far half stays pinned, folds in
+reach come apart newest-first, a hand with nowhere to go lands on the ground.
+
+Two consequences worth knowing:
+
+- **It fires on entering, not on standing.** Walk off and back on and it goes
+  off again — a plate has no channel to spend, unlike a `TRIGGER_FOLD`.
+- **It works inside a fold**, at any depth. A burst takes folds *out* of the
+  space you are in rather than splicing new ones into it, so a plate that was
+  swallowed by a fold still works in there — and one whose reach covers the glue
+  is a way out.
+
+Plates are placed in the **testbed** (`--world=testbed`), not in the shipped
+world: what a plate does to the authored beats is a playtesting question.
 
 ## Hands
 
@@ -632,7 +663,10 @@ stays pinned at `PixelArt.CAMERA_ZOOM` forever.
 - **The seam stays a hard line.** Because the art is cut by the crease exactly
   as the geometry is, two flaps meeting at a seam show two tiles cut mid-pattern
   against each other. Nothing blends, blurs or fades across it. That is
-  deliberate for now.
+  deliberate for now. What the seam does get is a **marker over that cut** — a
+  muted version of the glue line, in the unlit overlay layer with everything else
+  you read the world by, so a fold you left standing an hour ago is still legible
+  as a fold rather than as a place where the tiles happen to disagree.
 - **The HUD is outside the pixel viewport**, at window resolution, so text stays
   legible over chunky tiles. So are the overlay's markers — they are drawn
   unlit, because what you navigate by must never dim.

@@ -3,8 +3,9 @@ class_name WorldOverlay extends WrapCanvas
 ## WorldOverlay
 ##
 ## Draw-only layer for the fold world: anchor markers, the excised-strip preview,
-## seam-anchor diamonds (with unfoldability tint), the glue lines and outer seam
-## anchor inside a subspace, doors and hands lying on the ground.
+## seam lines and the anchor diamonds sitting on them (with unfoldability tint), the
+## glue lines and outer seam anchor inside a subspace, doors and hands lying on the
+## ground.
 ##
 ## It draws an `OverlayView` and knows nothing else. It does not hold `FoldWorld`,
 ## cannot ask it anything, and has no way to find it — which is the point. It used
@@ -38,7 +39,28 @@ const HAIR := PixelArt.WORLD_PER_PIXEL
 ## Two art pixels — for anything that has to be found at a glance.
 const STROKE := HAIR * 2.0
 
+## The two join lines, as one look at two strengths.
+##
+## Both say the same thing about the sheet — it is joined along here — so the seam is
+## the glue's own teal and nothing else about it changes. A hue of its own would read
+## as a different KIND of join, and there is no second kind.
+##
+## What separates them is weight, and the seam is the quiet one for two reasons. A
+## space has ONE set of glue lines and they are the walls of the room you are in; a
+## region can be carrying a dozen standing folds at once, each with a seam running the
+## length of what it swallowed. And a seam is already marked where it matters — the
+## diamond at its meeting cell is what a burst answers to. The line is context: it
+## says the fold you made runs THROUGH here, at an alpha that never competes with what
+## you navigate by.
+const GLUE_COLOR := Color("59e0d0", 0.55)
+const SEAM_COLOR := Color("59e0d0", 0.28)
+
 var _view := OverlayView.new()
+
+## The join lines, stepped into art pixels once per frame rather than once per copy —
+## see `PixelArt.hairline_runs` for why they are not just drawn.
+var _seam_runs := PackedVector2Array()
+var _glue_runs := PackedVector2Array()
 
 ## The preview strip and the guides, clipped to one copy of the space. Built when the
 ## view arrives — once per frame — rather than per copy, which is the whole lesson of
@@ -54,7 +76,22 @@ var _aim_strip: Array = []
 func set_view(view: OverlayView) -> void:
 	_view = view if view != null else OverlayView.new()
 	_rebuild_preview()
+	_rebuild_lines()
 	queue_redraw()
+
+
+## Step the seam and glue lines into art pixels. Once per frame, for the same reason
+## the strips are clipped here rather than in `paint()`: `paint()` runs once per copy
+## of the space, and neither of these depends on which copy is being drawn.
+func _rebuild_lines() -> void:
+	_seam_runs = PackedVector2Array()
+	_glue_runs = PackedVector2Array()
+	if not _view.active:
+		return
+	for seg in _view.seams:
+		_seam_runs.append_array(PixelArt.hairline_runs(seg[0], seg[1]))
+	for seg in _view.glue:
+		_glue_runs.append_array(PixelArt.hairline_runs(seg[0], seg[1]))
 
 
 ## The strip an armed pair would excise, and the guides through every placed hand.
@@ -106,6 +143,8 @@ func _clip(poly: PackedVector2Array) -> Array:
 func paint() -> void:
 	if not _view.active:
 		return
+	# Back to front by loudness: the join lines under the markers that sit on them.
+	_draw_seams()
 	if not _view.flat:
 		_draw_glue()
 		_draw_exit_anchor()
@@ -323,8 +362,23 @@ func _strip_polygon(a_center: Vector2, b_center: Vector2,
 ## rather than a rendering glitch. One pair per axis of the lattice: two lines
 ## down a cylinder, and all four walls of a torus when you are folded in twice.
 func _draw_glue() -> void:
-	for seg in _view.glue:
-		draw_line(seg[0], seg[1], Color("59e0d0", 0.55), HAIR)
+	if not _glue_runs.is_empty():
+		draw_multiline(_glue_runs, GLUE_COLOR, HAIR)
+
+
+## The meeting lines — where a fold's two flaps came together — drawn as a muted glue
+## line, and running exactly as far as the fold actually joined anything.
+##
+## This does not soften the seam. The ART is still cut by the crease exactly as the
+## geometry is, two tiles meeting mid-pattern with nothing blended across them (see
+## `scripts/world/README.md` §"The seam stays a hard line"): the hairline is a marker
+## laid OVER that cut, in the unlit layer with everything else you read the world by.
+## What it buys is that a fold you made an hour ago is still legible as a fold rather
+## than as a place where the tiles happen to disagree — which is the same job the glue
+## line does for the wrap, and the reason it is the same line at less than half weight.
+func _draw_seams() -> void:
+	if not _seam_runs.is_empty():
+		draw_multiline(_seam_runs, SEAM_COLOR, HAIR)
 
 
 ## Marker diamonds are snapped to the art-pixel grid: a diamond is only three

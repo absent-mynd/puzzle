@@ -312,6 +312,15 @@ func _draw_tile_params(doc: EditorDoc, id: String, cell: float) -> void:
 				_label(to + Vector2(cell * 0.34, -cell * 0.12), str(i + 1), C_PARAM, 11)
 			if focused and TileTypes.on_enter_kind(type) == "fold" and cells.size() >= 2:
 				_draw_reaction_preview(doc, id, cells[0], cells[1], cell)
+		# A burst plate's reach is a number of cells, and a number of cells is not
+		# something anyone can see on a board. Same question the fold preview answers —
+		# "what will this actually do" — for the reaction whose answer is a distance,
+		# and drawn for the inspected tile only for the same reason: every plate at once
+		# would be a wall of rings.
+		if focused and TileTypes.on_enter_kind(type) == "burst":
+			var reach := float(TileParams.get_value(type, data, "radius")) * cell
+			if reach > 0.0:
+				draw_arc(from, reach, 0, TAU, 48, Color(C_PARAM, 0.7), _px(LINE_PX))
 		draw_rect(Rect2(Vector2(tile_cell) * cell, Vector2(cell, cell)),
 			C_PARAM, false, _px(BORDER_PX if focused else LINE_PX))
 

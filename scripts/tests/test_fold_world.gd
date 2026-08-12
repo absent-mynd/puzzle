@@ -786,6 +786,116 @@ func test_a_shared_seam_cell_draws_one_diamond_that_reads_unblocked() -> void:
 		"With one fold left the cell still has its diamond, still open")
 
 
+func test_a_fold_draws_a_seam_line_through_its_diamond() -> void:
+	# A seam is a LINE, and the diamond is only where you burst it. Both come off the
+	# one fold — the diamond from `meeting_pos`, the line from the segment already
+	# recorded for unfold blocking — so the line runs through the diamond by
+	# construction. Pinned here because drawing them off two different facts is
+	# exactly how they would come to disagree.
+	assert_eq(world.seam_lines(), [], "A region with nothing folded has no seams to draw")
+
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))       # seam cell (24,12)
+	var segs: Array = world.seam_lines()
+	assert_eq(segs.size(), 1, "One fold, one seam line")
+	var seg: PackedVector2Array = segs[0]
+	var diamond := (Vector2(24, 12) + Vector2(0.5, 0.5)) * CS
+	assert_lt(diamond.distance_to(
+			Geometry2D.get_closest_point_to_segment(diamond, seg[0], seg[1])), 0.01,
+		"...running through the diamond that marks it")
+	assert_gt(seg[0].distance_to(seg[1]), CS,
+		"...and spanning what the fold actually joined, rather than sitting on a point")
+
+	world.unfold_space_fold(world.folds[0])
+	assert_eq(world.seam_lines(), [], "Opening the fold takes its seam line with it")
+
+
+func test_a_fold_laid_across_a_seam_cuts_it_where_it_crosses() -> void:
+	# Two folds meeting in one cell: they share their diamond (above) and still met
+	# along two different lines. But the second one is laid ACROSS the first, so it
+	# does not merely add a line — it takes four cells out of the middle of the older
+	# seam and slides what is left together, exactly as it does to the sheet the seam
+	# is drawn on. Three segments for two folds, and the pair that make up the older
+	# one meet at the newer one's seam.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)   # clear of both strips
+	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))           # X: vertical seam, x=22.5c
+	assert_eq(world.seam_lines().size(), 1, "One fold, one unbroken line")
+
+	world.do_fold(Vector2i(22, 10), Vector2i(22, 14))           # Y: straight across it
+	assert_eq(world.seam_markers().size(), 1, "One diamond between them")
+	var segs: Array = world.seam_lines()
+	assert_eq(segs.size(), 3, "...and three segments: Y's own line, and X's in two halves")
+
+	var halves: Array = []
+	for seg in segs:
+		if absf(Vector2(seg[0]).x - 22.5 * CS) < 0.01 \
+				and absf(Vector2(seg[1]).x - 22.5 * CS) < 0.01:
+			halves.append(seg)
+	assert_eq(halves.size(), 2, "X's seam is the vertical pair")
+	for seg in halves:
+		var meet := 12.5 * CS
+		var inner := minf(absf(Vector2(seg[0]).y - meet), absf(Vector2(seg[1]).y - meet))
+		assert_almost_eq(inner, 0.0, 1.0,
+			"Both halves run up to Y's seam — the strip between them is gone, "
+			+ "and what was on either side of it slid together")
+
+	# Blocked or free changes nothing about it. The refusal is the diamond's to say —
+	# the seam is where the halves met either way.
+	assert_false(world.can_unfold_fold(world.folds[0]), "The older fold is buried")
+	assert_eq(world.seam_lines().size(), 3, "...and its seam is drawn all the same")
+
+
+func test_a_standing_seam_rides_the_flap_a_later_fold_moves_it_on() -> void:
+	# A fold slides BOTH flaps inward, and everything already standing on them goes
+	# with the sheet — including the seam of an older fold, and the cell you unfold it
+	# at. Recorded once and never carried, that seam stays drawn, aimed at and burst
+	# where the world used to be, which is a marker pointing at the wrong place and a
+	# fold you can only open by standing somewhere it no longer is.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)   # clear of both strips
+	world.do_fold(Vector2i(30, 12), Vector2i(34, 12))           # seam cell (32,12)
+	var old: Fold = world.folds[0]
+	assert_eq(world.seam_cell(old), Vector2i(32, 12), "Where it was made")
+
+	# A second fold to its left. Everything past its far crease slides four cells in.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_eq(world.seam_cell(old), Vector2i(28, 12), "The older seam came with the flap")
+	assert_eq(world.seam_markers().keys(), [Vector2i(28, 12), Vector2i(24, 12)],
+		"...so that is where its diamond is, beside the new fold's own")
+	assert_almost_eq(Vector2(world.seam_lines()[0][0]).x, 28.5 * CS, 0.01,
+		"...and the line through it moved by exactly the same four cells")
+
+	# The half that is not decoration: the burst measures to the same place.
+	world.player.teleport(Vector2(28.5 * CS, 12.5 * CS), false)
+	assert_true(world.seams_within_burst().has(old), "In reach where the diamond now is")
+	assert_eq(world.aimed_fold(Vector2i(1, 0)), old, "...and F there opens it")
+
+	world.player.teleport(Vector2(32.5 * CS, 12.5 * CS), false)
+	assert_false(world.seams_within_burst().has(old),
+		"...and nothing is left to reach where it used to be")
+
+
+func test_a_seam_folded_over_goes_into_the_fold_that_swallowed_it() -> void:
+	# The other half. A later fold does not always MOVE an older seam — if the seam is
+	# inside the strip it excises, the seam goes into its subspace with the sheet it
+	# was cut into. There is then nothing in this space to burst, and a diamond left
+	# standing in the region is an invitation to press F where nothing will happen.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)
+	world.do_fold(Vector2i(30, 12), Vector2i(34, 12))           # seam cell (32,12)
+	var buried: Fold = world.folds[0]
+	world.do_fold(Vector2i(28, 12), Vector2i(36, 12))           # a strip right over it
+
+	assert_eq(world.folds.size(), 2, "Both folds are standing")
+	assert_null(world.seam_cell(buried), "The older seam is not in this space any more")
+	assert_eq(world.seam_markers(), {Vector2i(32, 12): true},
+		"One diamond, and it belongs to the fold that swallowed the other")
+	assert_eq(world.seam_lines().size(), 1, "...and one seam line, for the same reason")
+	assert_false(world.can_unfold_fold(buried),
+		"The buried fold cannot come out while the one over it stands")
+
+	# Unfolding the newer one gives the older seam back where it was.
+	world.unfold_space_fold(world.folds[1])
+	assert_eq(world.seam_cell(buried), Vector2i(32, 12), "...and there it is again")
+
+
 func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
 	_pin(Vector2i(1, 0))                # (5,12)
 	world.player.teleport(Vector2(7.5 * CS, 10.5 * CS), false)
@@ -1116,6 +1226,127 @@ func test_triggered_fold_persists_across_leaving_the_region() -> void:
 	assert_eq(world.region_id, "west", "Back in west")
 	assert_eq(world.regions["east"]["folds"].size(), east_folds,
 		"East keeps the triggered fold while you are away")
+
+
+# ---------------------------------------------------------------------------
+# Burst plates
+# ---------------------------------------------------------------------------
+# A tile that fires the burst FOR you: the same sphere your own release makes, centred
+# on the plate rather than on the body, at the reach the tile was authored with. East's
+# is 2.5 cells — wider than an arm, which is the whole point of putting one down.
+
+## Where east's burst plate is right now. Resolved rather than assumed: east ships
+## pre-folded, so the plate is nowhere near the cell it was authored in.
+func _burst_plate() -> Vector2:
+	var at = _plane_point(Vector2i(23, 9))
+	assert_not_null(at, "East's burst plate is on the sheet")
+	return Vector2(at)
+
+
+func test_a_burst_plate_reaches_further_than_your_arm() -> void:
+	_enter_east()
+	var plate := _burst_plate()
+	# Two cells above the plate: outside your own reach, inside the plate's.
+	world.player.teleport(plate + Vector2(0, -CS), false)
+	_pin(Vector2i(0, -1))
+	assert_eq(world.anchor_cells().size(), 1, "A hand is pinned two cells over the plate")
+	assert_eq(world.hands_held(), 1, "...and out of your slots")
+
+	world.player.teleport(plate, false)
+	world.hold_action()
+	assert_eq(world.anchor_cells().size(), 1,
+		"Your own burst cannot reach it, even standing right under it")
+
+	world._check_triggers()
+	assert_eq(world.anchor_cells(), [], "The plate can — that is what a plate is for")
+	assert_eq(world.hands_held(), 2, "...and the hand comes back to a slot, as any pop does")
+	assert_eq(_total(), _start_total, "Conserved: a plate moves hands, it does not make them")
+
+
+func test_a_burst_plate_opens_a_seam_in_its_reach() -> void:
+	# The other half of what a burst does. A plate is a remote unfold the world owns —
+	# the one thing the player has no key for.
+	_enter_east()
+	var cell := Vector2i((_burst_plate() / CS).floor())
+	world.player.teleport(Vector2(5.5 * CS, 9.5 * CS), false)
+	var before: int = world.folds.size()
+	world.do_fold(cell + Vector2i(1, 0), cell + Vector2i(3, 0))
+	assert_eq(world.folds.size(), before + 1, "A fold stands, its seam a cell from the plate")
+
+	world.player.teleport(_burst_plate(), false)
+	world._check_triggers()
+	assert_eq(world.folds.size(), before, "Stepping on the plate takes it back out")
+
+
+func test_a_burst_plate_fires_on_entering_and_not_on_standing() -> void:
+	_enter_east()
+	var plate := _burst_plate()
+	world.player.teleport(plate, false)
+	world._check_triggers()             # the entry that fires it; nothing to release yet
+
+	_pin(Vector2i(0, -1))
+	world._check_triggers()
+	assert_eq(world.anchor_cells().size(), 1,
+		"Standing on it does not fire it again — the hand pinned beside it survives")
+
+	# Step off and back on. Unlike a fold plate, which spends its channel the first
+	# time, a burst plate has nothing to spend: it goes off every time you arrive.
+	world.player.teleport(Vector2(5.5 * CS, 9.5 * CS), false)
+	world._check_triggers()
+	world.player.teleport(plate, false)
+	world._check_triggers()
+	assert_eq(world.anchor_cells(), [], "Arriving again fires it again, and this time it finds the hand")
+
+
+func test_a_burst_plate_with_no_reach_is_inert() -> void:
+	# The same latitude a trigger with no anchors gets: a tile you have not finished
+	# authoring does nothing rather than doing something surprising.
+	_enter_east()
+	world.base.tile_at(Vector2i(23, 9)).data = {"radius": 0.0}
+	var plate := _burst_plate()
+	world.player.teleport(plate + Vector2(0, -CS), false)
+	_pin(Vector2i(0, -1))
+	world.player.teleport(plate, false)
+	world._check_triggers()
+	assert_eq(world.anchor_cells().size(), 1, "A plate with no sphere pops nothing")
+
+
+func test_a_burst_plate_works_inside_a_fold() -> void:
+	# A burst takes folds OUT of whatever space you are in rather than splicing new ones
+	# into it, so it is the same rule at every depth — and a plate whose reach covers the
+	# glue is a way out of the fold it was swallowed by.
+	_enter_east()
+	var cell := Vector2i((_burst_plate() / CS).floor())
+	world.player.teleport(_burst_plate(), false)
+	world.do_fold(cell - Vector2i(1, 0), cell + Vector2i(3, 0))
+	assert_eq(world.mode, world.Mode.SUBSPACE, "The fold swallowed the plate and you with it")
+
+	world._check_triggers()
+	assert_eq(world.mode, world.Mode.WORLD, "The plate found the glue and let you out")
+
+
+func test_the_ring_a_plate_draws_is_the_plate_s_own_sphere() -> void:
+	# The ring is the only thing that says where a burst actually went off. Fired by a
+	# plate it belongs to the plate, so it must not be re-read off the body per frame.
+	_enter_east()
+	var plate := _burst_plate()
+	world.player.teleport(plate + Vector2(20.0, 0.0), false)   # on the plate, off its centre
+	world._check_triggers()
+	var v: OverlayView = world._build_overlay_view()
+	assert_gt(v.burst_t, 0.0, "The ring is up")
+	assert_almost_eq(v.burst_at.distance_to(plate), 0.0, 0.001, "centred on the plate")
+	assert_gt(v.burst_at.distance_to(world.player.global_position), 1.0, "...and not on you")
+	assert_almost_eq(v.burst_radius, 2.5 * CS, 0.001,
+		"at the reach this plate was authored with, not at yours")
+
+
+func test_an_unconfigured_plate_would_burst_exactly_as_far_as_you_do() -> void:
+	# Two numbers in two files — `TileTypes`' default and `FoldWorld.BURST_RADIUS` — and
+	# the default only means what it says while they agree. A plate you paint and never
+	# inspect should pop precisely what you could have popped standing on it.
+	assert_almost_eq(
+		float(TileParams.get_value(TileTypes.TRIGGER_BURST, {}, "radius")) * CS,
+		world.BURST_RADIUS, 0.001, "the registry's default reach is your own")
 
 
 # ---------------------------------------------------------------------------

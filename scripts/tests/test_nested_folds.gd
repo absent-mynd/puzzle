@@ -247,6 +247,28 @@ func test_the_glue_is_drawn_on_every_axis_the_space_repeats_on() -> void:
 	assert_eq(world.glue_lines().size(), 4, "...and a torus along four")
 
 
+func test_the_seams_drawn_are_the_ones_in_the_space_you_are_standing_in() -> void:
+	# Seams are drawn like a quieter glue line, and they answer to the same rule: the
+	# overlay draws THIS space. The fold you were swallowed by is the room's wall from
+	# in here — it is the glue, and it is already drawn as that. Its seam belongs to
+	# the region outside, and painting it in here would scribble the outside over the
+	# room you are in.
+	_pinch_over_pit()
+	assert_eq(world.folds.size(), 1, "The region is holding the fold that swallowed you")
+	assert_eq(world.seam_lines(), [],
+		"...but from in here that fold is the WALL — it is the glue, and nothing is folded in here")
+
+	# Fold in here without being swallowed again, and THAT seam is the one on screen.
+	world.player.teleport(Vector2(11.2 * CS, 12.5 * CS), false)
+	assert_true(world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8)), "An inner fold commits")
+	assert_eq(world.seam_lines().size(), 1, "The strip has a seam of its own now")
+
+	world.try_exit()
+	assert_eq(world.mode, world.Mode.WORLD, "Back out")
+	assert_eq(world.seam_lines().size(), 1,
+		"...to the region, where the inner fold persisted and brought its seam with it")
+
+
 func test_how_deep_you_are_tints_the_sheet() -> void:
 	assert_eq(world.light_rig.depth(), 0, "The region is untinted")
 	_pinch_over_pit()

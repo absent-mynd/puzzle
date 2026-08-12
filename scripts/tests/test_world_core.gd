@@ -160,6 +160,69 @@ func test_segment_intersects_band() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Carrying a mark through a later fold
+# ---------------------------------------------------------------------------
+# A fold moves the sheet, so it moves everything already standing on the sheet. What
+# these pin is that a mark recorded before the fold is still describing the same place
+# in the world afterwards — or is honestly gone.
+
+## Creases at x=288 and x=544; both flaps slide 128 inward to meet at x=416.
+func _mover() -> Fold:
+	return Fold.create(0, Vector2i(4, 0), Vector2i(8, 0), CS)
+
+
+func test_a_point_rides_the_flap_it_is_standing_on() -> void:
+	var fold := _mover()
+	assert_eq(WorldCore.carry_point(Vector2(160, 50), fold, CS), Vector2(288, 50),
+		"A point on the A side slides in with the A flap")
+	assert_eq(WorldCore.carry_point(Vector2(672, 50), fold, CS), Vector2(544, 50),
+		"...and one on the B side comes the other way")
+	assert_eq(WorldCore.carry_point(Vector2(288, 50), fold, CS), Vector2(416, 50),
+		"A point ON a crease rides that flap out rather than vanishing")
+
+
+func test_a_point_the_fold_excises_is_carried_nowhere() -> void:
+	# The half of this that matters in the world: a seam swallowed by a later fold has
+	# gone into that fold's subspace with the sheet it was cut into, and a marker left
+	# behind in the space it came from is pointing at nothing.
+	assert_null(WorldCore.carry_point(Vector2(416, 50), _mover(), CS),
+		"A point between the creases is excised, not moved")
+
+
+func test_a_line_across_a_fold_comes_back_in_two_pieces() -> void:
+	# A fold does not only move an older seam, it can CUT one — and the two halves it
+	# hands back meet at the new fold's own seam, because that is what the fold did to
+	# everything else on the sheet too.
+	var parts := WorldCore.carry_segment(Vector2(100, 50), Vector2(700, 50), _mover(), CS)
+	assert_eq(parts.size(), 2, "Cut in two by the strip it crossed")
+	assert_almost_eq(Vector2(parts[0][0]).x, 228.0, 0.6, "The A piece slid inward")
+	assert_almost_eq(Vector2(parts[0][1]).x, 416.0, 0.6, "...up to the new seam")
+	assert_almost_eq(Vector2(parts[1][0]).x, 416.0, 0.6, "...where the B piece takes over")
+	assert_almost_eq(Vector2(parts[1][1]).x, 572.0, 0.6, "...and runs on to its far end")
+
+
+func test_a_line_the_fold_swallowed_whole_comes_back_as_nothing() -> void:
+	assert_eq(WorldCore.carry_segment(
+		Vector2(350, 0), Vector2(480, 100), _mover(), CS), [],
+		"A line entirely between the creases is excised with the strip")
+
+
+func test_a_line_parallel_to_the_creases_is_moved_and_never_split() -> void:
+	# The common case in the world: folds laid the same way as the ones before them.
+	# One depth for the whole length, so there is no crossing to solve for — and a
+	# seam that grazes a crease has to survive whole, because the rule that decides
+	# whether it BLOCKS that fold has already said it does not cross it.
+	var fold := _mover()
+	for at in [[100.0, 228.0], [288.0, 416.0], [700.0, 572.0]]:
+		var parts := WorldCore.carry_segment(
+			Vector2(at[0], 0), Vector2(at[0], 600), fold, CS)
+		assert_eq(parts.size(), 1, "One piece at x=%s" % at[0])
+		assert_almost_eq(Vector2(parts[0][0]).x, float(at[1]), 0.001,
+			"...carried to x=%s" % at[1])
+		assert_almost_eq(Vector2(parts[0][1]).y, 600.0, 0.001, "...at its full length")
+
+
+# ---------------------------------------------------------------------------
 # The spring the carried hands float on
 # ---------------------------------------------------------------------------
 

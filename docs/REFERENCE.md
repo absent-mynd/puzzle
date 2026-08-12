@@ -30,7 +30,7 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | Concern | File |
 |---|---|
 | **The current space**: what space the player is in — its pieces, collision geometry, how it repeats, how far the one non-repeating axis runs. The value that lets a collaborator be handed "where you are" instead of the whole world | `Space.gd` |
-| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor reach & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
+| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, carrying a point or line through a later fold, circle-vs-polygon depenetration, anchor reach & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
 | Immutable base grid: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
 | One base tile: stable `base_id`, `grid_position`, `type`, per-instance `data` | `BaseTile.gd` |
 | One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel`, `held_hands` | `Fold.gd` |
@@ -66,9 +66,9 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | **What the camera should be showing**: the lead, the lens, and the render-target size that stands in for zoom. Takes the world's facts as a context dictionary | `WorldCamera.gd` |
 | **Hands in the air**: the flight, the wrap, the turn-back at a strip's end. Emits `landed` / `lost`; a hand at rest is an occupant and belongs to `FoldWorld` | `HandField.gd` |
 | Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing, all held still by `camera_held`); wears the loading burst as a colour (`charge_color`) | `PlayerBody.gd` |
-| Anchors, fold preview strip, the placement cursor and its reach, seam diamonds, glue lines, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
+| Anchors, fold preview strip, the placement cursor and its reach, seam lines and their diamonds, glue lines, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
 | The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |
-| **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping | `PixelArt.gd` |
+| **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping, and `hairline_runs` — a one-pixel line stepped into pixels rather than drawn as a quad | `PixelArt.gd` |
 | **The tileset.** Kinds, variants, and base-space UVs for cut pieces | `TileAtlas.gd` |
 | Lit materials, per-frame light uniforms, lamp glyphs | `LightRig.gd` |
 | **What time it is for things in the world.** Stops when the world does; everything that drifts, throbs or flickers reads it | `WorldClock.gd` |
@@ -88,7 +88,9 @@ understand how the pieces meet. Its header comment is the map.
 | …unfold blocking work? | `FoldWorld.can_unfold_fold()`, `WorldCore.segment_intersects_strip` |
 | …exiting a subspace work? | `FoldWorld.try_exit()`, `exit_blocker()` |
 | …a door find its partner? | `FoldWorld._check_doors()`, `BaseFrame.resolve_base_point` |
-| …a trigger fire? | `FoldWorld._check_triggers()` → `TriggerResolver.resolve` |
+| …a tile react to being stood on? | `FoldWorld._check_triggers()` — dispatches on `TileTypes.on_enter_kind` |
+| …a fold trigger fire? | `FoldWorld._fire_fold_trigger()` → `TriggerResolver.resolve` |
+| …a burst plate fire? | `FoldWorld._fire_burst_plate()` → `FoldWorld._burst()` — the same one your release fires |
 | …a tile get its art? | `FoldWorld._make_tile()` → `TileAtlas.uv_for` |
 | …a light know where it is? | `FoldWorld.lights_here()` → `LightSource.position_in` |
 | …lighting stay pixelly? | `assets/shaders/pixel_lit.gdshader` (snap, quantize, dither) |

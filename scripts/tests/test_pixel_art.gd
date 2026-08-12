@@ -120,3 +120,86 @@ func test_px_per_world_is_the_geometry_to_texture_scale():
 	assert_almost_eq(PixelArt.px_per_world(WorldCore.CELL) * WorldCore.CELL,
 		float(PixelArt.TILE_PX), 0.001,
 		"scaling a full cell by px_per_world spans exactly one atlas tile")
+
+
+# ---------------------------------------------------------------------------
+# Hairlines: a one-pixel line, stepped rather than drawn
+# ---------------------------------------------------------------------------
+# `draw_line` one art pixel wide is a quad four world units across, and at an angle
+# that quad covers a fraction of each pixel it crosses — a dim, thinned, broken line
+# in a frame where every other edge is a hard step. So a hairline is stepped into
+# pixels first. What matters about the stepping is on both sides of the same coin:
+# every pixel along the line is painted, and none of them is painted twice, because
+# these lines are translucent and a doubled pixel blends twice.
+
+const P := PixelArt.WORLD_PER_PIXEL
+
+
+## The art pixels a set of runs covers, duplicates included — a duplicate is the
+## defect being tested for, so this must not quietly fold them together.
+func _covered(runs: PackedVector2Array) -> Array:
+	var out: Array = []
+	for i in range(0, runs.size(), 2):
+		var a: Vector2 = runs[i]
+		var b: Vector2 = runs[i + 1]
+		var flat: bool = absf(a.y - b.y) < 0.001
+		var lo := int(floor((minf(a.x, b.x) if flat else minf(a.y, b.y)) / P))
+		var hi := int(floor((maxf(a.x, b.x) if flat else maxf(a.y, b.y)) / P))
+		var fixed := int(floor((a.y if flat else a.x) / P))
+		for at in range(lo, hi):
+			out.append(Vector2i(at, fixed) if flat else Vector2i(fixed, at))
+	return out
+
+
+func test_a_straight_hairline_is_a_single_run():
+	var runs := PixelArt.hairline_runs(Vector2(0, 10), Vector2(400, 10))
+	assert_eq(runs.size(), 2, "Two endpoints — the whole line is one span")
+	assert_eq(_covered(runs).size(), 101, "...covering every pixel from end to end")
+	assert_eq(PixelArt.hairline_runs(Vector2(10, 0), Vector2(10, 400)).size(), 2,
+		"...and a vertical one is the same span turned on its side")
+
+
+func test_a_single_pixel_hairline_still_has_a_length():
+	# A 45° line is one pixel per run, and a zero-length segment draws nothing at all —
+	# which would erase every diagonal in the game. Runs span pixel EDGES for exactly
+	# this reason.
+	var runs := PixelArt.hairline_runs(Vector2(2, 2), Vector2(2, 2))
+	assert_eq(runs.size(), 2, "One run")
+	assert_almost_eq(Vector2(runs[0]).distance_to(Vector2(runs[1])), P, 0.001,
+		"...one pixel long, not nothing")
+
+
+func test_a_diagonal_hairline_is_a_stair_of_whole_pixels():
+	var runs := PixelArt.hairline_runs(Vector2(0, 0), Vector2(40, 40))
+	assert_gt(runs.size(), 2, "A diagonal cannot be a single span")
+	var covered := _covered(runs)
+	assert_eq(covered.size(), 11, "It steps one pixel per pixel, corner to corner")
+
+	var seen := {}
+	for px in covered:
+		assert_false(seen.has(px), "No pixel is painted twice: %s" % px)
+		seen[px] = true
+
+
+func test_a_hairline_covers_its_line_without_gaps():
+	# Every angle, and both directions: the major axis is walked a pixel at a time, so
+	# the count is fixed by the longer side however the line is turned.
+	for to in [Vector2(97, 31), Vector2(-97, 31), Vector2(31, -97), Vector2(-31, -97)]:
+		var runs := PixelArt.hairline_runs(Vector2(200, 200), Vector2(200, 200) + to)
+		var span: Vector2i = (PixelArt.art_pixel(Vector2(200, 200) + to)
+			- PixelArt.art_pixel(Vector2(200, 200))).abs()
+		assert_eq(_covered(runs).size(), maxi(span.x, span.y) + 1,
+			"One pixel per step of the major axis, toward %s" % to)
+
+
+func test_every_run_lands_on_the_pixel_grid():
+	# The whole point of stepping: a run that ended mid-pixel would be the smear this
+	# replaced, drawn the long way round.
+	var runs := PixelArt.hairline_runs(Vector2(13, 7), Vector2(211, 96))
+	for i in range(0, runs.size(), 2):
+		var a: Vector2 = runs[i]
+		var b: Vector2 = runs[i + 1]
+		assert_almost_eq(fposmod(a.x, P), 0.0, 0.001, "run starts on a pixel edge")
+		assert_almost_eq(fposmod(b.x, P), 0.0, 0.001, "...and ends on one")
+		assert_almost_eq(fposmod(a.y, P), P * 0.5, 0.001, "...down the middle of its row")
+		assert_almost_eq(a.y, b.y, 0.001, "...which is one row")
