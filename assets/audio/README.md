@@ -2,7 +2,7 @@
 
 ```
 audio/
-├── music/     overworld.wav, subspace.wav      — 12s seamless loops
+├── music/     region.wav, subspace.wav      — 12s seamless loops
 └── sfx/       21 effects, one per Sounds id
 ```
 
@@ -54,7 +54,7 @@ Replacements are not held to that: use 44.1 kHz stereo `.ogg` if you have it.
 
 ## Music loops
 
-`overworld.wav` and `subspace.wav` are built **entirely from harmonics of the
+`region.wav` and `subspace.wav` are built **entirely from harmonics of the
 loop fundamental** (1/12 Hz), so each file is exactly periodic over its own
 length and the loop point is sample-exact. Nothing is faded at the edges —
 tapering would carve a dip into the one place that has to be continuous.

@@ -84,7 +84,7 @@ func readmit(ball: Dictionary) -> void:
 
 ## Step every ball in the CURRENT view.
 ##
-## Only the current view: the overworld and a subspace are different spaces
+## Only the current view: a region and a subspace are different spaces
 ## with different ground, and a ball must not fall through the other one's floor. A
 ## ball in the view you are not in simply waits — which is right, because the fold it
 ## is inside is not a place where time is passing for you either.

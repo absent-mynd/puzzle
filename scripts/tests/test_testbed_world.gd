@@ -25,7 +25,7 @@ const HUB := "hub"
 ## Region ids the hub must carry a door to. The hub IS the router; a spoke missing
 ## from here is a region you can only reach the long way round.
 const SPOKES := ["plain", "water", "pins", "unanchor", "triggers", "prefold", "lamps",
-	"caches", "goals", "mash_a", "mash_b", "mash_c", "kitchen"]
+	"hands", "goals", "mash_a", "mash_b", "mash_c", "kitchen"]
 
 
 func _world() -> WorldData:
@@ -441,7 +441,7 @@ func test_the_hub_ships_a_door_split_by_a_crease_and_a_door_inside_a_fold():
 	assert_not_null(vault_tile, "the vault door is on the grid")
 	assert_null(BaseFrame.world_point_from_base(booted["pieces"], vault_tile.base_id,
 		(Vector2(vault) + Vector2(0.5, 0.5)) * cs),
-		"the vault door is gone from the overworld — it is inside the fold")
+		"the vault door is gone from the region — it is inside the fold")
 
 
 func test_folding_a_lamp_away_takes_it_out_of_the_overworld():

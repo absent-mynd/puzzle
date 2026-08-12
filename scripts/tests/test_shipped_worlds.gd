@@ -121,7 +121,7 @@ func test_every_authored_hand_can_come_to_rest() -> void:
 func test_playable_worlds_place_their_hands_on_the_ground() -> void:
 	# Design rule, playable worlds only. A hand resting where the designer put it is
 	# a hand the player can walk into; one that has to fall first lands wherever the
-	# terrain sends it. Eight of these shipped in overworld's east region once.
+	# terrain sends it. Eight of these shipped in the world's east region once.
 	for path in _world_paths():
 		var wd := WorldData.load_from(path)
 		if wd == null or _is_debug(wd):

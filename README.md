@@ -24,7 +24,7 @@ What makes it a metroidvania rather than a puzzle game:
 - **Doors are warp points that ride folds.** Fold a door away and its partner
   delivers you *inside* that fold. Fold something over a door and you have jammed it
   shut until you unfold.
-- **Lamps are occupants too.** Fold one away and it leaves the overworld entirely —
+- **Lamps are occupants too.** Fold one away and it leaves the region entirely —
   and lights the folded-away place instead, for whoever ends up in there.
 
 Run it: open the project in Godot and press play (`scenes/world/World.tscn`), or

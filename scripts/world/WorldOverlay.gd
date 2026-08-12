@@ -134,7 +134,7 @@ func _draw_doors() -> void:
 		draw_circle(at, HAIR, Color("7ce07c", 0.9))
 
 
-## Hands lying in the world — caches the world shipped and hands that popped out of a
+## Hands lying in the world — loose hands the world shipped and hands that popped out of a
 ## burst alike, drawn through `HandOrbit.draw_hand` so a hand on the ground is
 ## pixel-identical to one riding beside you, idle float and all.
 ##

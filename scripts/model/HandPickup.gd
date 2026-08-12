@@ -4,7 +4,7 @@ class_name HandPickup extends RefCounted
 ##
 ## A hand lying in the world, waiting to be picked up.
 ##
-## There is only ONE kind of loose hand. A cache the world shipped and a hand that
+## There is only ONE kind of loose hand. One the world authored and one that
 ## popped out of a fold you just burst open are the same object, stored the same way
 ## and drawn the same way — because to the player they are the same thing: a hand on
 ## the ground. Anything that made them look or behave differently would be inventing a

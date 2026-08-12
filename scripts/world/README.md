@@ -130,7 +130,7 @@ the whole input. Everything of yours inside it comes loose at once —
 
 That last clause is what makes the burst safe to fire blind. Nothing is refused
 for want of a slot and nothing is destroyed: a hand you cannot catch is a hand
-on the ground, which is the same object a cache is. A ring shows how far the
+on the ground, the same object an authored one is. A ring shows how far the
 burst reached, after the fact — it confirms, it does not aim.
 
 A burst releases the folds that were unfoldable **when it fired**. A stack of
@@ -181,7 +181,7 @@ What they tell you is how many you have and what **kind** they are.
 
   And a hand at rest is not done forever: **fold the ground out from under a hand and it
   falls again.** A fold that only slides its tile carries it, as it always did. So a
-  cache you remember the position of may not be where you left it after you fold nearby.
+  loose hand you remember the position of may not be where you left it after you fold nearby.
 
 So the budget is not how many folds you may ever make but **how many folds may
 stand at once** — and with two slots, that is one, until you find more hands.
@@ -211,7 +211,7 @@ exactly like the ones orbiting you, in its kind's colour, because to you it is
 the same thing.
 
 Walking over one takes it **into a free slot**, one at a time. A slot is free
-because you *put a hand down* — so a loose hand is not a stockpile you raid on
+because you *put a hand down* — so one is not a stockpile you raid on
 the way past, it is the second half of a fold you have already started:
 
 > place a hand → walk to a loose one → take a different kind → place that → the
@@ -405,14 +405,14 @@ pinned and resolve again when you return.
    your hands are in its seam the whole time you are inside — and the patient
    hand by the goal is the only one you will have in there.
 5. **Finish a fold with a hand you did not set out with.** Put one hand down, then
-   walk to a cache with the slot it freed: the pillar top has a **swift** hand, the
+   walk to a loose hand with the slot it freed: the pillar top has a **swift** hand, the
    sealed chamber a **patient** one. The pair you finish with fuses at the mean of
    the two, so the same two cells fold at a different pace depending on what you
    went and fetched. This is what the colours are for.
 6. **Meet a fold you cannot make, and one you don't have to.** Through door W2,
    in the east region — see the next section.
-7. **Find a cache inside a fold.** Through door W1: you arrive inside east's
-   shipped pre-fold, and there is a cache in there with the goal. Folded-away
+7. **Find a hand inside a fold.** Through door W1: you arrive inside east's
+   shipped pre-fold, and there is a loose hand in there with the goal. Folded-away
    space is real space, and it holds real things.
 8. **Fold yourself in twice, across the grain.** Get pinched into the pit fold
    (beat 2), then — standing in the strip — fold *across* it: a vertical anchor
@@ -469,7 +469,7 @@ short low blip and a line of text, whatever the reason — the text says which
 reason.
 
 **A subspace has its own music.** Crossing into one crossfades the
-overworld bed out and a darker, detuned version of it in: the same room, folded.
+region bed out and a darker, detuned version of it in: the same room, folded.
 It is the only thing that tells you where you are without a word of UI.
 
 Audio is style, like the lighting: the game is fully playable with the sound
@@ -547,7 +547,7 @@ identity plus a point inside it (`LightSource`). It has no world position; where
 it burns is a question asked of the current piece list. Everything follows
 from that:
 
-- Fold a lamp's tile away and it is **gone from the overworld** — no glyph, no
+- Fold a lamp's tile away and it is **gone from the region** — no glyph, no
   light — and the same lamp is what **lights the fold's subspace** when you get
   in there.
 - Fold something else and the lamp **rides its flap**, like any other occupant.
@@ -566,7 +566,7 @@ Where the shipped lights are, and what each is for:
 | `w_spawn` | west | the ordinary case — and it rides the flap when you fold the pit |
 | `w_pit` | west | fold the pit shut and it leaves the world with the pit; get pinched in and it is in there with you |
 | `w_chamber` | west | the sealed chamber glows through its own shell — there is something in there |
-| `e_vault` | east | inside east's pre-placed fold: invisible from the overworld, and the only thing lighting the vault when you arrive through door W1 |
+| `e_vault` | east | inside east's pre-placed fold: invisible from the region, and the only thing lighting the vault when you arrive through door W1 |
 | `e_reward` | east | over the reward the pressure plate opens |
 
 Authoring, per region in `worlds/overworld.json`:
@@ -611,7 +611,7 @@ do not want yet.
   answer and do not exist yet.
 - Loose hands are runtime state (`FoldWorld.hand_pickups`) — the one thing tracked
   that is not `(base, folds)`. `R` rebuilds the list from the authored world, so
-  caches respawn and hands dropped in play are forgotten.
+  authored loose hands respawn and hands dropped in play are forgotten.
 - Lights do not cast shadows, and the seam is not lit specially — see *Art & light*.
 - The player and the overlay markers are drawn unlit, so they never disappear
   into an unlit corner.
@@ -623,7 +623,7 @@ do not want yet.
 - `HandStock.gd` (kernel) — the slot ledger: conservation arithmetic, nothing
   stored. Covered by `scripts/tests/test_hand_stock.gd`.
 - `HandPickup.gd` (kernel) — a hand lying in the world: base identity + point in
-  tile, exactly like a door or a lamp. One object for authored caches and dropped
+  tile, exactly like a door or a lamp. One object for authored loose hands and dropped
   hands alike.
 - `FoldLattice.gd` (kernel) — how the space you are in repeats: no periods in a
   region, one inside a fold, two on the torus you get by folding yourself in

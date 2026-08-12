@@ -262,7 +262,7 @@ func test_reset_is_heard() -> void:
 # ---------------------------------------------------------------------------
 
 func test_the_overworld_bed_starts_with_the_world() -> void:
-	assert_eq(AudioManager.current_music_track, Sounds.MUSIC_OVERWORLD,
+	assert_eq(AudioManager.current_music_track, Sounds.MUSIC_REGION,
 		"the world should come up with its bed playing")
 
 
@@ -278,8 +278,8 @@ func test_the_bed_changes_inside_a_fold_and_back() -> void:
 	world.player.teleport(Vector2(15.5 * CS, 12.5 * CS), false)
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD)
-	assert_eq(AudioManager.current_music_track, Sounds.MUSIC_OVERWORLD,
-		"surfacing brings the overworld bed back")
+	assert_eq(AudioManager.current_music_track, Sounds.MUSIC_REGION,
+		"surfacing brings the region bed back")
 
 
 # ---------------------------------------------------------------------------

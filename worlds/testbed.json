@@ -879,7 +879,7 @@
 			],
 			"editor": {}
 		},
-		"caches": {
+		"hands": {
 			"rows": [
 				"............................................",
 				"............................................",
@@ -1592,10 +1592,10 @@
 				"x": 32,
 				"y": 18
 			},
-			"pair": "CACHES_HUB"
+			"pair": "HANDS_HUB"
 		},
-		"CACHES_HUB": {
-			"region": "caches",
+		"HANDS_HUB": {
+			"region": "hands",
 			"cell": {
 				"x": 4,
 				"y": 16
@@ -1784,18 +1784,18 @@
 				"x": 10,
 				"y": 16
 			},
-			"pair": "CACHES_FROM_LAMPS"
+			"pair": "HANDS_FROM_LAMPS"
 		},
-		"CACHES_FROM_LAMPS": {
-			"region": "caches",
+		"HANDS_FROM_LAMPS": {
+			"region": "hands",
 			"cell": {
 				"x": 7,
 				"y": 16
 			},
 			"pair": "LAMPS_TO_CACHES"
 		},
-		"CACHES_TO_GOALS": {
-			"region": "caches",
+		"HANDS_TO_GOALS": {
+			"region": "hands",
 			"cell": {
 				"x": 10,
 				"y": 16
@@ -1808,7 +1808,7 @@
 				"x": 7,
 				"y": 16
 			},
-			"pair": "CACHES_TO_GOALS"
+			"pair": "HANDS_TO_GOALS"
 		},
 		"GOALS_TO_MASH_A": {
 			"region": "goals",
@@ -2085,6 +2085,6 @@
 	},
 	"metadata": {
 		"debug": true,
-		"note": "A DEBUG WORLD, not a designed one. Fourteen regions: `hub` carries a door to every other one, each themed region drills one element (plain=terrain, water, pins, unanchor=`_`/`X`, triggers, prefold, lamps, caches, goals), mash_a/b/c cross several, and `kitchen` crams every tile character, occupant kind and door case into one 30x16 room. Regions are also wired in a ring with four chords, so connectivity is a graph rather than a star. Every non-hub region opens with a clear LANDING STRIP (walk line, x=1..13) holding its routing doors, so the terrain past it is free to be impassable without stranding you \u2014 several arrangements here are deliberately unsolvable (a goal ringed by pins, a plate its own fold would swallow, a fold driven straight through a pin). Pre-placed fold anchors are PLANE cells: the loader applies a region's list in order against the already-folded sheet, so folds after the first are authored against where the sheet has moved to."
+		"note": "A DEBUG WORLD, not a designed one. Fourteen regions: `hub` carries a door to every other one, each themed region drills one element (plain=terrain, water, pins, unanchor=`_`/`X`, triggers, prefold, lamps, hands, goals), mash_a/b/c cross several, and `kitchen` crams every tile character, occupant kind and door case into one 30x16 room. Regions are also wired in a ring with four chords, so connectivity is a graph rather than a star. Every non-hub region opens with a clear LANDING RUN (walk line, x=1..13) holding its routing doors, so the terrain past it is free to be impassable without stranding you \u2014 several arrangements here are deliberately unsolvable (a goal ringed by pins, a plate its own fold would swallow, a fold driven straight through a pin). Pre-placed fold anchors are PLANE cells: the loader applies a region's list in order against the already-folded sheet, so folds after the first are authored against where the sheet has moved to."
 	}
 }

@@ -279,8 +279,8 @@ move one — which is what `HandStock.total` states and `test_hand_stock` pins.
 
 Consequences worth keeping in mind when designing:
 
-- **Two slots, and that never grows.** A cache does not raise a capacity; it hands
-  you *another hand* for a slot you emptied by placing one. So a cache is the second
+- **Two slots, and that never grows.** Picking a hand up does not raise a capacity; it
+  hands you *another hand* for a slot you emptied by placing one. So a found hand is the second
   half of a fold already in progress, and the natural way to use one is to finish a
   fold with a kind you did not set out with.
 - **Traversal is nearly free; configuration is not.** Fold a pit shut, walk across
@@ -288,7 +288,7 @@ Consequences worth keeping in mind when designing:
   is a fold you must *leave standing*.
 - **Nothing is ever refused for want of room.** A fold returns both hands at once,
   and a hand with nowhere to go lands on the ground as a `HandPickup` — the same
-  object an authored cache is. That one clause is what lets the burst be fired blind
+  object an authored loose hand is. That one clause is what lets the burst be fired blind
   and is why no code path has to ask "is there a slot" first.
 - **The burst is not aimed.** `hold_action` takes no direction: where you stand is
   the whole input, and it releases what was releasable when it fired rather than
@@ -338,7 +338,7 @@ Consequences worth keeping in mind when designing:
 
   **A resting hand wakes if a fold takes its ground away** (`_wake_unsupported_hands`,
   called from every fold/unfold finalize). A fold that merely *moves* its tile carries it
-  and it stays put, like a door. The cost, chosen deliberately: a cache can move without
+  and it stays put, like a door. The cost, chosen deliberately: a resting hand can move without
   you touching it.
 
   **`_take_back` must run AFTER the rebuild and the teleport.** A hand a fold cannot give
@@ -365,7 +365,7 @@ Consequences worth keeping in mind when designing:
   traded for "a hand is always somewhere you can see and walk to"), and authored hands are
   **settled at load** (`_settle_authored`) because authoring names a cell, which puts a
   hand at that tile's centre — half a cell in the air. Without settling, the first fold
-  near a cache would drop it, since it was never really on the ground.
+  near one would drop it, since it was never really on the ground.
 - **There is no fixed number of placed anchors.** `unpaired` holds hands waiting for
   a partner and `armed` holds pairs, each with its OWN fuse. Two fixed registers is
   what wedged the game: a hand left in another region sat in one forever, so every
@@ -385,9 +385,9 @@ Consequences worth keeping in mind when designing:
   second behaviour, that is a design change; do it in `HandTypes` and nowhere else.
 - **There is no remote unfold** — `hold` requires you to be at the seam. It means
   **you can strand yourself**: both hands in a fold, seam unreachable, and short of a
-  cache, `R` the only way out. `R` drops every fold and restores your starting pair,
-  which is exactly why caches respawn with it: hands are what a reset gives back, so
-  leaving the caches spent would strand you *shorter* than you began. Save points are
+  loose hand, `R` the only way out. `R` drops every fold and restores your starting pair,
+  which is exactly why authored loose hands respawn with it: hands are what a reset gives back, so
+  leaving them spent would strand you *shorter* than you began. Save points are
   the real answer and do not exist yet. Do not paper over any of this with a recall
   key without a design conversation.
 - **The floating hands are style.** `HandOrbit` springs them beside the body, adds a

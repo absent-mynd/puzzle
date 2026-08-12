@@ -241,7 +241,7 @@ func test_the_glue_is_drawn_on_every_axis_the_space_repeats_on() -> void:
 
 
 func test_how_deep_you_are_tints_the_sheet() -> void:
-	assert_eq(world.light_rig.depth(), 0, "The overworld is untinted")
+	assert_eq(world.light_rig.depth(), 0, "The region is untinted")
 	_pinch_over_pit()
 	assert_eq(world.light_rig.depth(), 1, "One fold in")
 	_pinch_again()

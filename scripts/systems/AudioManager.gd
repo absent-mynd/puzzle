@@ -6,7 +6,7 @@
 ## from here — audio is a leaf, and no gameplay decision may depend on it.
 ##
 ##   AudioManager.play_sfx(Sounds.FOLD)
-##   AudioManager.play_music(Sounds.MUSIC_OVERWORLD)
+##   AudioManager.play_music(Sounds.MUSIC_REGION)
 ##   AudioManager.set_music_volume(0.7)
 ##
 ## Three things about this file are load-bearing and easy to undo by accident.

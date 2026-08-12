@@ -20,7 +20,7 @@ func test_every_kind_is_registered():
 
 func test_kinds_are_told_apart_by_colour():
 	# The colour IS the identity — it is what the player reads on the hand, on the
-	# pending ring and on the cache tile — so two kinds sharing one would be a bug
+	# pending ring and on a hand lying in the world — so two kinds sharing one would be a bug
 	# you could only find by playing.
 	var seen: Array = []
 	for t in HandTypes.all_types():

@@ -341,7 +341,7 @@ func test_a_tap_at_a_seam_places_and_the_burst_clears_everything() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))  # seam anchor at (24,12)
 	assert_eq(world.folds.size(), 1, "Fold active")
 	world.player.teleport(Vector2(23.5 * CS, 12.5 * CS), false)
-	world.hands[0] = HandTypes.PLAIN                # as if picked up from a cache
+	world.hands[0] = HandTypes.PLAIN                # as if picked up off the ground
 
 	world.tap_action(Vector2i(1, 0))                # a tap only ever places
 	assert_eq(world.folds.size(), 1, "A TAP at a seam does not unfold")
@@ -513,7 +513,7 @@ func _hand_offsets() -> Array:
 
 
 ## Pinching yourself in spends both slots, so a player inside a strip is only
-## carrying hands if the fold in question was not theirs or they found a cache in
+## carrying hands if the fold in question was not theirs or they found a loose hand in
 ## there. Both happen; put a pair back so there is something to watch.
 func _fill_hands() -> void:
 	for i in range(world.hands.size()):
@@ -927,7 +927,7 @@ func test_an_interior_fold_holds_hands_across_the_subspace_boundary() -> void:
 # ---------------------------------------------------------------------------
 # Loose hands
 # ---------------------------------------------------------------------------
-# A cache the world shipped and a hand that popped out of a burst are the same
+# A loose hand the world authored and one that popped out of a burst are the same
 # object, in the same list, drawn the same way.
 
 func _loose_count() -> int:
@@ -1149,7 +1149,7 @@ func test_a_hand_burst_loose_in_midair_falls_to_the_floor() -> void:
 	for entry in world.loose_hand_points():
 		var p := Vector2(entry["pos"])
 		if p.distance_to(from) > 3.0 * CS:
-			continue                    # one of the authored caches, elsewhere entirely
+			continue                    # one of the authored loose hands, elsewhere entirely
 		landed += 1
 		assert_gt(p.y, from.y, "The freed hand ended up BELOW where it was let go")
 		assert_almost_eq(p.y, 14.0 * CS - WorldCore.HAND_CLEARANCE, 3.0,
@@ -1280,13 +1280,13 @@ func test_a_fold_that_takes_the_ground_away_wakes_the_hand_on_it() -> void:
 	# carries it (it is an occupant, like a door), but a fold that removes the ground
 	# under it leaves it hanging — so it wakes and falls again.
 	#
-	# The pillar-top cache at (24,6) sits on ground a fold across that column excises.
+	# The pillar-top loose hand at (24,6) sits on ground a fold across that column excises.
 	var spot = _plane_point(Vector2i(24, 6))
 	assert_not_null(spot, "The pillar-top hand starts in normal space")
 	assert_eq(world.hand_balls.size(), 0, "Nothing is falling yet")
 	var before: int = _total()
 
-	# Fold away the pillar the cache is standing on.
+	# Fold away the pillar the loose hand is standing on.
 	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
 	world.do_fold(Vector2i(24, 7), Vector2i(24, 11))
 	assert_eq(_total(), before, "Conserved across the fold, whatever it did to the hand")
@@ -1771,7 +1771,7 @@ func test_walking_into_the_folded_vault_finds_its_lamp_burning() -> void:
 	assert_eq(world.region_id, "east", "the door crossed regions")
 	assert_eq(world.mode, world.Mode.SUBSPACE, "...and landed inside the pre-placed fold")
 	assert_true(_light_ids().has("e_vault"),
-		"the lamp that is invisible from the overworld is what lights the vault")
+		"the lamp that is invisible from the region is what lights the vault")
 
 
 # ---------------------------------------------------------------------------

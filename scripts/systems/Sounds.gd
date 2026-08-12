@@ -83,7 +83,7 @@ const UI_CLICK := "ui_click"
 # Track ids, resolved against `assets/audio/music/` the same way.
 
 ## The bed for ordinary play.
-const MUSIC_OVERWORLD := "overworld"
+const MUSIC_REGION := "region"
 ## The bed inside a fold. A different place should sound like one.
 const MUSIC_SUBSPACE := "subspace"
 
@@ -147,7 +147,7 @@ static func all_sounds() -> Array:
 
 ## Every music track id.
 static func all_music() -> Array:
-	return [MUSIC_OVERWORLD, MUSIC_SUBSPACE]
+	return [MUSIC_REGION, MUSIC_SUBSPACE]
 
 
 static func is_registered(id: String) -> bool:

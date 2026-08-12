@@ -46,7 +46,7 @@ so region loading gets entered from more than one direction.
 | `triggers` | `T` — every outcome `TriggerResolver` has |
 | `prefold` | regions that ship already folded, in every orientation |
 | `lamps` | lights: colour, radius, energy, flicker, offset, and the light budget |
-| `caches` | loose hands, in every place a hand can be |
+| `hands` | loose hands, in every place a hand can be |
 | `goals` | `G` — the tile that shows you where a fold *put* things |
 | `mash_a` | pins × triggers × water |
 | `mash_b` | unanchorable × pre-folds × lamps × hands |
@@ -71,7 +71,7 @@ Every door case at once, which no single shipped region can show you:
 - **a door split by a crease** (`HUB_DORMANT`, on the right mezzanine's
   pre-fold anchor): its tile is cut exactly through its centre, so there is no
   unambiguous side to arrive on and it is **dormant** until you unfold;
-- **a door inside a fold** (`HUB_VAULT`): gone from the overworld entirely, so
+- **a door inside a fold** (`HUB_VAULT`): gone from the region entirely, so
   its partner in `kitchen` delivers you into the strip's subspace — where the
   lamp and the patient hand sealed in there are waiting.
 
@@ -111,7 +111,7 @@ Both refuse anchors; only `X` is solid. So `_` is open space you can walk
 through but never pin to, and `X` is a wall you can never pin to. A stretch of
 `_` over ground that is `X` underneath; alternating `X`/`#` stripes where every
 other column is the only one you may pin to; a chamber whose entire shell
-refuses anchors, with a goal and a cache inside it.
+refuses anchors, with a goal and a hand inside it.
 
 ### `triggers` — `T`
 
@@ -154,10 +154,10 @@ One overhead alcove per variant: radius 1 and radius 20, energy 0.15 and energy
 3.0, a lamp that flickers at full amplitude, a lamp offset into the corner of
 its tile. Then two extremes — **six lamps in one cell**, to lean on the
 shader's twelve-light budget, and a lamp buried inside the floor. And one lamp
-inside a one-column pre-fold, which is therefore **not in the overworld at
+inside a one-column pre-fold, which is therefore **not in the region at
 all**: it lights the strip's subspace, for whoever ends up in there.
 
-### `caches` — loose hands
+### `hands` — loose hands
 
 The three kinds on the ground; **two in one cell**; one let go at the ceiling
 so it falls the whole height of the region; one perched on a pin; one sealed in

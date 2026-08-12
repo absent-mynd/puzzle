@@ -116,4 +116,4 @@ func test_picking_one_up_is_the_only_thing_that_raises_the_total() -> void:
 	var lists: Array = [[_fold([PLAIN, PLAIN])]]
 	assert_eq(HandStock.total([null, null], 0, lists), 2, "Two hands, both committed")
 	assert_eq(HandStock.total([SWIFT, null], 0, lists), 3,
-		"A cache put a third hand in the world — the only way the count goes up")
+		"Picking one up put a third hand in the world — the only way the count goes up")

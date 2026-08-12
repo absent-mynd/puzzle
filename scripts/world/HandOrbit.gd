@@ -101,7 +101,7 @@ func paint() -> void:
 
 
 ## How a hand looks, wherever it is. STATIC and shared on purpose: a hand carried
-## beside you, a cache the world shipped and a hand that popped out of a burst are the
+## beside you, a loose hand the world authored and one that popped out of a burst are the
 ## same object to the player, so they must not be drawn by two different pieces of
 ## code that could drift apart. `WorldOverlay` draws loose ones through here.
 ##

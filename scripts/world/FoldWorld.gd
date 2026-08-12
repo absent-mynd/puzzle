@@ -40,7 +40,7 @@ extends Node2D
 ##     ceiling — two slots is forever; it refills one you emptied by pinning.
 ##   - LIGHTS are occupants like doors: base identity + a point in the tile,
 ##     resolved through BaseFrame against whatever is on screen. Fold a lamp
-##     away and it leaves the overworld and lights the fold's subspace
+##     away and it leaves the region and lights the fold's subspace
 ##     instead (see LightSource). Fold something else and it rides the flap.
 ##
 ## ONE KEY drives all of it, and it runs the hands both ways. Tap pins a hand as
@@ -158,7 +158,7 @@ var _spawn: Vector2:
 	get: return space.spawn
 	set(v): space.spawn = v
 
-## Loose hands, region id -> Array[HandPickup]. Authored caches and hands that popped
+## Loose hands, region id -> Array[HandPickup]. Authored loose hands and hands that popped
 ## out of a burst are the SAME list and the same object — to the player they are the
 ## same thing, a hand on the ground — and only `_reset` reads `authored` to tell them
 ## apart. Lives outside `regions` so a region rebuild cannot silently drop them.
@@ -222,7 +222,7 @@ var hands: Array = []
 ## intact. Folds are translations, so its flight is unaffected by the move.
 ##
 ## `in_sub` tags which view a ball is flying in, for the same reason anchors carry
-## their region: the overworld and a subspace are different spaces, and a ball
+## their region: a region and a subspace are different spaces, and a ball
 ## must only be stepped, drawn and collided against the one it is actually in.
 ## Hands in the air. `HandField` owns the flight; this object owns what a hand
 ## becomes when it stops flying. See HandField.
@@ -453,8 +453,8 @@ func _setup_all() -> void:
 		# that tile's centre — half a cell up in the air. That was invisible when a
 		# resting hand was wherever it was stored, but now that a hand can be woken by a
 		# fold taking its ground away, "resting" has to mean the same thing for an
-		# authored cache as for one that fell there: otherwise the first fold anywhere
-		# near a cache drops it, because it was never really on the ground to begin with.
+		# authored loose hand as for one that fell there: otherwise the first fold anywhere
+		# near one drops it, because it was never really on the ground to begin with.
 		var region_hands: Array = []
 		for pickup in world_data.hands_of(id):
 			if pickup.bind(rbase):
@@ -518,7 +518,7 @@ func _load_region(id: String) -> void:
 ## An authored hand names a CELL, and the natural reading of that is "a hand lying on the
 ## ground there" — not "a hand hovering at the exact centre of that tile", which is where
 ## naming a cell actually puts it. Settling at load makes the two agree, so an authored
-## cache and a hand that fell where it lies are the same kind of thing in every respect.
+## loose hand and a hand that fell where it lies are the same kind of thing in every respect.
 ##
 ## Rebinds the pickup to whatever piece it came to rest on, because that is the tile it
 ## is now lying on and therefore the one whose folds it must ride.
@@ -935,7 +935,7 @@ func tap_action(dir: Vector2i) -> void:
 ##
 ## That last clause is what makes the burst safe to fire blind. Nothing is ever
 ## refused for want of a slot and nothing is ever destroyed: a hand that cannot be
-## caught is simply a hand on the ground, which is the same object a cache is.
+## caught is simply a hand on the ground, the same object an authored one is.
 ##
 ## Folds come apart one at a time and the first to animate takes the burst with it,
 ## so a stack under one diamond clears over several bursts rather than all at once.
@@ -1463,7 +1463,7 @@ func _inner_glue_blocker(fold: Fold, sp_base: Array, list: Array, idx: int) -> F
 ##
 ## The overflow case is the whole reason nothing in this file has to refuse a hand.
 ## A hand you cannot catch is not a hand destroyed and not an action denied — it is a
-## hand lying where you were standing, which is exactly the object an authored cache
+## hand lying where you were standing, which is exactly the object an authored loose hand
 ## already is. Conservation holds without anyone having to check for room first.
 func _give_hand(kind: int) -> void:
 	var into := HandStock.first_empty(hands)
@@ -1502,7 +1502,7 @@ func _toss_hand(kind: int, at: Vector2) -> void:
 
 ## Step every ball in flight, and convert the ones that have come to rest.
 ##
-## Only balls in the CURRENT view are stepped: the overworld and a subspace are
+## Only balls in the CURRENT view are stepped: a region and a subspace are
 ## different spaces with different ground, and a ball must not fall through the other
 ## one's floor. A ball in the view you are not in simply waits — which is right, because
 ## the fold it is inside is not a place where time is passing for you either.
@@ -1518,7 +1518,7 @@ func _step_hand_balls(delta: float) -> void:
 ## under it leaves a hand hanging in the air, and a hand hanging in the air is the thing
 ## the physics exists to prevent. So it becomes a ball again and falls.
 ##
-## The cost, worth stating: a hand can now move without you touching it. A cache you
+## The cost, worth stating: a hand can now move without you touching it. One you
 ## remember the position of may be somewhere lower after you fold nearby. That was the
 ## explicit choice — physical behaviour with no exceptions, over "a hand is where you
 ## left it".
@@ -2290,9 +2290,9 @@ func _check_triggers() -> void:
 
 ## Loose hands: walk onto one and it is yours, if you have a slot free.
 ##
-## One object covers both the caches a world ships and the hands that pop out of a
+## One object covers both the loose hands a world ships and the hands that pop out of a
 ## burst, because to the player they are one thing. It only takes if a slot is free,
-## and a slot is free because you PUT A HAND DOWN — so a cache is not a stockpile you
+## and a slot is free because you PUT A HAND DOWN — so one is not a stockpile you
 ## raid on the way past, it is the second half of a fold you have already started.
 ##
 ## Works in a region AND inside a subspace: a hand the fold swallowed is lying in
@@ -2362,11 +2362,11 @@ func _check_goal() -> void:
 
 ## Put everything back — the world AND your hands.
 ##
-## `_setup_all` rebuilds the loose-hand lists from the authored world, so caches
+## `_setup_all` rebuilds the loose-hand lists from the authored world, so loose hands
 ## respawn and hands dropped during play are forgotten. That is the coherent reading
 ## now that the number you can hold does not grow: a pickup is another hand for an
 ## empty slot, not a permanent upgrade, and hands are exactly what a reset restores —
-## leaving caches spent would strand you at fewer hands than you started with, which
+## leaving loose hands spent would strand you at fewer hands than you started with, which
 ## is the opposite of what an escape hatch is for.
 func _reset() -> void:
 	if not _anim.is_empty():
@@ -2452,4 +2452,4 @@ func _deny(text: String) -> void:
 ## has its own bed, and crossing the boundary crossfades between them.
 func _update_music() -> void:
 	AudioManager.play_music(Sounds.MUSIC_SUBSPACE if mode == Mode.SUBSPACE
-		else Sounds.MUSIC_OVERWORLD)
+		else Sounds.MUSIC_REGION)

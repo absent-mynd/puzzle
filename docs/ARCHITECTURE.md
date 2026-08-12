@@ -242,7 +242,7 @@ Doors and lights do not store a world position. They store a **base identity plu
 point inside that tile**, and where they are is a question asked of the current
 piece list through `BaseFrame`. `LightSource` is the second instance of the
 pattern, and it is what makes the design work read as inevitable rather than
-implemented: a lamp folded away is not in the overworld, and the same lamp is what
+implemented: a lamp folded away is not in the region, and the same lamp is what
 lights that fold's subspace. Nobody wrote either behaviour — both are the answer to
 "where are you?" in two different configurations.
 

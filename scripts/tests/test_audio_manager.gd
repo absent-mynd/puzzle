@@ -124,7 +124,7 @@ func test_volumes_reach_their_buses():
 ## the bus AND to the player, so it multiplied into itself: half volume played
 ## at a quarter. The player's volume_db is the FADE, and nothing else.
 func test_music_volume_is_applied_once_not_twice():
-	audio_manager.play_music(Sounds.MUSIC_OVERWORLD, false)
+	audio_manager.play_music(Sounds.MUSIC_REGION, false)
 	audio_manager.set_music_volume(0.5)
 	assert_almost_eq(audio_manager.music_player.volume_db, 0.0, 0.001,
 		"the music player carries the fade, never the user's volume")
@@ -339,11 +339,11 @@ func test_missing_track_does_not_play():
 
 
 func test_play_and_stop_a_track():
-	audio_manager.play_music(Sounds.MUSIC_OVERWORLD, false)
+	audio_manager.play_music(Sounds.MUSIC_REGION, false)
 	assert_true(audio_manager.music_player.playing)
-	assert_eq(audio_manager.current_music_track, Sounds.MUSIC_OVERWORLD)
+	assert_eq(audio_manager.current_music_track, Sounds.MUSIC_REGION)
 	assert_eq(audio_manager.music_player.stream,
-		audio_manager.music_tracks[Sounds.MUSIC_OVERWORLD])
+		audio_manager.music_tracks[Sounds.MUSIC_REGION])
 
 	audio_manager.stop_music(false)
 	assert_false(audio_manager.music_player.playing)
@@ -351,15 +351,15 @@ func test_play_and_stop_a_track():
 
 
 func test_replaying_the_same_track_does_not_restart_it():
-	audio_manager.play_music(Sounds.MUSIC_OVERWORLD, false)
+	audio_manager.play_music(Sounds.MUSIC_REGION, false)
 	var playback_before: float = audio_manager.music_player.get_playback_position()
-	audio_manager.play_music(Sounds.MUSIC_OVERWORLD, false)
+	audio_manager.play_music(Sounds.MUSIC_REGION, false)
 	assert_eq(audio_manager.music_player.get_playback_position(), playback_before,
 		"walking between regions must not restart the bed")
 
 
 func test_switching_tracks_changes_the_stream():
-	audio_manager.play_music(Sounds.MUSIC_OVERWORLD, false)
+	audio_manager.play_music(Sounds.MUSIC_REGION, false)
 	audio_manager.play_music(Sounds.MUSIC_SUBSPACE, false)
 	assert_eq(audio_manager.current_music_track, Sounds.MUSIC_SUBSPACE)
 	assert_eq(audio_manager.music_player.stream,
@@ -370,7 +370,7 @@ func test_switching_tracks_changes_the_stream():
 ## what makes a track change during a fade land on the right track instead of
 ## stopping the music.
 func test_a_fade_is_cancellable():
-	audio_manager.play_music(Sounds.MUSIC_OVERWORLD, true)
+	audio_manager.play_music(Sounds.MUSIC_REGION, true)
 	assert_true(audio_manager.is_fading, "fading in")
 	audio_manager.play_music(Sounds.MUSIC_SUBSPACE, false)
 	assert_false(audio_manager.is_fading, "the new call should have cancelled it")

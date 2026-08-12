@@ -46,7 +46,7 @@ const GAIN_FG := 1.0
 const GAIN_BG := 0.70
 
 ## Hue shift per depth of folded-in-ness, applied as a tint uniform so it
-## multiplies the tileset rather than replacing it. Depth 0 is the overworld.
+## multiplies the tileset rather than replacing it. Depth 0 is the region.
 const TINT_WORLD := Vector3(1.0, 1.0, 1.0)
 const TINT_SUB := Vector3(0.86, 0.80, 1.12)
 ## How far a second and third layer push past the first. Sub-linear on purpose:

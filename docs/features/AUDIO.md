@@ -55,7 +55,7 @@ Named for *this* game. (The set that used to live here — `selection`, `undo`,
 **Body and world** — `jump`, `land`, `footstep`, `door`, `respawn`, `reset`,
 `goal`, `deny`.
 **UI** — `ui_click`, `ui_move`.
-**Music** — `overworld`, `subspace`.
+**Music** — `region`, `subspace`.
 
 ### Pairs that carry meaning
 
@@ -110,14 +110,14 @@ keeps the simultaneous pair sounding like two objects.
 
 ## Music
 
-Two beds, and which one plays is a function of where you are: `overworld` at
+Two beds, and which one plays is a function of where you are: `region` at
 world space, `subspace` inside a fold. `FoldWorld._update_music()` is called
 from `_apply_context()`, the single place `mode` changes, and `play_music`
 ignores a request for the track already playing — so walking in and out of a
 fold crossfades, and everything else costs nothing.
 
 This is the cheapest honest answer to the open question in AGENTS.md about
-whether a subspace reads as a **place**. `subspace` is the overworld bed
+whether a subspace reads as a **place**. `subspace` is the region bed
 moved down a fourth and pulled out of tune with itself — the same room, folded.
 The beating between its detuned pairs is the only thing in the mix that tells
 you where you are without a word of UI.
@@ -189,7 +189,7 @@ Two consequences worth knowing before retuning:
   reason: nothing in either bed goes above ~1.8 kHz, so the rate is pure cost
   and the length is what the bytes should buy.
 
-The overworld's harmony drifts too, not just its colour. Quiet upper voices —
+The region bed's harmony drifts too, not just its colour. Quiet upper voices —
 a ninth and a sixth, at just ratios, mostly absent — swell past each other so
 the chord moves between an open fifth, an added ninth and a sixth. Still no
 third and nothing that resolves: it should be impossible to hum and impossible

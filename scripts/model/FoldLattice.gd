@@ -53,8 +53,8 @@ class_name FoldLattice extends RefCounted
 ##
 ## `content ∩ B` is a fundamental domain of the child's content EXACTLY when every
 ## parent period is perpendicular to `n_F` — then each period preserves `B`, so
-## intersecting and orbiting commute. That covers every fold made from the
-## overworld (no periods at all) and the perpendicular nesting case (the torus).
+## intersecting and orbiting commute. That covers every fold made in a region
+## (no periods at all) and the perpendicular nesting case (the torus).
 ##
 ## When a parent period is NOT perpendicular, `content ∩ B` is a strict SUBSET of
 ## what the parent's full orbit puts in the strip: a strip running past its own glue
