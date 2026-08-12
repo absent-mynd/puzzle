@@ -24,8 +24,8 @@ extends Resource
 ## folded, with content sealed inside it that unfolding (or a door) reveals.
 ##
 ## A fold entry is `{"anchor1": {x,y}, "anchor2": {x,y}, "in": [i, ...]}`. `in` is the
-## INDEX PATH of the interiors this fold lives in — `[]` (or absent) is the region's own
-## sheet, `[0]` is inside the interior of the region's first pre-placed fold, `[0, 1]`
+## INDEX PATH of the subspaces this fold lives in — `[]` (or absent) is the region's own
+## sheet, `[0]` is inside the subspace of the region's first pre-placed fold, `[0, 1]`
 ## one level deeper. It is reserved, not yet implemented: `fold_pairs` returns only
 ## world-level entries, so a nested one is authored, saved and drawn by the editor but
 ## does NOT ship folded. See `docs/features/WORLD_EDITOR.md` §"Nested pre-placed folds"
@@ -247,7 +247,7 @@ func spawn_px(id: String) -> Vector2:
 
 
 ## A region's WORLD-LEVEL pre-placed folds as [anchor1, anchor2] Vector2i pairs, in
-## order. Entries with a non-empty `in` path are nested inside another fold's interior
+## order. Entries with a non-empty `in` path are nested inside another fold's subspace
 ## and are SKIPPED: the world boot applies this list to the region's own sheet, and a
 ## nested fold's anchors mean nothing there. See the `folds` note in the header.
 func fold_pairs(id: String) -> Array:

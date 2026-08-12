@@ -303,7 +303,7 @@ The comment is honest about what it is doing: there is a genuine cycle between
 `FoldWorld` and `WorldOverlay`, and it is being suppressed by giving up static
 typing on the reference. The overlay then reaches into **24 distinct members** of
 `FoldWorld` — `base`, `player`, `doors`, `lattice`, `armed`, `unpaired`,
-`sub_fold`, `BURST_RADIUS`, and 16 more.
+`host_fold`, `BURST_RADIUS`, and 16 more.
 
 That is not a view reading a model, it is a view sharing a brain with one. The
 cycle is the real finding; the missing type annotation is just the receipt.

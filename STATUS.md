@@ -24,7 +24,7 @@ What exists and works today:
 | Base-frame transport (`BaseFrame`) | ✅ Solid, well covered |
 | Side-view world: gravity, riding flaps, depenetration | ✅ Playable |
 | Variable-height jump (tap vs hold), air control | ✅ Playable |
-| Subspaces (fold interiors as real places) | ✅ Playable |
+| Subspaces (the inside of a fold as a real place) | ✅ Playable |
 | **Nesting: folding yourself in, and in again** | ✅ Playable, any depth, ⚙️ untuned |
 | Regions + doors (recursive partner resolution) | ✅ Playable |
 | Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |

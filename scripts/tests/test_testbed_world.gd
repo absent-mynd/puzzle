@@ -423,7 +423,7 @@ func test_the_routing_doors_survive_the_folds_their_region_ships_with():
 func test_the_hub_ships_a_door_split_by_a_crease_and_a_door_inside_a_fold():
 	# The two door cases the shipped world cannot show you at once: one whose tile is
 	# cut exactly through its centre (dormant — no unambiguous side to arrive on) and
-	# one wholly inside the excised strip (its partner delivers you into the interior).
+	# one wholly inside the excised strip (its partner delivers you into the subspace).
 	var wd := _world()
 	var booted := _booted(wd, HUB)
 	var base: BaseGrid = booted["base"]
@@ -446,7 +446,7 @@ func test_the_hub_ships_a_door_split_by_a_crease_and_a_door_inside_a_fold():
 
 func test_folding_a_lamp_away_takes_it_out_of_the_overworld():
 	# The lamps region ships one lamp inside a one-column pre-fold, so it lights the
-	# strip's interior and nothing else.
+	# strip's subspace and nothing else.
 	var wd := _world()
 	var booted := _booted(wd, "lamps")
 	var base: BaseGrid = booted["base"]

@@ -43,7 +43,7 @@ const FOLD := "fold"
 const UNFOLD := "unfold"
 ## The fold closed over the player instead of moving them: they are inside it.
 const PINCH := "pinch"
-## Emerging from a fold's interior back to the level above.
+## Emerging from a subspace back to the space above.
 const SURFACE := "surface"
 ## The release burst.
 const BURST := "burst"

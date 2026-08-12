@@ -242,8 +242,8 @@ A fold entry is:
 {"anchor1": {"x": 10, "y": 6}, "anchor2": {"x": 16, "y": 6}, "in": []}
 ```
 
-`in` is the **index path of the interiors the fold lives in**: `[]` (or absent)
-is the region's own sheet, `[0]` is inside the interior of the region's first
+`in` is the **index path of the subspaces the fold lives in**: `[]` (or absent)
+is the region's own sheet, `[0]` is inside the subspace of the region's first
 pre-placed fold, `[0, 1]` one level deeper. `WorldData.fold_pairs` returns only
 the entries with an empty path, so a nested one is authored, saved and drawn but
 does not ship folded — rather than being applied at world level, where its
@@ -254,9 +254,9 @@ anchors would fold a stranger part of the region.
 The runtime already has the two halves; what is missing is the seam between
 them.
 
-1. **A fold's interior is already a real place.** `FoldWorld._ensure_interiors(fid)`
+1. **A fold's subspace is already a real place.** `FoldWorld._ensure_inner_folds(fid)`
    keeps a fold list per fold id, and `do_sub_fold` folds inside one. So "a fold
-   in an interior" is a state the engine can represent — it is reached by play
+   in a subspace" is a state the engine can represent — it is reached by play
    today, just never by authoring.
 2. **The boot pass would have to recurse.** `_setup_all` walks a region's folds
    in order, capturing each strip before applying the next. A nested entry needs
@@ -269,13 +269,13 @@ them.
    same region*, so the list has to be applied parent-before-child. A topological
    pass, or simply requiring that a parent appears earlier in the array.
 4. **The editor would need a way in.** The natural gesture is to open a fold's
-   interior as its own canvas on the board — a card whose content is the strip
+   subspace as its own canvas on the board — a card whose content is the strip
    its parent excises — and place anchors in there normally. That reuses every
    tool as-is and keeps "a canvas is a sheet you paint on" true.
 
 The reason to defer is item 2's interaction with `AGENTS.md` §open question
 "Triggers are world-level only" — the resolver does not model splicing folds
-into an interior list mid-cascade either. Both want the same machinery, and
+into an inner-fold list mid-cascade either. Both want the same machinery, and
 building it once for both is better than building it twice.
 
 ---

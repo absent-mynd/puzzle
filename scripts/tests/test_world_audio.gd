@@ -266,7 +266,7 @@ func test_the_overworld_bed_starts_with_the_world() -> void:
 		"the world should come up with its bed playing")
 
 
-## A fold's interior is meant to read as a PLACE. Its own bed is the cheapest
+## A subspace is meant to read as a PLACE. Its own bed is the cheapest
 ## thing that says so, and crossing the boundary should swap it both ways.
 func test_the_bed_changes_inside_a_fold_and_back() -> void:
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)

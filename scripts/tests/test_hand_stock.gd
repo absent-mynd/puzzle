@@ -74,7 +74,7 @@ func test_held_by_counts_hands_in_one_list() -> void:
 
 
 func test_held_in_counts_across_lists() -> void:
-	# Regions and each fold's interiors are separate lists; all of them count.
+	# Regions and each fold's inner folds are separate lists; all of them count.
 	assert_eq(HandStock.held_in([[_fold([PLAIN, PLAIN])], [_fold([SWIFT, SWIFT])], []]), 4,
 		"Hands are counted wherever the fold lives")
 	assert_eq(HandStock.held_in([]), 0, "No lists, nothing held")

@@ -17,7 +17,7 @@ class_name HandField extends RefCounted
 ## Everything it needs to know about where it is arrives as a `Level`. Before that
 ## object existed this could not be lifted out of `FoldWorld` at all — the flight
 ## depends on the collision geometry, how the space repeats, how far the one
-## non-repeating axis runs, and whether this is a fold interior, and those were a
+## non-repeating axis runs, and whether this is a subspace, and those were a
 ## dozen separate members. Passing ten things is not an interface; passing the level
 ## is.
 
@@ -84,7 +84,7 @@ func readmit(ball: Dictionary) -> void:
 
 ## Step every ball in the CURRENT view.
 ##
-## Only the current view: the overworld and a strip interior are different spaces
+## Only the current view: the overworld and a subspace are different spaces
 ## with different ground, and a ball must not fall through the other one's floor. A
 ## ball in the view you are not in simply waits — which is right, because the fold it
 ## is inside is not a place where time is passing for you either.
@@ -137,7 +137,7 @@ func step(level: Level, delta: float) -> void:
 ## the flight it is on.
 ##
 ## `into_sub` says the fold swallowed this view into a strip, so surviving balls
-## belong to the interior from now on. A ball the fold leaves nowhere — its tile
+## belong to the subspace from now on. A ball the fold leaves nowhere — its tile
 ## excised while the view stays put — is one the strip captured, and it flies on in
 ## there.
 func carry_through(level: Level, new_pieces: Array, into_sub: bool) -> void:

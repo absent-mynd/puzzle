@@ -3,8 +3,8 @@ class_name Level extends RefCounted
 ## Everything true about the space the player is standing in right now.
 ##
 ## "One space at a time" is the rule the whole game is built on (see FoldWorld's
-## header): the region world is simply the level with an empty fold context, a strip
-## interior is a level with one, and an interior of an interior is a level with two.
+## header): the region world is simply the level with an empty fold context, a
+## subspace is a level with one, and a subspace of a subspace is a level with two.
 ## That was always the design — but the *state* of the current level was scattered
 ## across a dozen separate members of `FoldWorld`, all written in three places and
 ## read from everywhere.
@@ -31,13 +31,13 @@ var base: BaseGrid = null
 ## The region's spawn point, in pixels.
 var spawn := Vector2.ZERO
 
-## True when this is a fold interior rather than the region world. Deliberately a
+## True when this is a subspace rather than the region world. Deliberately a
 ## bool and not `FoldWorld.Mode`: the kernel may not name the view (Decision 9), and
 ## "is this a subspace" is the only part of the enum anything here needs.
 var in_subspace := false
 
-## The fold whose interior this is, or null at region level.
-var sub_fold: Fold = null
+## The fold whose subspace this is, or null at region level.
+var host_fold: Fold = null
 
 # --- The geometry, derived ---
 
@@ -84,12 +84,12 @@ func left_the_strip(point: Vector2, slack: float) -> bool:
 
 ## Where something that ran off the end of a strip is put back: the middle of the strip
 ## it just left. Only meaningful when `left_the_strip` is true, which implies both a
-## free axis and a `sub_fold`.
+## free axis and a `host_fold`.
 func turn_back_point() -> Vector2:
-	if sub_fold == null or lattice.periods().is_empty():
+	if host_fold == null or lattice.periods().is_empty():
 		return Vector2.ZERO
 	var period: Vector2 = lattice.periods()[0]
-	return sub_fold.crease_point1 + period * 0.5
+	return host_fold.crease_point1 + period * 0.5
 
 
 ## How deep in folds this level sits. 0 is the region world.

@@ -88,7 +88,7 @@ static func held_by(folds: Array) -> int:
 	return total
 
 
-## Hands held across several fold lists (regions, and each fold's interiors).
+## Hands held across several fold lists (regions, and each fold's inner folds).
 static func held_in(fold_lists: Array) -> int:
 	var total := 0
 	for list in fold_lists:

@@ -145,7 +145,7 @@ static func polys_of_type(pieces: Array, type: int) -> Array:
 # Each fold stores its seam SEGMENT (its meeting line, clipped to the tangent extent of
 # what it actually excised); a fold cannot be unfolded while any newer fold's excision
 # strip crosses that segment. The same test against the outer fold's two crease lines
-# (the glue) gates exiting a subspace: interior folds parallel to the glue are fine,
+# (the glue) gates exiting a subspace: inner folds parallel to the glue are fine,
 # folds whose strip crosses the glue must be unfolded first.
 
 ## The fold's seam segment: its meeting line over the excised content's extent.

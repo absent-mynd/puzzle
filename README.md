@@ -16,7 +16,7 @@ What makes it a metroidvania rather than a puzzle game:
 
 - **Folds persist.** They are world state, not a move you undo. Regions keep their
   fold state when you leave them.
-- **Folds are places.** The strip a fold excises is a real interior you can be
+- **Folds are places.** The strip a fold excises is a real place you can be
   pinched into, walk around in, fold *within*, and surface from somewhere else —
   and folding *within* can pinch you deeper again, with no limit. Fold yourself in
   across the grain of the fold you are already in and the space you are standing

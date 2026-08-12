@@ -18,7 +18,7 @@ Three things make it a metroidvania rather than a puzzle game:
 
 - **Folds persist.** They are world state, not a move you undo. Regions keep their
   fold state when you leave them.
-- **Folds are places.** The strip a fold excises is a real interior you can be
+- **Folds are places.** The strip a fold excises is a real place you can be
   pinched into, walk around in, fold *within*, and surface from somewhere else.
 - **Progression is knowledge and configuration**, not keys. A door folded shut is a
   door you jammed; unfolding is the key you already had.
@@ -471,7 +471,7 @@ These are live, not settled. Do not close them silently in a refactor.
   costs is that a strip past the glue is emptier than the space it sits in; what it
   buys is that the glue line means something.
 - **Triggers are world-level only.** A trigger inside a subspace would have to
-  splice folds into an interior list mid-cascade; the resolver does not model that.
+  splice folds into an inner-fold list mid-cascade; the resolver does not model that.
 - **Unfold animation** plays only for newest-fold unfolds at world level; mid-stack
   unfolds are instant.
 - **Jump feel is a first guess, but jump HEIGHT is level design.** How long you hold

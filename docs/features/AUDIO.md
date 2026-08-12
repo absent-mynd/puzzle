@@ -45,7 +45,7 @@ Named for *this* game. (The set that used to live here — `selection`, `undo`,
 | `pair_armed` | the second hand completes a pair and lights its fuse |
 | `fold` | a fold commits and you ride a flap |
 | `pinch` | the fold closes over you instead — you are inside it |
-| `surface` | you come back out of a fold's interior |
+| `surface` | you come back out of a subspace |
 | `unfold` | a fold comes apart |
 | `burst` | the release burst fires and something comes loose |
 | `fold_refused` | the fuse went off and the fold would not go |
@@ -117,7 +117,7 @@ ignores a request for the track already playing — so walking in and out of a
 fold crossfades, and everything else costs nothing.
 
 This is the cheapest honest answer to the open question in AGENTS.md about
-whether a fold's interior reads as a **place**. `subspace` is the overworld bed
+whether a subspace reads as a **place**. `subspace` is the overworld bed
 moved down a fourth and pulled out of tune with itself — the same room, folded.
 The beating between its detuned pairs is the only thing in the mix that tells
 you where you are without a word of UI.
@@ -194,7 +194,7 @@ a ninth and a sixth, at just ratios, mostly absent — swell past each other so
 the chord moves between an open fifth, an added ninth and a sixth. Still no
 third and nothing that resolves: it should be impossible to hum and impossible
 to catch repeating. `subspace` drifts more slowly and flatly on purpose, because
-its detuned beating already supplies movement and a fold's interior should feel
+its detuned beating already supplies movement and a subspace should feel
 like it is the thing holding still.
 
 `AudioManager` sets the loop flag at load time rather than relying on the import

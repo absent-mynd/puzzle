@@ -237,11 +237,12 @@ so the marker never promises what the act refuses.
 **Inside a fold, the same rules apply.** The subspace is a real place: the
 pinch fold is applied to the world, and the outer fold's two anchors coincide
 at one point on the glue line — the white diamond. A burst in reach of it opens
-the subspace (exit), and the diamond lights when you are close enough. You can pin anchors and fold *within* the subspace; interior
-folds persist into the world when you exit, and pending anchors ride along
+the subspace (exit), and the diamond lights when you are close enough. You can
+pin anchors and fold *within* the subspace; inner folds persist into the world
+when you exit, and pending anchors ride along
 and land where the strip content lands. **Unfold blocking** applies
 everywhere: a fold cannot be unfolded while a newer fold's strip crosses its
-seam — so an interior fold that crosses the glue (its creases are not
+seam — so an inner fold that crosses the glue (its creases are not
 parallel to the outer fold's) locks the exit until you unfold it; the white
 diamond turns red to show it. Player and anchors move by **exact base-tile
 riding** (each piece knows its base identity and offset), not approximate
@@ -366,7 +367,7 @@ warps you to its partner, wherever that partner currently *is*:
 - Landing blocked (something folded over the door) → traversal refused: you
   can *jam doors shut by folding* and clear them by unfolding.
 
-Doors exit subspaces **without unfolding them** — interior folds and all
+Doors exit subspaces **without unfolding them** — inner folds and all
 persist for the next visit. The glue anchor (white diamond) remains the
 unfolding exit. Pending anchors are inert outside their region but stay
 pinned and resolve again when you return.
@@ -467,7 +468,7 @@ Refusals share one sound and one message. If a thing did not happen you get a
 short low blip and a line of text, whatever the reason — the text says which
 reason.
 
-**A fold's interior has its own music.** Crossing into one crossfades the
+**A subspace has its own music.** Crossing into one crossfades the
 overworld bed out and a darker, detuned version of it in: the same room, folded.
 It is the only thing that tells you where you are without a word of UI.
 
@@ -547,7 +548,7 @@ it burns is a question asked of the current piece list. Everything follows
 from that:
 
 - Fold a lamp's tile away and it is **gone from the overworld** — no glyph, no
-  light — and the same lamp is what **lights the fold's interior** when you get
+  light — and the same lamp is what **lights the fold's subspace** when you get
   in there.
 - Fold something else and the lamp **rides its flap**, like any other occupant.
 - Split its tile with a crease and it keeps burning on whichever half it landed
@@ -598,7 +599,7 @@ do not want yet.
   and reddens the glue diamond.
 - Movable seams are design-agreed but not implemented.
 - Triggers only fire at world level — a trigger inside a subspace would have to
-  splice folds into an interior list mid-cascade, which the resolver does not model.
+  splice folds into an inner-fold list mid-cascade, which the resolver does not model.
 - Unanchorable tiles (`_`, `X`) are supported by the format and covered by tests, but
   the SHIPPED world does not place any yet. `worlds/testbed.json` does — its
   `unanchor` region is nothing else — so the way to see one is `--world=testbed`

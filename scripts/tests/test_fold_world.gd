@@ -427,34 +427,34 @@ func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
 	world.tap_action(Vector2i(1, 0))                # (8,10): off-axis, dist ~3.6
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Off-axis pinch folds the player in")
-	assert_eq(world.sub_fold.orientation, "diagonal", "The committed fold is diagonal")
+	assert_eq(world.host_fold.orientation, "diagonal", "The committed fold is diagonal")
 
 
 func test_interior_fold_rides_player_and_persists_on_exit() -> void:
 	_pinch_over_pit()
 	world.player.teleport(Vector2(11.2 * CS, 12.5 * CS), false)
-	# Interior fold PARALLEL to the glue (vertical creases, like the outer's).
+	# Inner fold PARALLEL to the glue (vertical creases, like the outer's).
 	var ok: bool = world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8))
-	assert_true(ok, "Interior fold commits")
-	assert_eq(world.level_folds().size(), 1, "Interior fold recorded")
+	assert_true(ok, "Inner fold commits")
+	assert_eq(world.level_folds().size(), 1, "Inner fold recorded")
 	assert_almost_eq(world.player.global_position.x, 13.2 * CS, 130.0,
-		"Player rides the interior A-flap inward")
+		"Player rides the inner A-flap inward")
 
 	world.try_exit()
-	assert_eq(world.mode, world.Mode.WORLD, "Parallel interior fold does not block exit")
-	assert_eq(world.folds.size(), 1, "Interior fold PERSISTS as a world fold")
-	assert_eq(world.folds[0].anchor1, Vector2i(12, 8), "It is the interior fold")
+	assert_eq(world.mode, world.Mode.WORLD, "Parallel inner fold does not block exit")
+	assert_eq(world.folds.size(), 1, "Inner fold PERSISTS as a world fold")
+	assert_eq(world.folds[0].anchor1, Vector2i(12, 8), "It is the inner fold")
 	assert_almost_eq(world.player.global_position.x, 13.2 * CS, 130.0,
-		"Player emerges exactly where the interior showed them")
+		"Player emerges exactly where the subspace showed them")
 
 
 func test_exit_blocked_by_glue_crossing_interior_fold() -> void:
 	_pinch_over_pit()
-	# Interior fold whose strip CROSSES the glue (horizontal strip in a
+	# Inner fold whose strip CROSSES the glue (horizontal strip in a
 	# vertical-strip subspace): the outer seam is no longer the newest fold
 	# affecting itself, so the exit locks until the inner fold is unfolded.
 	var ok: bool = world.do_sub_fold(Vector2i(12, 8), Vector2i(12, 11))
-	assert_true(ok, "Crossing interior fold commits")
+	assert_true(ok, "Crossing inner fold commits")
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Exit is blocked by the crossing fold")
 	assert_eq(world.folds.size(), 1, "Outer fold still applied")
@@ -463,7 +463,7 @@ func test_exit_blocked_by_glue_crossing_interior_fold() -> void:
 	assert_eq(world.level_folds().size(), 0, "Inner fold unfolded from inside")
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Exit works once nothing crosses the glue")
-	assert_eq(world.folds.size(), 0, "Outer fold gone, no interior folds remained")
+	assert_eq(world.folds.size(), 0, "Outer fold gone, no inner folds remained")
 
 
 func test_placed_hands_survive_subspace_exit() -> void:
@@ -559,7 +559,7 @@ func test_a_carried_hand_never_swims_a_band_after_a_wrap() -> void:
 	world.player.teleport(Vector2(18.9 * CS, 12.5 * CS), false)
 	_settle_orbit()
 	world._wrap_body()
-	var gap: float = world.sub_fold.gap_distance()
+	var gap: float = world.host_fold.gap_distance()
 	for _f in range(60):
 		_settle_orbit(1)
 		for off in _hand_offsets():
@@ -581,8 +581,8 @@ func test_everything_that_moves_is_drawn_in_every_copy_of_the_strip() -> void:
 		assert_eq(canvas.offsets, offsets,
 			"%s stands in every copy of the space" % canvas.get_class())
 
-	var n: Vector2 = world.sub_fold.crease_normal
-	var gap: float = world.sub_fold.gap_distance()
+	var n: Vector2 = world.host_fold.crease_normal
+	var gap: float = world.host_fold.gap_distance()
 	for off in offsets:
 		var k: float = Vector2(off).dot(n) / gap
 		assert_almost_eq(Vector2(off).distance_to(n * (k * gap)), 0.01, 0.02,
@@ -596,16 +596,16 @@ func test_everything_that_moves_is_drawn_in_every_copy_of_the_strip() -> void:
 
 
 func test_outside_unfold_splices_interiors() -> void:
-	# Rule 4: unfolding a fold from the outside carries its interior folds
+	# Rule 4: unfolding a fold from the outside carries its inner folds
 	# into the level at its index.
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
 	var x: Fold = world.folds[0]
 	var inner := Fold.create(500, Vector2i(22, 3), Vector2i(25, 3), CS)
 	var arr: Array[Fold] = [inner]
-	world.interiors[x.fold_id] = arr
+	world.inner_folds[x.fold_id] = arr
 	world.unfold_level_fold(x)
-	assert_eq(world.folds.size(), 1, "Interior spliced into the world on outside unfold")
-	assert_eq(world.folds[0].fold_id, 500, "The spliced fold is the interior one")
+	assert_eq(world.folds.size(), 1, "Inner fold spliced into the world on outside unfold")
+	assert_eq(world.folds[0].fold_id, 500, "The spliced fold is the inner one")
 
 
 func test_door_traversal_between_regions() -> void:
@@ -626,7 +626,7 @@ func test_door_into_prefolded_subspace_and_back() -> void:
 	world._check_doors()
 	assert_eq(world.region_id, "east", "In the east region")
 	assert_eq(world.mode, world.Mode.SUBSPACE, "...inside the shipped fold")
-	assert_eq(world.sub_fold.anchor1, Vector2i(10, 6), "It is the authored pre-fold")
+	assert_eq(world.host_fold.anchor1, Vector2i(10, 6), "It is the authored pre-fold")
 	assert_almost_eq(world.player.global_position.x, 13.5 * CS, 130.0,
 		"Standing at E1's point inside the strip")
 
@@ -912,7 +912,7 @@ func test_an_interior_fold_holds_hands_across_the_subspace_boundary() -> void:
 	world.hands[0] = HandTypes.SWIFT
 	world.hands[1] = HandTypes.SWIFT
 	world.player.teleport(Vector2(11.2 * CS, 12.5 * CS), false)
-	assert_true(world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8)), "Interior fold commits")
+	assert_true(world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8)), "Inner fold commits")
 	assert_eq(world.hands_held(), 0, "It took the pair too")
 	assert_eq(_total(), _start_total + 2,
 		"Two more than you started with — the test refilled both slots by hand; four are committed")
@@ -921,7 +921,7 @@ func test_an_interior_fold_holds_hands_across_the_subspace_boundary() -> void:
 	assert_eq(world.mode, world.Mode.WORLD, "Exited")
 	assert_eq(world.hands_held(), 2, "The outer fold returned its pair")
 	assert_eq(world.hands_in_folds(), 2,
-		"The interior fold persisted into the world, still holding its own")
+		"The inner fold persisted into the world, still holding its own")
 
 
 # ---------------------------------------------------------------------------
@@ -1326,9 +1326,9 @@ func test_a_hand_in_orbit_stays_within_the_band_it_orbits() -> void:
 	world._drop_hand(HandTypes.PLAIN, Vector2(13.5 * CS, 12.2 * CS))
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
 	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
-	var n: Vector2 = world.sub_fold.crease_normal
-	var c1: float = world.sub_fold.crease_point1.dot(n)
-	var gap: float = world.sub_fold.gap_distance()
+	var n: Vector2 = world.host_fold.crease_normal
+	var c1: float = world.host_fold.crease_point1.dot(n)
+	var gap: float = world.host_fold.gap_distance()
 
 	for _i in range(1200):
 		world._step_hand_balls(1.0 / 60.0)
@@ -1819,9 +1819,9 @@ func test_inside_a_fold_the_band_is_framed_glue_to_glue() -> void:
 	_pinch_over_pit()
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
 	var focus: PackedVector2Array = world._camera_focus()
-	var n: Vector2 = world.sub_fold.crease_normal
-	var near: float = world.sub_fold.crease_point1.dot(n)
-	var far: float = near + world.sub_fold.gap_distance()
+	var n: Vector2 = world.host_fold.crease_normal
+	var near: float = world.host_fold.crease_point1.dot(n)
+	var far: float = near + world.host_fold.gap_distance()
 	var seen := {}
 	for p in focus:
 		seen[snappedf(Vector2(p).dot(n), 0.01)] = true
@@ -1986,7 +1986,7 @@ func test_inside_a_fold_the_lead_is_flat_along_the_band() -> void:
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
 	world.player.velocity = Vector2(PlayerBody.RUN_SPEED, PlayerBody.MAX_FALL)
 	world._update_camera()
-	var n: Vector2 = world.sub_fold.crease_normal
+	var n: Vector2 = world.host_fold.crease_normal
 	assert_almost_eq(world.player.lookahead_target.dot(n), 0.0, 0.001,
 		"No lead along the repeating axis")
 	assert_gt(world.player.lookahead_target.length(), 0.0,

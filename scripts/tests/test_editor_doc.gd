@@ -560,7 +560,7 @@ func test_fold_at_finds_a_fold_by_either_anchor():
 
 
 func test_a_nested_fold_is_saved_but_not_applied():
-	# The format reserves `in` for folds inside another fold's interior. Nothing
+	# The format reserves `in` for folds inside another fold's subspace. Nothing
 	# applies them yet, so the loader must ignore them rather than fold the wrong
 	# part of the region. See docs/features/WORLD_EDITOR.md.
 	var doc := _doc()

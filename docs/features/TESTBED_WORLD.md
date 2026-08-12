@@ -72,7 +72,7 @@ Every door case at once, which no single shipped region can show you:
   pre-fold anchor): its tile is cut exactly through its centre, so there is no
   unambiguous side to arrive on and it is **dormant** until you unfold;
 - **a door inside a fold** (`HUB_VAULT`): gone from the overworld entirely, so
-  its partner in `kitchen` delivers you into the strip's interior — where the
+  its partner in `kitchen` delivers you into the strip's subspace — where the
   lamp and the patient hand sealed in there are waiting.
 
 There is also a two-tall pin on the concourse: jumpable, and a standing veto on
@@ -155,7 +155,7 @@ One overhead alcove per variant: radius 1 and radius 20, energy 0.15 and energy
 its tile. Then two extremes — **six lamps in one cell**, to lean on the
 shader's twelve-light budget, and a lamp buried inside the floor. And one lamp
 inside a one-column pre-fold, which is therefore **not in the overworld at
-all**: it lights the strip's interior, for whoever ends up in there.
+all**: it lights the strip's subspace, for whoever ends up in there.
 
 ### `caches` — loose hands
 
