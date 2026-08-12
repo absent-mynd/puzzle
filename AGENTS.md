@@ -306,6 +306,14 @@ Two consequences worth keeping:
   is `WorldCamera`'s call, off the `frozen` fact the world passes it, and
   `motion_intensity` is a plain statement about velocity. Do not put a mode check back
   into the body.
+- **The LENS stops too, and it is a separate flag.** `PlayerBody.camera_held` freezes
+  the follow, the lead and the zoom where they are — mid-lag, wherever the moment
+  caught them. It cannot be `frozen`: that is also set by a fold ride, and there the
+  camera keeping up IS its job. The two flags mean "the body is not stepped" and "the
+  view is not stepped", and only one of them is about time having stopped. A
+  consequence worth knowing before adding a focus point: while the lens is held it
+  cannot act on one, so a point that only exists during a placement does nothing —
+  which is why the cursor's cell is not in `_camera_focus`.
 
 ---
 

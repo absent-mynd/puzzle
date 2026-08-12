@@ -419,6 +419,57 @@ func test_a_burst_ring_hangs_where_it_was_while_the_world_is_held() -> void:
 	assert_lt(world.burst_flash(), ring, "...and it goes on fading once the world does")
 
 
+func test_the_lens_holds_still_while_a_hand_is_up() -> void:
+	# The camera is the last thing that was still moving over a held frame. It stops
+	# too — and it stops WHERE IT WAS, mid-lag and all, because the frame you choose in
+	# should be the frame you resume into rather than one that glided somewhere else
+	# while you thought about it.
+	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)   # camera left behind
+	world.player.velocity.x = PlayerBody.RUN_SPEED
+	world._update_camera()
+	world.player._process(1.0 / 60.0)
+	var eye: Vector2 = world.player.camera_position()
+	var lens: float = world.player.camera_zoom()
+	assert_ne(eye, world.player.global_position, "The camera is lagging behind the body")
+
+	# The world hands the flag over in `_process`, and the body is a descendant of it,
+	# so in a real frame the lens is already held by the time it would have moved.
+	world.tap_action(Vector2i(1, 0))
+	world._process(1.0 / 60.0)
+	assert_true(world.player.camera_held, "Raised: the lens is held")
+	for _i in range(30):
+		world._process(1.0 / 60.0)
+		world.player._process(1.0 / 60.0)
+	assert_eq(world.player.camera_position(), eye, "Half a second and it has not panned")
+	assert_eq(world.player.camera_zoom(), lens, "...nor changed how much it is showing")
+
+	world.tap_action(Vector2i(1, 0))
+	world._process(1.0 / 60.0)
+	assert_false(world.player.camera_held, "Pinned: the lens is free again")
+	world.player._process(1.0 / 60.0)
+	assert_ne(world.player.camera_position(), eye, "...and picks up its chase from there")
+
+
+func test_the_held_look_leaves_the_ground_around_the_body_clear() -> void:
+	# The effect is measured in render-target texels around where the BODY is drawn, so
+	# the clear circle has to follow the body rather than sitting at the middle of the
+	# screen — the lens leads, so those are not the same point.
+	world.player.snap_camera()
+	var centred: Vector2 = world._body_in_target_px()
+	assert_almost_eq(centred.x, Vector2(world.pixel_view.size).x * 0.5, 1.0,
+		"With the lens on the body, the body is the middle of the target")
+	assert_almost_eq(centred.y, Vector2(world.pixel_view.size).y * 0.5, 1.0, "...on both axes")
+
+	# Lead the camera a long way and the clear circle goes with the body, not the lens.
+	world.player.lookahead_target = Vector2(6.0 * CS, 0.0)
+	for _i in range(120):
+		world.player._process(1.0 / 60.0)
+	var led: Vector2 = world._body_in_target_px()
+	assert_lt(led.x, centred.x - 10.0,
+		"Leading right puts the body left of centre, and the clear circle with it")
+	assert_almost_eq(led.y, centred.y, 1.0, "...and nowhere else vertically")
+
+
 func test_the_held_look_closes_over_the_world_and_lets_go() -> void:
 	# The screen effect is the announcement, so it is the one thing that keeps
 	# animating while the world does not — and it has to finish arriving and finish

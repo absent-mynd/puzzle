@@ -141,6 +141,17 @@ var _lookahead := Vector2.ZERO
 ## world rearranges, and the animator drives global_position directly.
 var frozen := false
 
+## Set while the world is HELD (a hand raised into the placement cursor): the lens
+## stops where it is, lead and zoom included, and starts again from exactly there.
+##
+## Deliberately not `frozen`, though both mean "the body is not being stepped". The
+## two are set for opposite reasons and want opposite answers from the camera: a fold
+## ride freezes the body and the camera must keep working, because watching the ride
+## is its whole job that frame. A raised hand freezes the WORLD, and the camera is one
+## of the things that has to stop — a lens still gliding over a still frame is the one
+## moving thing left, and the frame you choose in should be the frame you resume into.
+var camera_held := false
+
 ## How far through a release burst the fold key is: 0 idle, 1 LOADED and waiting
 ## for you to let go. Written each frame by `FoldWorld._process`.
 ##
@@ -185,7 +196,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if _cam == null:
+	if _cam == null or camera_held:
 		return
 	# Frame-rate independent exponential approach (stable for large deltas).
 	_lookahead = _lookahead.lerp(

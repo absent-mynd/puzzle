@@ -14,7 +14,7 @@ shader_type canvas_item;
 // of it at once. The HUD is on its own layer above and is untouched: the readout that
 // says PLACING must not be dimmed by the effect it is describing.
 //
-// Three decisions, and the first two are the same one the lighting pass makes:
+// Four decisions, and the first two are the same one the lighting pass makes:
 //
 //   1. **Everything happens on the ART-PIXEL grid**, recovered from
 //      `TEXTURE_PIXEL_SIZE` — the render target is the art, so its texels ARE art
@@ -28,6 +28,12 @@ shader_type canvas_item;
 //      instant the ease passes its own threshold, so the stop spreads across the
 //      frame as a growing checker in about a tenth of a second. A smooth fade would
 //      be a continuous animation announcing that continuous animation has stopped.
+//
+//   4. **It leaves the ground around the body alone.** The hold is weakest where you
+//      are and closes in with distance, so the cells you are choosing between are
+//      seen through nothing at all while the world beyond them is plainly stopped.
+//      That falls out of the same dissolve rather than being a second mechanism —
+//      near the body the checker just thins.
 //
 // The held look itself is a desaturation toward a cold tint plus a slight darkening —
 // the colour drains out of the world and it cools. On top of that the dither STAYS,
@@ -64,6 +70,15 @@ uniform float dim : hint_range(0.0, 1.0) = 0.18;
 // the message, since the colour shift is kept light — the texture is the tell.
 uniform float screen_door : hint_range(0.0, 1.0) = 0.26;
 
+// Where the body is, in render-target texels — which are art pixels, so the distance
+// below is isotropic and in the same units as the dither grid. UV would not do: the
+// target is wider than it is tall, and a circle in UV space is an ellipse on screen.
+uniform vec2 clear_at = vec2(0.0);
+// How much room around the body the hold leaves entirely alone, and how far it takes
+// to close in past that. Both in art pixels.
+uniform float clear_radius = 0.0;
+uniform float clear_fade = 1.0;
+
 // 4x4 ordered-dither threshold in [0,1), computed arithmetically so the shader needs
 // no constant array. Identical to `pixel_lit.gdshader` — same pattern, same phase, so
 // the two never beat against each other.
@@ -78,13 +93,24 @@ float bayer4(vec2 a) {
 
 void fragment() {
 	// Texel coordinates of the render target = art pixels, at any zoom.
-	float threshold = bayer4(UV / TEXTURE_PIXEL_SIZE);
-	// The dissolve, and the whole of the on/off test: `bayer4` is never negative, so
-	// at `held == 0` no pixel qualifies and the running world passes through
-	// untouched; its ceiling is 15/16, so by `held == 1` every pixel has flipped.
-	// (Written as one branch rather than an early-out because Godot's shader language
-	// does not allow `return` in `fragment`.)
-	if (threshold < held) {
+	vec2 px = UV / TEXTURE_PIXEL_SIZE;
+	float threshold = bayer4(px);
+	// How hard the hold has taken here. It is weakest where you are: the ground you
+	// are working over stays clear, and the effect closes in over the distance past
+	// that — so the cells you are choosing between are seen through nothing at all.
+	//
+	// Note this rides the SAME dissolve the ease uses rather than being a second
+	// mechanism. Near the body the checker simply thins out, which is what a dither
+	// does when you ask it for less; a hard circular cut would read as a spotlight,
+	// which is a different idea about what is happening.
+	float grip = held * smoothstep(
+		clear_radius, clear_radius + clear_fade, distance(px, clear_at));
+	// The whole of the on/off test: `bayer4` is never negative, so where `grip` is 0 —
+	// a running world, or the ground at your feet — no pixel qualifies and the frame
+	// passes through untouched; its ceiling is 15/16, so at `grip == 1` every pixel
+	// has flipped. (Written as one branch rather than an early-out because Godot's
+	// shader language does not allow `return` in `fragment`.)
+	if (threshold < grip) {
 		float lum = dot(COLOR.rgb, vec3(0.299, 0.587, 0.114));
 		vec3 frozen = mix(COLOR.rgb, lum * hold_tint, drain) * (1.0 - dim);
 		COLOR.rgb = frozen * (1.0 - screen_door * threshold);

@@ -6,7 +6,7 @@ vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment. The
 world is now **authored in an editor** rather than by hand-editing JSON.
-**Tests:** 841 passing / 841, 34 scripts, ~25s.
+**Tests:** 843 passing / 843, 34 scripts, ~25s.
 
 ---
 

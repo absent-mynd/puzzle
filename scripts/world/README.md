@@ -87,16 +87,20 @@ of, not a fold that is coming.
 #### What a held world looks like
 
 A world that has stopped looks exactly like a world you are not moving in, so
-two things say the difference.
+the difference is drawn deliberately.
 
-**Nothing moves. At all.** Not the simulation, and not the decorations either —
-the idle float of every hand, the throb of a burning fuse, the breath of a
-flickering lamp and the fade of a burst ring all stop dead where they stood.
-They run on `WorldClock`, which is the world's own clock and only advances while
-the world does, so a held frame is a genuinely still image rather than a paused
-game with its ornaments left playing. (Three things stay live and all three are
-*about* the pause rather than in it: the charge on your body, the HUD's flash
-timer, and the effect below.)
+**Nothing moves. At all.** Not the simulation, not the decorations, and not the
+camera — the idle float of every hand, the throb of a burning fuse, the breath of
+a flickering lamp, the fade of a burst ring and the lens itself all stop dead
+where they stood. Everything in the world runs on `WorldClock`, which only
+advances while the world does; the lens stops separately
+(`PlayerBody.camera_held`) and **stops mid-lag**, wherever the moment caught it,
+because the frame you choose in should be the frame you resume into rather than
+one that glided somewhere else while you were thinking. A held frame is a
+genuinely still image, down to the pixel.
+
+Three things stay live, and all three are *about* the pause rather than in it:
+the charge on your body, the HUD's flash timer, and the effect below.
 
 **The screen takes on a held look** (`assets/shaders/held.gdshader`): the world
 cools and dims, and a fixed 4×4 ordered dither settles over it — the same Bayer
@@ -104,6 +108,14 @@ checker the lighting already uses for its bands, so it reads as something the
 game is made of rather than a filter laid over it. It **dissolves in** through
 that checker over about a tenth of a second, which is the only animation left
 on screen while the hold lasts.
+
+**The ground around you stays clear.** The hold is weakest where you are and
+closes in with distance, so the cells you are choosing between are seen through
+nothing at all while the world past them is plainly stopped. That is the same
+dissolve rather than a second mechanism — near the body the checker simply thins
+out — so there is no hard circle and nothing reads as a spotlight. The clear
+radius comfortably contains the reach box; both it and the fade are in cells
+(`FoldWorld.HELD_CLEAR_CELLS` / `HELD_FADE_CELLS`).
 
 The colour drain is deliberately light. The overlay draws inside the same render
 target, so the effect reaches the markers too — and those are drawn unlit

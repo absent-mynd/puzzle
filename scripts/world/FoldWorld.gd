@@ -81,6 +81,15 @@ const HELD_SHADER_PATH := "res://assets/shaders/held.gdshader"
 ## enough to feel like a grip rather than a transition, long enough that the dither
 ## dissolves in visibly rather than appearing whole.
 const HELD_EASE := 0.09
+## How much ground around the body the held look leaves entirely alone, in cells, and
+## how far it takes to close in past that.
+##
+## The clear radius covers the reach box with room to spare — its far corner is 1.5
+## cells out on both axes, so about 2.1 away — because the cells you are choosing
+## between are the one part of the frame that must be seen through nothing at all. The
+## fade is wide so the checker THINS toward you rather than ending at a line.
+const HELD_CLEAR_CELLS := 2.6
+const HELD_FADE_CELLS := 2.4
 ## Anchors are pinned at arm's length: any of the nine cells centred on the one you
 ## are standing in. What you can fold is exactly what you can stand next to.
 ##
@@ -458,6 +467,12 @@ func _build_pixel_view() -> void:
 		_held_mat = ShaderMaterial.new()
 		_held_mat.shader = load(HELD_SHADER_PATH)
 		_held_mat.set_shader_parameter("held", 0.0)
+		# Cells are the unit the design thinks in; art pixels are the unit the shader
+		# measures in. Converted once, here, rather than in the shader — which has no
+		# business knowing how big a cell is.
+		var per_cell := CS / PixelArt.WORLD_PER_PIXEL
+		_held_mat.set_shader_parameter("clear_radius", HELD_CLEAR_CELLS * per_cell)
+		_held_mat.set_shader_parameter("clear_fade", HELD_FADE_CELLS * per_cell)
 		view.material = _held_mat
 	else:
 		# No shader, no effect, and the game is otherwise unchanged — the stop is
@@ -2247,6 +2262,10 @@ func _process(delta: float) -> void:
 	# knows how to be a colour, not what folding is.
 	if player != null:
 		player.fold_charge = hold_progress()
+		# ...and holds the lens still while the world is held. Told once per frame
+		# rather than at the two edges, so a path that ends the mode without going
+		# through `_end_aim` cannot leave the camera stuck.
+		player.camera_held = placing()
 	# The overlay draws a description of the frame, not this object. Building it here
 	# is also what makes it a per-FRAME cost: it used to gather itself from inside
 	# `paint()`, which WrapCanvas runs once per copy of the space.
@@ -2290,10 +2309,25 @@ func _tick_held_look(delta: float) -> void:
 	if _held_mat == null:
 		return
 	var want := 1.0 if placing() else 0.0
-	if is_equal_approx(_held, want):
-		return
-	_held = move_toward(_held, want, delta / HELD_EASE)
-	_held_mat.set_shader_parameter("held", _held)
+	if not is_equal_approx(_held, want):
+		_held = move_toward(_held, want, delta / HELD_EASE)
+		_held_mat.set_shader_parameter("held", _held)
+	if _held > 0.0:
+		_held_mat.set_shader_parameter("clear_at", _body_in_target_px())
+
+
+## Where the body is in the render target, in texels — which are art pixels, which is
+## what the shader measures its clear radius in.
+##
+## The lens never moves (see `PixelArt`), so this is only ever the body's offset from
+## the RENDERED centre, scaled by the one constant that says how big an art pixel is.
+## The rendered centre is the camera's snapped position rather than its true one: half
+## an art pixel of disagreement would put the clear circle half a pixel off the body it
+## is drawn around, which at this resolution is a visible slip.
+func _body_in_target_px() -> Vector2:
+	var eye := PixelArt.snap_round(player.camera_position())
+	var from_centre := (player.global_position - eye) / PixelArt.WORLD_PER_PIXEL
+	return Vector2(pixel_view.size) * 0.5 + from_centre
 
 
 func _apply_anim_frame() -> void:
@@ -2455,11 +2489,13 @@ func _camera_focus() -> PackedVector2Array:
 		var wp = anchor_point(entry)
 		if wp != null:
 			pts.append(Vector2(wp))
-	# The cell you are choosing. It is within arm's reach, so it barely moves the
-	# frame — but "barely" is not "never" at the widest zoom, and the one thing that
-	# must not be off screen while you pick it is the cell you are picking.
-	if placing():
-		pts.append(cell_center(aim_cell()))
+	# The cell being chosen is deliberately NOT here. It was, briefly, on the reasoning
+	# that the one thing which must not be cropped while you pick it is the cell you
+	# are picking — but the lens is held still for the whole of that (see
+	# `PlayerBody.camera_held`), so it could not act on it then, and by the time it
+	# could the hand is down and counted above as an anchor like any other. A focus
+	# point nothing can move for is a focus point that does nothing.
+	#
 	# Inside a fold the band IS the room: frame the fundamental domain, so a wide
 	# strip reads as the cylinder it is rather than a corridor with no visible
 	# walls. On a torus that is all four walls, and it comes out of the same call.
