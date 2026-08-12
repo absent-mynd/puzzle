@@ -27,6 +27,13 @@ func before_each() -> void:
 	world.anim_enabled = false
 
 
+## Pin a hand one cell away in `dir`: two taps, the first raising it into a cursor
+## and stopping the world, the second putting it down. See `test_fold_world._pin`.
+func _pin(dir: Vector2i) -> void:
+	world.tap_action(dir)
+	world.tap_action(dir)
+
+
 ## Outer fold: a horizontal anchor pair over the pit, so its creases are VERTICAL
 ## and its strip runs up the map. Standing in the strip, the fold swallows you.
 func _pinch_over_pit() -> void:
@@ -187,9 +194,9 @@ func test_you_can_pin_and_fold_at_depth_two() -> void:
 	world.hands[0] = HandTypes.PLAIN
 	world.hands[1] = HandTypes.PLAIN
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_eq(world.anchor_cells(), [Vector2i(14, 12)], "A hand pins to the sheet in here")
-	world.tap_action(Vector2i(-1, 0))
+	_pin(Vector2i(-1, 0))
 	assert_eq(world.armed.size(), 1, "...and the second lights a fuse two layers down")
 
 
@@ -272,8 +279,8 @@ func test_the_preview_band_is_drawn_in_every_copy() -> void:
 	world.hands[0] = HandTypes.PLAIN
 	world.hands[1] = HandTypes.PLAIN
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(0, -1))
-	world.tap_action(Vector2i(0, 1))
+	_pin(Vector2i(0, -1))
+	_pin(Vector2i(0, 1))
 	assert_eq(world.armed.size(), 1, "A pair is armed, so there is a strip to preview")
 
 	world.overlay.set_view(world._build_overlay_view())
@@ -297,8 +304,8 @@ func _near_edge(p: Vector2, poly: PackedVector2Array) -> bool:
 func test_the_preview_is_one_band_in_a_world_that_does_not_repeat() -> void:
 	# Outside a fold there is no domain, so nothing is clipped and the preview is
 	# the single full-extent strip it always was.
-	world.tap_action(Vector2i(1, 0))
-	world.tap_action(Vector2i(-1, 0))
+	_pin(Vector2i(1, 0))
+	_pin(Vector2i(-1, 0))
 	assert_eq(world.armed.size(), 1, "A pair is armed")
 	world.overlay.set_view(world._build_overlay_view())
 	assert_eq(world.overlay._strips.size(), 1, "One strip, unclipped")

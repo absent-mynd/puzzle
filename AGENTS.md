@@ -235,6 +235,64 @@ its dB trim, pitch jitter and retrigger floor all live in that one registry, so
 **balancing the game is a diff**. Do not scatter volume constants at call sites, and
 do not add a throttle at one.
 
+### 7. Placing a hand stops the clock, and stopping it is a NON-EVENT
+
+Placing is two taps: the first raises the hand into a cursor over the nine cells of
+arm's reach, the second pins it. Between them `_physics_process` returns early and
+the body is `frozen` — see `FoldWorld.placing()`.
+
+**The freeze is implemented by not running, and it must stay that way.** Nothing is
+saved, snapshotted or restored: the fuses are not paused-and-resumed, the balls are
+not parked, the velocity is not stashed. They are simply not stepped, which is why
+resuming is exact rather than approximately exact, and why no future addition to the
+frame has to remember to opt in. **If you find yourself writing "save X on freeze,
+restore X on resume", the guard is in the wrong place** — move it up so X is never
+stepped at all. This is the same argument as §2 and Decision 1: a second copy of a
+value is a second thing that can be wrong.
+
+`_process` deliberately keeps running. The camera has to go on easing onto the cell
+being chosen, and the hold that cancels the placement has to keep counting; neither
+moves the world. If you add something to `_process` that DOES move the world, it
+needs the guard that `_physics_process` has.
+
+Two consequences worth keeping:
+
+- **Raising a hand spends nothing.** It leaves its slot at the pin, not at the
+  raise, so a cancelled placement costs exactly nothing and conservation never sees
+  a hand in a fourth state. Do not make `begin_aim` take it out of the slot early.
+- **Reach is a square, and its radius is level design.** `WorldCore.within_anchor_reach`
+  is a box of `ANCHOR_REACH` cells around your own, diagonals and your own feet
+  included. A one-tile shell keeps you out of what it encloses only because that
+  radius is 1 (the sealed chamber is exactly that shell), so raising it is a design
+  conversation, not tuning.
+- **The stop reaches the DECORATIONS, through one clock.** `WorldClock` is world
+  time: `FoldWorld._process` advances it only while the world runs, and everything
+  that drifts, throbs or flickers without being pushed reads it — the hands' idle
+  float, the fuse throb, the lamp flicker, the burst ring. It exists because there
+  were three clocks (two direct `Time.get_ticks_msec()` reads and `LightRig`'s own
+  accumulator) and all three kept running through a pause that had stopped everything
+  else, which reads as a paused game rather than as held time. **Anything new that
+  animates in the world reads `WorldClock`**, and `test_world_clock` fails the build
+  if it reads the wall clock instead. Wall time stays right for what is NOT in the
+  world: the input charge, the HUD's flash, and the held-look ease — all three are
+  about the pause rather than in it.
+- **`PlayerBody.frozen` means "do not step me" and nothing else.** It is set for two
+  unrelated reasons now, and they want opposite framings: a fold ride leaves the
+  velocity stale and the lens should read it as still, while a raised hand leaves it
+  exactly intact and the lens must go on reading it — or the frame eases shut over the
+  second you spend aiming and blooms open again when you pin. So *which* is happening
+  is `WorldCamera`'s call, off the `frozen` fact the world passes it, and
+  `motion_intensity` is a plain statement about velocity. Do not put a mode check back
+  into the body.
+- **The LENS stops too, and it is a separate flag.** `PlayerBody.camera_held` freezes
+  the follow, the lead and the zoom where they are — mid-lag, wherever the moment
+  caught them. It cannot be `frozen`: that is also set by a fold ride, and there the
+  camera keeping up IS its job. The two flags mean "the body is not stepped" and "the
+  view is not stepped", and only one of them is about time having stopped. A
+  consequence worth knowing before adding a focus point: while the lens is held it
+  cannot act on one, so a point that only exists during a placement does nothing —
+  which is why the cursor's cell is not in `_camera_focus`.
+
 ---
 
 ## The hand economy
@@ -242,13 +300,18 @@ do not add a throttle at one.
 | Where a hand can be | How it gets there | How it comes back |
 |---|---|---|
 | One of your two slots | the world's `starting_hands`; walking over a loose hand | — |
-| Pinned as an anchor | tap F pointing at a cell (leaves the slot at once) | a burst in reach |
-| Pinned in an ARMED pair | pairing with a reachable unpaired anchor | a burst reaching either half |
+| Pinned as an anchor | tap F to raise it, walk the cursor, tap F to pin (leaves the slot at the pin, not the raise) | a burst in reach |
+| Pinned in an ARMED pair | pairing with a reachable unpaired anchor | a burst in reach of that half (which also disarms the pair; the other half stays pinned) |
 | Held by a standing fold | the fuse going off | a burst at its seam |
 | Lying on the ground | authored; overflow from a burst; a fold that failed at the fuse | walk over it |
 
-**One key, two directions.** Tap puts a hand down; hold fires a **burst**. There is
-no committing press — the second hand lights a **fuse** and the pair folds itself.
+**One key, two directions.** Tap puts a hand down; F held and then *released* fires
+a **burst**. There is no committing press — the second hand lights a **fuse** and the
+pair folds itself.
+
+**Putting one down is two taps, and the world is stopped between them** (§7). A
+charged release while a hand is raised is still a burst: it cancels the placement,
+fires, and starts the clock again.
 
 Those places always sum to the same number. **Nothing in the game creates or destroys
 a hand** — placing, committing, unfolding, bursting and picking up all just move one
@@ -268,6 +331,20 @@ what you must not quietly change:
 - **The burst is not aimed.** `hold_action` takes no direction. Do not give it a
   target without a design conversation — the untargeted reading is what makes it a
   thing you *do*, not a thing you *point*.
+- **Both gestures fire on the RELEASE.** A hold does not act, it *loads*. So the
+  irreversible half of the verb is never on a timer you cannot stop, and a charge is
+  a state you can carry — load it on safe ground, walk to the seam, release there.
+  Reach is measured where you let go, not where you pressed. Do not move either
+  gesture back onto the press.
+- **The charge is worn on the body**, shading the player toward the teal that means
+  "openable" everywhere else on screen (`PlayerBody.charge_color`). Not a ring on the
+  aimed cell — a burst does not go off there. If you need to say something new about
+  the charge, say it on the body.
+- **The burst reaches exactly what is inside it.** Reaching one half of an armed pair
+  disarms the pair, but pops only the halves inside the sphere; the far one stays
+  pinned where you chose and goes back to `unpaired` (`_disarm_pair`). Reaching in
+  costs you the fuse, not the hand at the other end — which is what makes a badly
+  aimed pair correctable one end at a time.
 - **Fold validity is asked at the FUSE, not at placement.** That is what makes the
   fuse a *window*: you can put both hands down from a spot the fold could not put you
   and run clear before it fires. Moving a check back to placement closes it.

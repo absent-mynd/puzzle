@@ -38,12 +38,15 @@ why drift costs nothing at the loop point.
 
 ## Pairs that carry meaning
 
-Three sounds are deliberately *mirrors*, because the events are:
+Four sounds are deliberately *mirrors*, because the events are:
 
 - **`pinch` / `surface`** — going into a fold and coming out of it, one gesture
   heard from its two sides.
 - **`fold` / `unfold`** — literally the same waveform reversed, which is what
   unfolding *is* in this game (drop the fold and re-derive).
+- **`hand_raise` / `hand_place`** — the same, and for the same reason: raising a
+  hand into the cursor and pinning it there are one gesture in two directions.
+  The raise is trimmed further down, because it spends nothing.
 - **`fold` / `fold_refused`** — a fold that goes and a fold that does not must
   never be mistakable for one another, which is why the refusal is short, dull
   and low rather than a quieter whoosh.

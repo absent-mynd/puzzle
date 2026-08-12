@@ -66,21 +66,55 @@ func _count(name: String) -> int:
 	return n
 
 
+## Pin a hand one cell away in `dir`: two taps, the first raising it into a cursor
+## and stopping the world, the second putting it down. See `test_fold_world._pin`.
+func _pin(dir: Vector2i) -> void:
+	world.tap_action(dir)
+	world.tap_action(dir)
+
+
 # ---------------------------------------------------------------------------
 # Placing hands
 # ---------------------------------------------------------------------------
 
 func test_placing_a_hand_is_heard() -> void:
 	_listen()
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_true(_heard(Sounds.HAND_PLACE), "a tap that places should be heard")
+
+
+## Both halves of the gesture are audible, and they are not the same sound: raising a
+## hand stops the world, which is a thing the world cannot show you by moving.
+func test_raising_a_hand_is_heard_apart_from_pinning_it() -> void:
+	_listen()
+	world.tap_action(Vector2i(1, 0))
+	assert_true(_heard(Sounds.HAND_RAISE), "the hand coming up should be heard")
+	assert_false(_heard(Sounds.HAND_PLACE), "...and must not sound like it went down")
+
+	_listen()
+	world.tap_action(Vector2i(1, 0))
+	assert_true(_heard(Sounds.HAND_PLACE), "the pin that follows sounds like a pin")
+
+
+func test_walking_the_cursor_ticks() -> void:
+	world.tap_action(Vector2i(1, 0))
+	_listen()
+	world.move_aim(Vector2i(0, -1))
+	assert_eq(_count(Sounds.UI_MOVE), 1, "a cell of cursor travel is one tick")
+
+	# Pushing at the edge of your reach moves nothing, so it says nothing: a tick with
+	# no movement under it would read as a step that did not happen.
+	_listen()
+	for _i in range(3):
+		world.move_aim(Vector2i(0, -1))
+	assert_eq(_count(Sounds.UI_MOVE), 0, "the cursor is at the edge and stays silent")
 
 
 func test_a_tap_at_nothing_is_refused_not_placed() -> void:
 	# Off the sheet entirely: an anchor is a base identity, and void has none.
 	world.player.teleport(Vector2(-6.5 * CS, 12.5 * CS), false)
 	_listen()
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_eq(world.anchor_cells(), [], "nothing was pinned")
 	assert_true(_heard(Sounds.DENY), "a refused tap should say so")
 	assert_false(_heard(Sounds.HAND_PLACE), "...and must not sound like a placement")
@@ -90,7 +124,7 @@ func test_a_tap_with_no_hands_left_is_refused() -> void:
 	world.hands[0] = null
 	world.hands[1] = null
 	_listen()
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_true(_heard(Sounds.DENY), "no hand to place is a refusal")
 	assert_false(_heard(Sounds.HAND_PLACE))
 
@@ -99,12 +133,12 @@ func test_a_tap_with_no_hands_left_is_refused() -> void:
 ## completing a pair has to be audible in its own right — not just as a second
 ## copy of the placement sound.
 func test_completing_a_pair_lights_an_audible_fuse() -> void:
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_false(world.fuse_running(), "one hand is not a pair")
 
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
 	_listen()
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_true(world.fuse_running(), "the pair armed")
 	assert_true(_heard(Sounds.PAIR_ARMED), "arming should be heard")
 	assert_true(_heard(Sounds.HAND_PLACE), "...over the hand that armed it")
@@ -112,7 +146,7 @@ func test_completing_a_pair_lights_an_audible_fuse() -> void:
 
 func test_the_first_hand_of_a_pair_does_not_light_a_fuse() -> void:
 	_listen()
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_false(_heard(Sounds.PAIR_ARMED), "one hand down is not a fuse")
 
 
@@ -142,9 +176,9 @@ func test_a_pinch_sounds_different_from_a_ride() -> void:
 ## hands are heard hitting the ground. The two together are the whole message —
 ## the fold did not happen, and here is where your hands are now.
 func test_a_fold_that_will_not_go_is_heard_to_fail_and_scatter() -> void:
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))            # the same cell: no crease direction
+	_pin(Vector2i(1, 0))            # the same cell: no crease direction
 	_listen()
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 
@@ -154,19 +188,38 @@ func test_a_fold_that_will_not_go_is_heard_to_fail_and_scatter() -> void:
 	assert_false(_heard(Sounds.FOLD), "a refusal must never sound like a fold")
 
 
-func test_a_hand_caught_by_a_burst_is_silent_but_a_dropped_one_is_not() -> void:
-	# One anchor in reach, one far away: the burst catches the near hand and
-	# drops the far one. Only the drop should be heard.
-	world.tap_action(Vector2i(1, 0))                            # (5,12)
+func test_a_burst_that_pops_one_half_of_a_pair_drops_nothing() -> void:
+	# One anchor in reach, one far away: the burst pops the near hand and leaves the
+	# far one pinned. A hand caught is silent and a hand untouched is silent, so the
+	# whole gesture is — the ground is not involved.
+	_pin(Vector2i(1, 0))                                        # (5,12)
 	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                            # (21,12)
+	_pin(Vector2i(1, 0))                            # (21,12)
 	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)
 	_listen()
 	world.hold_action()
 
 	assert_eq(world.hands_held(), 1, "the reachable hand came back")
-	assert_eq(_count(Sounds.HAND_DROP), 1,
-		"only the hand that reached the ground is heard")
+	assert_true(_heard(Sounds.BURST), "the burst itself is heard")
+	assert_eq(_count(Sounds.HAND_DROP), 0,
+		"the far hand never moved, so nothing is heard to fall")
+
+
+func test_a_popped_hand_with_no_slot_to_go_to_is_heard_to_fall() -> void:
+	# The other half of the same claim: what makes a hand audible is being LET GO OF,
+	# not being popped. Fill both slots while the pair ticks — as if you had walked
+	# over two loose hands — and the hand you pop has nowhere to land but the floor.
+	_pin(Vector2i(1, 0))                                        # (5,12)
+	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
+	_pin(Vector2i(1, 0))                                        # (21,12)
+	world.hands[0] = HandTypes.PLAIN
+	world.hands[1] = HandTypes.PLAIN
+	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)
+	_listen()
+	world.hold_action()
+
+	assert_eq(world.hands_held(), 2, "your slots were already full")
+	assert_eq(_count(Sounds.HAND_DROP), 1, "so the hand you popped is heard to fall")
 
 
 # ---------------------------------------------------------------------------
@@ -293,9 +346,9 @@ func test_the_bed_changes_inside_a_fold_and_back() -> void:
 func test_the_world_never_asks_for_a_sound_that_is_not_there() -> void:
 	AudioManager._warned.clear()
 
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	world.hold_action()
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))

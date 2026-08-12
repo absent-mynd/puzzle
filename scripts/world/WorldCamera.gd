@@ -55,12 +55,18 @@ func frame(ctx: Dictionary, center: Vector2 = Vector2.INF) -> void:
 
 	var eye := (_player.camera_position() if center == Vector2.INF
 		else body + _player.lookahead_target)
+	# A fold ride reports still: the body's velocity is left over from before the
+	# transition, and the transition frames itself from its own endpoints. That is a
+	# framing decision about what is happening in the world, which is why it is made
+	# here and not in `motion_intensity` — the body is also held still while a hand is
+	# raised, and there the velocity is exactly what the frame should still be reading.
+	var still: bool = ctx.get("frozen", false)
 	_player.zoom_target = WorldCore.camera_zoom_for({
 		"viewport": ctx.get("viewport", Vector2.ZERO),
 		"center": eye,
-		"motion": _player.motion_intensity(),
+		"motion": 0.0 if still else _player.motion_intensity(),
 		# A fold rearranging the world is its own reason to step back and watch.
-		"widen": 1.0 if ctx.get("frozen", false) else 0.0,
+		"widen": 1.0 if still else 0.0,
 		"focus": ctx.get("focus", PackedVector2Array()),
 	})
 

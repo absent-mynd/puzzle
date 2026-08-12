@@ -70,6 +70,21 @@ const STRIDE := 96.0
 ## several times while you simply walked along uneven ground.
 const LAND_SPEED := 220.0
 
+## The player's own colour, and the colour it takes on as a burst charges.
+##
+## Teal is what release already means everywhere else on screen — an unblocked seam
+## diamond, the glue lines of a space you can open. A body drifting toward it is
+## saying "what I am about to do is let go", in a vocabulary the player has been
+## reading since the first fold.
+const BODY_COLOR := Color("ffd27f")
+const CHARGE_COLOR := Color("59e0d0")
+## How much of that colour a fully-charged-but-not-yet-loaded body wears...
+const CHARGE_TINT := 0.45
+## ...and how much a LOADED one does. The gap between them is the whole signal: the
+## charge creeps up and then arrives, so "ready" is a state you can see rather than
+## an amount you have to judge.
+const LOADED_TINT := 0.9
+
 var _coyote := 0.0
 var _buffer := 0.0
 ## The player's outline, in body-local space, and the squash currently applied to
@@ -126,6 +141,26 @@ var _lookahead := Vector2.ZERO
 ## world rearranges, and the animator drives global_position directly.
 var frozen := false
 
+## Set while the world is HELD (a hand raised into the placement cursor): the lens
+## stops where it is, lead and zoom included, and starts again from exactly there.
+##
+## Deliberately not `frozen`, though both mean "the body is not being stepped". The
+## two are set for opposite reasons and want opposite answers from the camera: a fold
+## ride freezes the body and the camera must keep working, because watching the ride
+## is its whole job that frame. A raised hand freezes the WORLD, and the camera is one
+## of the things that has to stop — a lens still gliding over a still frame is the one
+## moving thing left, and the frame you choose in should be the frame you resume into.
+var camera_held := false
+
+## How far through a burst the fold key is: 0 idle, 1 LOADED and waiting
+## for you to let go. Written each frame by `FoldWorld._process`.
+##
+## The body does not know what a burst is and must not learn. It is handed a number
+## between 0 and 1 and wears it — which is the same arrangement as `zoom_target`
+## and `frozen`, and the reason the charge indicator could move onto the body at
+## all without folding leaking in here.
+var fold_charge := 0.0
+
 
 func _ready() -> void:
 	var shape := CollisionShape2D.new()
@@ -161,7 +196,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if _cam == null:
+	if _cam == null or camera_held:
 		return
 	# Frame-rate independent exponential approach (stable for large deltas).
 	_lookahead = _lookahead.lerp(
@@ -382,11 +417,16 @@ func motion_fraction() -> Vector2:
 ## to see where you are going — and running least, since running is the resting
 ## state of play and should not sit the camera permanently at its limit.
 ##
-## Frozen (riding a fold) reports still: the velocity is stale, and the
-## transition frames itself from its own endpoints.
+## A plain statement about the velocity, and deliberately NOT about `frozen`. The
+## body is held still for two unrelated reasons and they want opposite framings: a
+## fold ride leaves the velocity stale and should report still, while a hand raised
+## into the placement cursor leaves it exactly, meaningfully intact — the frame you
+## are choosing in has to be the frame you resume into, or it drifts shut while you
+## aim and blooms open again the moment you pin.
+##
+## So which of those is happening is decided by `WorldCamera`, which the world
+## already tells whether a fold is in flight. This just reports the body.
 func motion_intensity() -> float:
-	if frozen:
-		return 0.0
 	var f := motion_fraction()
 	return clampf(0.45 * absf(f.x) + 0.75 * maxf(f.y, 0.0) + 0.25 * maxf(-f.y, 0.0), 0.0, 1.0)
 
@@ -444,4 +484,23 @@ func visual_squash() -> Vector2:
 
 
 func visual_color() -> Color:
-	return Color("ffd27f")
+	return charge_color(fold_charge)
+
+
+## The body's colour at a given charge — the whole release indicator, in one blend.
+##
+## Deliberately quiet, and deliberately not linear. `charge` is SQUARED on the way
+## up, so the first half of a hold barely shows: taps are the common press by a wide
+## margin, and a body that flickered on every hand you put down would be noise
+## rather than information. The tint arrives late, near the threshold, where the
+## thing it is warning you about actually is.
+##
+## Then it steps. At 1 the burst is loaded and will pop the instant you let go, and
+## that is a different fact from "nearly loaded" — not a further 10% of anything.
+## The step is what you learn to read; the ramp is only what tells you it is coming.
+static func charge_color(charge: float) -> Color:
+	var c := clampf(charge, 0.0, 1.0)
+	if c <= 0.0:
+		return BODY_COLOR
+	var mix := LOADED_TINT if c >= 1.0 else c * c * CHARGE_TINT
+	return BODY_COLOR.lerp(CHARGE_COLOR, mix)

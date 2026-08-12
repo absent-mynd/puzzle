@@ -25,6 +25,11 @@ in the tree, it is a leftover — fix it.
 | A hand pinned to a cell | **anchor** | pin, marker | Not a synonym for *hand* — it is the *role* a hand takes while it is down. `Fold.anchor_a/anchor_b` are positions, and they outlive the fold's hands. |
 | A hand lying in the world | **loose hand** | cache, drop | One object (`HandPickup`) for the ones a world authored and the ones a burst pops out; say **authored** or **dropped** when the difference matters (only the authored ones respawn on `R`). |
 | A pair whose fuse is running | **armed** | primed | The countdown is a *fuse*, and a fuse is armed. Also the word the player-facing README already used. |
+| Breaking an armed pair without folding it | **disarm** | break, defuse | `_disarm_pair`. It takes the fuse, not necessarily both hands — see *pop*. |
+| A hand coming off an anchor | **pop** | retrieve, recall, refund | What a burst does to what it reaches. A popped hand goes to a free slot, or to the ground if there is none. |
+| A hand up but not yet pinned | **raised** | held (that means the world), aiming | `FoldWorld.placing()` is true, and the cursor is on a cell within reach. |
+| A burst loading while F is down | **charge** | wind-up, hold | `PlayerBody.charge_color` wears it. It fires on release. |
+| The world stopped while you aim | **held** | paused, frozen | *Frozen* is taken: `PlayerBody.frozen` is a fold ride. `camera_held` and `held.gdshader` are this one. |
 | A derived polygon of a base tile | **piece** | fragment | `FoldedPiece` is the type, `pieces` is the list, `derive_pieces` builds it. A piece no fold has touched is not a fragment of anything. |
 | The region between a fold's two creases | **strip** | band, excision band, gap | What the fold excises and what its subspace is made of — one word for both, because they are the same sheet. |
 | One image of a repeating space | **copy** | band | `FoldLattice.offsets()` returns where to draw them. Distinct from *strip*: inside a fold you stand in one **copy** of the **strip**. |

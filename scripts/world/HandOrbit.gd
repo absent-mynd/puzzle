@@ -109,11 +109,16 @@ func paint() -> void:
 ## floats because it is a hand, so no caller can forget to make one float. `seed` is
 ## that hand's own phase (see `WorldCore.hand_drift_seed`); hands sharing a seed bob in
 ## lockstep, which is only ever right for the wrap copies of one hand.
+##
+## `drift` is how far it floats, and there is exactly one caller that passes 0: the
+## placement cursor. A hand being aimed at a cell is a tool rather than an object lying
+## about, and a tool that wobbles a pixel and a half is a tool you cannot aim. Every
+## other hand takes the default, which is the point of the parameter having one.
 static func draw_hand(on: CanvasItem, at: Vector2, kind: int, seed: float = 0.0,
-		scale: float = 1.0) -> void:
+		scale: float = 1.0, drift: float = WorldCore.DRIFT_RADIUS) -> void:
 	var c: Color = HandTypes.color(kind)
 	var r: float = HAND_RADIUS * scale
-	var p := at + WorldCore.hand_drift(seed, drift_time())
+	var p := at + WorldCore.hand_drift(seed, drift_time(), drift)
 	# A darker rim so a hand stays legible against ground of its own colour.
 	on.draw_circle(p, r + 1.5, Color(c.r * 0.25, c.g * 0.25, c.b * 0.25, 0.85))
 	on.draw_circle(p, r, c)
@@ -121,10 +126,15 @@ static func draw_hand(on: CanvasItem, at: Vector2, kind: int, seed: float = 0.0,
 
 ## The one clock every hand drifts on.
 ##
-## Wall time, not accumulated delta: the drift is a function of absolute time rather
-## than an integration, so there is no state to keep and nothing to keep in sync. A
-## hand you drop, a hand that pops out of a burst and a hand still in your slots are
-## all read off the same clock, so none of them restarts its float at zero — which is
-## what would give away that the world had just handed you a different object.
+## WORLD time, not wall time, and still not an integration: the drift is a function of
+## absolute time, so there is no state to keep and nothing to keep in sync. A hand you
+## drop, a hand that pops out of a burst and a hand still in your slots are all read
+## off the same clock, so none of them restarts its float at zero — which is what
+## would give away that the world had just handed you a different object.
+##
+## It reads `WorldClock` rather than `Time` so that a hand stops floating when the
+## world stops. A frozen world with the hands still bobbing in it is a paused game
+## with its decorations left running, which is exactly the thing a still frame is
+## supposed to say it is not.
 static func drift_time() -> float:
-	return float(Time.get_ticks_msec()) / 1000.0
+	return WorldClock.now()
