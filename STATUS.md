@@ -136,15 +136,12 @@ Roughly in priority order — nothing here is committed to yet:
 - Loose hands are runtime-only state (`FoldWorld.hand_pickups`) — the first thing that
   is not `(base, folds)`. `R` rebuilds them from the authored world and nothing carries
   them across a session; a save system is what they need next.
-- Lights do not cast shadows: they pass through walls. Occluders would have to be
-  re-derived per fold and would want to soften the seam, which the art is currently
-  committed to keeping hard.
 - The tilesheet is generated in code, so the world looks systematic rather than
   authored. The layout is fixed and a drawn sheet drops in without code changes.
 - The pin/trigger wing lives in **east**, not west, and is reached through a door.
   West's four authored beats depend on its exact geometry and infinite creases make
   a pin a global veto on every fold whose strip spans it, so nothing was placed there
-  playtesting. See the note in `scripts/world/README.md`.
+  without playtesting. See the note in `scripts/world/README.md`.
 
 ---
 

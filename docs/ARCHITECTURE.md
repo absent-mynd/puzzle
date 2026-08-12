@@ -284,12 +284,36 @@ scene-driven `test_fold_world.gd` is what catches integration regressions.
 
 ## What is deliberately still open
 
-- **Fold extent** (infinite creases) — see Decision 3.
-- **No nested pinch:** you cannot fold yourself deeper while already inside a fold.
+This is the list. **Do not close one of these silently in a refactor** — each is a
+position being held, not an oversight. (Gaps in the current build, as opposed to
+positions, are `STATUS.md` §"Known issues".)
+
+- **Fold extent is infinite-crease** — see Decision 3. A fold here guts a structure
+  over there. It is the argument for barrier-scoped folds, and it is kept unresolved
+  so it can be *felt* before it is designed away.
+- **How deep nesting stays legible** is untested by play. It works to arbitrary depth
+  and the tint deepens with each layer, but three folds in is a claim about the game,
+  not just about the code.
+- **A torus has no turn-back.** Fold yourself in across the grain and the space has no
+  ends at all — every direction wraps. Elegant or disorienting is a playtesting
+  question.
+- **A fold does not reach around the cylinder.** Fold across the glue you came in
+  through and the strip finds the end of the stored sheet rather than the next copy of
+  it. A design choice, not a geometric necessity — the alternative was implemented and
+  reverted. It costs a strip past the glue being emptier than the space it sits in; it
+  buys the glue line meaning something.
+- **A hand's kind changes only its fuse.** Whether that is enough to make picking up a
+  colour feel like a choice is open. A second axis would be a design change, made in
+  `HandTypes` and nowhere else.
+- **Jump feel is a first guess; jump HEIGHT is level design.** The curve wants
+  playtesting, the two bounds around it do not — the pinned pillar is two tiles
+  because it is meant to be jumped, the plate's wall is three because it is meant to
+  need a fold. `test_player_body` asserts both bounds, so tune the gravity constants
+  and let that test tell you when you have moved the world.
 - **Triggers are region-level only:** firing inside a subspace would require splicing
-  folds into an inner-fold list mid-cascade.
+  folds into an inner-fold list mid-cascade, which the resolver does not model.
 - **Unfold animation** plays only for newest-fold unfolds in a region; the reverse
-  transform is exact only there.
+  transform is exact only there, so mid-stack unfolds are instant.
 - **Lights do not cast shadows,** and the seam is not lit or blended specially.
   Occluders would have to be re-derived per fold and would want to soften the seam,
   which is the one thing the art is currently committed to keeping hard.
