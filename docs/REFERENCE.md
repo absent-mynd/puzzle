@@ -88,7 +88,9 @@ understand how the pieces meet. Its header comment is the map.
 | …unfold blocking work? | `FoldWorld.can_unfold_fold()`, `WorldCore.segment_intersects_strip` |
 | …exiting a subspace work? | `FoldWorld.try_exit()`, `exit_blocker()` |
 | …a door find its partner? | `FoldWorld._check_doors()`, `BaseFrame.resolve_base_point` |
-| …a trigger fire? | `FoldWorld._check_triggers()` → `TriggerResolver.resolve` |
+| …a tile react to being stood on? | `FoldWorld._check_triggers()` — dispatches on `TileTypes.on_enter_kind` |
+| …a fold trigger fire? | `FoldWorld._fire_fold_trigger()` → `TriggerResolver.resolve` |
+| …a burst plate fire? | `FoldWorld._fire_burst_plate()` → `FoldWorld._burst()` — the same one your release fires |
 | …a tile get its art? | `FoldWorld._make_tile()` → `TileAtlas.uv_for` |
 | …a light know where it is? | `FoldWorld.lights_here()` → `LightSource.position_in` |
 | …lighting stay pixelly? | `assets/shaders/pixel_lit.gdshader` (snap, quantize, dither) |

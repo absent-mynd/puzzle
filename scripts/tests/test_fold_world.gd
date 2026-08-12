@@ -1229,6 +1229,127 @@ func test_triggered_fold_persists_across_leaving_the_region() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Burst plates
+# ---------------------------------------------------------------------------
+# A tile that fires the burst FOR you: the same sphere your own release makes, centred
+# on the plate rather than on the body, at the reach the tile was authored with. East's
+# is 2.5 cells — wider than an arm, which is the whole point of putting one down.
+
+## Where east's burst plate is right now. Resolved rather than assumed: east ships
+## pre-folded, so the plate is nowhere near the cell it was authored in.
+func _burst_plate() -> Vector2:
+	var at = _plane_point(Vector2i(23, 9))
+	assert_not_null(at, "East's burst plate is on the sheet")
+	return Vector2(at)
+
+
+func test_a_burst_plate_reaches_further_than_your_arm() -> void:
+	_enter_east()
+	var plate := _burst_plate()
+	# Two cells above the plate: outside your own reach, inside the plate's.
+	world.player.teleport(plate + Vector2(0, -CS), false)
+	_pin(Vector2i(0, -1))
+	assert_eq(world.anchor_cells().size(), 1, "A hand is pinned two cells over the plate")
+	assert_eq(world.hands_held(), 1, "...and out of your slots")
+
+	world.player.teleport(plate, false)
+	world.hold_action()
+	assert_eq(world.anchor_cells().size(), 1,
+		"Your own burst cannot reach it, even standing right under it")
+
+	world._check_triggers()
+	assert_eq(world.anchor_cells(), [], "The plate can — that is what a plate is for")
+	assert_eq(world.hands_held(), 2, "...and the hand comes back to a slot, as any pop does")
+	assert_eq(_total(), _start_total, "Conserved: a plate moves hands, it does not make them")
+
+
+func test_a_burst_plate_opens_a_seam_in_its_reach() -> void:
+	# The other half of what a burst does. A plate is a remote unfold the world owns —
+	# the one thing the player has no key for.
+	_enter_east()
+	var cell := Vector2i((_burst_plate() / CS).floor())
+	world.player.teleport(Vector2(5.5 * CS, 9.5 * CS), false)
+	var before: int = world.folds.size()
+	world.do_fold(cell + Vector2i(1, 0), cell + Vector2i(3, 0))
+	assert_eq(world.folds.size(), before + 1, "A fold stands, its seam a cell from the plate")
+
+	world.player.teleport(_burst_plate(), false)
+	world._check_triggers()
+	assert_eq(world.folds.size(), before, "Stepping on the plate takes it back out")
+
+
+func test_a_burst_plate_fires_on_entering_and_not_on_standing() -> void:
+	_enter_east()
+	var plate := _burst_plate()
+	world.player.teleport(plate, false)
+	world._check_triggers()             # the entry that fires it; nothing to release yet
+
+	_pin(Vector2i(0, -1))
+	world._check_triggers()
+	assert_eq(world.anchor_cells().size(), 1,
+		"Standing on it does not fire it again — the hand pinned beside it survives")
+
+	# Step off and back on. Unlike a fold plate, which spends its channel the first
+	# time, a burst plate has nothing to spend: it goes off every time you arrive.
+	world.player.teleport(Vector2(5.5 * CS, 9.5 * CS), false)
+	world._check_triggers()
+	world.player.teleport(plate, false)
+	world._check_triggers()
+	assert_eq(world.anchor_cells(), [], "Arriving again fires it again, and this time it finds the hand")
+
+
+func test_a_burst_plate_with_no_reach_is_inert() -> void:
+	# The same latitude a trigger with no anchors gets: a tile you have not finished
+	# authoring does nothing rather than doing something surprising.
+	_enter_east()
+	world.base.tile_at(Vector2i(23, 9)).data = {"radius": 0.0}
+	var plate := _burst_plate()
+	world.player.teleport(plate + Vector2(0, -CS), false)
+	_pin(Vector2i(0, -1))
+	world.player.teleport(plate, false)
+	world._check_triggers()
+	assert_eq(world.anchor_cells().size(), 1, "A plate with no sphere pops nothing")
+
+
+func test_a_burst_plate_works_inside_a_fold() -> void:
+	# A burst takes folds OUT of whatever space you are in rather than splicing new ones
+	# into it, so it is the same rule at every depth — and a plate whose reach covers the
+	# glue is a way out of the fold it was swallowed by.
+	_enter_east()
+	var cell := Vector2i((_burst_plate() / CS).floor())
+	world.player.teleport(_burst_plate(), false)
+	world.do_fold(cell - Vector2i(1, 0), cell + Vector2i(3, 0))
+	assert_eq(world.mode, world.Mode.SUBSPACE, "The fold swallowed the plate and you with it")
+
+	world._check_triggers()
+	assert_eq(world.mode, world.Mode.WORLD, "The plate found the glue and let you out")
+
+
+func test_the_ring_a_plate_draws_is_the_plate_s_own_sphere() -> void:
+	# The ring is the only thing that says where a burst actually went off. Fired by a
+	# plate it belongs to the plate, so it must not be re-read off the body per frame.
+	_enter_east()
+	var plate := _burst_plate()
+	world.player.teleport(plate + Vector2(20.0, 0.0), false)   # on the plate, off its centre
+	world._check_triggers()
+	var v: OverlayView = world._build_overlay_view()
+	assert_gt(v.burst_t, 0.0, "The ring is up")
+	assert_almost_eq(v.burst_at.distance_to(plate), 0.0, 0.001, "centred on the plate")
+	assert_gt(v.burst_at.distance_to(world.player.global_position), 1.0, "...and not on you")
+	assert_almost_eq(v.burst_radius, 2.5 * CS, 0.001,
+		"at the reach this plate was authored with, not at yours")
+
+
+func test_an_unconfigured_plate_would_burst_exactly_as_far_as_you_do() -> void:
+	# Two numbers in two files — `TileTypes`' default and `FoldWorld.BURST_RADIUS` — and
+	# the default only means what it says while they agree. A plate you paint and never
+	# inspect should pop precisely what you could have popped standing on it.
+	assert_almost_eq(
+		float(TileParams.get_value(TileTypes.TRIGGER_BURST, {}, "radius")) * CS,
+		world.BURST_RADIUS, 0.001, "the registry's default reach is your own")
+
+
+# ---------------------------------------------------------------------------
 # Hands: two slots, typed, conserved
 # ---------------------------------------------------------------------------
 # A hand is an object with a kind. You hold two; a standing fold holds the two you

@@ -340,6 +340,54 @@ func test_the_trigger_region_covers_every_outcome_the_resolver_has():
 	assert_gt(blank, 0, "and one plate has no channel, so nothing stops it firing again")
 
 
+## The trigger/plate pairs this world authors as a LOOP you can walk: step on the
+## trigger and a fold stands, step on the plate a cell or two along and the same fold
+## comes back out. Listed here because that is what the pairing is; the test says what
+## has to be true for it to work.
+const PLATE_LOOPS := [
+	{"region": "kitchen", "trigger": Vector2i(22, 12), "plate": Vector2i(23, 12)},
+	{"region": "triggers", "trigger": Vector2i(17, 16), "plate": Vector2i(26, 16)},
+]
+
+
+func test_every_plate_loop_reaches_the_seam_its_trigger_leaves():
+	# A loop works only while the plate's authored REACH covers where the seam actually
+	# LANDS — and where it lands is the fold's half-shift, moved again by whatever else
+	# the region ships folded. Numbers in three places, and nothing but this would
+	# notice them drifting apart.
+	var wd := _world()
+	for loop in PLATE_LOOPS:
+		var id: String = loop["region"]
+		var booted := _booted(wd, id)
+		var base: BaseGrid = booted["base"]
+		var cs := wd.cell_size
+		var plate_cell: Vector2i = loop["plate"]
+		var plate_tile := base.tile_at(plate_cell)
+		assert_eq(plate_tile.type, TileTypes.TRIGGER_BURST,
+			"%s %s is a burst plate" % [id, plate_cell])
+		var radius := float(TileParams.get_value(plate_tile.type, plate_tile.data, "radius"))
+
+		# Fire the trigger exactly as the world does: standing on it, through the resolver.
+		var trigger_cell: Vector2i = loop["trigger"]
+		var stood_on = BaseFrame.world_point_from_base(booted["pieces"],
+			base.tile_at(trigger_cell).base_id, (Vector2(trigger_cell) + Vector2(0.5, 0.5)) * cs)
+		assert_not_null(stood_on, "%s's trigger is reachable at boot" % id)
+		var out := TriggerResolver.resolve(base, {
+			"folds": booted["folds"], "pieces": booted["pieces"],
+			"player_pos": stood_on, "next_trigger_id": TriggerResolver.TRIGGER_FOLD_ID_BASE,
+		})
+		assert_eq((out["folds"] as Array).size(), (booted["folds"] as Array).size() + 1,
+			"%s's trigger fires" % id)
+
+		var fold: Fold = (out["folds"] as Array)[-1]
+		var plate_at = BaseFrame.world_point_from_base(out["pieces"],
+			plate_tile.base_id, (Vector2(plate_cell) + Vector2(0.5, 0.5)) * cs)
+		assert_not_null(plate_at, "%s's plate rode the fold rather than being excised" % id)
+		var seam := (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs
+		assert_lte(seam.distance_to(Vector2(plate_at)), radius * cs,
+			"%s's plate reaches the seam its trigger leaves behind" % id)
+
+
 func test_a_pin_still_vetoes_the_fold_a_plate_would_make():
 	# The plate is on the floor and the pin is in the sky six rows up: a fold's
 	# extent is the whole world, so the nail is in its strip anyway.

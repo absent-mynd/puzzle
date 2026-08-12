@@ -249,6 +249,33 @@ two folds under one diamond clears one layer per press, because releasing the
 newer one is what unblocks the older, and one press undoing work you never
 asked it to reach would be a surprise.
 
+### Burst plates — the world firing one for you
+
+A **burst plate** (`B`, teal, walkable) fires exactly that sphere when you step
+on it, centred on the *plate* rather than on you, at a radius the plate carries
+in its own tile data — **in cells**, defaulting to your own reach. It is the one
+thing in the game that reaches a seam you cannot stand next to, which is what a
+wide one is for: it is a remote unfold the *world* owns, and there is still no
+key for one.
+
+It is your gesture with two things taken away. You do not choose when — stepping
+on it is the whole input — and you do not choose where. Everything else is
+identical, because it is the same code: hands come back to your slots, an armed
+pair with one half inside is disarmed and the far half stays pinned, folds in
+reach come apart newest-first, a hand with nowhere to go lands on the ground.
+
+Two consequences worth knowing:
+
+- **It fires on entering, not on standing.** Walk off and back on and it goes
+  off again — a plate has no channel to spend, unlike a `TRIGGER_FOLD`.
+- **It works inside a fold**, at any depth. A burst takes folds *out* of the
+  space you are in rather than splicing new ones into it, so a plate that was
+  swallowed by a fold still works in there — and one whose reach covers the glue
+  is a way out.
+
+Plates are placed in the **testbed** (`--world=testbed`), not in the shipped
+world: what a plate does to the authored beats is a playtesting question.
+
 ## Hands
 
 A hand is an **object you carry**, not an ability you have. You have **two
