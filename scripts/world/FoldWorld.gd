@@ -1372,18 +1372,28 @@ func _burst(origin: Vector2, radius: float) -> int:
 	return freed
 
 
+## How far apart two points in THIS space are — the short way round.
+##
+## Every "is that in reach" question in the world goes through here rather than
+## through `distance_to`, because inside a fold the space is identified across its
+## glue lines: a hand pinned just past the far glue is drawn beside your feet and
+## subtracts to a whole period away. See `FoldLattice.shortest_delta`.
+func gap_to(a: Vector2, b: Vector2) -> float:
+	return lattice.distance(a, b)
+
+
 ## Is this anchor within `radius` of a point? False when it is unresolvable in the
 ## frame we are looking at — an anchor you cannot see is not one you can reach.
 func _anchor_within(entry, origin: Vector2, radius: float) -> bool:
 	var wp = anchor_point(entry)
-	return wp != null and Vector2(wp).distance_to(origin) <= radius
+	return wp != null and gap_to(Vector2(wp), origin) <= radius
 
 
 func _glue_within(origin: Vector2, radius: float) -> bool:
 	if mode != Mode.SUBSPACE or host_fold == null:
 		return false
 	for c in [host_fold.anchor_a, host_fold.anchor_b]:
-		if ((Vector2(c) + Vector2(0.5, 0.5)) * CS).distance_to(origin) <= radius:
+		if gap_to((Vector2(c) + Vector2(0.5, 0.5)) * CS, origin) <= radius:
 			return true
 	return false
 
@@ -1397,7 +1407,7 @@ func _unfoldable_within(origin: Vector2, radius: float) -> Array:
 	for i in range(list.size() - 1, -1, -1):
 		var fold: Fold = list[i]
 		var seam = seam_point(fold)
-		if seam != null and Vector2(seam).distance_to(origin) <= radius \
+		if seam != null and gap_to(Vector2(seam), origin) <= radius \
 				and can_unfold_fold(fold):
 			out.append(fold)
 	return out
@@ -1411,7 +1421,7 @@ func seams_within_burst() -> Array:
 	var origin := player.global_position
 	for fold in space_folds():
 		var seam = seam_point(fold)
-		if seam != null and Vector2(seam).distance_to(origin) <= BURST_RADIUS:
+		if seam != null and gap_to(Vector2(seam), origin) <= BURST_RADIUS:
 			out.append(fold)
 	return out
 
@@ -2275,7 +2285,7 @@ func _check_doors() -> void:
 		var wp = door_point_here(id)
 		var over := false
 		if wp != null:
-			over = player.global_position.distance_to(Vector2(wp)) < PlayerBody.RADIUS
+			over = gap_to(player.global_position, Vector2(wp)) < PlayerBody.RADIUS
 		if over and not _door_latch.get(id, false):
 			_door_latch[id] = true
 			_traverse(id)
@@ -2874,7 +2884,7 @@ func _check_pickups() -> void:
 		if bool(ball["in_sub"]) != (mode == Mode.SUBSPACE) \
 				or String(ball["region"]) != region_id:
 			continue
-		if player.global_position.distance_to(Vector2(ball["pos"])) > PlayerBody.RADIUS + 8.0:
+		if gap_to(player.global_position, Vector2(ball["pos"])) > PlayerBody.RADIUS + 8.0:
 			continue
 		hands[HandStock.first_empty(hands)] = int(ball["kind"])
 		hand_balls.remove_at(i)
@@ -2888,7 +2898,7 @@ func _check_pickups() -> void:
 		var wp = pickup.position_in(current_pieces)
 		if wp == null:
 			continue                # folded away — not here to be picked up
-		if player.global_position.distance_to(Vector2(wp)) > PlayerBody.RADIUS + 8.0:
+		if gap_to(player.global_position, Vector2(wp)) > PlayerBody.RADIUS + 8.0:
 			continue
 		hands[HandStock.first_empty(hands)] = pickup.kind
 		loose_hands.remove_at(i)

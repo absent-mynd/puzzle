@@ -153,6 +153,37 @@ func wrap(p: Vector2) -> Vector2:
 	return p + wrap_delta(p)
 
 
+## The displacement from `from` to the NEAREST image of `to` — the way you would
+## actually walk it.
+##
+## In a repeating space the plain difference between two points is not the distance
+## between them: the space is identified across its glue lines, so a point just past
+## the far glue is drawn beside you and subtracts to a whole period away. Anything
+## that asks "is that within reach" — the burst, a pickup, two anchors deciding
+## whether they can fold together — has to ask it of this instead.
+##
+## Exact and per-axis, for the reason the class docstring proves: a lattice axis has
+## `period == dir * len`, and the axes are orthogonal, so reducing along each in turn
+## cannot disturb the others. `roundf` breaks the half-period tie away from zero, so
+## a pair sitting exactly on it does not flicker between the two answers.
+func shortest_delta(from: Vector2, to: Vector2) -> Vector2:
+	var delta := to - from
+	for axis in axes:
+		var span: float = axis["len"]
+		if span <= 0.0:
+			continue
+		var k := roundf(delta.dot(axis["dir"]) / span)
+		if k != 0.0:
+			delta -= (axis["period"] as Vector2) * k
+	return delta
+
+
+## How far apart two points are, the short way round. Plain distance in a region,
+## which has no short way round.
+func distance(from: Vector2, to: Vector2) -> float:
+	return shortest_delta(from, to).length()
+
+
 # ---------------------------------------------------------------------------
 # Copies
 # ---------------------------------------------------------------------------
