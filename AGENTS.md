@@ -123,10 +123,12 @@ ever had. **Move it down; do not relax the rule.**
 Docs rot; code, tests and `git log` do not. So **every fact has exactly one home,
 and it is the one that cannot go stale.**
 
-1. **Write it once.** To say it in a second place, link instead. Every duplicate
-   this project has had went stale on one side — a changelog in `STATUS.md`, a
-   key-files list in this file, a per-script test-count table, a limits list that
-   reached three copies before anyone noticed they disagreed.
+1. **Write a fact once.** To state it in a second place, link instead. Every
+   duplicate this project has had went stale on one side — a changelog in
+   `STATUS.md`, a key-files list in this file, a per-script test-count table, a
+   limits list that reached three copies before anyone noticed they disagreed. (A
+   one-line command like `./run_tests.sh` is not a fact worth linking for; an
+   explanation of it is.)
 2. **Put the reason next to the thing.** A trap in `_land_ball` belongs in
    `_land_ball`'s docstring, where someone editing it will see it — not in a
    narrative page they would have to already know to open.
