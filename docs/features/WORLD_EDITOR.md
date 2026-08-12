@@ -1,8 +1,5 @@
 # The world editor
 
-**Last updated:** 2026-08-06 · **Tests:** `test_editor_tools`, `test_editor_doc`,
-`test_world_editor`
-
 An MS-Paint canvas for terrain, on a Mural-style board of canvases you can
 arrange, resize and connect.
 
@@ -34,7 +31,7 @@ So the vocabulary lines up like this:
 | where the card **sits** | `regions.<id>.editor.pos` | *nothing* |
 | a **door** | `doors.<id>` | a warp point at a base tile's centre |
 | a **connected pair of anchors** | `regions.<id>.folds[]` | a fold applied before you spawn |
-| a **loose anchor** | `regions.<id>.editor.anchors[]` | *nothing* |
+| a **unpaired anchor** | `regions.<id>.editor.anchors[]` | *nothing* |
 
 **A card's position is not a fact about the world.** Regions have no spatial
 relationship to each other — they are connected by doors, not by adjacency — so
@@ -189,14 +186,14 @@ outside the new grid is dropped, and you are told how much.
 
 A fold is authored the way the player makes one: **pin an anchor, pin another,
 and the pair becomes a fold.** The difference is that an editor anchor waits
-indefinitely — it is saved as a loose anchor in the region's `editor` block, so
+indefinitely — it is saved as an unpaired anchor in the region's `editor` block, so
 a half-finished design is still half-finished tomorrow.
 
 **They are drawn, not applied.** The card keeps its full shape and the fold is
 shown as:
 
 - the two **crease lines**, where the sheet will be cut;
-- the **band** between them, shaded — the space the fold excises;
+- the **strip** between them, shaded — the space the fold excises;
 - the **meeting line**, drawn bright: where the two halves come to rest;
 - a dashed line joining the two anchors.
 
@@ -204,7 +201,7 @@ A card that shipped already folded would show you a hole and no way to reason
 about what is sealed inside it, which is the opposite of what a pre-placed fold
 is for.
 
-The band is not a lookalike. `EditorTools.fold_guides` builds a real `Fold` from
+The strip is not a lookalike. `EditorTools.fold_guides` builds a real `Fold` from
 the two anchors and asks `CollisionCore.fold_polygons` what it drops — the same
 call `FoldReplay` makes when the fold is applied for real. `test_editor_tools`
 pins that equality.
@@ -242,11 +239,11 @@ A fold entry is:
 {"anchor1": {"x": 10, "y": 6}, "anchor2": {"x": 16, "y": 6}, "in": []}
 ```
 
-`in` is the **index path of the interiors the fold lives in**: `[]` (or absent)
-is the region's own sheet, `[0]` is inside the interior of the region's first
-pre-placed fold, `[0, 1]` one level deeper. `WorldData.fold_pairs` returns only
+`in` is the **index path of the subspaces the fold lives in**: `[]` (or absent)
+is the region's own sheet, `[0]` is inside the subspace of the region's first
+pre-placed fold, `[0, 1]` one step deeper. `WorldData.fold_pairs` returns only
 the entries with an empty path, so a nested one is authored, saved and drawn but
-does not ship folded — rather than being applied at world level, where its
+does not ship folded — rather than being applied at world space, where its
 anchors would fold a stranger part of the region.
 
 ### What implementing it would take
@@ -254,9 +251,9 @@ anchors would fold a stranger part of the region.
 The runtime already has the two halves; what is missing is the seam between
 them.
 
-1. **A fold's interior is already a real place.** `FoldWorld._ensure_interiors(fid)`
+1. **A fold's subspace is already a real place.** `FoldWorld._ensure_inner_folds(fid)`
    keeps a fold list per fold id, and `do_sub_fold` folds inside one. So "a fold
-   in an interior" is a state the engine can represent — it is reached by play
+   in a subspace" is a state the engine can represent — it is reached by play
    today, just never by authoring.
 2. **The boot pass would have to recurse.** `_setup_all` walks a region's folds
    in order, capturing each strip before applying the next. A nested entry needs
@@ -269,13 +266,13 @@ them.
    same region*, so the list has to be applied parent-before-child. A topological
    pass, or simply requiring that a parent appears earlier in the array.
 4. **The editor would need a way in.** The natural gesture is to open a fold's
-   interior as its own canvas on the board — a card whose content is the strip
+   subspace as its own canvas on the board — a card whose content is the strip
    its parent excises — and place anchors in there normally. That reuses every
    tool as-is and keeps "a canvas is a sheet you paint on" true.
 
 The reason to defer is item 2's interaction with `AGENTS.md` §open question
-"Triggers are world-level only" — the resolver does not model splicing folds
-into an interior list mid-cascade either. Both want the same machinery, and
+"Triggers are region-level only" — the resolver does not model splicing folds
+into an inner-fold list mid-cascade either. Both want the same machinery, and
 building it once for both is better than building it twice.
 
 ---

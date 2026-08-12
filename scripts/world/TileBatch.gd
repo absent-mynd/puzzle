@@ -2,12 +2,12 @@ class_name TileBatch extends Node2D
 
 ## TileBatch
 ##
-## Every drawn fragment of the sheet, in as few canvas items as the materials
+## Every drawn piece of the sheet, in as few canvas items as the materials
 ## allow — which is two: what stops you, and what you move through.
 ##
-## A region is ~800 base tiles, a fold cuts fragments out of them, and inside a
+## A region is ~800 base tiles, a fold cuts pieces out of them, and inside a
 ## fold the whole strip is drawn again in every visible copy. One `Polygon2D` per
-## fragment per copy meant thousands of nodes torn down and rebuilt on every
+## piece per copy meant thousands of nodes torn down and rebuilt on every
 ## single fold, which is the most expensive thing the game did. `Polygon2D` can
 ## hold many sub-polygons over one vertex array (`polygons`), and the tileset is
 ## one texture, so the ONLY thing that forces a second node is the lit material.
@@ -19,12 +19,12 @@ class_name TileBatch extends Node2D
 ##     anything that MOVES repeats through `WrapCanvas`;
 ##     anything STATIC bakes its copies at rebuild.
 ##
-## Appearance is still per fragment and still a base-space fact — kind, variant
-## and UVs all come from `TileAtlas` against the fragment's `base_id` and
+## Appearance is still per piece and still a base-space fact — kind, variant
+## and UVs all come from `TileAtlas` against the piece's `base_id` and
 ## `src_offset`, so a tile looks the same however it has been folded or cut. The
 ## batch changes how many draw calls that costs, not what is drawn.
 
-## A group's fragments, kept so a fold transition can deform them in place
+## A group's pieces, kept so a fold transition can deform them in place
 ## without rebuilding the batch: `{"poly": Polygon2D, "local": PackedVector2Array,
 ## "copy": PackedVector2Array}` — `local` is each vertex before its copy offset,
 ## `copy` the offset itself.
@@ -45,7 +45,7 @@ func setup(atlas: Texture2D, rig: LightRig, base: BaseGrid) -> void:
 ## at every offset in `copies`. Replaces whatever was here before.
 ##
 ## `poly` is passed apart from `piece` because a fold transition draws
-## SUB-fragments of a piece, cut again by the crease being applied. They share the
+## SUB-pieces of a piece, cut again by the crease being applied. They share the
 ## piece's `src_offset`, so their UVs come out of the same base tile and the art
 ## slides with the geometry instead of swimming across it.
 func rebuild(frags: Array, copies: Array) -> void:
@@ -91,7 +91,7 @@ func shift_group(type_key: String, by: Vector2) -> void:
 
 ## Move every vertex of this batch, given a function of its position within its
 ## own copy. The copy offset is taken off before the call and put back after, so
-## a deformation that is defined about a crease line applies to each band about
+## a deformation that is defined about a crease line applies to each strip about
 ## its OWN crease — which is what a fold looks like from inside one.
 func deform(fn: Callable) -> void:
 	for key in _groups:
@@ -148,14 +148,14 @@ func _apply(acc: Dictionary) -> void:
 		_groups[key] = {"poly": vis, "local": group["local"], "copy": group["copy"]}
 
 
-## Which material group a fragment belongs to. Walkability, not the type list:
+## Which material group a piece belongs to. Walkability, not the type list:
 ## what stops you is foreground, what you move through is background — so a new
 ## tile type lands in the right group without touching this file.
 func _key_of(type: int) -> String:
 	return LightRig.BG if TileTypes.is_walkable(type) else LightRig.FG
 
 
-## Which tileset row a fragment draws from. The "open sky above" edge kind is
+## Which tileset row a piece draws from. The "open sky above" edge kind is
 ## decided in BASE space, so a wall keeps its lit cap when a fold slides it under
 ## something else — material belongs to the sheet, not to the current stacking.
 func _kind_of(piece) -> int:

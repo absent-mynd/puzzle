@@ -18,7 +18,7 @@ extends GutTest
 const SCENE := "res://scenes/world/World.tscn"
 ## The suite's OWN world, not the shipped one. These tests assert against concrete
 ## geometry — a pit here, a wall there, a door with that partner — so they must not
-## inherit whichever level happens to be shipping. See worlds/fixtures/README.md.
+## inherit whichever world happens to be shipping. See worlds/fixtures/README.md.
 const FIXTURE := "res://worlds/fixtures/kernel.json"
 const CS := 64.0
 
@@ -208,7 +208,7 @@ func test_a_burst_that_pops_one_half_of_a_pair_drops_nothing() -> void:
 func test_a_popped_hand_with_no_slot_to_go_to_is_heard_to_fall() -> void:
 	# The other half of the same claim: what makes a hand audible is being LET GO OF,
 	# not being popped. Fill both slots while the pair ticks — as if you had walked
-	# over two caches — and the hand you pop has nowhere to land but the floor.
+	# over two loose hands — and the hand you pop has nowhere to land but the floor.
 	_pin(Vector2i(1, 0))                                        # (5,12)
 	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
 	_pin(Vector2i(1, 0))                                        # (21,12)
@@ -229,7 +229,7 @@ func test_a_popped_hand_with_no_slot_to_go_to_is_heard_to_fall() -> void:
 func test_unfolding_is_heard() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
 	_listen()
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	assert_eq(world.folds.size(), 0, "it came out")
 	assert_true(_heard(Sounds.UNFOLD))
 
@@ -238,7 +238,7 @@ func test_a_blocked_unfold_is_refused_not_unfolded() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))
 	world.do_fold(Vector2i(30, 8), Vector2i(30, 11))   # crosses the first's seam
 	_listen()
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 
 	assert_eq(world.folds.size(), 2, "blocked: nothing moved")
 	assert_true(_heard(Sounds.DENY), "a blocked unfold should be refused audibly")
@@ -315,11 +315,11 @@ func test_reset_is_heard() -> void:
 # ---------------------------------------------------------------------------
 
 func test_the_overworld_bed_starts_with_the_world() -> void:
-	assert_eq(AudioManager.current_music_track, Sounds.MUSIC_OVERWORLD,
+	assert_eq(AudioManager.current_music_track, Sounds.MUSIC_REGION,
 		"the world should come up with its bed playing")
 
 
-## A fold's interior is meant to read as a PLACE. Its own bed is the cheapest
+## A subspace is meant to read as a PLACE. Its own bed is the cheapest
 ## thing that says so, and crossing the boundary should swap it both ways.
 func test_the_bed_changes_inside_a_fold_and_back() -> void:
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
@@ -331,8 +331,8 @@ func test_the_bed_changes_inside_a_fold_and_back() -> void:
 	world.player.teleport(Vector2(15.5 * CS, 12.5 * CS), false)
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD)
-	assert_eq(AudioManager.current_music_track, Sounds.MUSIC_OVERWORLD,
-		"surfacing brings the overworld bed back")
+	assert_eq(AudioManager.current_music_track, Sounds.MUSIC_REGION,
+		"surfacing brings the region bed back")
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +352,7 @@ func test_the_world_never_asks_for_a_sound_that_is_not_there() -> void:
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	world.hold_action()
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
 	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
 	world.try_exit()

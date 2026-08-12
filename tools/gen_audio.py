@@ -265,7 +265,7 @@ def sfx_surface(rng):
 
 
 def sfx_burst(rng):
-    """The release burst: a soft pop with a short ring. Untargeted, so it wants
+    """The burst: a soft pop with a short ring. Untargeted, so it wants
     to sound like something leaving you in every direction at once, not like
     something being fired at a target."""
     s = 0.34
@@ -545,8 +545,8 @@ def breathe(rate, depth, cycles, phase=0.0):
         phase + 2.0 * math.pi * cycles * i / n)) for i in range(n)]
 
 
-def music_overworld(rng):
-    """The overworld bed: open, low, and almost still — but never quite still.
+def music_region(rng):
+    """The region bed: open, low, and almost still — but never quite still.
 
     Ambient to the point of being barely there. The game's own vocabulary is
     quiet and sparse, and a track with any melodic opinion would be competing
@@ -599,17 +599,17 @@ def music_subspace(rng):
     """Inside a fold.
 
     A fold's interior is a PLACE, and the doc's open question is whether it
-    reads as one. So this is the overworld bed moved down a fourth and pulled
+    reads as one. So this is the region bed moved down a fourth and pulled
     out of tune with itself: the same room, folded. The beating between the
     detuned pairs is the point — it is the only thing in the mix that tells you
     where you are without a word of UI.
 
-    The drift here is deliberately slower and flatter than the overworld's. The
-    beating already supplies movement, and a fold's interior should feel like it
-    is holding still while something else moves — swelling it as freely as the
-    overworld would make the two beds read as the same room after all.
+    The drift here is deliberately slower and flatter than the region bed's. The
+    beating already supplies movement, and a subspace should feel like it is
+    holding still while something else moves — swelling it as freely as the
+    region bed would make the two beds read as the same room after all.
     """
-    root = 41.25                      # E1, a fourth below the overworld
+    root = 41.25                      # E1, a fourth below the region bed
     voices = []
     for mult, amp, cycles in ((1.0, 0.50, 1), (2.0, 0.32, 2),
                               (3.0, 0.12, 3), (4.0, 0.08, 5)):
@@ -640,7 +640,7 @@ def music_subspace(rng):
 
 
 MUSIC = {
-    "overworld": music_overworld,
+    "region": music_region,
     "subspace": music_subspace,
 }
 

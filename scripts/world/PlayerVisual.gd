@@ -2,11 +2,11 @@ class_name PlayerVisual extends WrapCanvas
 
 ## PlayerVisual
 ##
-## The blob, drawn wherever the space says the body is.
+## The player, drawn wherever the space says the body is.
 ##
 ## Outside a fold that is one place. Inside one, the strip is a cylinder and you
-## are one point on it, so you are in every band at once — and inside a fold
-## inside a perpendicular fold it is a torus, so you are in every band both ways.
+## are one point on it, so you are in every copy at once — and inside a fold
+## inside a perpendicular fold it is a torus, so you are in every copy both ways.
 ## None of which this file knows: it paints the body once, and `WrapCanvas`
 ## repeats it wherever the lattice says there is another copy of here.
 ##

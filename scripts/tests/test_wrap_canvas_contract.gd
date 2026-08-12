@@ -3,14 +3,14 @@ extends GutTest
 ## `WrapCanvas` has a contract, and it is a performance contract.
 ##
 ## Its own docstring states it: `prepare()` runs once before any copy, "so a question
-## that costs something is asked once rather than once per band"; `paint()` runs once
+## that costs something is asked once rather than once per copy"; `paint()` runs once
 ## per copy. A space repeats 7 times inside one fold and 77 two folds deep, and the
 ## ceiling is `FoldWorld.MAX_WRAP_COPIES` = 121.
 ##
 ## `WorldOverlay` broke that contract quietly, and it was expensive. `_draw_glue`
 ## called `world.glue_lines()` — which scans every base piece for every period — and
 ## `_draw_loose_hands` called `world.loose_hand_points()`, which resolves every hand
-## against every fragment. Both from inside `paint()`. Measured on a torus of 77
+## against every piece. Both from inside `paint()`. Measured on a torus of 77
 ## copies, the pair cost most of the frame; gathered once, the whole per-frame
 ## description costs about 200 µs. The drawing was identical either way.
 ##
@@ -24,14 +24,14 @@ extends GutTest
 ## `WrapCanvas` subclass will not have a view-model. And the specific one, that the
 ## overlay still holds no reference back, because that is what made the general rule
 ## breakable in the first place. Cheap reads were never the problem; work that scales
-## with the world, done once per band, was.
+## with the world, done once per copy, was.
 
 ## Queries that build a new Array or Dictionary every call. Adding one here is how you
 ## keep the next `glue_lines()` out of a draw loop.
 const ALLOCATING_QUERIES := [
 	"glue_lines", "loose_hand_points", "hand_ball_points",
 	"seam_markers", "seams_within_burst", "all_anchors", "anchor_cells",
-	"lights_here", "level_folds",
+	"lights_here", "space_folds",
 ]
 
 const WORLD_DIR := "res://scripts/world"

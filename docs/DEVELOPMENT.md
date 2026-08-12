@@ -30,7 +30,7 @@ shaped this way*, see [ARCHITECTURE.md](ARCHITECTURE.md).
 3. **Run the whole suite before pushing.** The pre-push hook does this for you if
    you have run `./setup-hooks.sh`.
 
-After adding or renaming a `class_name`, run `godot --headless --import` once so
+After adding or renaming a `class_name`, run `godot --headless --editor --quit` once so
 the global class registry updates — otherwise you get spurious
 "Identifier not declared" parse errors that have nothing to do with your change.
 
@@ -58,10 +58,18 @@ A run fails if any of these is true:
 | A test script never loaded (parse error) | `tools/gut_strict_exit.gd` |
 | The kernel referenced the view | `scripts/tests/test_layering.gd` |
 | A shipped world is unplayable | `scripts/tests/test_shipped_worlds.gd` |
+| Something in `scripts/world/` animates off the wall clock | `scripts/tests/test_world_clock.gd` |
 
 The middle three exist because GUT derives its exit code from the assertion-failure
 count alone, so a test that never reaches an assertion scores zero of everything and
 passes. A test file could be deleted by breaking it and nothing said so.
+
+The last one is a **grep gate**, and it is there because the bug it catches is
+invisible until the day it matters: anything in the world that drifts, throbs or
+flickers must read `WorldClock`, not `Time.get_ticks_msec()`. A second clock looks
+perfect for as long as the world always runs, and the moment the world stops it is
+the one thing still moving. Wall time is still correct for what is *not* in the
+world — the input charge, the HUD flash, the held-look ease.
 
 If you legitimately want a test that does not assert yet, mark it `pending()` —
 that is tracked separately and does not fail the build.
@@ -76,7 +84,7 @@ that had nothing to do with the change that caused them.
 - **Kernel and integration tests** (`test_fold_world`, `test_nested_folds`,
   `test_world_audio`) pin themselves to `worlds/fixtures/kernel.json` via
   `FoldWorld.world_override`. They assert against concrete geometry — a pit here, a
-  wall there — so they must not inherit whichever level happens to be shipping.
+  wall there — so they must not inherit whichever world happens to be shipping.
 - **Content tests** (`test_shipped_worlds`, `test_world_data`,
   `test_testbed_world`) read the real worlds, because checking the real content is
   the entire point.
@@ -86,7 +94,7 @@ See [`worlds/fixtures/README.md`](../worlds/fixtures/README.md). The rule:
 Neither test should be able to fail for the other's reason.
 
 Express invariants as **deltas**, not constants. `assert_eq(_total(), 5)` is a
-statement about one level's contents; `assert_eq(_total(), _start_total)` is the
+statement about one space's contents; `assert_eq(_total(), _start_total)` is the
 conservation law you actually meant.
 
 ---
@@ -115,13 +123,13 @@ entire fix. **Move it down; don't relax the rule.**
 
 ### 1. Mutating derived state — the most common
 
-Editing a `FoldedPiece` (or the fragment list) and expecting it to stick.
+Editing a `FoldedPiece` (or the piece list) and expecting it to stick.
 
 **Symptom:** your change works for one frame and vanishes on the next fold, unfold,
 region load, or subspace transition.
 
 **Why:** derived state is rebuilt from scratch by
-`FoldReplay.derive_pieces(base, folds)` on every change. Fragments are outputs, not
+`FoldReplay.derive_pieces(base, folds)` on every change. Pieces are outputs, not
 storage. See ARCHITECTURE.md Decision 1.
 
 ```gdscript
@@ -138,13 +146,13 @@ rebuild_world()
 ```
 
 **Rule of thumb:** if you want it to survive, it belongs in `BaseGrid`, the fold
-list, or `WorldData` — never in a derived fragment.
+list, or `WorldData` — never in a derived piece.
 
 ### 2. Comparing floats with `==`
 
 `GeometryCore.EPSILON` is `0.0001`. Grazing a crease must not count as crossing it,
-which is why `WorldCore.segment_intersects_band` carries a half-pixel margin.
-Without it, a fold whose seam merely *touches* another's band spuriously blocks
+which is why `WorldCore.segment_intersects_strip` carries a half-pixel margin.
+Without it, a fold whose seam merely *touches* another's strip spuriously blocks
 unfolding.
 
 ```gdscript
@@ -190,15 +198,15 @@ frame contains.
 
 `scripts/world/FoldWorld.gd` is ~2390 lines and still the object most features get
 added to. Two seams have been lifted out (`WorldHud`, `WorldCamera`); the hand-ball
-physics has **not**, because it depends on ten separate pieces of current-level
+physics has **not**, because it depends on ten separate pieces of current-space
 state and extracting it today would only convert that into a ten-field context
 object or another back-reference.
 
-The prerequisite is a **`Level` value object**. `_compute_level` already returns
-`{base_pieces, level_folds, pieces}`, but the rest of the level's state —
+The prerequisite is a **`Space` value object**. `_compute_space` already returns
+`{base_pieces, space_folds, pieces}`, but the rest of the space's state —
 `pieces_by_pos`, `wall_polys`, `lattice`, `free_extent`, `mode`, `region_id`,
 `_spawn` — is scattered across members that `_apply_context` assigns. Gather those
-into one value and the hand field becomes `step(level, delta)` with a narrow
+into one value and the hand field becomes `step(space, delta)` with a narrow
 interface. Until then, leave it where it is.
 
 ---

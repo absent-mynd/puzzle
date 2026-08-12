@@ -141,8 +141,8 @@ func test_shipped_world_loads():
 func test_shipped_world_starts_you_with_a_full_pair():
 	var wd := WorldData.load_from(WORLD_PATH)
 	var slots := wd.starting_hand_slots()
-	assert_eq(slots.size(), AnchorStock.SLOTS, "one entry per slot, always")
-	assert_eq(AnchorStock.held_count(slots), AnchorStock.SLOTS,
+	assert_eq(slots.size(), HandStock.SLOTS, "one entry per slot, always")
+	assert_eq(HandStock.held_count(slots), HandStock.SLOTS,
 		"the shipped world starts you able to make exactly one fold")
 
 
@@ -153,7 +153,7 @@ func test_starting_hand_slots_pads_and_truncates():
 	wd.starting_hands = ["swift"]
 	assert_eq(wd.starting_hand_slots(), [HandTypes.SWIFT, null], "a short list leaves slots empty")
 	wd.starting_hands = ["plain", "plain", "plain", "plain"]
-	assert_eq(wd.starting_hand_slots().size(), AnchorStock.SLOTS,
+	assert_eq(wd.starting_hand_slots().size(), HandStock.SLOTS,
 		"hands you could not hold are dropped rather than overflowing")
 
 
@@ -282,7 +282,7 @@ func test_shipped_trigger_is_fully_specified():
 
 
 func test_shipped_pins_survive_the_preplaced_fold():
-	# A pin inside a pre-folded band would be excised, contradicting what a pin is.
+	# A pin inside a pre-folded strip would be excised, contradicting what a pin is.
 	var e := _east()
 	for t in (e["base"] as BaseGrid).tiles:
 		if t.type != TileTypes.PIN:

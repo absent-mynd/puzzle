@@ -8,7 +8,7 @@ class_name WrapCanvas extends Node2D
 ## in ordinary world coordinates, exactly as they would in a world that did not
 ## repeat; this repeats those commands at every lattice offset. Put a new thing
 ## in the world — a hand floating beside the body, a marker, a creature — and it
-## appears in every band for free, because it never had a say in the matter.
+## appears in every copy for free, because it never had a say in the matter.
 ##
 ## That is the whole design rule. Before this, "repeat across the wrap" was
 ## written out again in the terrain builder, the player's ghost list, the light
@@ -23,10 +23,10 @@ class_name WrapCanvas extends Node2D
 ## Three hooks, because not everything in the frame belongs to the space:
 ##
 ##   - `prepare()` — once, before any copy. Work out WHAT to draw here, so a
-##     question that costs something is asked once rather than once per band.
+##     question that costs something is asked once rather than once per copy.
 ##   - `paint()` — drawn once per copy. Anything that IS somewhere.
 ##   - `paint_once()` — drawn once, at the origin. Guides that span the world and
-##     translucent bands, which repeated would tile the screen and stack their
+##     translucent strips, which repeated would tile the screen and stack their
 ##     alpha into a wash.
 
 var offsets: Array = [Vector2.ZERO]

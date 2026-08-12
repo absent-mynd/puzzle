@@ -1,7 +1,7 @@
 ## LightSource tests — lights as occupants of the sheet
 ##
 ## A light has no world position. It has a base identity and a point inside that tile,
-## and where it burns is always a question asked of the current fragment list. These
+## and where it burns is always a question asked of the current piece list. These
 ## tests pin the consequences the design rests on: fold a light away and it leaves the
 ## world entirely, but it is still there inside the fold; fold something else and it
 ## rides the flap that carried its tile.
@@ -59,7 +59,7 @@ func test_an_unfolded_light_burns_where_it_was_placed():
 
 
 func test_a_folded_away_light_is_not_in_the_world():
-	# The band strictly between the creases is excised: the light goes with it.
+	# The strip strictly between the creases is excised: the light goes with it.
 	var base := _base()
 	var light := _light_at(Vector2i(4, 5), base)
 	var fold := Fold.create(0, Vector2i(2, 5), Vector2i(6, 5), CELL)
@@ -86,7 +86,7 @@ func test_a_light_rides_the_flap_its_tile_rides():
 	var light := _light_at(Vector2i(8, 5), base)
 	var fold := Fold.create(0, Vector2i(2, 5), Vector2i(5, 5), CELL)
 	var pos = light.position_in(FoldReplay.derive_pieces(base, [fold]))
-	assert_not_null(pos, "a light outside the band survives the fold")
+	assert_not_null(pos, "a light outside the strip survives the fold")
 	var expected := Vector2(8.5, 5.5) * CELL + fold.shift_b_px(CELL)
 	assert_almost_eq(Vector2(pos).distance_to(expected), 0.0, 0.001,
 		"and is displaced by exactly its flap's shift")
@@ -105,7 +105,7 @@ func test_a_light_returns_when_its_fold_is_dropped():
 
 func test_a_split_light_still_burns_on_its_half():
 	# Unlike a door, a light cut through by a crease is not dormant: it resolves
-	# non-strictly, onto whichever fragment holds its point.
+	# non-strictly, onto whichever piece holds its point.
 	var base := _base()
 	var light := _light_at(Vector2i(7, 5), base)
 	var fold := Fold.create(0, Vector2i(2, 5), Vector2i(5, 5), CELL)
@@ -121,7 +121,7 @@ func test_resolve_all_skips_lights_that_are_not_here():
 	var resolved := LightSource.resolve_all(
 		FoldReplay.derive_pieces(base, [fold]), [here, gone])
 	assert_eq(resolved.size(), 1, "only the surviving light is returned")
-	assert_eq(resolved[0]["light"], here, "and it is the one outside the band")
+	assert_eq(resolved[0]["light"], here, "and it is the one outside the strip")
 
 
 func test_unbound_lights_resolve_nowhere():

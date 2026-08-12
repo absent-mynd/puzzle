@@ -7,17 +7,17 @@ class_name LightSource extends RefCounted
 ## A light is authored on a base cell and stored the way a door is: as a base
 ## identity (`base_id`) plus a point inside that tile (`bp`). It has no world
 ## position of its own. Where it burns is always a question asked of the current
-## fragment list:
+## piece list:
 ##
 ##     BaseFrame.world_point_from_base(pieces, base_id, bp)
 ##
 ## Everything the design asks for falls out of that one call:
 ##
-##   - Fold the light's tile away and it resolves to null at world level: the
-##     lamp is gone from the overworld and casts nothing there.
+##   - Fold the light's tile away and it resolves to null at world space: the
+##     lamp is gone from the region and casts nothing there.
 ##   - Enter that fold's subspace and the same light resolves against the strip
 ##     content, so it lights the folded-away place from inside.
-##   - Fold something else and the light rides its flap, because the fragment it
+##   - Fold something else and the light rides its flap, because the piece it
 ##     belongs to carries the offset.
 ##
 ## Unlike a door, a light resolves NON-strictly (`world_point_from_base`, not
@@ -74,14 +74,14 @@ func radius_px(cell_size: float) -> float:
 
 
 ## Where this light burns in the given configuration, or null if its tile has no
-## surviving fragment there (folded away — see the class comment).
+## surviving piece there (folded away — see the class comment).
 func position_in(pieces: Array):
 	if not is_bound():
 		return null
 	return BaseFrame.world_point_from_base(pieces, base_id, bp)
 
 
-## Resolve a list of lights against one fragment list. Returns
+## Resolve a list of lights against one piece list. Returns
 ## `[{"light": LightSource, "pos": Vector2}, ...]`, skipping any light that does
 ## not survive into this configuration.
 static func resolve_all(pieces: Array, lights: Array) -> Array:

@@ -10,9 +10,9 @@ shader_type canvas_item;
 //   1. Both the shaded point and every light position are SNAPPED to the
 //      art-pixel grid before the distance is taken, so a light's falloff moves
 //      in whole pixels and its edge is a staircase, not a gradient.
-//   2. The accumulated intensity is QUANTIZED into `light_steps` bands, so
+//   2. The accumulated intensity is QUANTIZED into `light_steps` steps, so
 //      light arrives as discrete rings the way a hand-painted sprite would.
-//   3. The band edges are ORDERED-DITHERED with a 4x4 Bayer threshold computed
+//   3. The step edges are ORDERED-DITHERED with a 4x4 Bayer threshold computed
 //      in art-pixel space, so the rings break up into a checker rather than a
 //      hard contour.
 //
@@ -44,9 +44,9 @@ uniform vec3 tint = vec3(1.0);
 
 // World units per art pixel — the snapping quantum.
 uniform float pixel_size = 4.0;
-// Number of discrete brightness bands between dark and fully lit.
+// Number of discrete brightness steps between dark and fully lit.
 uniform int light_steps = 5;
-// 0 = hard bands, 1 = fully dithered band edges.
+// 0 = hard steps, 1 = fully dithered step edges.
 uniform float dither = 0.85;
 // Ceiling on accumulated light, so overlapping lamps bloom instead of blowing out.
 uniform float max_light = 1.75;
@@ -90,7 +90,7 @@ void fragment() {
 	}
 
 	// Quantize the accumulated INTENSITY, not each channel, so overlapping
-	// lights of different colours band together instead of separating into
+	// lights of different colours blend together instead of separating into
 	// per-channel contours.
 	float m = max(acc.r, max(acc.g, acc.b));
 	if (m > 0.0001) {

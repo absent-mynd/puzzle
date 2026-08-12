@@ -11,7 +11,7 @@ class_name OverlayView extends RefCounted
 ## 77 two folds deep. Because the overlay could ask the world anything at any point,
 ## two allocating queries drifted into that per-copy path — `glue_lines()`, which
 ## scans every base piece per period, and `loose_hand_points()`, which resolves every
-## hand against every fragment. Measured on a torus they cost **16.3 ms of a 16.6 ms
+## hand against every piece. Measured on a torus they cost **16.3 ms of a 16.6 ms
 ## frame**. Nothing about the drawing was wrong; only where the question was asked.
 ## With no boundary between the two objects, there was no wrong side to be on.
 ##
@@ -61,8 +61,8 @@ var doors: Array = []
 ## the overlay turns it into a throb.
 var hands_down: Array = []
 
-## Armed pairs, as the two points a preview band spans: `{"a": Vector2, "b": Vector2}`.
-## Only pairs with both halves in this frame; half a pair has no band to draw.
+## Armed pairs, as the two points a preview strip spans: `{"a": Vector2, "b": Vector2}`.
+## Only pairs with both halves in this frame; half a pair has no strip to draw.
 var pairs: Array = []
 
 ## Hands lying in the world, and hands still in the air. Same shape and the same
@@ -75,7 +75,7 @@ var glue: Array = []
 
 # --- The way out of a fold ---
 
-## Where the outer fold's anchors coincide on the glue, or null at region level.
+## Where the outer fold's anchors coincide on the glue, or null at region space.
 var exit_at = null
 ## False when an inner fold crosses the seam and is holding the subspace shut.
 var exit_ok := true
@@ -102,10 +102,10 @@ var aiming := false
 ## The cells the cursor may be walked to: arm's reach, as a rectangle. Empty off-mode.
 var aim_box := Rect2()
 ## The placed hand this one would pair with, or null when it would start a fresh pair.
-## The band between the two is the fold you are about to arm, drawn before you arm it.
+## The strip between the two is the fold you are about to arm, drawn before you arm it.
 var aim_pair = null
 
-# --- The release burst ---
+# --- The burst ---
 
 ## Time left on the burst ring, 0 when none is showing.
 var burst_t := 0.0

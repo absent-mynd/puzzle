@@ -1,6 +1,6 @@
 ## BaseFrame tests — exact base <-> derived transport
 ##
-## Every fragment satisfies `polygon == base_polygon + src_offset`. These tests pin the
+## Every piece satisfies `polygon == base_polygon + src_offset`. These tests pin the
 ## round trip that relies on it: a point in current space maps into base space and back
 ## into any other configuration. That is what carries the player, entities and pinned
 ## anchors through arbitrary fold/unfold sequences without crease arithmetic.
@@ -18,19 +18,19 @@ func _center(cell: Vector2i) -> Vector2:
 	return (Vector2(cell) + Vector2(0.5, 0.5)) * CELL
 
 
-func test_piece_at_finds_the_fragment_under_a_point():
+func test_piece_at_finds_the_piece_under_a_point():
 	var base := _base()
 	var pieces := FoldReplay.derive_pieces(base, [])
 	var piece = BaseFrame.piece_at(pieces, _center(Vector2i(3, 4)), CELL)
-	assert_not_null(piece, "a point inside the grid lands on a fragment")
-	assert_eq(piece.plane_pos, Vector2i(3, 4), "and it is the fragment at that cell")
+	assert_not_null(piece, "a point inside the grid lands on a piece")
+	assert_eq(piece.plane_pos, Vector2i(3, 4), "and it is the piece at that cell")
 
 
 func test_piece_at_returns_null_over_void():
 	var base := _base()
 	var pieces := FoldReplay.derive_pieces(base, [])
 	assert_null(BaseFrame.piece_at(pieces, Vector2(-500, -500), CELL),
-		"a point outside all fragments is over void")
+		"a point outside all pieces is over void")
 
 
 func test_identity_round_trip_is_a_no_op():
@@ -63,7 +63,7 @@ func test_transport_into_the_excised_strip_returns_null():
 	var after := FoldReplay.derive_pieces(base, [f])
 	# (4,5) sits strictly between the creases: it is folded away.
 	assert_null(BaseFrame.transport(before, after, _center(Vector2i(4, 5)), CELL),
-		"a point in the excised strip has no surviving fragment")
+		"a point in the excised strip has no surviving piece")
 
 
 func test_transport_survives_fold_then_unfold():
@@ -99,9 +99,9 @@ func test_world_point_from_base_returns_null_for_a_folded_away_tile():
 		"an excised base tile has no current-space location")
 
 
-func test_index_by_pos_groups_fragments_by_cell():
+func test_index_by_pos_groups_pieces_by_cell():
 	var base := _base()
 	var pieces := FoldReplay.derive_pieces(base, [])
 	var index := BaseFrame.index_by_pos(pieces)
 	assert_eq(index.size(), 100, "one entry per occupied plane cell")
-	assert_eq((index[Vector2i(0, 0)] as Array).size(), 1, "one fragment per cell at identity")
+	assert_eq((index[Vector2i(0, 0)] as Array).size(), 1, "one piece per cell at identity")

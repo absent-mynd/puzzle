@@ -8,7 +8,7 @@ extends Resource
 ##
 ## Replaces the old per-level LevelData. Two things changed with the pivot:
 ##
-##   - A world is not a level. There is no par, no fold budget, no difficulty rating,
+##   - A world is not a space. There is no par, no fold budget, no difficulty rating,
 ##     no win condition to score — the goal is somewhere in the world, and reaching it
 ##     is the whole game. What used to be "which level" is now "which region".
 ##   - Tiles are authored as ASCII ROWS, not a sparse position->type dictionary. For a
@@ -24,13 +24,13 @@ extends Resource
 ## folded, with content sealed inside it that unfolding (or a door) reveals.
 ##
 ## A fold entry is `{"anchor1": {x,y}, "anchor2": {x,y}, "in": [i, ...]}`. `in` is the
-## INDEX PATH of the interiors this fold lives in — `[]` (or absent) is the region's own
-## sheet, `[0]` is inside the interior of the region's first pre-placed fold, `[0, 1]`
-## one level deeper. It is reserved, not yet implemented: `fold_pairs` returns only
-## world-level entries, so a nested one is authored, saved and drawn by the editor but
+## INDEX PATH of the subspaces this fold lives in — `[]` (or absent) is the region's own
+## sheet, `[0]` is inside the subspace of the region's first pre-placed fold, `[0, 1]`
+## one step deeper. It is reserved, not yet implemented: `fold_pairs` returns only
+## region-level entries, so a nested one is authored, saved and drawn by the editor but
 ## does NOT ship folded. See `docs/features/WORLD_EDITOR.md` §"Nested pre-placed folds"
 ## for what implementing it would take. Ignoring it is the deliberate choice — applying
-## a nested fold's anchors at world level would fold a stranger part of the region.
+## a nested fold's anchors in a region would fold a stranger part of the region.
 
 ## Prefix of the command-line flag that names a world file to open instead of the
 ## shipped one: `-- --world=res://worlds/testbed.json`.
@@ -45,11 +45,11 @@ const WORLD_FLAG := "--world="
 @export var start_region: String = ""
 
 ## The hands the player starts the world holding, as `HandTypes` authoring keys —
-## e.g. `["plain", "plain"]`. One entry per filled slot; fewer than `AnchorStock.SLOTS`
+## e.g. `["plain", "plain"]`. One entry per filled slot; fewer than `HandStock.SLOTS`
 ## entries starts you short-handed, which is a legitimate thing for a world to do.
 ## Entries beyond `SLOTS` are ignored, since you cannot hold them.
 ##
-## This is not a capacity: the number you can hold is fixed (`AnchorStock.SLOTS`).
+## This is not a capacity: the number you can hold is fixed (`HandStock.SLOTS`).
 ## What a world chooses here is which KINDS you set out with.
 @export var starting_hands: Array = ["plain", "plain"]
 
@@ -63,7 +63,7 @@ const WORLD_FLAG := "--world="
 ##   "editor":    Dictionary,     AUTHORING ONLY — see below. The game never reads it.
 ## }
 ##
-## `editor` is the level editor's scratch space, carried through the file so a
+## `editor` is the world editor's scratch space, carried through the file so a
 ## half-finished design survives a save. Nothing in `scripts/world/` may read it:
 ## a region's PLACE on the editor board is not a fact about the world (regions have
 ## no spatial relationship to each other — they are separate sheets), and a fold
@@ -246,8 +246,8 @@ func spawn_px(id: String) -> Vector2:
 	return (regions[id]["spawn"] as Vector2) * cell_size
 
 
-## A region's WORLD-LEVEL pre-placed folds as [anchor1, anchor2] Vector2i pairs, in
-## order. Entries with a non-empty `in` path are nested inside another fold's interior
+## A region's OWN pre-placed folds — the ones not nested inside another — as [anchor1, anchor2] Vector2i pairs, in
+## order. Entries with a non-empty `in` path are nested inside another fold's subspace
 ## and are SKIPPED: the world boot applies this list to the region's own sheet, and a
 ## nested fold's anchors mean nothing there. See the `folds` note in the header.
 func fold_pairs(id: String) -> Array:
@@ -279,7 +279,7 @@ func board_pos(id: String) -> Vector2:
 
 ## Fold anchors placed in a region but not yet connected to a partner, as Vector2i
 ## cells. Authoring only: an unpaired anchor is a design in progress, not a fold.
-func loose_anchors(id: String) -> Array:
+func unpaired_anchors(id: String) -> Array:
 	var out: Array = []
 	if not regions.has(id):
 		return out
@@ -302,10 +302,10 @@ func region_size(id: String) -> Vector2i:
 
 
 ## The starting hands as a slot array: `HandTypes` ids, one entry per slot, `null`
-## where the world starts you empty-handed. Always exactly `AnchorStock.SLOTS` long,
+## where the world starts you empty-handed. Always exactly `HandStock.SLOTS` long,
 ## so callers never have to think about a short or over-long authored list.
 func starting_hand_slots() -> Array:
-	var out: Array = AnchorStock.empty_slots()
+	var out: Array = HandStock.empty_slots()
 	for i in range(mini(starting_hands.size(), out.size())):
 		out[i] = HandTypes.from_name(String(starting_hands[i]))
 	return out

@@ -1,12 +1,13 @@
 # Project Status — Space Folding
 
-**Last Updated:** 2026-08-11
+**Last Updated:** 2026-08-12
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment. The
 world is now **authored in an editor** rather than by hand-editing JSON.
-**Tests:** 843 passing / 843, 34 scripts, ~25s.
+**Tests:** 843 passing / 843, 34 scripts, ~25s. (`./run_tests.sh` prints the real
+numbers; this line is a snapshot and the runner is the authority.)
 
 ---
 
@@ -24,14 +25,14 @@ What exists and works today:
 | Base-frame transport (`BaseFrame`) | ✅ Solid, well covered |
 | Side-view world: gravity, riding flaps, depenetration | ✅ Playable |
 | Variable-height jump (tap vs hold), air control | ✅ Playable |
-| Subspaces (fold interiors as real places) | ✅ Playable |
+| Subspaces (the inside of a fold as a real place) | ✅ Playable |
 | **Nesting: folding yourself in, and in again** | ✅ Playable, any depth, ⚙️ untuned |
 | Regions + doors (recursive partner resolution) | ✅ Playable |
 | Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
-| Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
-| Hands: two slots, typed, conserved (`AnchorStock`/`HandTypes`) | ✅ Playable, **in the world** |
+| Fold-on-enter triggers | ✅ Wired in a region, **in the world** |
+| Hands: two slots, typed, conserved (`HandStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
-| One-key verb (tap = raise a hand, tap = pin it, hold-and-release = burst; charge worn on the body) | ✅ Playable |
+| One-key verb (tap = raise a hand, tap = pin it, hold-and-release = burst) | ✅ Playable |
 | **Placement cursor** — time stops between the two taps; nine cells of reach; dithered held-world look | ✅ Playable, ⚙️ untuned |
 | Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
 | Hands floating beside the body (style only) | ✅ Playable |
@@ -42,14 +43,12 @@ What exists and works today:
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested; placed in the testbed, not in the shipped world |
 | Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
 | **One wrap for the whole view** (`FoldLattice` / `WrapCanvas`) | ✅ In the world |
-| **Batched sheet** — two canvas items, not one per fragment | ✅ In the world |
+| **Batched sheet** — two canvas items, not one per piece | ✅ In the world |
 | Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
 | Hand-drawn tilesheet | ⚙️ Layout + drop-in path done; sheet is generated in code |
 | Audio | ✅ Whole fold vocabulary wired; 21 SFX + 2 music beds ship (generated placeholders) |
 | Save / progression | ❌ Not started |
 | Entities (items, enemies, save points) | ❌ Not started |
-
----
 
 ---
 
@@ -92,10 +91,10 @@ For the reasoning behind the *shape* of the code rather than its history, see
 
 Roughly in priority order — nothing here is committed to yet:
 
-1. **Playtest the anchor economy.** The allowance (4) and cache grant (2) are first
-   guesses, and west's beats were authored when folding was free. The question to
-   answer by feel: does scarcity make the world read as *considered*, or merely
-   fussy? Tuning is a playtesting job, not an editing one.
+1. **Playtest the hand economy.** Two slots, and fuses of 0.65 / 1.6 / 3.2 seconds,
+   are first guesses, and west's beats were authored when folding was free. The
+   question to answer by feel: does scarcity make the world read as *considered*, or
+   merely fussy? Tuning is a playtesting job, not an editing one.
 2. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
    and drop-in path are done, so this is now an art job, not an engineering one.
 3. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
@@ -106,17 +105,16 @@ Roughly in priority order — nothing here is committed to yet:
    the leading candidate.
 5. **Save / checkpoints.** Undo is gone by design; respawn currently sends you to the
    region spawn. Real save points are the replacement — and they are now also what
-   collected caches need to outlive a session, and the answer to stranding yourself
-   with no anchors and no reachable seam.
+   the loose hands you have moved need to outlive a session, and the answer to
+   stranding yourself with no hands and no reachable seam.
 6. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
-7. ~~**Authoring tooling.**~~ Done — `./run_editor.sh`, see
-   `docs/features/WORLD_EDITOR.md`. Terrain, canvases, doors, pre-placed folds and
-   per-tile `tile_data` are all editable. What is NOT yet is a light's
-   colour/radius/flicker — the obvious next thing to move onto the `TileParams`
-   pattern. **Nested pre-placed folds are designed but deferred**; the format
-   reserves `folds[].in` and the loader ignores it.
-
----
+7. **Finish the `Space` migration.** `FoldWorld` still carries twelve
+   getter/setter properties forwarding to `space.x`, so the current space can be
+   read two ways. Moving the call sites over and deleting them is mechanical.
+8. **Two gaps in the editor** (`./run_editor.sh` — see
+   `docs/features/WORLD_EDITOR.md`): a light's colour/radius/flicker are not yet on
+   the `TileParams` pattern, and nested pre-placed folds are designed but deferred —
+   the format reserves `folds[].in` and the loader ignores it.
 
 ---
 
@@ -131,33 +129,28 @@ Roughly in priority order — nothing here is committed to yet:
 - The shipped sounds are generated placeholders (`tools/gen_audio.py`), not art.
 - Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
   the world yet. Pins and triggers now are — see east's right wing.
-- **You can strand yourself.** Spend your last anchors on a fold, walk somewhere its
+- **You can strand yourself.** Spend your last hands on a fold, walk somewhere its
   seam cannot be reached from, and `R` is the only way back. `R` is survivable by
-  design — it refunds every anchor and keeps your caches — but it still costs your
-  position and fold configuration. Save points are the real fix.
-- Collected anchor caches are runtime-only state (`FoldWorld.collected_caches`) — the
-  first thing that is not `(base, folds)`. They survive `R` but not the session; a save
-  system is what they need next.
-- Lights do not cast shadows: they pass through walls. Occluders would have to be
-  re-derived per fold and would want to soften the seam, which the art is currently
-  committed to keeping hard.
+  design — it drops every fold and respawns the authored loose hands — but it still
+  costs your position, your fold configuration, and any hand you had dropped
+  somewhere deliberately. Save points are the real fix.
+- Loose hands are runtime-only state (`FoldWorld.hand_pickups`) — the first thing that
+  is not `(base, folds)`. `R` rebuilds them from the authored world and nothing carries
+  them across a session; a save system is what they need next.
 - The tilesheet is generated in code, so the world looks systematic rather than
   authored. The layout is fixed and a drawn sheet drops in without code changes.
 - The pin/trigger wing lives in **east**, not west, and is reached through a door.
   West's four authored beats depend on its exact geometry and infinite creases make
-  a pin a global veto on a band of folds, so nothing was placed there without
-  playtesting. See the note in `scripts/world/README.md`.
-
----
+  a pin a global veto on every fold whose strip spans it, so nothing was placed there
+  without playtesting. See the note in `scripts/world/README.md`.
 
 ---
 
 ## For detailed information
 
 - [AGENTS.md](AGENTS.md) — start here: architecture, layering, critical decisions
+- [docs/GLOSSARY.md](docs/GLOSSARY.md) — the vocabulary: one name per thing
 - [scripts/world/README.md](scripts/world/README.md) — controls and design beats
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions & rationale
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — workflow, gates, pitfalls
 - [docs/REFERENCE.md](docs/REFERENCE.md) — code map
-- [docs/ARCHITECTURE-REVIEW-2026-08.md](docs/ARCHITECTURE-REVIEW-2026-08.md) — an
-  external review of 2026-08-11 and what was done about it

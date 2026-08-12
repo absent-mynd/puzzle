@@ -29,19 +29,19 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 
 | Concern | File |
 |---|---|
-| **The current level**: what space the player is in — its pieces, collision geometry, how it repeats, how far the one non-repeating axis runs. The value that lets a collaborator be handed "where you are" instead of the whole world | `Level.gd` |
+| **The current space**: what space the player is in — its pieces, collision geometry, how it repeats, how far the one non-repeating axis runs. The value that lets a collaborator be handed "where you are" instead of the whole world | `Space.gd` |
 | Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor reach & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
-| Immutable base level: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
+| Immutable base grid: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
 | One base tile: stable `base_id`, `grid_position`, `type`, per-instance `data` | `BaseTile.gd` |
 | One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel`, `held_hands` | `Fold.gd` |
 | **The derivation engine.** `derive()`, `derive_pieces()`, `apply_one_fold()` — replays a fold list over the base grid | `FoldReplay.gd` |
-| A derived fragment: `base_id`, `type`, `polygon`, `plane_pos`, **`src_offset`** | `FoldedPiece.gd` |
+| A derived piece: `base_id`, `type`, `polygon`, `plane_pos`, **`src_offset`** | `FoldedPiece.gd` |
 | Queryable derived state: per-position stacks, `dominant_type_at`, `pieces_of_base` | `FoldedState.gd` |
 | **Base ↔ derived point transport.** `transport()`, `world_point_from_base()`, `resolve_base_point()`, `piece_at()` | `BaseFrame.gd` |
 | **The tile registry.** walkable / merge_rank / blocks_fold / blocks_anchor / on_enter / grant | `TileTypes.gd` |
 | **The hand registry.** One entry per kind: colour, fuse, authoring key. `fuse_for()` mixes a pair | `HandTypes.gd` |
-| A hand lying in the world: base identity + point in tile, `dropped_at()`, `resolve_all()`. One object for authored caches and hands a burst popped out | `HandPickup.gd` |
-| **The slot ledger.** `SLOTS`, `free_slots()`, `first_empty()`, `held_in()`, `total()` — conservation across slots / pinned / folds / ground, nothing stored | `AnchorStock.gd` |
+| A hand lying in the world: base identity + point in tile, `dropped_at()`, `resolve_all()`. One object for authored loose hands and hands a burst popped out | `HandPickup.gd` |
+| **The hand ledger.** `SLOTS`, `free_slots()`, `first_empty()`, `held_in()`, `total()` — conservation across slots / pinned / folds / ground, nothing stored | `HandStock.gd` |
 | Entities that ride base tiles: split-on-unfold latents, carried geometry, footprints | `Occupants.gd` |
 | Fold-on-enter cascade: channels, fire-once guard, bounded fixpoint | `TriggerResolver.gd` |
 | Authored world: regions (ASCII rows), doors, pre-placed folds, lights, `starting_hands`; JSON round trip | `WorldData.gd` |
@@ -64,12 +64,12 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/burst verb, the placement cursor and its stopped clock, the hand ledger, the auto-commit fuse, loose hands, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
 | **The window-resolution overlay**: background, controls line, status readout, the centre flash and its lifetime. Told what to say; holds no reference back | `WorldHud.gd` |
 | **What the camera should be showing**: the lead, the lens, and the render-target size that stands in for zoom. Takes the world's facts as a context dictionary | `WorldCamera.gd` |
-| **Hands in the air**: the flight, the wrap, the turn-back at a band's end. Emits `landed` / `lost`; a hand at rest is an occupant and belongs to `FoldWorld` | `HandField.gd` |
+| **Hands in the air**: the flight, the wrap, the turn-back at a strip's end. Emits `landed` / `lost`; a hand at rest is an occupant and belongs to `FoldWorld` | `HandField.gd` |
 | Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing, all held still by `camera_held`); wears the loading burst as a colour (`charge_color`) | `PlayerBody.gd` |
-| Anchors, fold preview band, the placement cursor and its reach, seam diamonds, glue lines, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
+| Anchors, fold preview strip, the placement cursor and its reach, seam diamonds, glue lines, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
 | The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |
 | **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping | `PixelArt.gd` |
-| **The tileset.** Kinds, variants, and base-space UVs for cut fragments | `TileAtlas.gd` |
+| **The tileset.** Kinds, variants, and base-space UVs for cut pieces | `TileAtlas.gd` |
 | Lit materials, per-frame light uniforms, lamp glyphs | `LightRig.gd` |
 | **What time it is for things in the world.** Stops when the world does; everything that drifts, throbs or flickers reads it | `WorldClock.gd` |
 | Controls and the design beats | `README.md` |
@@ -84,8 +84,8 @@ understand how the pieces meet. Its header comment is the map.
 | …a fold get committed? | `FoldWorld.do_fold()` / `do_sub_fold()` |
 | …the player ride a flap? | `do_fold()` → `BaseFrame.world_point_from_base` → `WorldCore.depenetrate` |
 | …getting pinched into a fold work? | `do_fold()`, the `dest == null` branch |
-| …a subspace get derived? | `FoldWorld._compute_level()` / `_apply_context()` |
-| …unfold blocking work? | `FoldWorld.can_unfold_fold()`, `WorldCore.segment_intersects_band` |
+| …a subspace get derived? | `FoldWorld._compute_space()` / `_apply_context()` |
+| …unfold blocking work? | `FoldWorld.can_unfold_fold()`, `WorldCore.segment_intersects_strip` |
 | …exiting a subspace work? | `FoldWorld.try_exit()`, `exit_blocker()` |
 | …a door find its partner? | `FoldWorld._check_doors()`, `BaseFrame.resolve_base_point` |
 | …a trigger fire? | `FoldWorld._check_triggers()` → `TriggerResolver.resolve` |
@@ -133,7 +133,8 @@ understand how the pieces meet. Its header comment is the map.
 ## Conventions that bite (read before editing)
 
 These are enforced by the code, not optional style. Full rationale in
-[ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](../AGENTS.md):
+[ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](../AGENTS.md); the vocabulary
+the names are drawn from is [GLOSSARY.md](GLOSSARY.md):
 
 - **Derive, never mutate.** Change the fold list and re-derive; editing a
   `FoldedPiece` in place does not persist.
@@ -143,7 +144,7 @@ These are enforced by the code, not optional style. Full rationale in
   `blocks_anchor`).
 - **Never compare floats with `==`** — use `GeometryCore.EPSILON`.
 - **Don't mutate a collection while iterating it** — collect, then apply.
-- After adding or renaming a `class_name`, run `godot --headless --import` once so
+- After adding or renaming a `class_name`, run `godot --headless --editor --quit` once so
   the global class registry updates.
 
 ---

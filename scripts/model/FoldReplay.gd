@@ -16,8 +16,8 @@ class_name FoldReplay extends RefCounted
 ##       d >= gap      : source side  (translated by shift onto the target side)
 ##
 ## Each existing piece is clipped by the two parallel creases into up to three
-## fragments; the between fragment is dropped, the target fragment stays, the
-## source fragment translates. Fragments keep their base_id, so identity — and the
+## pieces; the between piece is dropped, the target piece stays, the
+## source piece translates. Pieces keep their base_id, so identity — and the
 ## player riding it — survives every fold.
 
 ## Pure derivation: (BaseGrid, ordered folds) -> FoldedState.
@@ -25,7 +25,7 @@ static func derive(base: BaseGrid, folds: Array) -> FoldedState:
 	return state_from_pieces(derive_pieces(base, folds))
 
 
-## The fragment list after replaying `folds` over the base grid. Exposed so the
+## The piece list after replaying `folds` over the base grid. Exposed so the
 ## step-log engine (StepReplay) can carry the pieces forward incrementally between
 ## checkpoints instead of rebuilding a FoldedState it would only re-flatten.
 static func derive_pieces(base: BaseGrid, folds: Array) -> Array[FoldedPiece]:
@@ -35,14 +35,14 @@ static func derive_pieces(base: BaseGrid, folds: Array) -> Array[FoldedPiece]:
 		pieces.append(FoldedPiece.new(
 			t.base_id, t.type, base.unit_square_local(t.base_id), t.grid_position, -1))
 
-	# 2. Apply each fold in order (folds compose over prior fragments).
+	# 2. Apply each fold in order (folds compose over prior pieces).
 	for fold in folds:
 		pieces = _apply_fold(pieces, fold, base.cell_size, true, false)["pieces"]
 
 	return pieces
 
 
-## Build the queryable state from a fragment list. Kept separate from derive_pieces
+## Build the queryable state from a piece list. Kept separate from derive_pieces
 ## so a MOVE step (which does not change geometry) can reuse an existing state.
 static func state_from_pieces(pieces: Array) -> FoldedState:
 	var state := FoldedState.new()
@@ -52,18 +52,18 @@ static func state_from_pieces(pieces: Array) -> FoldedState:
 	return state
 
 
-## Identity fragment list (base tiles, no folds). Convenience for StepReplay.
+## Identity piece list (base tiles, no folds). Convenience for StepReplay.
 static func identity_pieces(base: BaseGrid) -> Array[FoldedPiece]:
 	return derive_pieces(base, [])
 
 
-## Apply exactly one fold to a fragment list (public wrapper over the internal
+## Apply exactly one fold to a piece list (public wrapper over the internal
 ## clip-and-shift). Lets StepReplay extend a checkpoint by a single fold.
 static func apply_one_fold(pieces: Array, fold: Fold, cell_size: float) -> Array[FoldedPiece]:
 	return _apply_fold(pieces, fold, cell_size, true, false)["pieces"]
 
 
-## Just the strip a fold excises, as fragments that keep their PRE-fold frame.
+## Just the strip a fold excises, as pieces that keep their PRE-fold frame.
 ##
 ## `WorldCore.capture_strip` is this; it delegates here so the clip lives in one
 ## place.
@@ -75,12 +75,12 @@ static func capture_strip(pieces: Array, fold: Fold, cell_size: float) -> Array:
 ##
 ## Both halves of a fold come out of the same clip. `CollisionCore.fold_polygons`
 ## already returns `{a, b, dropped}` for a piece, and a fold needs all three: the
-## flaps become the new fragment list, the strip between them becomes the subspace.
+## flaps become the new piece list, the strip between them becomes the subspace.
 ## Asking for them separately — `apply_one_fold` then `capture_strip` — clips the
 ## whole world twice for one answer.
 ##
-## Measured on the shipped region (792 fragments) that was 14.7ms + 12.9ms of a
-## 58ms fold. The clip is Sutherland-Hodgman per fragment, so it is the single most
+## Measured on the shipped region (792 pieces) that was 14.7ms + 12.9ms of a
+## 58ms fold. The clip is Sutherland-Hodgman per piece, so it is the single most
 ## expensive thing a fold does; doing it once is worth more than anything downstream
 ## of it.
 ##
@@ -89,10 +89,10 @@ static func fold_and_capture(pieces: Array, fold: Fold, cell_size: float) -> Dic
 	return _apply_fold(pieces, fold, cell_size, true, true)
 
 
-## Apply one fold to the current fragment list, returning the new fragment list.
+## Apply one fold to the current piece list, returning the new piece list.
 ## MEET-IN-THE-MIDDLE: A-side and B-side both translate inward; between is excised.
 ## The polygon clip+shift math is shared with occupant footprints via
-## CollisionCore.fold_polygons; here we re-wrap each kept fragment as a FoldedPiece,
+## CollisionCore.fold_polygons; here we re-wrap each kept piece as a FoldedPiece,
 ## carrying base_id/type/plane_pos/src_offset.
 ##
 ## `want_pieces` / `want_dropped` say which parts of the answer the caller will use.

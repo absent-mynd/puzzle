@@ -31,7 +31,7 @@ entities cut in half — falls out without special-casing.
 **State is `(BaseGrid, Array[Fold])`. Everything else is a pure function of it.**
 
 `FoldReplay.derive_pieces(base, folds)` replays the fold list over the immutable base
-grid and returns a fresh fragment list. There is no in-place mutation in the kernel.
+grid and returns a fresh piece list. There is no in-place mutation in the kernel.
 
 **Why:** the predecessor was ~2000 lines of in-place mutation that had to implement
 *unfold* as a hand-written inverse of every forward operation — reversing shifts,
@@ -48,8 +48,8 @@ There is no inverse to get wrong, no snapshot to go stale, and no ordering const
 
 **Cost:** re-deriving is O(pieces × folds) on every change, and it is the most
 expensive thing the game does. Measured 2026-08-11 on the shipped region (792
-fragments, headless): one replay of one fold is **~15 ms** — the clip is
-Sutherland-Hodgman per fragment, so the O() is not a formality. A whole `do_fold`
+pieces, headless): one replay of one fold is **~15 ms** — the clip is
+Sutherland-Hodgman per piece, so the O() is not a formality. A whole `do_fold`
 is ~68 ms, about four frames at 60fps, masked by the 0.24 s fold animation.
 
 > An earlier version of this paragraph said "at current world sizes this is
@@ -63,7 +63,7 @@ exists for — no inverse to get wrong, no snapshot to go stale, no ordering
 constraint — and that property has already paid for itself several times over.
 
 **Where the remaining cost is, if you come here to optimize.** A fold used to clip
-every fragment *twice*: `capture_strip` and `apply_one_fold` are the same loop over
+every piece *twice*: `capture_strip` and `apply_one_fold` are the same loop over
 `CollisionCore.fold_polygons`, keeping different parts of the same answer.
 `FoldReplay.fold_and_capture` now does it once, which took a fold from ~82 ms to
 ~68 ms with no cached state. What is left is ~16 ms of clip and ~17 ms of view
@@ -73,7 +73,7 @@ rebuild (terrain batch + collision shapes).
 instead of recreating them is *slower* (5.7 ms vs 4.2 ms — assigning `.polygon` on a
 parented node triggers the same physics-shape rebuild). Caching `TileAtlas.uv_for`
 by base polygon is *slower* (8.5 ms vs 3.8 ms — hashing the polygon costs more than
-the computation it saves), even though 95% of fragments do keep their base polygon
+the computation it saves), even though 95% of pieces do keep their base polygon
 through a fold. Rediscovering *what changed* by comparing geometry costs more than
 recomputing it.
 
@@ -90,13 +90,13 @@ that pins the invariant.
 
 ## Decision 2: `src_offset` — the invariant that makes transport exact
 
-**Every derived fragment satisfies `polygon == base_polygon + src_offset`.**
+**Every derived piece satisfies `polygon == base_polygon + src_offset`.**
 
 That one invariant is the load-bearing element of the whole design:
 
 ```
-current point ──(subtract its fragment's src_offset)──► base point
-base point ──(find the fragment with the same base_id containing it)──► any other configuration
+current point ──(subtract its piece's src_offset)──► base point
+base point ──(find the piece with the same base_id containing it)──► any other configuration
 ```
 
 `BaseFrame` is that round trip. It is how the player rides a flap through a fold, how
@@ -107,9 +107,9 @@ follow whatever earlier folds did.
 **The alternative we rejected:** crease arithmetic — classify a point by which side of
 the fold it is on, then apply that side's shift. Simpler, and it works for one fold.
 It does *not* compose: after two folds a point's displacement depends on which
-fragments it passed through, not on its position relative to either crease. Crease
+pieces it passed through, not on its position relative to either crease. Crease
 math survives in `WorldCore.fold_shift_for_side` as a fallback for points over
-**void**, where there is no fragment to ask.
+**void**, where there is no piece to ask.
 
 ---
 
@@ -127,8 +127,8 @@ keeps `plane_pos` meaningful and lets the door and anchor machinery work in cell
 coordinates.
 
 **Consequence — infinite creases.** A crease is a full line, not a segment, so a fold
-excises a band across the entire world. Close a pit here and a structure on the far
-side of the map loses the same band. **This is deliberately unresolved.** It is the
+excises a strip across the entire world. Close a pit here and a structure on the far
+side of the map loses the same strip. **This is deliberately unresolved.** It is the
 strongest argument for barrier-scoped fold regions, and the design position is that it
 should be *felt* in play before it is engineered away. Do not quietly fix it.
 
@@ -137,14 +137,14 @@ should be *felt* in play before it is engineered away. Do not quietly fix it.
 ## Decision 4: Subspaces are real places, derived the same way
 
 A fold's excised strip is not deleted — it is captured (`WorldCore.capture_strip`) as
-a real fragment list retaining `base_id` and `src_offset`. Being pinched into a fold
-enters that list as a *level* with the same rules as the outside: you can fold within
-it, and interior folds persist into the world when you exit.
+a real piece list retaining `base_id` and `src_offset`. Being pinched into a fold
+enters that list as a *space* with the same rules as the outside: you can fold within
+it, and inner folds persist into the world when you exit.
 
 **Why this needed no new machinery:** a subspace's base pieces are just the parent's
 strip content, and its fold list is just another `Array[Fold]`. So
-`FoldWorld._compute_level(path)` derives any level — world, strip, or interior of an
-interior — by the same replay. Recursion came free because the strip kept its base
+`FoldWorld._compute_space(path)` derives any space — region, strip, or a subspace
+of a subspace — by the same replay. Recursion came free because the strip kept its base
 identity.
 
 ---
@@ -168,14 +168,14 @@ collide correctly without that loop ever having heard of them.
 
 ## Decision 6: Uniform unfold blocking
 
-A fold cannot be unfolded while a **newer** fold's excision band crosses its seam
+A fold cannot be unfolded while a **newer** fold's excised strip crosses its seam
 segment. The same test against a fold's two glue lines gates exiting a subspace.
 
 **Why one rule:** the naive alternative is a stack discipline (only unfold the newest
 fold). Simpler, but far less interesting — it forbids legal, comprehensible
 configurations, and it cannot express the situation that makes subspaces tense: an
-interior fold whose creases are not parallel to the glue *locks you inside* until you
-undo it. One geometric predicate, applied at every level, produces that for free.
+inner fold whose creases are not parallel to the glue *locks you inside* until you
+undo it. One geometric predicate, applied at every space, produces that for free.
 
 ---
 
@@ -205,16 +205,16 @@ those were never about undo.
 ## Decision 8: Sutherland-Hodgman for polygon splitting
 
 Industry-standard convex clipping, used by `CollisionCore.fold_polygons` to split each
-fragment by the two crease lines into up to three parts (A-side, between, B-side).
+piece by the two crease lines into up to three parts (A-side, between, B-side).
 
 **Why:** simple, robust for convex clip regions (a crease half-plane always is), and
 predictable in the degenerate cases (vertex exactly on the line, edge collinear with
-it) given an epsilon. Fragments stay convex under repeated folding, so it composes.
+it) given an epsilon. Pieces stay convex under repeated folding, so it composes.
 
 **The epsilon discipline:** `GeometryCore.EPSILON = 0.0001`. Never compare floats with
 `==`. Grazing a crease must not count as crossing it — which is why
-`WorldCore.segment_intersects_band` uses a half-pixel margin. Without it, a fold whose
-seam merely *touches* another's band would spuriously block unfolding.
+`WorldCore.segment_intersects_strip` uses a half-pixel margin. Without it, a fold whose
+seam merely *touches* another's strip would spuriously block unfolding.
 
 ---
 
@@ -240,10 +240,10 @@ Extracting the pure part was the fix; importing upward would have been a cycle.
 
 Doors and lights do not store a world position. They store a **base identity plus a
 point inside that tile**, and where they are is a question asked of the current
-fragment list through `BaseFrame`. `LightSource` is the second instance of the
+piece list through `BaseFrame`. `LightSource` is the second instance of the
 pattern, and it is what makes the design work read as inevitable rather than
-implemented: a lamp folded away is not in the overworld, and the same lamp is what
-lights that fold's interior. Nobody wrote either behaviour — both are the answer to
+implemented: a lamp folded away is not in the region, and the same lamp is what
+lights that fold's subspace. Nobody wrote either behaviour — both are the answer to
 "where are you?" in two different configurations.
 
 The one place the two differ is strictness. A door resolves with
@@ -252,7 +252,7 @@ there is no unambiguous side to arrive on. A light resolves with
 `world_point_from_base` and keeps burning on whichever half its point landed in,
 because a light has no such ambiguity to resolve.
 
-**Rendering follows the same rule.** A fragment's tile art, its variant and its
+**Rendering follows the same rule.** A piece's tile art, its variant and its
 edge kind all come from base space (`TileAtlas.uv_for` sends each vertex back
 through `src_offset`), so a tile looks identical however it has been folded,
 ridden or cut — and a crease cuts the *art* exactly as it cuts the geometry. That
@@ -284,12 +284,36 @@ scene-driven `test_fold_world.gd` is what catches integration regressions.
 
 ## What is deliberately still open
 
-- **Fold extent** (infinite creases) — see Decision 3.
-- **No nested pinch:** you cannot fold yourself deeper while already inside a fold.
-- **Triggers are world-level only:** firing inside a subspace would require splicing
-  folds into an interior list mid-cascade.
-- **Unfold animation** plays only for newest-fold unfolds at world level; the reverse
-  transform is exact only there.
+This is the list. **Do not close one of these silently in a refactor** — each is a
+position being held, not an oversight. (Gaps in the current build, as opposed to
+positions, are `STATUS.md` §"Known issues".)
+
+- **Fold extent is infinite-crease** — see Decision 3. A fold here guts a structure
+  over there. It is the argument for barrier-scoped folds, and it is kept unresolved
+  so it can be *felt* before it is designed away.
+- **How deep nesting stays legible** is untested by play. It works to arbitrary depth
+  and the tint deepens with each layer, but three folds in is a claim about the game,
+  not just about the code.
+- **A torus has no turn-back.** Fold yourself in across the grain and the space has no
+  ends at all — every direction wraps. Elegant or disorienting is a playtesting
+  question.
+- **A fold does not reach around the cylinder.** Fold across the glue you came in
+  through and the strip finds the end of the stored sheet rather than the next copy of
+  it. A design choice, not a geometric necessity — the alternative was implemented and
+  reverted. It costs a strip past the glue being emptier than the space it sits in; it
+  buys the glue line meaning something.
+- **A hand's kind changes only its fuse.** Whether that is enough to make picking up a
+  colour feel like a choice is open. A second axis would be a design change, made in
+  `HandTypes` and nowhere else.
+- **Jump feel is a first guess; jump HEIGHT is level design.** The curve wants
+  playtesting, the two bounds around it do not — the pinned pillar is two tiles
+  because it is meant to be jumped, the plate's wall is three because it is meant to
+  need a fold. `test_player_body` asserts both bounds, so tune the gravity constants
+  and let that test tell you when you have moved the world.
+- **Triggers are region-level only:** firing inside a subspace would require splicing
+  folds into an inner-fold list mid-cascade, which the resolver does not model.
+- **Unfold animation** plays only for newest-fold unfolds in a region; the reverse
+  transform is exact only there, so mid-stack unfolds are instant.
 - **Lights do not cast shadows,** and the seam is not lit or blended specially.
   Occluders would have to be re-derived per fold and would want to soften the seam,
   which is the one thing the art is currently committed to keeping hard.

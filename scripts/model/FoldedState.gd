@@ -20,13 +20,13 @@ const TYPE_GOAL := 3
 ## Vector2i plane_pos -> Array[FoldedPiece], ordered surface-first (stack_order asc).
 var stacks: Dictionary = {}
 
-## base_id -> FoldedPiece (its largest/primary fragment) for player-riding.
+## base_id -> FoldedPiece (its largest/primary piece) for player-riding.
 var base_to_piece: Dictionary = {}
 
-## base_id -> Array[FoldedPiece] (ALL its surface fragments). When a fold cuts a
-## tile, it produces two fragments with the same base_id; keeping both here is what
+## base_id -> Array[FoldedPiece] (ALL its surface pieces). When a fold cuts a
+## tile, it produces two pieces with the same base_id; keeping both here is what
 ## lets the player be SPLIT into multiple bodies (F4) rather than collapsing to the
-## largest fragment. base_to_piece is retained as the "primary" for single-body code.
+## largest piece. base_to_piece is retained as the "primary" for single-body code.
 var base_to_pieces: Dictionary = {}
 
 
@@ -36,12 +36,12 @@ func add_piece(piece: FoldedPiece) -> void:
 		stacks[piece.plane_pos] = []
 	stacks[piece.plane_pos].append(piece)
 
-	# Track the primary (largest-area) fragment per base id.
+	# Track the primary (largest-area) piece per base id.
 	var existing: FoldedPiece = base_to_piece.get(piece.base_id, null)
 	if existing == null or piece.area() > existing.area():
 		base_to_piece[piece.base_id] = piece
 
-	# Track EVERY fragment per base id (for multi-body / split player).
+	# Track EVERY piece per base id (for multi-body / split player).
 	if not base_to_pieces.has(piece.base_id):
 		base_to_pieces[piece.base_id] = []
 	base_to_pieces[piece.base_id].append(piece)
@@ -80,7 +80,7 @@ func is_occupied(pos: Vector2i) -> bool:
 	return not surface_pieces_at(pos).is_empty()
 
 
-## Surface fragments here whose type is walkable (per TileTypes). A body stands on
+## Surface pieces here whose type is walkable (per TileTypes). A body stands on
 ## one of these — sub-tile collision (F-sub) uses this instead of a whole-cell test.
 func walkable_pieces_at(pos: Vector2i) -> Array:
 	var out: Array = []
@@ -90,9 +90,9 @@ func walkable_pieces_at(pos: Vector2i) -> Array:
 	return out
 
 
-## Total walkable ground here (sum of walkable fragment areas). A rigid body fits if
-## this is >= its size. Sum (not largest single fragment) so a fold's MERGE seam — a
-## full cell tiled by two contiguous flap fragments — correctly holds a full body.
+## Total walkable ground here (sum of walkable piece areas). A rigid body fits if
+## this is >= its size. Sum (not largest single piece) so a fold's MERGE seam — a
+## full cell tiled by two contiguous flap pieces — correctly holds a full body.
 ## Folds produce contiguous flaps/merges, so summing doesn't admit disjoint slivers.
 func walkable_area_at(pos: Vector2i) -> float:
 	var total := 0.0
@@ -101,7 +101,7 @@ func walkable_area_at(pos: Vector2i) -> float:
 	return total
 
 
-## Total area a base tile's fragment(s) cover at a position — the "size" of a body
+## Total area a base tile's piece(s) cover at a position — the "size" of a body
 ## riding that tile there (smaller once a fold has cut it).
 func area_of_base_at(base_id: int, pos: Vector2i) -> float:
 	var total := 0.0
@@ -126,11 +126,11 @@ func is_complete(pos: Vector2i, cell_size: float) -> bool:
 	return surface_area_at(pos) >= cell_size * cell_size - 1.0
 
 
-## Walkable (SUB-TILE): a body can stand here if ANY surface fragment is a walkable
+## Walkable (SUB-TILE): a body can stand here if ANY surface piece is a walkable
 ## type. Completeness is no longer required — the body occupies the covered walkable
-## sub-region even when the rest of the cell is void or wall (a wall fragment in a
-## different sub-region doesn't block the floor fragment). `cell_size` is kept for
-## signature compatibility. A cell that is only wall/void has no walkable fragment.
+## sub-region even when the rest of the cell is void or wall (a wall piece in a
+## different sub-region doesn't block the floor piece). `cell_size` is kept for
+## signature compatibility. A cell that is only wall/void has no walkable piece.
 func is_walkable(pos: Vector2i, _cell_size: float = 0.0) -> bool:
 	return not walkable_pieces_at(pos).is_empty()
 
@@ -151,8 +151,8 @@ func has_type_at(pos: Vector2i, type: int) -> bool:
 	return false
 
 
-## Current plane position of a base tile's primary fragment. Returns a sentinel
-## Vector2i(-99999, -99999) if the base has no surviving surface fragment (excised).
+## Current plane position of a base tile's primary piece. Returns a sentinel
+## Vector2i(-99999, -99999) if the base has no surviving surface piece (excised).
 func plane_pos_of_base(base_id: int) -> Vector2i:
 	var p: FoldedPiece = base_to_piece.get(base_id, null)
 	if p == null:
@@ -164,7 +164,7 @@ func has_base(base_id: int) -> bool:
 	return base_to_piece.has(base_id)
 
 
-## ALL surface fragments of a base tile (>1 when a fold has split it). [] if excised.
+## ALL surface pieces of a base tile (>1 when a fold has split it). [] if excised.
 func pieces_of_base(base_id: int) -> Array:
 	return base_to_pieces.get(base_id, [])
 
@@ -199,9 +199,9 @@ func center_at(pos: Vector2i, cell_size: float = 64.0) -> Vector2:
 	return avg / pieces.size()
 
 
-## Area-weighted centroid of ONE base tile's fragment(s) at a position — where a body
+## Area-weighted centroid of ONE base tile's piece(s) at a position — where a body
 ## riding that tile actually sits (sub-cell). Falls back to the cell center if the
-## base has no fragment here. Used to position the player/occupant on its own
+## base has no piece here. Used to position the player/occupant on its own
 ## sub-region rather than the averaged cell center.
 func center_of_base_at(base_id: int, pos: Vector2i, cell_size: float = 64.0) -> Vector2:
 	var total := 0.0

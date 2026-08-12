@@ -5,7 +5,7 @@
 ## trigger. These tests pin: firing, anchors following earlier folds, idempotence per
 ## channel, the reserved id range, and the bounded-fixpoint cap.
 ##
-## The resolver works on a fragment list and a continuous player position, so these are
+## The resolver works on a piece list and a continuous player position, so these are
 ## pure — no scene, no physics.
 
 extends GutTest
@@ -61,7 +61,7 @@ func test_geometry_actually_changes():
 	var before := FoldReplay.derive_pieces(base, [])
 	var out := TriggerResolver.resolve(base, _ctx(base, Vector2i(5, 5)))
 	assert_ne((out["pieces"] as Array).size(), before.size(),
-		"the triggered fold is applied to the fragment list, not just recorded")
+		"the triggered fold is applied to the piece list, not just recorded")
 
 
 func test_channel_is_idempotent():
@@ -136,7 +136,7 @@ func test_trigger_refuses_to_cut_a_pin():
 	# cannot be folded away. The trigger still "fires" (and is spent), but no fold lands.
 	var base := BaseGrid.from_types(Vector2i(10, 10), CELL, {
 		Vector2i(5, 5): {"type": TRIGGER, "channel": "E", "anchors": [[1, 1], [4, 1]]},
-		Vector2i(2, 7): TileTypes.PIN,   # inside the band the trigger would excise
+		Vector2i(2, 7): TileTypes.PIN,   # inside the strip the trigger would excise
 	})
 	var out := TriggerResolver.resolve(base, _ctx(base, Vector2i(5, 5)))
 	assert_eq((out["folds"] as Array).size(), 0, "the pin refuses the triggered fold")
@@ -145,7 +145,7 @@ func test_trigger_refuses_to_cut_a_pin():
 func test_trigger_still_fires_when_the_pin_is_clear_of_the_band():
 	var base := BaseGrid.from_types(Vector2i(10, 10), CELL, {
 		Vector2i(5, 5): {"type": TRIGGER, "channel": "E", "anchors": [[1, 1], [4, 1]]},
-		Vector2i(8, 7): TileTypes.PIN,   # well outside the band
+		Vector2i(8, 7): TileTypes.PIN,   # well outside the strip
 	})
 	var out := TriggerResolver.resolve(base, _ctx(base, Vector2i(5, 5)))
 	assert_eq((out["folds"] as Array).size(), 1, "a pin elsewhere does not veto the fold")

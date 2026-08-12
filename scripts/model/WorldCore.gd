@@ -99,7 +99,7 @@ static func unfold_shift(pos: Vector2, fold: Fold, cell_size: float) -> Vector2:
 
 ## Everything a fold would excise, in the PRE-fold frame: the subspace's content, as
 ## real FoldedPieces (keeping base_id / src_offset so identity and base-frame mapping
-## survive INTO the subspace). Captured from the current fragment list BEFORE the fold
+## survive INTO the subspace). Captured from the current piece list BEFORE the fold
 ## is applied, so it composes over earlier folds.
 static func capture_strip(pieces: Array, fold: Fold, cell_size: float) -> Array:
 	return FoldReplay.capture_strip(pieces, fold, cell_size)
@@ -120,7 +120,7 @@ static func strip_extent(strip: Array, dir: Vector2) -> Dictionary:
 	return {"min": lo, "max": hi}
 
 
-## Collision polygons of the non-walkable pieces in a fragment list. Walkability comes
+## Collision polygons of the non-walkable pieces in a piece list. Walkability comes
 ## from the registry, so a new blocking tile type needs no change here.
 static func solid_polys_of(pieces: Array) -> Array:
 	var out: Array = []
@@ -143,10 +143,10 @@ static func polys_of_type(pieces: Array, type: int) -> Array:
 # Seam segments & unfold blocking
 # ---------------------------------------------------------------------------
 # Each fold stores its seam SEGMENT (its meeting line, clipped to the tangent extent of
-# what it actually excised); a fold cannot be unfolded while any newer fold's excision
-# band crosses that segment. The same test against the outer fold's two crease lines
-# (the glue) gates exiting a subspace: interior folds parallel to the glue are fine,
-# folds whose band crosses the glue must be unfolded first.
+# what it actually excised); a fold cannot be unfolded while any newer fold's excised
+# strip crosses that segment. The same test against the outer fold's two crease lines
+# (the glue) gates exiting a subspace: inner folds parallel to the glue are fine,
+# folds whose strip crosses the glue must be unfolded first.
 
 ## The fold's seam segment: its meeting line over the excised content's extent.
 static func seam_segment(fold: Fold, dropped: Array, cell_size: float) -> PackedVector2Array:
@@ -172,9 +172,9 @@ static func glue_segments(fold: Fold, dropped: Array) -> Array:
 	return out
 
 
-## Does a segment cross a fold's excision band (the open region strictly between its
+## Does a segment cross a fold's excised strip (the open region strictly between its
 ## creases)? Half-pixel epsilon: grazing a crease doesn't block.
-static func segment_intersects_band(p0: Vector2, p1: Vector2, fold: Fold) -> bool:
+static func segment_intersects_strip(p0: Vector2, p1: Vector2, fold: Fold) -> bool:
 	var d0 := (p0 - fold.crease_point1).dot(fold.crease_normal)
 	var d1 := (p1 - fold.crease_point1).dot(fold.crease_normal)
 	var gap := fold.gap_distance()
@@ -322,7 +322,7 @@ static func hand_drift(seed: float, t: float, radius: float = DRIFT_RADIUS) -> V
 #
 # That boundary is the whole design, and it is what keeps `AGENTS.md` §8 intact. §8
 # forbids caching a world position on a thing that lives in the world, because the
-# fragment list is the only authority on where anything is. A ball in flight does hold
+# piece list is the only authority on where anything is. A ball in flight does hold
 # a position — but it holds it for a second or two and nothing persists it, and while
 # it is in flight it is transported through `BaseFrame` exactly as the player is. So
 # folds carry a flying hand correctly (a ball folded into a subspace goes on flying
@@ -530,16 +530,16 @@ static func hand_closest_point_on(at: Vector2, poly: PackedVector2Array) -> Vect
 	return best
 
 
-## Bring a point back into the strip's fundamental band, wrapping across the glue.
+## Bring a point back into the strip's fundamental domain, wrapping across the glue.
 ##
-## A subspace IS a cylinder: the band repeats forever along the crease normal, and the
+## A subspace IS a cylinder: the strip repeats forever along the crease normal, and the
 ## two glue lines are the same line. `_subspace_wrap_and_turnback` does this for the
 ## player; anything else living in a strip has to agree with it, or objects and player
 ## disagree about where "here" is.
 ##
-## Stated as a modulo rather than the player's one-band if/elif, because a falling thing
+## Stated as a modulo rather than the player's one-strip if/elif, because a falling thing
 ## accelerates: at terminal speed against a one-cell fold a single frame can cross more
-## than one band width, and a single-step wrap would leave it outside. `floor` handles any
+## than one strip width, and a single-step wrap would leave it outside. `floor` handles any
 ## number of laps at the same cost.
 ##
 ## The consequence worth knowing: when the wrap axis has a vertical component, an object
@@ -657,7 +657,7 @@ static func hand_drift_seed(id: int, point: Vector2) -> float:
 ## geometry downstream divides by a gap of zero.
 ##
 ## There is deliberately no minimum distance. A one-cell fold is a perfectly good
-## fold — it excises a one-cell band and the halves meet — and the rule that used to
+## fold — it excises a one-cell strip and the halves meet — and the rule that used to
 ## demand two cells was protecting nothing but taste. Whether a fold is worth making
 ## is the player's call, and they find out by making it.
 static func anchors_valid(a: Vector2i, b: Vector2i) -> bool:
@@ -719,7 +719,7 @@ static func fold_blocked_by_tile(pieces: Array, fold: Fold, cell_size: float) ->
 # SPACE — and this is a game about the shape of the space, so how much to show
 # is a question about what the moment is: how hard you are moving, and what
 # would be a mistake to leave off screen (an anchor pinned twenty cells back,
-# the band you are folded inside, the two ends of a fold ride).
+# the strip you are folded inside, the two ends of a fold ride).
 #
 # Every term can only WIDEN the frame. Resting is the tightest it ever sits, so
 # the camera never closes in on you unasked.
@@ -811,7 +811,7 @@ const LOOKAHEAD_MAX := 6.0 * CELL
 ##   `flat_axes` (Array[Vector2]) axes to lead nowhere along — the periods of the
 ##               space (see `FoldLattice`). A repeating space already shows every
 ##               copy there is along an axis it repeats on, so a lead there slides
-##               the view past identical bands for nothing. One axis inside a
+##               the view past identical strips for nothing. One axis inside a
 ##               fold; TWO on the torus you get by folding yourself in twice
 ##               across the grain, and then the lead is the body's alone.
 ##   `flat_axis` (Vector2) the single-axis form, for callers with one.

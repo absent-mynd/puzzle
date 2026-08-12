@@ -13,10 +13,10 @@ extends GutTest
 ## refused at the FUSE ("Both hands came down on one spot" — `WorldCore.anchors_valid`).
 ## For the length of that fuse the pair is armed and the overlay previews it every
 ## frame, and a pair whose anchors coincide has no crease direction at all, so
-## `_band_polygon` rightly returns no polygon.
+## `_strip_polygon` rightly returns no polygon.
 ##
 ## It only errored in a space that does NOT repeat — which is a region, which is where
-## you play. `_clip` has two branches and only one of them dropped the empty band:
+## you play. `_clip` has two branches and only one of them dropped the empty strip:
 ## `Geometry2D.intersect_polygons` returns nothing for a degenerate subject, while the
 ## "no domain, nothing to clip to" branch passed it straight through to be drawn.
 
@@ -66,7 +66,7 @@ func _cell(x: int, y: int) -> Vector2:
 func _preview_polys() -> Array:
 	var out: Array = []
 	out.append_array(overlay._guides)
-	out.append_array(overlay._bands)
+	out.append_array(overlay._strips)
 	return out
 
 
@@ -84,27 +84,27 @@ func test_a_pair_on_one_cell_previews_nothing_in_a_flat_space() -> void:
 	# The reported crash. Both hands on cell (4, 5), region level, so no domain.
 	var at := _cell(4, 5)
 	overlay.set_view(_view([[at, at]]))
-	assert_eq(overlay._bands, [],
-		"a pair with no crease direction previews no band at all")
+	assert_eq(overlay._strips, [],
+		"a pair with no crease direction previews no strip at all")
 
 
 func test_a_pair_on_one_cell_previews_nothing_in_a_repeating_space() -> void:
 	# The branch that was already correct, pinned so the two stay agreed.
 	var at := _cell(4, 5)
 	overlay.set_view(_view([[at, at]], [], true))
-	assert_eq(overlay._bands, [],
-		"...and the same inside a fold, where the band is clipped to one copy")
+	assert_eq(overlay._strips, [],
+		"...and the same inside a fold, where the strip is clipped to one copy")
 
 
 func test_a_real_pair_still_previews_a_band() -> void:
-	# The guard must drop the degenerate band and nothing else.
+	# The guard must drop the degenerate strip and nothing else.
 	overlay.set_view(_view([[_cell(4, 5), _cell(9, 5)]]))
-	assert_eq(overlay._bands.size(), 1, "a pair a cell apart still previews its band")
-	assert_gte(_fewest_points(overlay._bands), 3, "and that band is drawable")
+	assert_eq(overlay._strips.size(), 1, "a pair a cell apart still previews its strip")
+	assert_gte(_fewest_points(overlay._strips), 3, "and that strip is drawable")
 
 	overlay.set_view(_view([[_cell(4, 5), _cell(9, 5)]], [], true))
-	assert_gt(overlay._bands.size(), 0, "so does the same pair in a repeating space")
-	assert_gte(_fewest_points(overlay._bands), 3, "and its clipped band is drawable too")
+	assert_gt(overlay._strips.size(), 0, "so does the same pair in a repeating space")
+	assert_gte(_fewest_points(overlay._strips), 3, "and its clipped strip is drawable too")
 
 
 func test_nothing_the_overlay_would_draw_has_fewer_than_three_points() -> void:

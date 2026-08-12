@@ -10,7 +10,7 @@ class_name TriggerResolver extends RefCounted
 ## player — possibly onto another trigger.
 ##
 ## Previously this ran inside the step log, which made it undoable for free. The world
-## is continuous now, so it runs against a fragment list and a continuous player
+## is continuous now, so it runs against a piece list and a continuous player
 ## position instead: each reaction applies its fold to the pieces and transports the
 ## player through `BaseFrame`, exactly as a player-initiated fold does. The determinism
 ## properties are unchanged and still carried by this file:
@@ -89,7 +89,7 @@ static func _next_reaction(base: BaseGrid, ctx: Dictionary, fired: Dictionary) -
 
 
 ## Apply a fold reaction: resolve the anchors through the current fold state (so they
-## ride prior folds), create the channel-tagged fold, extend the fragment list, and
+## ride prior folds), create the channel-tagged fold, extend the piece list, and
 ## transport the player onto whichever flap carried them.
 static func _apply_fold_reaction(base: BaseGrid, ctx: Dictionary, reaction: Dictionary, fired: Dictionary) -> Dictionary:
 	fired[reaction["trigger_id"]] = true  # fire once per cascade regardless of outcome

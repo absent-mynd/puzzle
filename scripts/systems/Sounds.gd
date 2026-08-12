@@ -46,9 +46,9 @@ const FOLD := "fold"
 const UNFOLD := "unfold"
 ## The fold closed over the player instead of moving them: they are inside it.
 const PINCH := "pinch"
-## Emerging from a fold's interior back to the level above.
+## Emerging from a subspace back to the space above.
 const SURFACE := "surface"
-## The release burst.
+## The burst.
 const BURST := "burst"
 ## The fuse went off and the fold would not go; the hands scatter.
 const FOLD_REFUSED := "fold_refused"
@@ -86,7 +86,7 @@ const UI_CLICK := "ui_click"
 # Track ids, resolved against `assets/audio/music/` the same way.
 
 ## The bed for ordinary play.
-const MUSIC_OVERWORLD := "overworld"
+const MUSIC_REGION := "region"
 ## The bed inside a fold. A different place should sound like one.
 const MUSIC_SUBSPACE := "subspace"
 
@@ -154,7 +154,7 @@ static func all_sounds() -> Array:
 
 ## Every music track id.
 static func all_music() -> Array:
-	return [MUSIC_OVERWORLD, MUSIC_SUBSPACE]
+	return [MUSIC_REGION, MUSIC_SUBSPACE]
 
 
 static func is_registered(id: String) -> bool:

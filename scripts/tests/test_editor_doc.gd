@@ -382,7 +382,7 @@ func test_growing_the_left_edge_carries_everything_with_the_terrain():
 	assert_eq(doc.light_at("west", Vector2i(4, 1)).cell, Vector2i(4, 1), "so did the light")
 	assert_eq(doc.hand_at("west", Vector2i(5, 1)).cell, Vector2i(5, 1), "and the hand")
 	assert_eq(doc.world.doors[door]["cell"], Vector2i(6, 1), "and the door")
-	assert_eq(doc.anchors_of("west"), [Vector2i(7, 1)], "and the loose anchor")
+	assert_eq(doc.anchors_of("west"), [Vector2i(7, 1)], "and the unpaired anchor")
 	assert_eq(doc.region("west")["spawn"], Vector2(8.5, 1.5), "and the spawn point")
 
 
@@ -560,7 +560,7 @@ func test_fold_at_finds_a_fold_by_either_anchor():
 
 
 func test_a_nested_fold_is_saved_but_not_applied():
-	# The format reserves `in` for folds inside another fold's interior. Nothing
+	# The format reserves `in` for folds inside another fold's subspace. Nothing
 	# applies them yet, so the loader must ignore them rather than fold the wrong
 	# part of the region. See docs/features/WORLD_EDITOR.md.
 	var doc := _doc()
@@ -568,7 +568,7 @@ func test_a_nested_fold_is_saved_but_not_applied():
 		{"anchor1": {"x": 1, "y": 1}, "anchor2": {"x": 5, "y": 1}},
 		{"anchor1": {"x": 2, "y": 2}, "anchor2": {"x": 4, "y": 2}, "in": [0]},
 	]
-	assert_eq(doc.world.fold_pairs("west").size(), 1, "only the world-level fold is applied")
+	assert_eq(doc.world.fold_pairs("west").size(), 1, "only the region-level fold is applied")
 	assert_eq(doc.folds_of("west").size(), 2, "the editor still sees and draws both")
 	assert_eq(doc.folds_of("west")[1]["in"], [0], "and keeps the nesting path")
 
@@ -616,10 +616,10 @@ func test_starting_hands_are_written_as_authoring_keys():
 # Validation
 # ---------------------------------------------------------------------------
 
-func _messages(doc: EditorDoc, level: String) -> Array:
+func _messages(doc: EditorDoc, space: String) -> Array:
 	var out: Array = []
 	for issue in doc.validate():
-		if issue["level"] == level:
+		if issue["severity"] == space:
 			out.append(String(issue["message"]))
 	return out
 

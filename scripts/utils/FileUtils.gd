@@ -10,18 +10,14 @@ extends Node
 class_name FileUtils
 
 
-## Get list of custom level files from a directory
+## The names of the .json files in a directory, without the extension, sorted.
 ##
-## Scans the specified directory for .json files and returns their names
-## (without the .json extension) in sorted order.
-##
-## @param directory: The directory path to scan (e.g., "user://levels/")
-## @return: Array of level file names without .json extension, sorted alphabetically
+## NOTE: nothing calls this. It is the last of the campaign-era file helpers —
+## worlds are loaded by path (`FoldWorld.WORLD_PATH`), not discovered by scan.
 ##
 ## Example:
-##   var levels = FileUtils.get_custom_level_files("user://levels/")
-##   # Returns ["level1", "level2", "my_puzzle"] if those .json files exist
-static func get_custom_level_files(directory: String) -> Array[String]:
+##   var names = FileUtils.json_names_in("user://worlds/")
+static func json_names_in(directory: String) -> Array[String]:
 	var files: Array[String] = []
 
 	if not DirAccess.dir_exists_absolute(directory):

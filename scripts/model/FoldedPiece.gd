@@ -2,14 +2,14 @@ class_name FoldedPiece extends RefCounted
 
 ## FoldedPiece
 ##
-## A derived fragment of a base tile in the current (folded) configuration.
+## A derived piece of a base tile in the current (folded) configuration.
 ## One base tile can contribute several pieces after being clipped by fold creases.
 ## Each piece carries its base identity plus its current-space geometry.
 ##
 ## FoldedPieces are produced fresh by FoldReplay.derive() every time; they are
 ## never mutated in place by gameplay and hold no persistent state.
 
-## Which base tile this is a fragment of (stable identity for player-riding & merge).
+## Which base tile this is a piece of (stable identity for player-riding & merge).
 var base_id: int = -1
 
 ## Type inherited from the base tile (0 empty, 1 wall, 2 water, 3 goal). No null.
@@ -18,20 +18,20 @@ var type: int = 0
 ## Polygon vertices in CURRENT-space coords (world px).
 var polygon: PackedVector2Array = PackedVector2Array()
 
-## The integer grid cell this fragment currently occupies.
+## The integer grid cell this piece currently occupies.
 var plane_pos: Vector2i = Vector2i.ZERO
 
-## The last fold that produced/moved this fragment (-1 if untouched base geometry).
+## The last fold that produced/moved this piece (-1 if untouched base geometry).
 var source_fold_id: int = -1
 
 ## Reserved for future true-occlusion mechanics. Always false under current ruleset
-## (between-anchor fragments are dropped, not buried).
+## (between-anchor pieces are dropped, not buried).
 var occluded: bool = false
 
 ## 0 = topmost surface; larger = deeper. Deterministic ordering set by FoldReplay.
 var stack_order: int = 0
 
-## Cumulative translation (px) applied to this fragment across all folds so far, i.e.
+## Cumulative translation (px) applied to this piece across all folds so far, i.e.
 ## current_polygon = base_polygon + src_offset. Lets a current-space point be mapped
 ## back to base space (point - src_offset) so anchors can be re-derived stably.
 var src_offset: Vector2 = Vector2.ZERO

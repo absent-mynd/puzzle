@@ -36,7 +36,6 @@ Rows, top to bottom — the `K_*` constants in `scripts/world/TileAtlas.gd`:
 | 7 | `K_UFLOOR` | unanchorable floor (walkable) |
 | 8 | `K_UWALL` | unanchorable wall (solid) |
 | 9 | `K_LAMP` | the glyph drawn at a light source; transparent ground |
-| 10 | `K_CACHE` | a hand cache: ONE spare hand, drawn as a single upright peg (one is what it gives). Paint it **neutral/near-white** — it is tinted at draw time by the kind of hand it holds, so one row covers every colour |
 
 ## Two rules the art has to respect
 

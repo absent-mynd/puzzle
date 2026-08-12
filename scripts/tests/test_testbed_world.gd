@@ -2,7 +2,7 @@
 ##
 ## `worlds/testbed.json` is the DEBUG world: fourteen regions wired star-and-ring,
 ## one element per themed region, three mashups, and a `kitchen` that crams every
-## tile character and occupant kind into one room. It is not a designed level and
+## tile character and occupant kind into one room. It is not a designed world and
 ## nothing here asserts that it is fun or even finishable — several arrangements in
 ## it are deliberately unsolvable.
 ##
@@ -25,7 +25,7 @@ const HUB := "hub"
 ## Region ids the hub must carry a door to. The hub IS the router; a spoke missing
 ## from here is a region you can only reach the long way round.
 const SPOKES := ["plain", "water", "pins", "unanchor", "triggers", "prefold", "lamps",
-	"caches", "goals", "mash_a", "mash_b", "mash_c", "kitchen"]
+	"hands", "goals", "mash_a", "mash_b", "mash_c", "kitchen"]
 
 
 func _world() -> WorldData:
@@ -33,7 +33,7 @@ func _world() -> WorldData:
 
 
 ## A region with its pre-placed folds applied, exactly as `FoldWorld._setup_all`
-## does it: each fold created from the CURRENT fragment list, in order.
+## does it: each fold created from the CURRENT piece list, in order.
 func _booted(wd: WorldData, id: String) -> Dictionary:
 	var base := wd.build_base(id)
 	var pieces: Array = FoldReplay.identity_pieces(base)
@@ -230,7 +230,7 @@ func test_it_starts_you_with_a_mixed_pair():
 	# the first fold you make rather than being something you have to go and find.
 	var wd := _world()
 	var slots := wd.starting_hand_slots()
-	assert_eq(AnchorStock.held_count(slots), AnchorStock.SLOTS, "both slots are full")
+	assert_eq(HandStock.held_count(slots), HandStock.SLOTS, "both slots are full")
 	assert_ne(slots[0], slots[1], "and they are not the same kind")
 
 
@@ -342,7 +342,7 @@ func test_the_trigger_region_covers_every_outcome_the_resolver_has():
 
 func test_a_pin_still_vetoes_the_fold_a_plate_would_make():
 	# The plate is on the floor and the pin is in the sky six rows up: a fold's
-	# extent is the whole world, so the nail is in its band anyway.
+	# extent is the whole world, so the nail is in its strip anyway.
 	var wd := _world()
 	var booted := _booted(wd, "triggers")
 	var base: BaseGrid = booted["base"]
@@ -364,7 +364,7 @@ func test_a_pin_still_vetoes_the_fold_a_plate_would_make():
 # ---------------------------------------------------------------------------
 
 func test_every_region_survives_booting_its_pre_placed_folds():
-	# A region's fold list is applied in order against the ALREADY-FOLDED fragment
+	# A region's fold list is applied in order against the ALREADY-FOLDED piece
 	# list, so a second fold's anchors are plane cells, not base ones. Getting that
 	# wrong is how a region folds itself out of existence.
 	var wd := _world()
@@ -396,12 +396,12 @@ func test_a_nested_pre_placed_fold_is_authored_and_ignored():
 			flat += 1
 	assert_gt(nested, 0, "a nested entry is authored")
 	assert_eq(wd.fold_pairs("prefold").size(), flat,
-		"...and fold_pairs hands back only the world-level ones")
+		"...and fold_pairs hands back only the region-level ones")
 
 
 func test_the_routing_doors_survive_the_folds_their_region_ships_with():
 	# Doors that are folded away at boot are a case this world is FOR — but only the
-	# ones authored for it. Every door on a region's landing strip (the clear stretch
+	# ones authored for it. Every door on a region's landing run (the clear stretch
 	# of walk line the routing doors sit on) has to still be there, or a spoke of the
 	# hub leads somewhere you cannot come back from.
 	var wd := _world()
@@ -423,7 +423,7 @@ func test_the_routing_doors_survive_the_folds_their_region_ships_with():
 func test_the_hub_ships_a_door_split_by_a_crease_and_a_door_inside_a_fold():
 	# The two door cases the shipped world cannot show you at once: one whose tile is
 	# cut exactly through its centre (dormant — no unambiguous side to arrive on) and
-	# one wholly inside the excised strip (its partner delivers you into the interior).
+	# one wholly inside the excised strip (its partner delivers you into the subspace).
 	var wd := _world()
 	var booted := _booted(wd, HUB)
 	var base: BaseGrid = booted["base"]
@@ -441,12 +441,12 @@ func test_the_hub_ships_a_door_split_by_a_crease_and_a_door_inside_a_fold():
 	assert_not_null(vault_tile, "the vault door is on the grid")
 	assert_null(BaseFrame.world_point_from_base(booted["pieces"], vault_tile.base_id,
 		(Vector2(vault) + Vector2(0.5, 0.5)) * cs),
-		"the vault door is gone from the overworld — it is inside the fold")
+		"the vault door is gone from the region — it is inside the fold")
 
 
 func test_folding_a_lamp_away_takes_it_out_of_the_overworld():
 	# The lamps region ships one lamp inside a one-column pre-fold, so it lights the
-	# strip's interior and nothing else.
+	# strip's subspace and nothing else.
 	var wd := _world()
 	var booted := _booted(wd, "lamps")
 	var base: BaseGrid = booted["base"]

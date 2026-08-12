@@ -18,7 +18,7 @@ class_name HandOrbit extends WrapCanvas
 ## It is a `WrapCanvas`, which is the whole of what it knows about folds: it paints
 ## the hands beside the body and they turn up in every copy of a strip, because the
 ## body does. Before that base class existed this node was the standing example of
-## the problem — a new object added to the world that quietly appeared in one band
+## the problem — a new object added to the world that quietly appeared in one copy
 ## and nowhere else, while the terrain, the body and the markers each carried their
 ## own copy of the repeat loop.
 ##
@@ -30,7 +30,7 @@ const ORBIT_RADIUS := 34.0
 ## Spring constants, tuned for "carried, slightly reluctant" rather than "rigid".
 const STIFFNESS := 120.0
 const DAMPING := 11.0
-## Drawn size. Smaller than the player blob: these are held things, not a second body.
+## Drawn size. Smaller than the player: these are held things, not a second body.
 const HAND_RADIUS := 5.0
 
 ## One entry per slot: {"pos": Vector2, "vel": Vector2, "type": int, "held": bool}.
@@ -77,7 +77,7 @@ func follow(hands: Array, body: Vector2, motion: Vector2, facing: int, delta: fl
 ## Walk through a glue line and the body slides back by a period; these positions
 ## have to slide with it. They are the one thing in this file that outlives a frame,
 ## which is exactly what `WrapCanvas.carry_through_wrap` exists for: left behind, a
-## hand sits a band away and the spring hauls it home across the whole space — the
+## hand sits a copy away and the spring hauls it home across the whole space — the
 ## hands appearing to jump back to the copy you entered from and swim after you,
 ## when they should simply have come through with you.
 ##
@@ -101,7 +101,7 @@ func paint() -> void:
 
 
 ## How a hand looks, wherever it is. STATIC and shared on purpose: a hand carried
-## beside you, a cache the world shipped and a hand that popped out of a burst are the
+## beside you, a loose hand the world authored and one that popped out of a burst are the
 ## same object to the player, so they must not be drawn by two different pieces of
 ## code that could drift apart. `WorldOverlay` draws loose ones through here.
 ##

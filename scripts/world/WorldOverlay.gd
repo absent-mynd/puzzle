@@ -2,7 +2,7 @@ class_name WorldOverlay extends WrapCanvas
 
 ## WorldOverlay
 ##
-## Draw-only layer for the fold world: anchor markers, the excised-band preview,
+## Draw-only layer for the fold world: anchor markers, the excised-strip preview,
 ## seam-anchor diamonds (with unfoldability tint), the glue lines and outer seam
 ## anchor inside a subspace, doors and hands lying on the ground.
 ##
@@ -14,16 +14,16 @@ class_name WorldOverlay extends WrapCanvas
 ## 16.3 ms of a 16.6 ms frame. See `OverlayView`.
 ##
 ## It is a `WrapCanvas`, so nothing here loops over copies of the space: `paint`
-## draws one band's worth of markers and they appear in every band. What used to
+## draws one copy's worth of markers and they appear in every copy. What used to
 ## be a private `_copy_offsets` threaded through nine draw calls — and had to be
 ## remembered by every new marker — is now the base class's business.
 ##
-## The excised-band preview and the alignment guides repeat like everything else,
+## The excised-strip preview and the alignment guides repeat like everything else,
 ## but they are the one thing that has to be CLIPPED first: both span the whole
 ## world, so unclipped copies would lie on top of each other and stack their alpha
-## into a wash. Clipped to the fundamental domain each copy paints its own band and
+## into a wash. Clipped to the fundamental domain each copy paints its own strip and
 ## the tiling is exact. In a space that does not repeat there is no domain, nothing
-## is clipped, and this is the single band it always was.
+## is clipped, and this is the single strip it always was.
 ##
 ## The overlay draws INSIDE the pixel render target, so every stroke is measured
 ## in art pixels: a 1-unit line would be a quarter of a pixel and would flicker
@@ -40,14 +40,14 @@ const STROKE := HAIR * 2.0
 
 var _view := OverlayView.new()
 
-## The preview band and the guides, clipped to one copy of the space. Built when the
+## The preview strip and the guides, clipped to one copy of the space. Built when the
 ## view arrives — once per frame — rather than per copy, which is the whole lesson of
 ## `OverlayView`: `Geometry2D.intersect_polygons` is not free.
-var _bands: Array = []
+var _strips: Array = []
 var _guides: Array = []
-## ...and the band the raised hand WOULD excise, kept apart from `_bands` because it is
+## ...and the strip the raised hand WOULD excise, kept apart from `_strips` because it is
 ## a proposal rather than a fact and must not be drawn as one.
-var _aim_band: Array = []
+var _aim_strip: Array = []
 
 
 ## Take the frame's description and redraw. The only way anything gets in here.
@@ -57,15 +57,15 @@ func set_view(view: OverlayView) -> void:
 	queue_redraw()
 
 
-## The band an armed pair would excise, and the guides through every placed hand.
+## The strip an armed pair would excise, and the guides through every placed hand.
 func _rebuild_preview() -> void:
-	_bands = []
+	_strips = []
 	_guides = []
-	_aim_band = []
+	_aim_strip = []
 	if not _view.active:
 		return
 	if _view.aiming and _view.aim_pair != null:
-		_aim_band = _clip(_band_polygon(
+		_aim_strip = _clip(_strip_polygon(
 			_view.aim_at, Vector2(_view.aim_pair), _view.world_px))
 	var world_px := _view.world_px
 	for entry in _view.hands_down:
@@ -81,8 +81,8 @@ func _rebuild_preview() -> void:
 			Vector2(at.x + HAIR * 0.5, world_px.y), Vector2(at.x - HAIR * 0.5, world_px.y),
 		])))
 	for pair in _view.pairs:
-		_bands.append_array(
-			_clip(_band_polygon(Vector2(pair["a"]), Vector2(pair["b"]), world_px)))
+		_strips.append_array(
+			_clip(_strip_polygon(Vector2(pair["a"]), Vector2(pair["b"]), world_px)))
 
 
 ## `poly` cut down to one copy of the space. A domain of fewer than three points
@@ -155,7 +155,7 @@ func _draw_doors() -> void:
 		draw_circle(at, HAIR, Color("7ce07c", 0.9))
 
 
-## Hands lying in the world — caches the world shipped and hands that popped out of a
+## Hands lying in the world — loose hands the world shipped and hands that popped out of a
 ## burst alike, drawn through `HandOrbit.draw_hand` so a hand on the ground is
 ## pixel-identical to one riding beside you, idle float and all.
 ##
@@ -163,7 +163,7 @@ func _draw_doors() -> void:
 ## they are one object seen several times, and copies bobbing out of phase would say
 ## otherwise. The seed comes from the hand's base identity rather than its place in the
 ## list — see `WorldCore.hand_drift_seed`. (The copies themselves are `WrapCanvas`'s
-## business: this draws one band's worth and they appear in every band.)
+## business: this draws one copy's worth and they appear in every copy.)
 ##
 ## The float does NOT move the hand. `_check_pickups` measures from `position_in`, so a
 ## hand is picked up where it lies; the drift is only ever how it is drawn, which is why
@@ -282,31 +282,31 @@ func _draw_placed_hands() -> void:
 			draw_circle(at, 3.0 + pulse * 2.5, c)
 
 
-## The band an armed pair would excise, and the alignment guides — in every copy
+## The strip an armed pair would excise, and the alignment guides — in every copy
 ## of the space, because the fold reaches into every copy. What the preview shows
-## is what the fold will take, and inside a repeating space that is a band in each
-## band. Folds may be diagonal; the guides just help line up straight ones.
+## is what the fold will take, and inside a repeating space that is a strip in each
+## strip. Folds may be diagonal; the guides just help line up straight ones.
 func _draw_preview() -> void:
 	for poly in _guides:
 		draw_colored_polygon(poly, Color(1, 1, 1, 0.08))
 	# The fold the raised hand would arm, under the ones already armed and fainter than
-	# them: a proposal you can still walk the cursor out of, not a band that is coming.
+	# them: a proposal you can still walk the cursor out of, not a strip that is coming.
 	# Drawn at all because "which cells does this pair take" is the question the whole
 	# placement is about, and answering it after the fuse is lit is answering it late.
-	for poly in _aim_band:
+	for poly in _aim_strip:
 		draw_colored_polygon(poly, Color(0.95, 0.25, 0.3, 0.10))
-	for poly in _bands:
+	for poly in _strips:
 		draw_colored_polygon(poly, Color(0.95, 0.25, 0.3, 0.22))
 
 
 ## The parallelogram an armed pair would excise: spanning well past the view, at
 ## whatever angle the pair implies.
 ##
-## Two anchors on ONE cell imply no angle, so there is no band and this returns no
+## Two anchors on ONE cell imply no angle, so there is no strip and this returns no
 ## polygon. That pair is legal right up to the fuse — placement asks only whether
 ## there is sheet to pin to, and `fire_pair` is what refuses it — so the preview has
 ## to hold a frame it cannot draw, rather than assume it never sees one.
-func _band_polygon(a_center: Vector2, b_center: Vector2,
+func _strip_polygon(a_center: Vector2, b_center: Vector2,
 		world_px: Vector2) -> PackedVector2Array:
 	if a_center.is_equal_approx(b_center):
 		return PackedVector2Array()

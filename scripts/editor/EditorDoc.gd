@@ -2,7 +2,7 @@ class_name EditorDoc extends RefCounted
 
 ## EditorDoc
 ##
-## The level editor's DOCUMENT: a `WorldData` plus the history around it. Every
+## The world editor's DOCUMENT: a `WorldData` plus the history around it. Every
 ## change the editor makes to a world goes through a method here, and nothing here
 ## knows about a mouse, a Node or a draw call.
 ##
@@ -325,7 +325,7 @@ func resize_region(id: String, offset: Vector2i, size: Vector2i, tag: String = "
 	r["folds"] = folds
 
 	var anchors: Array = []
-	for a in world.loose_anchors(id):
+	for a in world.unpaired_anchors(id):
 		var dst: Vector2i = a + offset
 		if EditorTools.in_bounds(dst, size):
 			anchors.append({"x": dst.x, "y": dst.y})
@@ -597,15 +597,15 @@ func _unique_door_id(region_id: String) -> String:
 
 ## A fold is authored the way the player makes one: pin an anchor, pin another,
 ## and the pair becomes a fold. The difference is that an editor anchor waits
-## indefinitely — it is saved as a loose anchor in the region's `editor` block, so
+## indefinitely — it is saved as an unpaired anchor in the region's `editor` block, so
 ## a design left half-finished on Friday is still half-finished on Monday.
 
 func anchors_of(id: String) -> Array:
-	return world.loose_anchors(id)
+	return world.unpaired_anchors(id)
 
 
 func has_anchor(id: String, cell: Vector2i) -> bool:
-	return world.loose_anchors(id).has(cell)
+	return world.unpaired_anchors(id).has(cell)
 
 
 func add_anchor(id: String, cell: Vector2i, tag: String = "") -> bool:
@@ -625,7 +625,7 @@ func remove_anchor(id: String, cell: Vector2i, tag: String = "") -> bool:
 		return false
 	_snapshot(tag)
 	var list: Array = []
-	for a in world.loose_anchors(id):
+	for a in world.unpaired_anchors(id):
 		if a != cell:
 			list.append({"x": a.x, "y": a.y})
 	_editor_block(id)["anchors"] = list
@@ -694,7 +694,7 @@ func remove_fold(id: String, index: int, keep_anchors: bool = true, tag: String 
 
 
 ## The fold whose anchor sits on `cell`, or -1. Folds are hit-tested by their
-## anchors rather than their band: bands overlap, anchors are where you clicked.
+## anchors rather than their strip: strips overlap, anchors are where you clicked.
 func fold_at(id: String, cell: Vector2i) -> int:
 	var folds := folds_of(id)
 	for i in range(folds.size()):
@@ -807,7 +807,7 @@ func remove_hand(id: String, cell: Vector2i, tag: String = "") -> bool:
 
 
 ## The hands the player sets out with, as `HandTypes` ids. A world may start you
-## short-handed, so a shorter list than `AnchorStock.SLOTS` is legal.
+## short-handed, so a shorter list than `HandStock.SLOTS` is legal.
 func set_starting_hands(kinds: Array, tag: String = "") -> bool:
 	_snapshot(tag)
 	var out: Array = []
@@ -821,7 +821,7 @@ func set_starting_hands(kinds: Array, tag: String = "") -> bool:
 # Validation
 # ---------------------------------------------------------------------------
 
-## Everything wrong with the world, as `{"level": "error"/"warn", "region": String,
+## Everything wrong with the world, as `{"severity": "error"/"warn", "region": String,
 ## "message": String}`.
 ##
 ## The split matters: an ERROR is something `FoldWorld._setup_all` will refuse or
@@ -832,22 +832,22 @@ func set_starting_hands(kinds: Array, tag: String = "") -> bool:
 func validate() -> Array:
 	var out: Array = []
 	if world.regions.is_empty():
-		out.append({"level": "error", "region": "", "message": "the world has no regions"})
+		out.append({"severity": "error", "region": "", "message": "the world has no regions"})
 	if world.start_region == "" or not world.regions.has(world.start_region):
-		out.append({"level": "error", "region": "",
+		out.append({"severity": "error", "region": "",
 			"message": "start region \"%s\" does not exist" % world.start_region})
 
 	for id in world.regions:
 		var size := size_of(id)
 		if size.x <= 0 or size.y <= 0:
-			out.append({"level": "error", "region": id, "message": "region is empty"})
+			out.append({"severity": "error", "region": id, "message": "region is empty"})
 			continue
 		var spawn: Vector2 = world.regions[id].get("spawn", Vector2.ZERO)
 		var spawn_cell := Vector2i(floori(spawn.x), floori(spawn.y))
 		if not EditorTools.in_bounds(spawn_cell, size):
-			out.append({"level": "error", "region": id, "message": "spawn is outside the region"})
+			out.append({"severity": "error", "region": id, "message": "spawn is outside the region"})
 		elif not TileTypes.is_walkable(EditorTools.type_of_char(char_at(id, spawn_cell))):
-			out.append({"level": "warn", "region": id,
+			out.append({"severity": "warn", "region": id,
 				"message": "spawn sits inside a %s" % TileTypes.type_name(
 					EditorTools.type_of_char(char_at(id, spawn_cell)))})
 
@@ -858,57 +858,57 @@ func validate() -> Array:
 			var a: Vector2i = entry["a"]
 			var b: Vector2i = entry["b"]
 			if not (EditorTools.in_bounds(a, size) and EditorTools.in_bounds(b, size)):
-				out.append({"level": "error", "region": id,
+				out.append({"severity": "error", "region": id,
 					"message": "pre-placed fold %s-%s reaches outside the region" % [a, b]})
 				continue
 			if a == b:
-				out.append({"level": "error", "region": id,
+				out.append({"severity": "error", "region": id,
 					"message": "pre-placed fold has both anchors on %s" % a})
 			for cell in [a, b]:
 				var type := EditorTools.type_of_char(char_at(id, cell))
 				if TileTypes.blocks_anchor(type):
-					out.append({"level": "warn", "region": id,
+					out.append({"severity": "warn", "region": id,
 						"message": "fold anchor at %s is on an unanchorable tile" % cell})
 			if not (entry["in"] as Array).is_empty():
-				out.append({"level": "warn", "region": id,
+				out.append({"severity": "warn", "region": id,
 					"message": "nested pre-placed fold at %s is saved but not applied at load" % a})
 
-		for cell in world.loose_anchors(id):
+		for cell in world.unpaired_anchors(id):
 			if not EditorTools.in_bounds(cell, size):
-				out.append({"level": "error", "region": id,
+				out.append({"severity": "error", "region": id,
 					"message": "loose fold anchor %s is outside the region" % cell})
-		if not world.loose_anchors(id).is_empty():
-			out.append({"level": "warn", "region": id,
+		if not world.unpaired_anchors(id).is_empty():
+			out.append({"severity": "warn", "region": id,
 				"message": "%d fold anchor(s) placed but not connected" %
-					world.loose_anchors(id).size()})
+					world.unpaired_anchors(id).size()})
 
 		for light in world.regions[id].get("lights", []):
 			if not EditorTools.in_bounds(light.cell, size):
-				out.append({"level": "error", "region": id,
+				out.append({"severity": "error", "region": id,
 					"message": "light %s is outside the region" % light.id})
 		for pickup in world.regions[id].get("hands", []):
 			if not EditorTools.in_bounds(pickup.cell, size):
-				out.append({"level": "error", "region": id, "message": "loose hand is outside the region"})
+				out.append({"severity": "error", "region": id, "message": "loose hand is outside the region"})
 
 	for door_id in world.doors:
 		var d: Dictionary = world.doors[door_id]
 		var rid := String(d["region"])
 		if not world.regions.has(rid):
-			out.append({"level": "error", "region": rid,
+			out.append({"severity": "error", "region": rid,
 				"message": "door %s is in a region that does not exist" % door_id})
 			continue
 		if not EditorTools.in_bounds(d["cell"], size_of(rid)):
-			out.append({"level": "error", "region": rid,
+			out.append({"severity": "error", "region": rid,
 				"message": "door %s is outside its region" % door_id})
 		var pair := String(d["pair"])
 		if pair == "":
-			out.append({"level": "warn", "region": rid,
+			out.append({"severity": "warn", "region": rid,
 				"message": "door %s leads nowhere" % door_id})
 		elif not world.doors.has(pair):
-			out.append({"level": "error", "region": rid,
+			out.append({"severity": "error", "region": rid,
 				"message": "door %s points at %s, which does not exist" % [door_id, pair]})
 		elif String(world.doors[pair]["pair"]) != door_id:
-			out.append({"level": "error", "region": rid,
+			out.append({"severity": "error", "region": rid,
 				"message": "door %s -> %s is one-way" % [door_id, pair]})
 	return out
 
@@ -934,17 +934,17 @@ func _tile_data_issues(id: String, size: Vector2i) -> Array:
 		if stored.is_empty():
 			continue
 		if not EditorTools.in_bounds(cell, size):
-			out.append({"level": "error", "region": id,
+			out.append({"severity": "error", "region": id,
 				"message": "tile data at %s is outside the region" % cell})
 			continue
 		var cell_type := type_at(id, cell)
 		if not TileParams.has_params(cell_type):
-			out.append({"level": "warn", "region": id,
+			out.append({"severity": "warn", "region": id,
 				"message": "leftover tile data at %s, on a %s that takes none" %
 					[cell, TileTypes.type_name(cell_type)]})
 			continue
 		for problem in TileParams.issues(cell_type, stored, size):
-			out.append({"level": "warn", "region": id,
+			out.append({"severity": "warn", "region": id,
 				"message": "%s at %s — %s" % [TileTypes.type_name(cell_type), cell, problem]})
 
 	# The other direction: a tile whose type TAKES parameters but has no entry at
@@ -967,7 +967,7 @@ func _tile_data_issues(id: String, size: Vector2i) -> Array:
 			var cell := Vector2i(x, y)
 			if not (stored_all.get(TileParams.key_of(cell), {}) as Dictionary).is_empty():
 				continue
-			out.append({"level": "warn", "region": id,
+			out.append({"severity": "warn", "region": id,
 				"message": "%s at %s is not configured and will do nothing" %
 					[TileTypes.type_name(EditorTools.type_of_char(row[x])), cell]})
 	return out
@@ -976,7 +976,7 @@ func _tile_data_issues(id: String, size: Vector2i) -> Array:
 func error_count() -> int:
 	var n := 0
 	for issue in validate():
-		if issue["level"] == "error":
+		if issue["severity"] == "error":
 			n += 1
 	return n
 

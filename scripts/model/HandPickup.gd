@@ -4,7 +4,7 @@ class_name HandPickup extends RefCounted
 ##
 ## A hand lying in the world, waiting to be picked up.
 ##
-## There is only ONE kind of loose hand. A cache the world shipped and a hand that
+## There is only ONE kind of loose hand. One the world authored and one that
 ## popped out of a fold you just burst open are the same object, stored the same way
 ## and drawn the same way — because to the player they are the same thing: a hand on
 ## the ground. Anything that made them look or behave differently would be inventing a
@@ -12,7 +12,7 @@ class_name HandPickup extends RefCounted
 ##
 ## Like a door or a light, a pickup is an OCCUPANT of the sheet: a base identity
 ## (`base_id`) plus a point inside that tile (`bp`), with no world position of its own.
-## Where it lies is always a question asked of the current fragment list, so it rides
+## Where it lies is always a question asked of the current piece list, so it rides
 ## flaps, folds away into a subspace with its tile, and is found again in there.
 ##
 ## Resolves NON-strictly (`world_point_from_base`): a pickup on a tile split down the
@@ -56,9 +56,9 @@ func is_bound() -> bool:
 	return base_id >= 0
 
 
-## A hand dropped at a world point during play. `piece` is the fragment under that
+## A hand dropped at a world point during play. `piece` is the piece under that
 ## point, which supplies the base identity the pickup will ride on — subtracting the
-## fragment's offset is what turns "here, now" into "this spot on the sheet".
+## piece's offset is what turns "here, now" into "this spot on the sheet".
 static func dropped_at(kind_id: int, piece, world_pos: Vector2, region_id: String) -> HandPickup:
 	var p := HandPickup.new()
 	p.kind = kind_id
@@ -70,14 +70,14 @@ static func dropped_at(kind_id: int, piece, world_pos: Vector2, region_id: Strin
 
 
 ## Where this hand lies in the given configuration, or null if its tile has no
-## surviving fragment there (folded away — look for it inside the fold).
+## surviving piece there (folded away — look for it inside the fold).
 func position_in(pieces: Array):
 	if not is_bound():
 		return null
 	return BaseFrame.world_point_from_base(pieces, base_id, bp)
 
 
-## Resolve a list against one fragment list. Returns
+## Resolve a list against one piece list. Returns
 ## `[{"pickup": HandPickup, "pos": Vector2}, ...]`, skipping any that does not
 ## survive into this configuration.
 static func resolve_all(pieces: Array, pickups: Array) -> Array:

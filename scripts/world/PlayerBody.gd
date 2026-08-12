@@ -3,7 +3,7 @@ class_name PlayerBody extends CharacterBody2D
 ## PlayerBody
 ##
 ## Minimal side-view platformer body for the fold prototype: run, gravity,
-## variable-height jump with coyote time + input buffer, and a cheap blob squash
+## variable-height jump with coyote time + input buffer, and a cheap squash
 ## so the character reads as soft. Input is raw physical keys so the prototype
 ## needs no project input-map changes.
 ##
@@ -36,9 +36,9 @@ const JUMP_CUT_GRAVITY := 2.0
 ## earned it reads as weight; a symmetric arc reads as the moon. Deliberately
 ## small — the fall is also the part of the arc you steer a landing in.
 const FALL_GRAVITY := 1.12
-## The band around the apex, in vertical speed, that gets `APEX_GRAVITY`.
+## The window around the apex, in vertical speed, that gets `APEX_GRAVITY`.
 const APEX_SPEED := 200.0
-## Gravity multiplier inside that band. The top of a jump is where you are barely
+## Gravity multiplier inside that window. The top of a jump is where you are barely
 ## moving vertically and entirely occupied with where you are going to land — and
 ## with pinning the mid-air anchor the sealed chamber wants. Lightening it buys
 ## more of those frames without raising the arc much (about 6 units, which is why
@@ -70,7 +70,7 @@ const STRIDE := 96.0
 ## several times while you simply walked along uneven ground.
 const LAND_SPEED := 220.0
 
-## The blob's own colour, and the colour it takes on as a release burst charges.
+## The player's own colour, and the colour it takes on as a burst charges.
 ##
 ## Teal is what release already means everywhere else on screen — an unblocked seam
 ## diamond, the glue lines of a space you can open. A body drifting toward it is
@@ -87,9 +87,9 @@ const LOADED_TINT := 0.9
 
 var _coyote := 0.0
 var _buffer := 0.0
-## The blob's outline, in body-local space, and the squash currently applied to
+## The player's outline, in body-local space, and the squash currently applied to
 ## it. The body does NOT draw itself: `PlayerVisual` does, once per copy of the
-## space, so that inside a fold you appear in every band without this file
+## space, so that inside a fold you appear in every copy without this file
 ## knowing that folds have insides. See `WrapCanvas`.
 var _outline := PackedVector2Array()
 var _squash := Vector2.ONE
@@ -152,7 +152,7 @@ var frozen := false
 ## moving thing left, and the frame you choose in should be the frame you resume into.
 var camera_held := false
 
-## How far through a release burst the fold key is: 0 idle, 1 LOADED and waiting
+## How far through a burst the fold key is: 0 idle, 1 LOADED and waiting
 ## for you to let go. Written each frame by `FoldWorld._process`.
 ##
 ## The body does not know what a burst is and must not learn. It is handed a number
@@ -263,7 +263,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_step_audio(delta, fall_speed)
 
-	# Blob squash: stretch along the dominant velocity axis, conserve area.
+	# Squash: stretch along the dominant velocity axis, conserve area.
 	var stretch := clampf(absf(velocity.y) / 2800.0, 0.0, 0.30)
 	if absf(velocity.y) > absf(velocity.x):
 		_squash = Vector2(1.0 - stretch, 1.0 + stretch)
@@ -472,9 +472,9 @@ func camera_position() -> Vector2:
 	return _cam.global_position if _cam != null else global_position
 
 
-## The blob's outline in body-local space, and the squash to apply to it. Read by
+## The player's outline in body-local space, and the squash to apply to it. Read by
 ## `PlayerVisual`, which draws the body wherever the space says the body is —
-## which inside a fold is every band at once.
+## which inside a fold is every copy at once.
 func visual_outline() -> PackedVector2Array:
 	return _outline
 
