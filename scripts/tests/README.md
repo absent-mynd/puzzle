@@ -23,7 +23,7 @@ Directly, without the wrapper:
 godot --path . --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/ -gexit
 ```
 
-**After adding or renaming a `class_name`**, run `godot --headless --import` once so
+**After adding or renaming a `class_name`**, run `godot --headless --editor --quit` once so
 the global class registry updates — otherwise you will see spurious
 "Identifier not declared in the current scope" parse errors that have nothing to do
 with your change.

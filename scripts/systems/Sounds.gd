@@ -45,7 +45,7 @@ const UNFOLD := "unfold"
 const PINCH := "pinch"
 ## Emerging from a subspace back to the space above.
 const SURFACE := "surface"
-## The release burst.
+## The burst.
 const BURST := "burst"
 ## The fuse went off and the fold would not go; the hands scatter.
 const FOLD_REFUSED := "fold_refused"

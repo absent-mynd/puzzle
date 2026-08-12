@@ -42,7 +42,7 @@ one sealed inside a fold). See [docs/features/TESTBED_WORLD.md](../../docs/featu
 | Space | jump — **tap for a hop, hold for full height** |
 | hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
 | **tap F** | put a **hand** down on the cell you point at — the second one lights the fuse |
-| **hold F** | **release burst**: everything of yours within about a tile and a third comes loose at once |
+| **hold F** | **burst**: everything of yours within about a tile and a third comes loose at once |
 | R | reset |
 
 One key, two directions. **Tap puts a hand down; hold bursts them loose.** There
@@ -637,7 +637,7 @@ do not want yet.
   into the vertices. Also what the fold transition draws through: three batches,
   two of which move by setting a position. Covered by
   `scripts/tests/test_tile_batch.gd`.
-- `PlayerVisual.gd` — the blob, drawn wherever the space says the body is.
+- `PlayerVisual.gd` — the player, drawn wherever the space says the body is.
 - `HandOrbit.gd` — the circles that float beside you, and `draw_hand`, the ONE place
   a hand is drawn (the overlay draws loose ones through it, so they cannot drift
   apart — which is also why the idle drift lives in `draw_hand` and no caller can
@@ -660,7 +660,7 @@ do not want yet.
   fold/unfold with player riding, folding yourself in to any depth, wrap and exit,
   regions, doors, triggers, the tap/hold verb, the hand ledger, and the pixel
   render target (which it resizes as the zoom changes).
-- `PlayerBody.gd` — CharacterBody2D blob (coyote time, jump buffer, the
+- `PlayerBody.gd` — the player's CharacterBody2D (coyote time, jump buffer, the
   variable-height jump, squash) and the pixel-snapped camera, whose smoothing is
   driven here so the wrap can displace it by a whole period without losing its
   lag. It does not draw itself — `PlayerVisual` does, once per copy of the space.

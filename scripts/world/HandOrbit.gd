@@ -30,7 +30,7 @@ const ORBIT_RADIUS := 34.0
 ## Spring constants, tuned for "carried, slightly reluctant" rather than "rigid".
 const STIFFNESS := 120.0
 const DAMPING := 11.0
-## Drawn size. Smaller than the player blob: these are held things, not a second body.
+## Drawn size. Smaller than the player: these are held things, not a second body.
 const HAND_RADIUS := 5.0
 
 ## One entry per slot: {"pos": Vector2, "vel": Vector2, "type": int, "held": bool}.

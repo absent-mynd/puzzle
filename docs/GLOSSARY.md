@@ -23,7 +23,7 @@ in the tree, it is a leftover — fix it.
 |---|---|---|---|
 | The resource you carry, pin and spend | **hand** | anchor, peg | A hand is an *object*: you hold two, and the game never creates or destroys one. `HandTypes`, `HandStock`, `HandPickup`. |
 | A hand pinned to a cell | **anchor** | pin, marker | Not a synonym for *hand* — it is the *role* a hand takes while it is down. `Fold.anchor_a/anchor_b` are positions, and they outlive the fold's hands. |
-| A hand lying in the world | **loose hand** | cache, pickup, drop | One object (`HandPickup`) for the ones a world ships and the ones a burst pops out; say **authored** or **dropped** when the difference matters (only one of them respawns). |
+| A hand lying in the world | **loose hand** | cache, drop | One object (`HandPickup`) for the ones a world authored and the ones a burst pops out; say **authored** or **dropped** when the difference matters (only the authored ones respawn on `R`). |
 | A pair whose fuse is running | **armed** | primed | The countdown is a *fuse*, and a fuse is armed. Also the word the player-facing README already used. |
 | A derived polygon of a base tile | **piece** | fragment | `FoldedPiece` is the type, `pieces` is the list, `derive_pieces` builds it. A piece no fold has touched is not a fragment of anything. |
 | The region between a fold's two creases | **strip** | band, excision band, gap | What the fold excises and what its subspace is made of — one word for both, because they are the same sheet. |
@@ -40,8 +40,26 @@ in the tree, it is a leftover — fix it.
 | Where a subspace's edges are identified | **glue** / glue line | wrap line, boundary | Walking through it puts you in the next copy. |
 | The two outer halves a fold slides inward | **flap** | side, half, wing | Already consistent; recorded so it stays that way. |
 | Holding the fold key | **burst** | release burst, retrieve, pull-back | One word for the untargeted release. |
-| The character you drive | **player** | blob, avatar | `PlayerBody` is its physics body, `PlayerVisual` its drawing. *Blob* is a description of the art, not the name of the thing. |
+| The character you drive | **player** | blob, avatar | `PlayerBody` is its physics body, `PlayerVisual` its drawing. *Blob* survives only where it is not the character: a 47-tile *blob set* is a tiling term, a *binary blob* is a file. |
 | Memoizing a computed value | **cache** | — | The only surviving use of the word: `_tile_cache`, `drop_tile_cache`. Never a hand. |
+
+### Two names that are allowed to differ
+
+A type may be named for what you *do* with a thing while the prose names what it
+*is*, and that is not the drift this file exists to stop:
+
+- **`HandPickup` is the type; a "loose hand" is the thing.** The class is named
+  for the interaction, the same way `PlayerBody` is named for the physics node
+  and the prose still says "the player". What is retired is *pickup* as a
+  competing noun for the concept — "an authored pickup" should read "an authored
+  loose hand". Renaming the type to `LooseHand` would be defensible; it is 175
+  call sites for a synonym rather than for a collision, so it was not done.
+- **`FoldedPiece` is the type; a "piece" is the thing.** Same word, so nothing to
+  reconcile — recorded only because the prose used to say *fragment*.
+
+The test to apply: does the second word mean something *else* somewhere in the
+project? *Anchor*, *band*, *level*, *interior* and *cache* all did, which is why
+they were the expensive ones. *Pickup* does not.
 
 ---
 
@@ -75,7 +93,10 @@ Grep for these; each is a leftover.
 | Retired | Say | Note |
 |---|---|---|
 | anchor stock, anchor economy | hand ledger, **hand economy** | The ledger counts hands, wherever they are. |
-| anchor cache, hand cache, pickup | **loose hand** | |
+| anchor cache, hand cache, a pickup | **loose hand** | The type is still `HandPickup` — see above. |
+| release burst | **burst** | The burst *is* the release. |
+| excision band, excision strip | **excised strip** | |
+| the blob (meaning the character) | **the player** | |
 | primed | **armed** | |
 | fragment | **piece** | The one exception is `void fragment()` in the shaders, which is GLSL and means something else entirely. |
 | band | **strip** or **copy** | Whichever it meant; they are not the same. |

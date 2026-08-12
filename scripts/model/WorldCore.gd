@@ -143,7 +143,7 @@ static func polys_of_type(pieces: Array, type: int) -> Array:
 # Seam segments & unfold blocking
 # ---------------------------------------------------------------------------
 # Each fold stores its seam SEGMENT (its meeting line, clipped to the tangent extent of
-# what it actually excised); a fold cannot be unfolded while any newer fold's excision
+# what it actually excised); a fold cannot be unfolded while any newer fold's excised
 # strip crosses that segment. The same test against the outer fold's two crease lines
 # (the glue) gates exiting a subspace: inner folds parallel to the glue are fine,
 # folds whose strip crosses the glue must be unfolded first.
@@ -172,7 +172,7 @@ static func glue_segments(fold: Fold, dropped: Array) -> Array:
 	return out
 
 
-## Does a segment cross a fold's excision strip (the open region strictly between its
+## Does a segment cross a fold's excised strip (the open region strictly between its
 ## creases)? Half-pixel epsilon: grazing a crease doesn't block.
 static func segment_intersects_strip(p0: Vector2, p1: Vector2, fold: Fold) -> bool:
 	var d0 := (p0 - fold.crease_point1).dot(fold.crease_normal)

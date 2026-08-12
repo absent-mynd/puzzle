@@ -30,7 +30,7 @@ shaped this way*, see [ARCHITECTURE.md](ARCHITECTURE.md).
 3. **Run the whole suite before pushing.** The pre-push hook does this for you if
    you have run `./setup-hooks.sh`.
 
-After adding or renaming a `class_name`, run `godot --headless --import` once so
+After adding or renaming a `class_name`, run `godot --headless --editor --quit` once so
 the global class registry updates — otherwise you get spurious
 "Identifier not declared" parse errors that have nothing to do with your change.
 

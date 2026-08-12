@@ -1,12 +1,13 @@
 # Project Status — Space Folding
 
-**Last Updated:** 2026-08-11
+**Last Updated:** 2026-08-12
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment. The
 world is now **authored in an editor** rather than by hand-editing JSON.
-**Tests:** 792 passing / 792, 31 scripts, ~30s.
+**Tests:** 797 passing / 797, 32 scripts, ~18s. (`./run_tests.sh` prints the real
+numbers; this line is a snapshot and the runner is the authority.)
 
 ---
 
@@ -31,7 +32,7 @@ What exists and works today:
 | Fold-on-enter triggers | ✅ Wired in a region, **in the world** |
 | Hands: two slots, typed, conserved (`HandStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
-| One-key verb (tap = place a hand, hold = release burst) | ✅ Playable |
+| One-key verb (tap = place a hand, hold = burst) | ✅ Playable |
 | Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
 | Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
@@ -155,6 +156,7 @@ Roughly in priority order — nothing here is committed to yet:
 ## For detailed information
 
 - [AGENTS.md](AGENTS.md) — start here: architecture, layering, critical decisions
+- [docs/GLOSSARY.md](docs/GLOSSARY.md) — the vocabulary: one name per thing
 - [scripts/world/README.md](scripts/world/README.md) — controls and design beats
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions & rationale
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — workflow, gates, pitfalls

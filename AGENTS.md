@@ -133,6 +133,11 @@ updated.
 See `scripts/world/README.md` for controls and the design beats, and
 `docs/features/WORLD_EDITOR.md` for the editor (`./run_editor.sh`).
 
+**The words are decided in [docs/GLOSSARY.md](docs/GLOSSARY.md)** — one name per
+thing, the retired synonyms beside it, and the pairs that look like synonyms and
+are not (hand vs anchor, strip vs copy, crease vs seam vs glue). Add a term there
+before you add it to the code.
+
 ---
 
 ## Critical decisions — do not deviate without thought
@@ -269,7 +274,7 @@ field precisely so it is solved once. See `docs/features/AUDIO.md`.
 | Held by a standing fold | the fuse going off | a burst at its seam |
 | Lying on the ground | authored by the world; overflow from a burst; a fold that failed at the fuse | walk over it |
 
-**One key, two directions.** Tap puts a hand down; hold fires a **release burst**.
+**One key, two directions.** Tap puts a hand down; hold fires a **burst**.
 There is no committing press — the second hand lights a **fuse** and the pair folds
 itself. The input mirrors the economy on purpose.
 
@@ -416,7 +421,7 @@ world (unchanged: CELL = 64 world units)
 		│                 (one per lit material), base-space UVs from TileAtlas,
 		│                 the wrap baked into the vertices
 		├── StaticBody2D  colliders, domain + the copies one step out
-		└── WrapCanvas×n  everything that moves — the blob, the hands you carry,
+		└── WrapCanvas×n  everything that moves — the player, the hands you carry,
 						  the hands in flight, the markers — each painted once
 						  per lattice offset
 		│
@@ -507,7 +512,7 @@ HOME=/tmp/godot-home ./run_tests.sh world      # partial filename match
 `run_tests.sh` prefers the bundled `tools/godot/godot`, which is **gzipped and
 Linux x86-64** (`tools/godot/godot.gz`); the script falls back to a system `godot`
 on PATH. If Godot's config dir is sandboxed, redirect `HOME` as above. After adding
-or renaming a `class_name`, run `godot --headless --import` once so the global class
+or renaming a `class_name`, run `godot --headless --editor --quit` once so the global class
 registry picks it up, or you will get spurious "Identifier not declared" errors.
 
 **Write the test first.** The suite is the behavioral spec — when you want to know

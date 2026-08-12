@@ -110,7 +110,7 @@ If Godot's config dir is sandboxed, redirect `HOME`:
 HOME=/tmp/godot-home ./run_tests.sh
 ```
 
-After adding or renaming a `class_name`, run `godot --headless --import` once so the
+After adding or renaming a `class_name`, run `godot --headless --editor --quit` once so the
 global class registry updates — otherwise you get spurious "Identifier not declared"
 parse errors.
 

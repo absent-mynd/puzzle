@@ -1028,7 +1028,7 @@ func test_reset_puts_both_the_world_and_your_hands_back() -> void:
 
 
 # ---------------------------------------------------------------------------
-# The release burst
+# The burst
 # ---------------------------------------------------------------------------
 # Not an aimed action: a small sphere around the body. Everything of yours inside
 # it comes loose, and anything with nowhere to go lands on the ground.

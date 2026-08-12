@@ -2,7 +2,7 @@ class_name PlayerVisual extends WrapCanvas
 
 ## PlayerVisual
 ##
-## The blob, drawn wherever the space says the body is.
+## The player, drawn wherever the space says the body is.
 ##
 ## Outside a fold that is one place. Inside one, the strip is a cylinder and you
 ## are one point on it, so you are in every copy at once — and inside a fold

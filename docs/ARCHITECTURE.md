@@ -168,7 +168,7 @@ collide correctly without that loop ever having heard of them.
 
 ## Decision 6: Uniform unfold blocking
 
-A fold cannot be unfolded while a **newer** fold's excision strip crosses its seam
+A fold cannot be unfolded while a **newer** fold's excised strip crosses its seam
 segment. The same test against a fold's two glue lines gates exiting a subspace.
 
 **Why one rule:** the naive alternative is a stack discipline (only unfold the newest

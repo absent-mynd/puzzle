@@ -47,7 +47,7 @@ Named for *this* game. (The set that used to live here — `selection`, `undo`,
 | `pinch` | the fold closes over you instead — you are inside it |
 | `surface` | you come back out of a subspace |
 | `unfold` | a fold comes apart |
-| `burst` | the release burst fires and something comes loose |
+| `burst` | the burst fires and something comes loose |
 | `fold_refused` | the fuse went off and the fold would not go |
 | `trigger` | a trigger tile fires — the world folding itself |
 

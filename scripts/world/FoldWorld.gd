@@ -78,7 +78,7 @@ const ANIM_TIME := 0.24
 ## How long the fold key must be held before it reads as "pull back" rather than
 ## "push in". Long enough that a committing tap never trips it by accident.
 const HOLD_TIME := 0.35
-## Reach of the release burst, in world units. About a tile and a third — the burst is a
+## Reach of the burst, in world units. About a tile and a third — the burst is a
 ## thing you do to the space you are standing in, not a thing you aim, so its reach wants
 ## to be forgiving enough that standing *near* a seam clears it. Tuned up from 1.2: at a
 ## tile the burst kept missing seams that looked well within it, which reads as the key
@@ -922,7 +922,7 @@ func tap_action(dir: Vector2i) -> void:
 	place_hand(dir)
 
 
-## HOLD: a release BURST around you.
+## HOLD: a BURST around you.
 ##
 ## Not an aimed action — a small sphere of influence centred on your body
 ## (`BURST_RADIUS`, about a tile and a third). Everything of yours inside it comes loose

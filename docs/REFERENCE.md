@@ -124,7 +124,8 @@ understand how the pieces meet. Its header comment is the map.
 ## Conventions that bite (read before editing)
 
 These are enforced by the code, not optional style. Full rationale in
-[ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](../AGENTS.md):
+[ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](../AGENTS.md); the vocabulary
+the names are drawn from is [GLOSSARY.md](GLOSSARY.md):
 
 - **Derive, never mutate.** Change the fold list and re-derive; editing a
   `FoldedPiece` in place does not persist.
@@ -134,7 +135,7 @@ These are enforced by the code, not optional style. Full rationale in
   `blocks_anchor`).
 - **Never compare floats with `==`** — use `GeometryCore.EPSILON`.
 - **Don't mutate a collection while iterating it** — collect, then apply.
-- After adding or renaming a `class_name`, run `godot --headless --import` once so
+- After adding or renaming a `class_name`, run `godot --headless --editor --quit` once so
   the global class registry updates.
 
 ---

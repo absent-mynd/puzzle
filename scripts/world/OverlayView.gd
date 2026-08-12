@@ -91,7 +91,7 @@ var aim_hand := -1
 ## How far through a hold the key is, 0 when not held.
 var hold := 0.0
 
-# --- The release burst ---
+# --- The burst ---
 
 ## Time left on the burst ring, 0 when none is showing.
 var burst_t := 0.0
