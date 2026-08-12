@@ -58,10 +58,18 @@ A run fails if any of these is true:
 | A test script never loaded (parse error) | `tools/gut_strict_exit.gd` |
 | The kernel referenced the view | `scripts/tests/test_layering.gd` |
 | A shipped world is unplayable | `scripts/tests/test_shipped_worlds.gd` |
+| Something in `scripts/world/` animates off the wall clock | `scripts/tests/test_world_clock.gd` |
 
 The middle three exist because GUT derives its exit code from the assertion-failure
 count alone, so a test that never reaches an assertion scores zero of everything and
 passes. A test file could be deleted by breaking it and nothing said so.
+
+The last one is a **grep gate**, and it is there because the bug it catches is
+invisible until the day it matters: anything in the world that drifts, throbs or
+flickers must read `WorldClock`, not `Time.get_ticks_msec()`. A second clock looks
+perfect for as long as the world always runs, and the moment the world stops it is
+the one thing still moving. Wall time is still correct for what is *not* in the
+world — the input charge, the HUD flash, the held-look ease.
 
 If you legitimately want a test that does not assert yet, mark it `pending()` —
 that is tracked separately and does not fail the build.

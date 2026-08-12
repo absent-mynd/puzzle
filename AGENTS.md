@@ -383,6 +383,7 @@ world (unchanged: CELL = 64 world units)
         │
         ▼
   TextureRect, nearest             HUD renders OUTSIDE this, at window resolution
+    + held.gdshader                the whole world speaking for itself when it stops
 ```
 
 - **The camera's zoom is fixed; the render target resizes.** Moving the lens would
@@ -396,6 +397,13 @@ world (unchanged: CELL = 64 world units)
   soften it without a design conversation.
 - **Lighting is style, not a mechanic.** The player and the overlay markers are drawn
   unlit so they never disappear into a dark corner.
+- **The held look composites the whole world at once**, which is why it lives on the
+  rect rather than on anything in the scene. Once arrived it **must not animate**:
+  with `held` steady the output is a fixed function of the input, so a held world is
+  one unchanging image — and a render check hashes two frames half a second apart to
+  hold that. The overlay is inside the same target, which is what bounds how far the
+  colour drain may go; `scripts/world/README.md` §"What a held world looks like" has
+  the reasoning.
 
 ---
 
