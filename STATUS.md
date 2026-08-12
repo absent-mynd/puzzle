@@ -51,8 +51,6 @@ What exists and works today:
 
 ---
 
----
-
 ## Test suite
 
 `./run_tests.sh` reports the current composition — script count, test count and
@@ -109,14 +107,13 @@ Roughly in priority order — nothing here is committed to yet:
    the loose hands you have moved need to outlive a session, and the answer to
    stranding yourself with no hands and no reachable seam.
 6. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
-7. ~~**Authoring tooling.**~~ Done — `./run_editor.sh`, see
-   `docs/features/WORLD_EDITOR.md`. Terrain, canvases, doors, pre-placed folds and
-   per-tile `tile_data` are all editable. What is NOT yet is a light's
-   colour/radius/flicker — the obvious next thing to move onto the `TileParams`
-   pattern. **Nested pre-placed folds are designed but deferred**; the format
-   reserves `folds[].in` and the loader ignores it.
-
----
+7. **Finish the `Space` migration.** `FoldWorld` still carries twelve
+   getter/setter properties forwarding to `space.x`, so the current space can be
+   read two ways. Moving the call sites over and deleting them is mechanical.
+8. **Two gaps in the editor** (`./run_editor.sh` — see
+   `docs/features/WORLD_EDITOR.md`): a light's colour/radius/flicker are not yet on
+   the `TileParams` pattern, and nested pre-placed folds are designed but deferred —
+   the format reserves `folds[].in` and the loader ignores it.
 
 ---
 
@@ -151,8 +148,6 @@ Roughly in priority order — nothing here is committed to yet:
 
 ---
 
----
-
 ## For detailed information
 
 - [AGENTS.md](AGENTS.md) — start here: architecture, layering, critical decisions
@@ -161,5 +156,3 @@ Roughly in priority order — nothing here is committed to yet:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions & rationale
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — workflow, gates, pitfalls
 - [docs/REFERENCE.md](docs/REFERENCE.md) — code map
-- [docs/ARCHITECTURE-REVIEW-2026-08.md](docs/ARCHITECTURE-REVIEW-2026-08.md) — an
-  external review of 2026-08-11 and what was done about it
