@@ -219,7 +219,11 @@ loose at once —
 - armed pairs you can reach either half of are **disarmed** — the halves inside
   the sphere come back, and any half outside it stays pinned exactly where it
   was, waiting for a partner again;
-- folds whose seam is in reach come apart, if nothing newer is blocking them;
+- folds whose seam is in reach come apart, if nothing newer is blocking them —
+  and a seam is wherever the folds made since have carried it, which is not
+  always where you made it: fold beside an older seam and it slides in with the
+  flap it is on, fold *over* one and it goes into the new fold's subspace with
+  the sheet it was cut into, where you have to go in after it;
 - inside a fold, the glue anchor in reach is the way out;
 - and **any hand with nowhere to go pops into the world at your feet.**
 
@@ -659,7 +663,10 @@ stays pinned at `PixelArt.CAMERA_ZOOM` forever.
 - **The seam stays a hard line.** Because the art is cut by the crease exactly
   as the geometry is, two flaps meeting at a seam show two tiles cut mid-pattern
   against each other. Nothing blends, blurs or fades across it. That is
-  deliberate for now.
+  deliberate for now. What the seam does get is a **marker over that cut** — a
+  muted version of the glue line, in the unlit overlay layer with everything else
+  you read the world by, so a fold you left standing an hour ago is still legible
+  as a fold rather than as a place where the tiles happen to disagree.
 - **The HUD is outside the pixel viewport**, at window resolution, so text stays
   legible over chunky tiles. So are the overlay's markers — they are drawn
   unlit, because what you navigate by must never dim.

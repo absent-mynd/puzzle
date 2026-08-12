@@ -29,7 +29,7 @@ extends GutTest
 ## Queries that build a new Array or Dictionary every call. Adding one here is how you
 ## keep the next `glue_lines()` out of a draw loop.
 const ALLOCATING_QUERIES := [
-	"glue_lines", "loose_hand_points", "hand_ball_points",
+	"glue_lines", "seam_lines", "loose_hand_points", "hand_ball_points",
 	"seam_markers", "seams_within_burst", "all_anchors", "anchor_cells",
 	"lights_here", "space_folds",
 ]
