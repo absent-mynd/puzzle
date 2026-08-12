@@ -33,9 +33,11 @@ const BG_DEEP := Color("140a2a")
 ## of the way there by the second fold, which is where "deep" stops being news.
 const DEPTH_TINT_RATE := 0.7
 
+## "hold, release" rather than "hold": the burst charges while F is down and fires
+## when you let go, and the body turning teal is the tell that it is loaded.
 const HELP_TEXT := \
 	"A/D/W/S move & aim   Space tap/hold: jump   " \
-	+ "F tap: raise a hand — move it, tap to pin · hold: pull back   R reset"
+	+ "F tap: raise a hand — move it, tap to pin · hold+release: pull back   R reset"
 
 var _bg: ColorRect
 var _status: Label

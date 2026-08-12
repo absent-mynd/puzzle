@@ -42,17 +42,18 @@ extends Node2D
 ##     away and it leaves the overworld and lights the fold's interior
 ##     instead (see LightSource). Fold something else and it rides the flap.
 ##
-## ONE KEY drives all of it. Tap = push anchors in; hold = pull them back out
-## (retrieve a pending anchor, unfold the fold you are standing at, or exit a
-## subspace by its glue anchor). There is no remote unfold: to get the anchors out
-## of a fold you must go back to its seam.
+## ONE KEY drives all of it. Tap = push anchors in; hold and then LET GO = pull them
+## back out (retrieve a pending anchor, unfold the fold you are standing at, or exit
+## a subspace by its glue anchor). Both gestures land on the release: holding only
+## charges the burst, and the body wears the charge as a colour. There is no remote
+## unfold: to get the anchors out of a fold you must go back to its seam.
 ##
 ## Pushing one in takes TWO taps and STOPS TIME between them. The first raises the
 ## hand you are about to spend into a cursor and freezes the world; the movement keys
 ## walk that cursor over the cells within arm's reach, diagonals included; the second
 ## pins it there and time resumes with exactly the momentum, fuses and flight it was
-## carrying. A hold while the hand is up is still a hold — it cancels the placement,
-## fires the burst and resumes the same way. See §"Placing a hand".
+## carrying. A charged release while the hand is up is still a pop — it cancels the
+## placement, fires the burst and resumes the same way. See §"Placing a hand".
 ##
 ## Rendering is a PIXEL pass: the world draws into a low-resolution SubViewport
 ## (see PixelArt) that is scaled up with nearest filtering, tiles are textured
@@ -86,8 +87,12 @@ const CS := WorldCore.CELL
 ## `WorldCore.within_anchor_reach`), and the sealed chamber is exactly that shell.
 const ANCHOR_REACH := 1
 const ANIM_TIME := 0.24
-## How long the fold key must be held before it reads as "pull back" rather than
-## "push in". Long enough that a committing tap never trips it by accident.
+## How long the fold key must be held before the release reads as "pull back"
+## rather than "push in". Long enough that a tap never trips it by accident.
+##
+## It is a LOADING time, not a delay before something happens: nothing fires at the
+## threshold, it only decides which way the release will go. Lengthening it costs
+## the player nothing but the wait — no window closes while they hold.
 const HOLD_TIME := 0.35
 ## Reach of the release burst, in world units. About a tile and a third — the burst is a
 ## thing you do to the space you are standing in, not a thing you aim, so its reach wants
@@ -203,6 +208,11 @@ var context: Array[Fold] = []
 ## and they go off in the order their fuses run out rather than the order you placed
 ## them. A swift pair laid second fires before a patient pair laid first.
 ##
+## The traffic between the two lists runs BOTH ways: pairing takes an anchor out of
+## `unpaired`, and bursting one half of a pair puts the other half back into it
+## (`_disarm_pair`). A hand you did not reach has not moved and is not spent, so the
+## only list it can be in is the one for hands waiting on a partner.
+##
 ## There is no fixed number of either. Two registers is what wedged the game: an
 ## anchor left in another region sat in one of them forever, so every pair you formed
 ## afterwards contained a partner you could not reach and never fired.
@@ -243,8 +253,9 @@ var hand_balls: Array:
 	get: return hand_field.balls
 
 # --- Fold-key hold tracking (tap = place a hand, hold = pull one back) ---
+# Both gestures land on the RELEASE; the hold only decides which one it was. There
+# is no "already fired" state any more, because nothing fires while the key is down.
 var _hold_active := false
-var _hold_fired := false
 var _hold_elapsed := 0.0
 
 ## Where the placement cursor is, or null when no hand is up. **Its emptiness IS the
@@ -772,12 +783,23 @@ const AIM_STEPS := {
 
 
 ## One key for the whole verb. TAP pushes an anchor in (raise the hand, then pin it);
-## HOLD pulls one back out (your last anchor, or the fold you are standing at).
-## The two directions of a conserved resource are the two ways to press one key.
+## HOLD pulls one back out — everything of yours within reach of where you are
+## standing. The two directions of a conserved resource are the two ways to press
+## one key.
 ##
-## The tap fires on RELEASE, so a press that grows into a hold never also places.
+## BOTH GESTURES FIRE ON RELEASE, and that is the whole shape of this. Holding does
+## not do anything — it LOADS. The burst is charged while the key is down and pops
+## the moment you let go, so the press is a decision you are still holding and the
+## release is you making it. Firing at the threshold instead made the burst arrive
+## while you were still deciding, and put the one irreversible half of the verb on a
+## timer you could not stop.
 ##
-## Cursor steps fire on PRESS and echoes are dropped at the top, so one press is one
+## What you get for it: a loaded burst can be walked. Charge it, step onto the seam,
+## let go — the reach is measured where you release, not where you pressed. That
+## holds with a hand raised too: the charge accrues in real time while world time is
+## stopped, and letting go loaded cancels the placement and pops.
+##
+## Cursor steps fire on PRESS, and echoes are dropped at the top, so one press is one
 ## cell. That matters more than it looks: you tap F while already holding the key you
 ## were running with, and a cursor driven by the HELD key would set off for the edge
 ## of your reach the moment it appeared. One press, one cell, and the run key you are
@@ -798,35 +820,51 @@ func _unhandled_input(event: InputEvent) -> void:
 		if animating():
 			return
 		_hold_active = true
-		_hold_fired = false
 		_hold_elapsed = 0.0
 		return
-	var tapped := _hold_active and not _hold_fired
+	# A release with no press behind it — the press landed mid-fold and was refused,
+	# or a reset cleared it — is not a gesture, and must not fall through to a tap.
+	if not _hold_active:
+		return
+	var loaded := hold_loaded()
 	_hold_active = false
-	_hold_fired = false
-	if tapped and not animating():
+	_hold_elapsed = 0.0
+	if animating():
+		return
+	if loaded:
+		hold_action()   # the burst is not aimed; where you stand is the whole input
+	else:
 		tap_action(player.point_dir())
 
 
-## How far through the hold the key currently is (0 = not holding / already fired).
-## Drawn as a filling ring by the overlay so the two gestures are distinguishable
-## before either of them lands.
+## How far through the hold the key currently is: 0 not holding, 1 LOADED. The body
+## wears this as a colour (see `PlayerBody.charge_color`) — the indicator is on the
+## thing the burst comes out of, not on the cell you are pointing at, because the
+## burst is not aimed there.
 func hold_progress() -> float:
-	if not _hold_active or _hold_fired:
+	if not _hold_active:
 		return 0.0
 	return clampf(_hold_elapsed / HOLD_TIME, 0.0, 1.0)
 
 
+## Is the burst loaded — would letting go RIGHT NOW pop rather than place a hand?
+func hold_loaded() -> bool:
+	return _hold_active and _hold_elapsed >= HOLD_TIME
+
+
+## Charge the burst while the key is down. It never fires from here: the release
+## does that. Held past the threshold it simply stays loaded, so you can charge it
+## somewhere safe and carry it to where you want it to go off.
 func _tick_hold(delta: float) -> void:
-	if not _hold_active or _hold_fired:
+	if not _hold_active:
 		return
+	# A fold started under you — a fuse went off, a trigger fired. The gesture is
+	# void: what you charged it against is no longer the world in front of you.
 	if animating():
 		_hold_active = false
+		_hold_elapsed = 0.0
 		return
-	_hold_elapsed += delta
-	if _hold_elapsed >= HOLD_TIME:
-		_hold_fired = true
-		hold_action()   # the burst is not aimed; where you stand is the whole input
+	_hold_elapsed = minf(_hold_elapsed + delta, HOLD_TIME)
 
 
 func player_cell() -> Vector2i:
@@ -1099,7 +1137,9 @@ func tap_action(dir: Vector2i) -> void:
 ## (`BURST_RADIUS`, about a tile and a third). Everything of yours inside it comes loose
 ## at once:
 ##
-##   - hands you have placed as anchors come back;
+##   - hands you have placed as anchors come back — and ONLY the ones inside it, so
+##     reaching one half of an armed pair disarms the pair and pops that half while
+##     the other stays pinned where you put it;
 ##   - folds whose seam is in reach come apart, if nothing newer is blocking them;
 ##   - inside a subspace, the glue anchor in reach is the way out;
 ##   - and any hand with nowhere to go POPS INTO THE WORLD at your feet.
@@ -1107,6 +1147,9 @@ func tap_action(dir: Vector2i) -> void:
 ## That last clause is what makes the burst safe to fire blind. Nothing is ever
 ## refused for want of a slot and nothing is ever destroyed: a hand that cannot be
 ## caught is simply a hand on the ground, which is the same object a cache is.
+##
+## The first clause is what makes it safe to fire NEAR something: the sphere is the
+## whole of what it touches, so nothing you cannot see moves when you press the key.
 ##
 ## Folds come apart one at a time and the first to animate takes the burst with it,
 ## so a stack under one diamond clears over several bursts rather than all at once.
@@ -1119,6 +1162,12 @@ func tap_action(dir: Vector2i) -> void:
 func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	if animating():
 		return
+	# Putting a raised hand back is something this gesture DID, and it is tracked apart
+	# from `freed` because it is not something that came loose: the burst sound belongs
+	# to hands and folds leaving their places, and no hand left one here. What it does
+	# earn is silence instead of "Nothing here to release" — a pop that cancelled a
+	# placement in open ground has not done nothing.
+	var cancelled := placing()
 	cancel_aim()
 	var origin := player.global_position
 	_burst_flash_left = BURST_FLASH
@@ -1131,14 +1180,13 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 			_release_anchor(unpaired[i], true)
 			unpaired.remove_at(i)
 			freed += 1
-	# A primed pair with EITHER anchor in reach is broken: you cannot half-defuse a
-	# fold. What you can reach comes back to your hands, what you cannot drops where
-	# it was pinned — so reaching into an armed pair always costs you the far hand.
+	# A primed pair with EITHER anchor in reach is DISARMED — a fold needs two hands,
+	# so there is no such thing as half an armed pair — but only the halves you can
+	# actually reach come off. The far one stays pinned exactly where you put it.
 	for pair in primed.duplicate():
 		if _anchor_within(pair["a"], origin, BURST_RADIUS) \
 				or _anchor_within(pair["b"], origin, BURST_RADIUS):
-			_break_pair(pair, origin, BURST_RADIUS)
-			freed += 1
+			freed += _disarm_pair(pair, origin, BURST_RADIUS)
 
 	# Inside a fold, the glue anchor in reach is the exit.
 	if mode == Mode.SUBSPACE and _glue_within(origin, BURST_RADIUS):
@@ -1165,7 +1213,7 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 		unfold_level_fold(fold)
 		freed += 1
 
-	if freed == 0:
+	if freed == 0 and not cancelled:
 		_deny("Nothing here to release.")
 
 
@@ -1268,18 +1316,27 @@ func _release_anchor(entry, into_hand: bool) -> void:
 	AudioManager.play_sfx(Sounds.HAND_DROP)
 
 
-## Break a primed pair without folding it. Anchors within `reach` of `origin` come
-## back to your hands; the rest drop where they were pinned.
+## Disarm a primed pair without folding it: anchors within `reach` of `origin` are
+## POPPED and come back to your hands, and every other anchor of the pair STAYS
+## PINNED where it is. Returns how many hands came off.
 ##
-## An anchor is already stored as exactly what a loose hand is — a base identity plus
-## a point in that tile — so dropping one is a conversion rather than a placement, and
-## it lands on the spot you chose rather than at your feet.
-func _break_pair(pair: Dictionary, origin: Vector2, reach: float) -> void:
+## Reaching into an armed pair costs you the fuse, not the hand at the far end of it.
+## A hand you did not reach is a hand nothing happened to, and knocking it loose from
+## across the region would mean the only way to correct one badly placed end was to
+## walk to both. So the survivor simply goes back to `unpaired` — still on the spot you
+## chose, still yours to pair with — and being the newest entry there, it is the one
+## your next tap pairs with. Re-aiming a pair is now "burst the end you got wrong,
+## walk, tap": the end you got right never moves.
+func _disarm_pair(pair: Dictionary, origin: Vector2, reach: float) -> int:
 	primed.erase(pair)
+	var popped := 0
 	for entry in [pair["a"], pair["b"]]:
-		var wp = anchor_point(entry)
-		var caught: bool = wp != null and Vector2(wp).distance_to(origin) <= reach
-		_release_anchor(entry, caught)
+		if _anchor_within(entry, origin, reach):
+			_release_anchor(entry, true)
+			popped += 1
+		else:
+			unpaired.append(entry)
+	return popped
 
 
 ## A fold that would not go: every anchor of the pair drops where it was pinned.
@@ -2149,6 +2206,10 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 
 func _process(delta: float) -> void:
 	_tick_hold(delta)
+	# The body wears the charge. It is handed the number and nothing else — the body
+	# knows how to be a colour, not what folding is.
+	if player != null:
+		player.fold_charge = hold_progress()
 	# The overlay draws a description of the frame, not this object. Building it here
 	# is also what makes it a per-FRAME cost: it used to gather itself from inside
 	# `paint()`, which WrapCanvas runs once per copy of the space.
@@ -2262,7 +2323,8 @@ func _build_overlay_view() -> OverlayView:
 	v.aiming = placing()
 	v.aim_at = cell_center(aim_cell())
 	v.aim_hand = next_hand_type()
-	v.hold = hold_progress()
+	# ...and no hold ring. A charging burst is worn by the BODY, which is both where
+	# it will come from and the one thing on screen you are already watching.
 	if v.aiming:
 		# The cells the cursor may go to, as a rectangle, because the overlay should be
 		# told the shape of the reach and not the arithmetic that produced it.
@@ -2581,7 +2643,7 @@ func _reset() -> void:
 		light_rig.visible = true
 		geo.visible = true       # the transition had hidden the sheet it stands in for
 	_hold_active = false
-	_hold_fired = false
+	_hold_elapsed = 0.0
 	# A hand up over a world that is about to be replaced is a cursor pointing at cells
 	# that will not exist. R unfreezes as well as rebuilding.
 	_aim = null

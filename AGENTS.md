@@ -304,17 +304,17 @@ Two consequences worth keeping:
 |---|---|---|
 | One of your two slots | the world's `starting_hands`; walking over a loose hand | — |
 | Pinned as an anchor | tap F to raise it, walk the cursor, tap F to pin (leaves the slot at the pin, not the raise) | a burst in reach |
-| Pinned in an ARMED pair | pairing with a reachable unpaired anchor | a burst reaching either half |
+| Pinned in an ARMED pair | pairing with a reachable unpaired anchor | a burst in reach of that half (which also disarms the pair; the other half stays pinned) |
 | Held by a standing fold | the fuse going off | a burst at its seam |
 | Lying on the ground | authored by the world; overflow from a burst; a fold that failed at the fuse | walk over it |
 
-**One key, two directions.** Tap puts a hand down; hold fires a **release burst**.
-There is no committing press — the second hand lights a **fuse** and the pair folds
-itself. The input mirrors the economy on purpose.
+**One key, two directions.** Tap puts a hand down; a held-then-released F fires a
+**release burst**. There is no committing press — the second hand lights a **fuse**
+and the pair folds itself. The input mirrors the economy on purpose.
 
 **Putting one down is two taps, and the world is stopped between them** (see §7
-above). A hold while a hand is raised is still a hold: it cancels the placement,
-fires the burst, and starts the clock again.
+above). A charged release while a hand is raised is still a pop: it cancels the
+placement, fires the burst, and starts the clock again.
 
 Those four places always sum to the same number. **Nothing in the game creates or
 destroys a hand** — placing, committing, unfolding, bursting and picking up all just
@@ -337,6 +337,27 @@ Consequences worth keeping in mind when designing:
   the whole input, and it releases what was releasable when it fired rather than
   cascading. Do not give it a target without a design conversation — the untargeted
   reading is what makes it read as a thing you *do*, not a thing you *point*.
+- **Both gestures fire on the RELEASE.** A hold does not act, it *loads*: the burst
+  is charged while F is down and pops when you let go. So the one irreversible half
+  of the verb is never on a timer you cannot stop, and a charge is a state you can
+  carry — load it on safe ground, walk to the seam, release there. Reach is measured
+  where you let go, not where you pressed. Do not move either gesture back onto the
+  press: the press is a decision you are still holding.
+- **The charge is worn on the body, and quietly.** `PlayerBody.charge_color` shades
+  the blob from its amber toward the teal that means "openable" everywhere else on
+  screen, squared so a tap barely shows, then steps to fully teal at the threshold.
+  It is deliberately not a ring on the aimed cell: a burst does not go off there,
+  and the aim marker already speaks for taps. If you need to say something new about
+  the charge, say it on the body — nothing else on screen is both always visible and
+  always where the burst will come from.
+- **The burst reaches exactly what is inside it, and nothing else.** Reaching one
+  half of an armed pair disarms the pair — a fold needs two hands — but pops only
+  the halves inside the sphere; the far one stays pinned on the spot you chose and
+  goes back to `unpaired` (`_disarm_pair`). Reaching into an armed pair costs you the
+  fuse, not the hand at the other end of it. That is what makes a badly aimed pair
+  correctable one end at a time — the survivor is the newest waiting hand, so your
+  next tap pairs with it — and it is why nothing outside the sphere may move when the
+  key goes down.
 - **Fold validity is asked at the FUSE, not at placement.** `place_hand` checks
   only that there is sheet to pin to (which is storage, not a rule — an anchor is a
   base identity, and void has none). Everything else — the degenerate pair, the

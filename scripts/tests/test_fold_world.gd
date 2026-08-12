@@ -447,6 +447,31 @@ func test_two_pairs_can_be_armed_at_once() -> void:
 	assert_eq(world.hands_pending(), 4, "Four hands are out")
 
 
+func test_two_hands_on_one_cell_arm_a_pair_the_preview_can_survive() -> void:
+	# Placement asks only that there be sheet to pin to, so both hands CAN come down
+	# on one cell, and the pair then stands armed for a whole fuse before anything
+	# refuses it. The overlay has to be able to draw that frame: a pair whose anchors
+	# coincide implies no crease direction and so no band, and `draw_colored_polygon`
+	# errors on a polygon with no points — once per copy of the space, every frame the
+	# fuse is running.
+	_pin(Vector2i(1, 0))                                    # (5,12)
+	_pin(Vector2i(1, 0))                                    # (5,12) again — one cell, two hands
+	assert_eq(world.primed.size(), 1, "Both hands on one cell still arm a pair")
+
+	world._process(0.0)                                     # the real per-frame overlay refresh
+	var view: OverlayView = world.overlay._view
+	assert_eq(view.pairs.size(), 1, "The frame describes the armed pair")
+	assert_true(Vector2(view.pairs[0]["a"]).is_equal_approx(Vector2(view.pairs[0]["b"])),
+		"...as two anchors resolving to one point")
+	assert_eq(world.overlay._bands, [], "...and the preview draws no band for it")
+
+	# The fuse is still what refuses it — see WorldCore.anchors_valid.
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.folds.size(), 0, "No fold: the pair had no crease direction")
+	assert_eq(world.primed.size(), 0, "...and it is gone rather than left ticking")
+	assert_eq(_total(), _start_total, "Conserved")
+
+
 func test_pairs_fire_in_fuse_order_not_placement_order() -> void:
 	# The behaviour that falls out of per-pair fuses: a swift pair laid SECOND goes
 	# off before a patient pair laid first.
@@ -500,9 +525,10 @@ func test_an_armed_pair_in_another_region_waits_for_you() -> void:
 	assert_eq(world.primed.size(), 0, "...and it resumes and fires when you return")
 
 
-func test_a_burst_into_an_armed_pair_breaks_the_whole_pair() -> void:
-	# You cannot half-defuse a fold. What you can reach comes back; the far hand
-	# drops where it was pinned, so reaching into an armed pair always costs you one.
+func test_a_burst_pops_the_half_it_reaches_and_leaves_the_other_pinned() -> void:
+	# Reaching into an armed pair costs you the FUSE, not the hand at the far end of
+	# it. The half you stood on comes back; the half across the region was not inside
+	# the sphere, so nothing happened to it.
 	_pin(Vector2i(1, 0))                        # (5,12)
 	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
 	_pin(Vector2i(1, 0))                        # (21,12), far from the first
@@ -511,9 +537,48 @@ func test_a_burst_into_an_armed_pair_breaks_the_whole_pair() -> void:
 
 	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)   # stand on the near hand
 	world.hold_action()
-	assert_eq(world.primed.size(), 0, "The pair is broken")
+	assert_eq(world.primed.size(), 0, "Disarmed — one hand alone cannot fold")
 	assert_eq(world.hands_held(), 1, "The hand you reached came back")
-	assert_eq(world.hands_loose(), loose_before + 1, "...and the far one fell where it was")
+	assert_eq(world.hands_loose(), loose_before, "...and nothing was knocked loose")
+	assert_eq(world.anchor_cells(), [Vector2i(21, 12)],
+		"The far hand is still pinned on the spot you chose")
+	assert_eq(world.hands_pending(), 1, "...and it is still a hand you have out")
+	assert_eq(_total(), _start_total, "Conserved")
+
+
+func test_the_half_left_behind_is_what_your_next_hand_pairs_with() -> void:
+	# So re-aiming a pair is "burst the end you got wrong, walk, tap again" — the end
+	# you got right never moves.
+	_pin(Vector2i(1, 0))                                    # (5,12)
+	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
+	_pin(Vector2i(1, 0))                                    # (21,12)
+	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)
+	world.hold_action()                                     # pop the west end only
+	assert_eq(world.primed.size(), 0, "Disarmed")
+
+	world.player.teleport(Vector2(25.5 * CS, 12.5 * CS), false)
+	_pin(Vector2i(1, 0))                                    # (26,12)
+	assert_eq(world.primed.size(), 1, "The hand it was left waiting for arrived")
+	assert_eq(world.anchor_cells(), [Vector2i(21, 12), Vector2i(26, 12)],
+		"...and the pair is the survivor plus the new hand, not two new ones")
+	assert_eq(_total(), _start_total, "Conserved")
+
+
+func test_a_burst_that_reaches_both_halves_takes_both() -> void:
+	# The rule is only ever "what is inside the sphere": stand between two hands a
+	# cell apart and both are inside it.
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+	_pin(Vector2i(1, 0))                                    # (5,12)
+	world.player.teleport(Vector2(6.5 * CS, 12.5 * CS), false)
+	_pin(Vector2i(1, 0))                                    # (7,12) — armed, and adjacent
+	assert_eq(world.primed.size(), 1, "Armed")
+	var loose_before: int = world.hands_loose()
+
+	world.hold_action()                                     # standing between them
+	assert_eq(world.primed.size(), 0, "Disarmed")
+	assert_eq(world.anchor_cells(), [], "Both halves were in reach, so both came off")
+	assert_eq(world.hands_held(), 2, "...and both are back in your slots")
+	assert_eq(world.hands_loose(), loose_before, "Nothing fell")
 	assert_eq(_total(), _start_total, "Conserved")
 
 
@@ -1206,6 +1271,140 @@ func test_reset_puts_both_the_world_and_your_hands_back() -> void:
 	assert_eq(world.hands_in_folds(), 0, "Nothing is holding anything")
 	assert_eq(_loose_count(), _start_loose_here,
 		"And this region's authored hands are lying out again")
+
+
+# ---------------------------------------------------------------------------
+# The one-key gesture: both directions land on the RELEASE
+# ---------------------------------------------------------------------------
+# Holding F does not burst — it LOADS one, and the pop happens when you let go.
+# Everything below drives `_unhandled_input` with real key events, because the
+# thing under test is the gesture, not the two actions it chooses between.
+
+func _key_f(down: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_F
+	ev.pressed = down
+	world._unhandled_input(ev)
+
+
+## Press F, hold it for `secs`, let go.
+func _press_f_for(secs: float) -> void:
+	_key_f(true)
+	world._tick_hold(secs)
+	_key_f(false)
+
+
+func test_a_short_press_is_a_tap_and_two_taps_put_a_hand_down() -> void:
+	_press_f_for(world.HOLD_TIME * 0.5)
+	assert_true(world.placing(), "Under the threshold the release is a tap, and a tap raises")
+	assert_eq(world.anchor_cells(), [], "...which puts nothing down by itself")
+
+	_press_f_for(world.HOLD_TIME * 0.5)
+	assert_false(world.placing(), "The second tap pins it")
+	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "...on the cell the cursor was on")
+
+
+func test_a_loaded_release_cancels_a_raised_hand_and_pops() -> void:
+	# The cancel through the real gesture rather than through `hold_action`: the charge
+	# runs on wall time, so it goes on loading while world time is stopped, and letting
+	# go loaded puts the hand back and fires the burst in one release.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))       # seam at (24,12) — takes both hands
+	world.hands[0] = HandTypes.PLAIN                       # as if picked up from a cache
+	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+	_press_f_for(world.HOLD_TIME * 0.5)                    # a hand up over the seam
+	assert_true(world.placing(), "Raised, and the world is stopped")
+	assert_eq(world.hands_held(), 1, "A raised hand has not left its slot")
+
+	_key_f(true)
+	world._tick_hold(world.HOLD_TIME)
+	assert_true(world.placing(), "Charging does not put it back — the release does")
+
+	_key_f(false)
+	assert_false(world.placing(), "Let go loaded and the hand comes back down")
+	assert_false(world.player.frozen, "...with the clock running again")
+	assert_eq(world.folds.size(), 0, "...and the same release popped the seam under you")
+	assert_eq(_total(), _start_total + 1, "Conserved, less the hand the test handed you")
+
+
+func test_holding_past_the_threshold_loads_the_burst_without_firing_it() -> void:
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))       # seam at (24,12)
+	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+
+	_key_f(true)
+	world._tick_hold(world.HOLD_TIME + 1.0)
+	assert_true(world.hold_loaded(), "Held past the threshold: the burst is loaded")
+	assert_eq(world.folds.size(), 1,
+		"...and the seam under you is untouched — holding does not fire it")
+
+	_key_f(false)
+	assert_eq(world.folds.size(), 0, "Letting go is what pops it")
+	assert_false(world.hold_loaded(), "...and the charge is spent")
+
+
+func test_a_loaded_release_pops_instead_of_placing_a_hand() -> void:
+	# The two gestures are exclusive at the same instant they are decided: one
+	# release cannot both burst and place.
+	var held: int = world.hands_held()
+	_press_f_for(world.HOLD_TIME)
+	assert_eq(world.anchor_cells(), [], "A loaded release put no hand down")
+	assert_eq(world.hands_held(), held, "...and left your slots exactly as they were")
+
+
+func test_a_burst_can_be_charged_in_one_place_and_let_go_in_another() -> void:
+	# What the release-fired pop buys: the reach is measured where you LET GO. The
+	# burst still is not aimed — but it is now something you can carry to a seam.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))       # seam at (24,12)
+	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
+
+	_key_f(true)
+	world._tick_hold(world.HOLD_TIME)
+	assert_eq(world.folds.size(), 1, "Charged across the map: nothing has happened")
+
+	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
+	_key_f(false)
+	assert_eq(world.folds.size(), 0, "The pop lands where you released, not where you pressed")
+
+
+func test_a_release_with_no_press_behind_it_is_not_a_gesture() -> void:
+	# A press swallowed mid-fold (or cleared by a reset) leaves a release with
+	# nothing behind it, and it must not fall through to a tap.
+	_key_f(false)
+	assert_eq(world.anchor_cells(), [], "A stray release places nothing")
+	assert_eq(world.hands_held(), 2, "...and spends nothing")
+
+
+func test_the_body_wears_the_charge_and_puts_it_down_again() -> void:
+	# The indicator is the body. `_process` is what hands it the number, so this
+	# drives frames rather than calling `_tick_hold` directly.
+	assert_eq(world.player.fold_charge, 0.0, "Idle: no charge")
+
+	_key_f(true)
+	world._process(world.HOLD_TIME * 0.5)
+	assert_almost_eq(world.player.fold_charge, 0.5, 0.001, "Halfway through the hold")
+	assert_ne(world.player.visual_color(), PlayerBody.BODY_COLOR,
+		"...and the body is already saying so")
+
+	world._process(world.HOLD_TIME)
+	assert_eq(world.player.fold_charge, 1.0, "Loaded — and it does not climb past 1")
+	assert_eq(world.player.visual_color(), PlayerBody.charge_color(1.0),
+		"The body wears the loaded colour")
+
+	_key_f(false)
+	world._process(1.0 / 60.0)
+	assert_eq(world.player.fold_charge, 0.0, "Let go and the charge is gone")
+	assert_eq(world.player.visual_color(), PlayerBody.BODY_COLOR,
+		"...and the body is its own colour again")
+
+
+func test_a_reset_drops_a_charge_you_were_holding() -> void:
+	_key_f(true)
+	world._process(world.HOLD_TIME)
+	assert_true(world.hold_loaded(), "Loaded")
+
+	world._reset()
+	assert_false(world.hold_loaded(), "The reset dropped the charge with everything else")
+	world._process(1.0 / 60.0)
+	assert_eq(world.player.fold_charge, 0.0, "...and the body stopped showing it")
 
 
 # ---------------------------------------------------------------------------

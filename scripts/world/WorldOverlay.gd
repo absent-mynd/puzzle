@@ -87,7 +87,17 @@ func _rebuild_preview() -> void:
 
 ## `poly` cut down to one copy of the space. A domain of fewer than three points
 ## means the space does not repeat, and then there is nothing to cut it down to.
+##
+## Nothing undrawable comes out of here. Fewer than three points is not a polygon
+## and `draw_colored_polygon` refuses one — once per copy of the space, every frame,
+## for as long as it sits in the view. The clipping branch dropped a degenerate
+## polygon for free, since `intersect_polygons` returns nothing for one; the branch
+## that does NOT clip passed it straight through. So two anchors pinned to a single
+## cell errored for the whole length of their fuse in a region, and not at all
+## inside a fold. Both branches answer alike now: no polygon in, no polygons out.
 func _clip(poly: PackedVector2Array) -> Array:
+	if poly.size() < 3:
+		return []
 	if _view.domain.size() < 3:
 		return [poly]
 	return Geometry2D.intersect_polygons(poly, _view.domain)
@@ -201,8 +211,12 @@ func _aim_colour() -> Color:
 	return Color("e06a6a") if _view.aim_hand < 0 else HandTypes.color(_view.aim_hand)
 
 
-## Where a tap would put a hand, what a burst from here would reach, and how far
-## through a hold the key is.
+## Where a tap would put a hand, and what a burst from here would reach.
+##
+## A burst being CHARGED is drawn nowhere near here: it is a tint on the body. This
+## used to fill a ring at `aim_at`, which said the wrong thing twice over — the
+## burst is not aimed at that cell, and a ring is not subtle enough to be the thing
+## you look at through every tap.
 func _draw_aim() -> void:
 	if _view.aiming:
 		_draw_cursor()
@@ -218,12 +232,6 @@ func _draw_aim() -> void:
 	for entry in _view.in_reach:
 		draw_arc(Vector2(entry["at"]), 20.0, 0, TAU, 24,
 			Color("59e0d0") if bool(entry["ok"]) else Color("e06a6a", 0.7), STROKE)
-
-	# A hold in progress fills a ring: the two gestures are distinguishable while
-	# the key is still down, so a hold never lands as a surprise.
-	if _view.hold > 0.0:
-		draw_arc(_view.aim_at, 23.0, -PI / 2.0, -PI / 2.0 + TAU * _view.hold, 32,
-			Color("ffd27f"), STROKE)
 
 
 ## The raised hand, as a cursor over the cells it may go into.
@@ -289,6 +297,11 @@ func _draw_preview() -> void:
 
 ## The parallelogram an armed pair would excise: spanning well past the view, at
 ## whatever angle the pair implies.
+##
+## Two anchors on ONE cell imply no angle, so there is no band and this returns no
+## polygon. That pair is legal right up to the fuse — placement asks only whether
+## there is sheet to pin to, and `fire_pair` is what refuses it — so the preview has
+## to hold a frame it cannot draw, rather than assume it never sees one.
 func _band_polygon(a_center: Vector2, b_center: Vector2,
 		world_px: Vector2) -> PackedVector2Array:
 	if a_center.is_equal_approx(b_center):

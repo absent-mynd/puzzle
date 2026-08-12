@@ -43,12 +43,18 @@ one sealed inside a fold). See [docs/features/TESTBED_WORLD.md](../../docs/featu
 | hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
 | **tap F** | **raise a hand** — time stops and it becomes a cursor on the cell you point at |
 | A/D/W/S while raised | walk the cursor over the nine cells within arm's reach |
-| **tap F again** | pin it there and start the clock again — the second hand lights the fuse |
-| **hold F** | **release burst**: everything of yours within about a tile and a third comes loose at once. With a hand raised it also cancels the placement |
+| **tap F again** | pin it there and start the clock again — the second one lights the fuse |
+| **hold F, then let go** | **release burst**: everything of yours within about a tile and a third comes loose at once. With a hand raised it cancels the placement too |
 | R | reset |
 
-One key, two directions. **Tap puts a hand down; hold bursts them loose.** There
-is no committing press: put both hands down and the fold goes off by itself.
+One key, two directions. **Tapping puts a hand down; holding bursts them loose.**
+There is no committing press: put both hands down and the fold goes off by itself.
+
+**Both directions land when you LET GO.** Holding F does not fire anything — it
+*loads* a burst, and your body cools from amber toward teal as it charges. Once
+it snaps fully teal the burst is loaded and pops the moment you release. So a
+burst is something you can charge where you are and set off where you end up:
+load it, step onto the seam, let go.
 
 ### Placing a hand stops the clock
 
@@ -63,7 +69,7 @@ Two things it buys, and they are the two problems it was built for:
 
 - **Precision does not have to be a reflex.** Aiming at a particular cell used
   to mean arriving at a particular place with a particular key held. Miss it and
-  the fix was to burst the hand back and run the approach again — repetition
+  the fix was to pop the hand back and run the approach again — repetition
   standing in for accuracy. Now the approach and the aim are separate decisions,
   and only the first of them has to be made at speed.
 - **Every cell you can touch is a cell you can name.** Arm's length is a
@@ -77,6 +83,10 @@ already a hand down to pair with, the band between the two is drawn faintly
 under the cursor, at whatever angle the pair implies. It is fainter than an
 armed pair's band on purpose: it is a proposal you can still walk the cursor out
 of, not a fold that is coming.
+
+The charge is real time, not world time, so a raised hand can be popped back
+down: hold F until you turn teal and let go, and the placement is cancelled, the
+burst fires around you, and the clock starts again exactly as it would have.
 
 The reach is deliberately still one cell (`FoldWorld.ANCHOR_REACH`), and that
 number is load bearing rather than a taste: a shell one tile thick keeps you out
@@ -161,13 +171,15 @@ behind you is a thing you can choose to do.
 
 ### The burst
 
-Holding F fires a small sphere of influence around your body (`BURST_RADIUS`,
-about a tile and a third — tune it in `FoldWorld`). It is **not aimed**: where you stand is
-the whole input. Everything of yours inside it comes loose at once —
+Releasing a held F fires a small sphere of influence around your body
+(`BURST_RADIUS`, about a tile and a third — tune it in `FoldWorld`). It is **not
+aimed**: where you stand is the whole input. Everything of yours inside it comes
+loose at once —
 
 - unpaired hands you placed come back;
-- armed pairs you can reach either half of come apart — what you can reach comes
-  back, the far hand falls where it was pinned;
+- armed pairs you can reach either half of are **disarmed** — the halves inside
+  the sphere come back, and any half outside it stays pinned exactly where it
+  was, waiting for a partner again;
 - folds whose seam is in reach come apart, if nothing newer is blocking them;
 - inside a fold, the glue anchor in reach is the way out;
 - and **any hand with nowhere to go pops into the world at your feet.**
@@ -176,6 +188,18 @@ That last clause is what makes the burst safe to fire blind. Nothing is refused
 for want of a slot and nothing is destroyed: a hand you cannot catch is a hand
 on the ground, which is the same object a cache is. A ring shows how far the
 burst reached, after the fact — it confirms, it does not aim.
+
+**It fires on the release, and the reach is measured there.** Charging is a
+state you carry: hold F on safe ground, walk to the seam, let go, and the sphere
+is drawn around where you *released*. The one irreversible half of the verb is
+never on a timer you cannot stop — right up to the moment you lift your finger,
+nothing has happened.
+
+The charge is worn **on your body**, not on the cell you are pointing at: the
+blob shades from its amber toward the teal of an openable seam, quietly at first
+(a tap barely moves it) and then in one step to fully teal when the burst is
+loaded. That step is the thing to learn to read — teal body means letting go
+pops.
 
 A burst releases the folds that were unfoldable **when it fired**. A stack of
 two folds under one diamond clears one layer per press, because releasing the
@@ -204,9 +228,13 @@ What they tell you is how many you have and what **kind** they are.
   counts its own fuse, so they go off in the order their fuses run out rather
   than the order you laid them: a swift pair laid second fires before a patient
   pair laid first.
-- **Bursting takes back** whatever is in reach. Reaching either half of an armed
-  pair breaks the whole pair — the far hand drops where it was pinned, so
-  reaching into one always costs you a hand.
+- **Bursting takes back** whatever is in reach, and *only* that. Reaching either
+  half of an armed pair disarms the pair — a fold needs two hands — but takes
+  back only the halves you actually reached. The far one stays pinned where you
+  put it and goes back to waiting for a partner, so reaching into an armed pair
+  costs you the fuse, not a hand. Since the survivor is the newest hand waiting,
+  it is the one your next tap pairs with: **re-aim a pair by bursting the end
+  you got wrong, walking, and tapping again.**
 - A pair that **fails at the fuse** drops both hands from where they were pinned.
 - **Unfolding gives back the same two hands that went in** — kinds and all.
 - Hands with nowhere to go **land on the ground** rather than being refused.
@@ -419,10 +447,10 @@ pinned and resolve again when you return.
 
 1. **Ride a fold.** Cross the wide pit by folding it away: F-F on one rim, then
    F-F on the other (raise, then pin). The pair starts pulsing and folds itself —
-   so where you are standing when it goes off is a decision, not a keypress. You ride your flap;
-   the seam diamond marks the meeting line. Walk over it, hold F, and you ride the
-   unfold back — and get both hands back, because you no longer need the pit
-   closed. Also try a
+   so where you are standing when it goes off is a decision, not a keypress. You
+   ride your flap; the seam diamond marks the meeting line. Walk over it, hold F
+   until you turn teal and let go, and you ride the unfold back — and get both
+   hands back, because you no longer need the pit closed. Also try a
    *vertical* fold (same column): fold the sky down / the floor up to climb —
    this is the gravity-specific verb.
 2. **Get folded in.** Stand *inside* the red preview band and commit the fold:
@@ -434,7 +462,7 @@ pinned and resolve again when you return.
    by exactly one band width, so the frame does not change and the crossing is
    invisible — there is no seam to cross, only a lap to finish.
 3. **Dive-traverse.** While inside, walk somewhere else along the strip, then
-   hold F on the white glue diamond. The fold springs open and you emerge
+   release a held F on the white glue diamond. The fold springs open and you emerge
    **where you walked to** — fold, dive, surface: movement through the inside
    of a fold.
 4. **Break the sealed chamber.** With arm's-length anchors, sealed means
