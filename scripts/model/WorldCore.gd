@@ -172,13 +172,93 @@ static func glue_segments(fold: Fold, dropped: Array) -> Array:
 	return out
 
 
+## How close to a crease still counts as ON it rather than across it. Half a world
+## unit — an eighth of an art pixel, and far below anything the grid can express.
+##
+## Shared on purpose by the three questions that must never disagree about one crease:
+## does this fold cross that seam, did it swallow that point, and which flap does the
+## point ride out on. Two tolerances would be two answers.
+const GRAZE := 0.5
+
 ## Does a segment cross a fold's excised strip (the open region strictly between its
-## creases)? Half-pixel epsilon: grazing a crease doesn't block.
+## creases)? Grazing a crease doesn't block.
 static func segment_intersects_strip(p0: Vector2, p1: Vector2, fold: Fold) -> bool:
 	var d0 := (p0 - fold.crease_point1).dot(fold.crease_normal)
 	var d1 := (p1 - fold.crease_point1).dot(fold.crease_normal)
 	var gap := fold.gap_distance()
-	return maxf(d0, d1) > 0.5 and minf(d0, d1) < gap - 0.5
+	return maxf(d0, d1) > GRAZE and minf(d0, d1) < gap - GRAZE
+
+
+# ---------------------------------------------------------------------------
+# Carrying a mark through a later fold
+# ---------------------------------------------------------------------------
+# A fold does not only add a seam of its own — it MOVES every mark already standing in
+# the space, because it moves the sheet those marks are on. Both flaps slide inward and
+# what lay between them is gone. So anything recorded in plane coordinates before a fold
+# — an older fold's seam and the meeting cell you unfold it at — has to be carried
+# through the folds made after it, in order, or it is a statement about a configuration
+# that no longer exists.
+#
+# This is the fold list replaying, the same as everything else here (Decision 1). It is
+# NOT `BaseFrame`: a seam is a property of the FOLD, not a point riding a tile, and it
+# has to survive running over a hole in the sheet, where there is no piece to resolve
+# against.
+
+## Where a point lands once `fold` is applied — carried with whichever flap it sits on,
+## or null if the fold excised it. A point grazing a crease rides that flap out rather
+## than vanishing.
+static func carry_point(p: Vector2, fold: Fold, cell_size: float):
+	var d := (p - fold.crease_point1).dot(fold.crease_normal)
+	var gap := fold.gap_distance()
+	if d > GRAZE and d < gap - GRAZE:
+		return null
+	return p + (fold.shift_a_px(cell_size) if d <= GRAZE else fold.shift_b_px(cell_size))
+
+
+## The same for a SEGMENT, which a fold can do more to than move: the part on each side
+## rides that flap and the part between the creases is excised, so a fold laid across an
+## older seam CUTS it and hands back the two pieces — now meeting at its own seam.
+##
+## Returns 0, 1 or 2 segments. Zero when the fold swallowed the whole thing.
+static func carry_segment(p0: Vector2, p1: Vector2, fold: Fold, cell_size: float) -> Array:
+	var n := fold.crease_normal
+	var d0 := (p0 - fold.crease_point1).dot(n)
+	var d1 := (p1 - fold.crease_point1).dot(n)
+	var gap := fold.gap_distance()
+	var out: Array = []
+	for side in [[-INF, GRAZE, fold.shift_a_px(cell_size)],
+			[gap - GRAZE, INF, fold.shift_b_px(cell_size)]]:
+		var part := _span_between(p0, p1, d0, d1, float(side[0]), float(side[1]))
+		if part.size() == 2:
+			out.append(shift_segment(part, Vector2(side[2])))
+	return out
+
+
+## The stretch of `p0`..`p1` whose depth into the fold lies within `[lo, hi]`, or
+## nothing. A segment parallel to the creases has one depth for its whole length and is
+## therefore all in or all out — the case that has no intersection to solve for, and
+## the one an older seam takes whenever it was folded the same way as the fold now
+## crossing it.
+static func _span_between(p0: Vector2, p1: Vector2, d0: float, d1: float,
+		lo: float, hi: float) -> PackedVector2Array:
+	var slope := d1 - d0
+	if absf(slope) < GeometryCore.EPSILON:
+		return PackedVector2Array([p0, p1]) if d0 >= lo and d0 <= hi \
+			else PackedVector2Array()
+	var ta := (lo - d0) / slope
+	var tb := (hi - d0) / slope
+	var t0 := maxf(0.0, minf(ta, tb))
+	var t1 := minf(1.0, maxf(ta, tb))
+	# Measured along the segment, not across the fold: a seam running almost parallel
+	# to a crease covers very little depth over a very long line, and dropping it for
+	# that would delete most of what this is here to carry.
+	if (t1 - t0) * p0.distance_to(p1) <= GRAZE:
+		return PackedVector2Array()          # a graze, not a length of seam
+	return PackedVector2Array([p0.lerp(p1, t0), p0.lerp(p1, t1)])
+
+
+static func shift_segment(seg: PackedVector2Array, by: Vector2) -> PackedVector2Array:
+	return PackedVector2Array([seg[0] + by, seg[1] + by])
 
 
 # ---------------------------------------------------------------------------

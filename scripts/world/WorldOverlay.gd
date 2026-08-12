@@ -57,6 +57,11 @@ const SEAM_COLOR := Color("59e0d0", 0.28)
 
 var _view := OverlayView.new()
 
+## The join lines, stepped into art pixels once per frame rather than once per copy —
+## see `PixelArt.hairline_runs` for why they are not just drawn.
+var _seam_runs := PackedVector2Array()
+var _glue_runs := PackedVector2Array()
+
 ## The preview strip and the guides, clipped to one copy of the space. Built when the
 ## view arrives — once per frame — rather than per copy, which is the whole lesson of
 ## `OverlayView`: `Geometry2D.intersect_polygons` is not free.
@@ -71,7 +76,22 @@ var _aim_strip: Array = []
 func set_view(view: OverlayView) -> void:
 	_view = view if view != null else OverlayView.new()
 	_rebuild_preview()
+	_rebuild_lines()
 	queue_redraw()
+
+
+## Step the seam and glue lines into art pixels. Once per frame, for the same reason
+## the strips are clipped here rather than in `paint()`: `paint()` runs once per copy
+## of the space, and neither of these depends on which copy is being drawn.
+func _rebuild_lines() -> void:
+	_seam_runs = PackedVector2Array()
+	_glue_runs = PackedVector2Array()
+	if not _view.active:
+		return
+	for seg in _view.seams:
+		_seam_runs.append_array(PixelArt.hairline_runs(seg[0], seg[1]))
+	for seg in _view.glue:
+		_glue_runs.append_array(PixelArt.hairline_runs(seg[0], seg[1]))
 
 
 ## The strip an armed pair would excise, and the guides through every placed hand.
@@ -342,8 +362,8 @@ func _strip_polygon(a_center: Vector2, b_center: Vector2,
 ## rather than a rendering glitch. One pair per axis of the lattice: two lines
 ## down a cylinder, and all four walls of a torus when you are folded in twice.
 func _draw_glue() -> void:
-	for seg in _view.glue:
-		draw_line(seg[0], seg[1], GLUE_COLOR, HAIR)
+	if not _glue_runs.is_empty():
+		draw_multiline(_glue_runs, GLUE_COLOR, HAIR)
 
 
 ## The meeting lines — where a fold's two flaps came together — drawn as a muted glue
@@ -357,8 +377,8 @@ func _draw_glue() -> void:
 ## than as a place where the tiles happen to disagree — which is the same job the glue
 ## line does for the wrap, and the reason it is the same line at less than half weight.
 func _draw_seams() -> void:
-	for seg in _view.seams:
-		draw_line(seg[0], seg[1], SEAM_COLOR, HAIR)
+	if not _seam_runs.is_empty():
+		draw_multiline(_seam_runs, SEAM_COLOR, HAIR)
 
 
 ## Marker diamonds are snapped to the art-pixel grid: a diamond is only three

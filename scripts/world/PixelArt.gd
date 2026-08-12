@@ -108,3 +108,64 @@ static func art_pixel(p: Vector2) -> Vector2i:
 ## space (see `TileAtlas.uv_for`).
 static func px_per_world(cell_size: float) -> float:
 	return float(TILE_PX) / cell_size
+
+
+## A one-pixel line from `a` to `b`, as the RUNS of art pixels it covers — pairs of
+## endpoints, the shape `draw_multiline` takes.
+##
+## A drawn line is not a pixel-art line. `draw_line` at one art pixel of width is a
+## quad four world units across, and at an angle that quad covers a fraction of each
+## pixel it crosses: the line comes out dim, thinned and broken, while every other
+## edge in the frame is a hard step. Axis-aligned the quad lands exactly on the grid,
+## which is why nothing showed it until a fold ran diagonally.
+##
+## So the line is stepped in pixels here and each one is painted once. Painted ONCE
+## matters as much as painted at all: these lines are translucent, and a pixel covered
+## by two runs would blend twice and sit brighter than the rest of the same line.
+##
+## Runs rather than pixels because a line that is mostly flat is mostly long spans —
+## an axis-aligned line comes back as ONE run, which is the whole of the common case.
+## A 45° diagonal is the worst case at one run per pixel; it is still a single draw
+## call, and it is the only shape of line this costs anything for.
+##
+## Endpoints are the OUTER EDGES of the first and last pixel of a run, not their
+## centres, so a run of one pixel is still a segment with a length — a zero-length
+## segment draws nothing at all.
+static func hairline_runs(a: Vector2, b: Vector2) -> PackedVector2Array:
+	var p0 := art_pixel(a)
+	var p1 := art_pixel(b)
+	var span := p1 - p0
+	var flat := absi(span.x) >= absi(span.y)
+	# One axis is walked a pixel at a time; the other is whatever the line is doing
+	# there. Swapping them is what keeps this one piece of code rather than two.
+	var major := absi(span.x) if flat else absi(span.y)
+	var minor := absi(span.y) if flat else absi(span.x)
+	var step_major := signi(span.x) if flat else signi(span.y)
+	var step_minor := signi(span.y) if flat else signi(span.x)
+	var from_major := p0.x if flat else p0.y
+	var from_minor := p0.y if flat else p0.x
+
+	var out := PackedVector2Array()
+	var run_start := from_major
+	var run_minor := from_minor
+	for i in range(major + 1):
+		var at_major := from_major + i * step_major
+		var at_minor := from_minor + (0 if major == 0 else roundi(
+			float(i) * float(minor) / float(major)) * step_minor)
+		if at_minor != run_minor:
+			out.append_array(_run(run_start, at_major - step_major, run_minor, flat))
+			run_start = at_major
+			run_minor = at_minor
+	out.append_array(_run(run_start, from_major + major * step_major, run_minor, flat))
+	return out
+
+
+## One run, as its two endpoints in world space: across the full width of the pixels it
+## covers on the major axis, down the middle of its single pixel on the minor one.
+static func _run(from_major: int, to_major: int, minor: int, flat: bool) -> PackedVector2Array:
+	var lo := float(mini(from_major, to_major)) * WORLD_PER_PIXEL
+	var hi := float(maxi(from_major, to_major) + 1) * WORLD_PER_PIXEL
+	var mid := (float(minor) + 0.5) * WORLD_PER_PIXEL
+	if flat:
+		return PackedVector2Array([Vector2(lo, mid), Vector2(hi, mid)])
+	return PackedVector2Array([Vector2(mid, lo), Vector2(mid, hi)])

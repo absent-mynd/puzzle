@@ -809,20 +809,91 @@ func test_a_fold_draws_a_seam_line_through_its_diamond() -> void:
 	assert_eq(world.seam_lines(), [], "Opening the fold takes its seam line with it")
 
 
-func test_every_standing_fold_draws_its_own_seam() -> void:
-	# One line per fold, not per meeting cell: two folds sharing a cell share their
-	# diamond (above) and still met along two different lines. The diamond is about
-	# what a burst there would do; the line is about where the sheet is joined.
+func test_a_fold_laid_across_a_seam_cuts_it_where_it_crosses() -> void:
+	# Two folds meeting in one cell: they share their diamond (above) and still met
+	# along two different lines. But the second one is laid ACROSS the first, so it
+	# does not merely add a line — it takes four cells out of the middle of the older
+	# seam and slides what is left together, exactly as it does to the sheet the seam
+	# is drawn on. Three segments for two folds, and the pair that make up the older
+	# one meet at the newer one's seam.
 	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)   # clear of both strips
-	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))           # X: seam cell (22,12)
-	world.do_fold(Vector2i(22, 10), Vector2i(22, 14))           # Y: the SAME seam cell
+	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))           # X: vertical seam, x=22.5c
+	assert_eq(world.seam_lines().size(), 1, "One fold, one unbroken line")
+
+	world.do_fold(Vector2i(22, 10), Vector2i(22, 14))           # Y: straight across it
 	assert_eq(world.seam_markers().size(), 1, "One diamond between them")
-	assert_eq(world.seam_lines().size(), 2, "...and a line each, crossing there")
+	var segs: Array = world.seam_lines()
+	assert_eq(segs.size(), 3, "...and three segments: Y's own line, and X's in two halves")
+
+	var halves: Array = []
+	for seg in segs:
+		if absf(Vector2(seg[0]).x - 22.5 * CS) < 0.01 \
+				and absf(Vector2(seg[1]).x - 22.5 * CS) < 0.01:
+			halves.append(seg)
+	assert_eq(halves.size(), 2, "X's seam is the vertical pair")
+	for seg in halves:
+		var meet := 12.5 * CS
+		var inner := minf(absf(Vector2(seg[0]).y - meet), absf(Vector2(seg[1]).y - meet))
+		assert_almost_eq(inner, 0.0, 1.0,
+			"Both halves run up to Y's seam — the strip between them is gone, "
+			+ "and what was on either side of it slid together")
 
 	# Blocked or free changes nothing about it. The refusal is the diamond's to say —
 	# the seam is where the halves met either way.
 	assert_false(world.can_unfold_fold(world.folds[0]), "The older fold is buried")
-	assert_eq(world.seam_lines().size(), 2, "...and its seam is drawn all the same")
+	assert_eq(world.seam_lines().size(), 3, "...and its seam is drawn all the same")
+
+
+func test_a_standing_seam_rides_the_flap_a_later_fold_moves_it_on() -> void:
+	# A fold slides BOTH flaps inward, and everything already standing on them goes
+	# with the sheet — including the seam of an older fold, and the cell you unfold it
+	# at. Recorded once and never carried, that seam stays drawn, aimed at and burst
+	# where the world used to be, which is a marker pointing at the wrong place and a
+	# fold you can only open by standing somewhere it no longer is.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)   # clear of both strips
+	world.do_fold(Vector2i(30, 12), Vector2i(34, 12))           # seam cell (32,12)
+	var old: Fold = world.folds[0]
+	assert_eq(world.seam_cell(old), Vector2i(32, 12), "Where it was made")
+
+	# A second fold to its left. Everything past its far crease slides four cells in.
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
+	assert_eq(world.seam_cell(old), Vector2i(28, 12), "The older seam came with the flap")
+	assert_eq(world.seam_markers().keys(), [Vector2i(28, 12), Vector2i(24, 12)],
+		"...so that is where its diamond is, beside the new fold's own")
+	assert_almost_eq(Vector2(world.seam_lines()[0][0]).x, 28.5 * CS, 0.01,
+		"...and the line through it moved by exactly the same four cells")
+
+	# The half that is not decoration: the burst measures to the same place.
+	world.player.teleport(Vector2(28.5 * CS, 12.5 * CS), false)
+	assert_true(world.seams_within_burst().has(old), "In reach where the diamond now is")
+	assert_eq(world.aimed_fold(Vector2i(1, 0)), old, "...and F there opens it")
+
+	world.player.teleport(Vector2(32.5 * CS, 12.5 * CS), false)
+	assert_false(world.seams_within_burst().has(old),
+		"...and nothing is left to reach where it used to be")
+
+
+func test_a_seam_folded_over_goes_into_the_fold_that_swallowed_it() -> void:
+	# The other half. A later fold does not always MOVE an older seam — if the seam is
+	# inside the strip it excises, the seam goes into its subspace with the sheet it
+	# was cut into. There is then nothing in this space to burst, and a diamond left
+	# standing in the region is an invitation to press F where nothing will happen.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)
+	world.do_fold(Vector2i(30, 12), Vector2i(34, 12))           # seam cell (32,12)
+	var buried: Fold = world.folds[0]
+	world.do_fold(Vector2i(28, 12), Vector2i(36, 12))           # a strip right over it
+
+	assert_eq(world.folds.size(), 2, "Both folds are standing")
+	assert_null(world.seam_cell(buried), "The older seam is not in this space any more")
+	assert_eq(world.seam_markers(), {Vector2i(32, 12): true},
+		"One diamond, and it belongs to the fold that swallowed the other")
+	assert_eq(world.seam_lines().size(), 1, "...and one seam line, for the same reason")
+	assert_false(world.can_unfold_fold(buried),
+		"The buried fold cannot come out while the one over it stands")
+
+	# Unfolding the newer one gives the older seam back where it was.
+	world.unfold_space_fold(world.folds[1])
+	assert_eq(world.seam_cell(buried), Vector2i(32, 12), "...and there it is again")
 
 
 func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:

@@ -121,6 +121,26 @@ func test_a_seam_is_drawn_as_a_muted_glue_line() -> void:
 		"...but still drawn")
 
 
+func test_a_diagonal_join_line_is_stepped_before_it_is_drawn() -> void:
+	# Folds are not all axis-aligned, and a diagonal one has a diagonal seam — and, if
+	# you are standing inside it, diagonal glue. Handed straight to `draw_line` those
+	# come out as a dim broken thread while every other edge in the frame is a hard
+	# step, which reads as no line at all. Both are stepped through `PixelArt`, once
+	# per frame rather than once per copy of the space.
+	var v := _view([])
+	v.seams = [PackedVector2Array([Vector2(0, 0), Vector2(320, 320)])]
+	v.glue = [PackedVector2Array([Vector2(0, 320), Vector2(320, 0)])]
+	overlay.set_view(v)
+	assert_gt(overlay._seam_runs.size(), 2, "A diagonal seam is a stair, not one quad")
+	assert_gt(overlay._glue_runs.size(), 2, "...and the glue is stepped the same way")
+
+	v = _view([])
+	v.seams = [PackedVector2Array([Vector2(0, 8), Vector2(320, 8)])]
+	overlay.set_view(v)
+	assert_eq(overlay._seam_runs.size(), 2,
+		"A straight seam is still one span — the common case costs nothing")
+
+
 func test_nothing_the_overlay_would_draw_has_fewer_than_three_points() -> void:
 	# The invariant itself, over a frame holding both kinds of pair and the guides
 	# that a placed hand draws — in both kinds of space, because the bug lived in the
