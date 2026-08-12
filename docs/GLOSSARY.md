@@ -45,6 +45,7 @@ in the tree, it is a leftover — fix it.
 | Where a subspace's edges are identified | **glue** / glue line | wrap line, boundary | Walking through it puts you in the next copy. |
 | The two outer halves a fold slides inward | **flap** | side, half, wing | Already consistent; recorded so it stays that way. |
 | Holding the fold key | **burst** | release burst, retrieve, pull-back | One word for the untargeted release. |
+| A tile that bursts when you step on it | **burst plate** | pop tile, popper, burst trap | The *plate* is the tile; what it fires is a **burst**, the same word as your own because it is the same sphere at a reach the plate chose. `TileTypes.TRIGGER_BURST`, `FoldWorld._fire_burst_plate`. |
 | The character you drive | **player** | blob, avatar | `PlayerBody` is its physics body, `PlayerVisual` its drawing. *Blob* survives only where it is not the character: a 47-tile *blob set* is a tiling term, a *binary blob* is a file. |
 | Memoizing a computed value | **cache** | — | The only surviving use of the word: `_tile_cache`, `drop_tile_cache`. Never a hand. |
 
@@ -101,6 +102,7 @@ Grep for these; each is a leftover.
 | anchor cache, hand cache, a pickup | **loose hand** | The type is still `HandPickup` — see above. |
 | loose anchor | **unpaired anchor** | An editor anchor with no partner yet. "Loose" belongs to hands. |
 | release burst | **burst** | The burst *is* the release. |
+| pop tile, pop plate | **burst plate** | *Pop* is what a burst does to one hand; the sphere is a **burst**, whoever fires it. |
 | excision band, excision strip | **excised strip** | |
 | the blob (meaning the character) | **the player** | |
 | primed | **armed** | |

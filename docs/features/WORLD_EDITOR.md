@@ -121,10 +121,15 @@ fold anchors.
 ### What the board shows
 
 Every configured tile is outlined, with a dashed line to each cell it names and
-a numbered ring on each. The tile you are *inspecting* additionally gets the
-fold its reaction will make, drawn with the same guides as a pre-placed fold.
-Both are driven off the schema — a `cells` parameter added to any tile type
-appears on the board the day it is declared.
+a numbered ring on each. That is driven off the schema — a `cells` parameter
+added to any tile type appears on the board the day it is declared.
+
+The tile you are *inspecting* additionally gets a preview of what its reaction
+will do, keyed off the reaction and not off the tile type: a `fold` reaction
+draws the fold it will make, with the same guides as a pre-placed fold, and a
+`burst` reaction draws its **reach**, to scale, as a circle around the plate.
+Both exist for the same reason — a fold you cannot see is two integers, and a
+reach you cannot see is one.
 
 ### Two rules about storage
 

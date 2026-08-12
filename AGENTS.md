@@ -359,7 +359,10 @@ what you must not quietly change:
 - **A kind only changes the fuse.** If you give kinds a second behaviour, that is a
   design change; do it in `HandTypes` and nowhere else.
 - **There is no remote unfold**, so **you can strand yourself**. Do not paper over
-  that with a recall key without a design conversation.
+  that with a recall key without a design conversation. A **burst plate**
+  (`TileTypes.TRIGGER_BURST`) is not that key: it fires the same burst at a reach the
+  WORLD authored, from a tile you have to walk onto. What is player-aimed is still
+  exactly your own arm.
 - **The floating hands are style.** Nothing reads their drawn positions back; do not
   make them load-bearing without saying so.
 

@@ -39,15 +39,21 @@ const UNANCHORABLE_FLOOR := 6
 ## An UNANCHORABLE_WALL tile is not walkable (like a wall) and also cannot be used
 ## as a fold anchor. Useful for walls that must never become fold reference points.
 const UNANCHORABLE_WALL := 7
+## A BURST PLATE fires a BURST when the player enters it — the same sphere the
+## player's own hold-and-release makes, centred on the plate instead of on the body,
+## at a reach the plate carries in its own `data`. It is the world's half of the
+## one-key verb: the tile does the pulling-back, and it can reach further than an arm.
+const TRIGGER_BURST := 8
 
 ## type -> definition. Keep merge_rank strictly ordered: null(5) > goal(4) >
 ## wall(3) > water(2) > empty(1). FoldedState never produces null pieces, so its
 ## ordering (goal > wall > water > empty) falls out of the same ranks; Cell view
 ## code that can still see legacy null pieces gets null-on-top for free.
-## `on_enter` names the reaction a tile fires when the player enters it (""=none).
-## The reaction's parameters come from the tile's per-instance `data`; the resolver
-## (TriggerResolver) interprets the name. Kept as a string, not a Callable, so the
-## registry stays a pure const data table.
+## `on_enter` names the reaction a tile fires when the player enters it (""=none) —
+## "fold" for a trigger, "burst" for a burst plate. The reaction's parameters come from
+## the tile's per-instance `data`; `FoldWorld._check_triggers` dispatches on the name
+## (and hands a fold cascade to `TriggerResolver`). Kept as a string, not a Callable,
+## so the registry stays a pure const data table.
 ##
 ## `name` is what a human calls this tile — the label the world editor's palette
 ## shows. It lives here rather than in the editor because a new tile type must
@@ -80,6 +86,11 @@ const _REGISTRY := {
 			 "hint": "names the fold this plate makes. Two plates on one channel are one fold: whichever fires first makes it, and the other finds it already standing."},
 			{"key": "anchors", "type": "cells", "default": [], "count": 2, "required": true, "label": "fold anchors",
 			 "hint": "the two cells the fired fold is pinned between, in BASE coordinates — they ride earlier folds like anything else."},
+		]},
+	TRIGGER_BURST: {"name": "burst plate", "walkable": true, "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "burst",
+		"params": [
+			{"key": "radius", "type": "float", "default": 1.3, "label": "burst radius",
+			 "hint": "how far the burst reaches, IN CELLS. 1.3 is your own reach, so a default plate pops exactly what you could have popped standing on it; wider is the point of a plate — it opens seams you cannot get next to. Zero or less is an inert plate."},
 		]},
 	PIN:          {"name": "pin",     "walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": "", "params": []},
 	UNANCHORABLE_FLOOR: {"name": "unanchorable floor", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "params": []},
