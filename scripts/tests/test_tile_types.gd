@@ -110,3 +110,44 @@ func test_blocks_anchor_false_for_existing_types():
 func test_unknown_type_does_not_block_anchor():
 	assert_false(TileTypes.blocks_anchor(999), "unknown type does not block anchors by default")
 
+
+## --- Reacting tiles: the plates ---
+##
+## A tile that DOES something when you enter it says so in the registry, as a reaction
+## name. Nothing switches on the type: `FoldWorld` dispatches on the name, and the
+## parameters the reaction needs are declared beside it (see TileParams).
+
+const TRIGGER_BURST := TileTypes.TRIGGER_BURST
+
+
+func test_each_plate_names_its_reaction():
+	assert_eq(TileTypes.on_enter_kind(TileTypes.TRIGGER_FOLD), "fold",
+		"a trigger folds when you step on it")
+	assert_eq(TileTypes.on_enter_kind(TRIGGER_BURST), "burst",
+		"a burst plate bursts — the same sphere your own release makes")
+	assert_eq(TileTypes.on_enter_kind(WALL), "", "and a wall does nothing at all")
+
+
+func test_the_burst_plate_is_floor_you_can_stand_on():
+	# You fire it by entering it, so a plate you cannot enter is a plate that never goes
+	# off — and it has to merge as the floor it is, or a co-surfaced plate would win the
+	# cell and turn the ground under you into something that bursts.
+	assert_true(TileTypes.is_registered(TRIGGER_BURST), "the burst plate is registered")
+	assert_true(TileTypes.is_walkable(TRIGGER_BURST), "and walkable")
+	assert_eq(TileTypes.merge_rank(TRIGGER_BURST), TileTypes.merge_rank(EMPTY),
+		"at the same rank as the air it lies in")
+
+
+func test_the_burst_plate_refuses_nothing():
+	assert_false(TileTypes.blocks_fold(TRIGGER_BURST),
+		"a plate does not stop a fold cutting it — only a pin does that")
+	assert_false(TileTypes.blocks_anchor(TRIGGER_BURST), "nor a hand pinned on it")
+
+
+func test_the_burst_plate_carries_its_reach():
+	var keys: Array = []
+	for spec in TileTypes.params(TRIGGER_BURST):
+		keys.append(String(spec["key"]))
+	assert_eq(keys, ["radius"],
+		"how far it reaches is per-instance data, which is what makes a plate configurable")
+

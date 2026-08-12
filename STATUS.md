@@ -6,7 +6,7 @@ vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment. The
 world is now **authored in an editor** rather than by hand-editing JSON.
-**Tests:** 843 passing / 843, 34 scripts, ~25s. (`./run_tests.sh` prints the real
+**Tests:** 857 passing / 857, 34 scripts, ~25s. (`./run_tests.sh` prints the real
 numbers; this line is a snapshot and the runner is the authority.)
 
 ---
@@ -30,6 +30,7 @@ What exists and works today:
 | Regions + doors (recursive partner resolution) | ✅ Playable |
 | Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
 | Fold-on-enter triggers | ✅ Wired in a region, **in the world** |
+| **Burst plates** (`B`) — a tile that fires your burst at a radius it chooses | ✅ Wired at every depth, tested; placed in the testbed, not in the shipped world |
 | Hands: two slots, typed, conserved (`HandStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
 | One-key verb (tap = raise a hand, tap = pin it, hold-and-release = burst) | ✅ Playable |
@@ -127,8 +128,11 @@ Roughly in priority order — nothing here is committed to yet:
   read from `user://settings.json` at startup, so they are settable by hand.
 - Audio is not positional: a fold across the room sounds like one at your feet.
 - The shipped sounds are generated placeholders (`tools/gen_audio.py`), not art.
-- Unanchorable tiles (`_`, `X`) and occupants are covered by tests but not placed in
-  the world yet. Pins and triggers now are — see east's right wing.
+- Unanchorable tiles (`_`, `X`), burst plates (`B`) and occupants are covered by tests
+  but not placed in the shipped world yet — they are in the testbed. Pins and triggers
+  are placed — see east's right wing. What a burst plate does to west's authored beats
+  (it can open a fold you were meant to walk around) is a playtesting question, which
+  is why one has not been dropped into them.
 - **You can strand yourself.** Spend your last hands on a fold, walk somewhere its
   seam cannot be reached from, and `R` is the only way back. `R` is survivable by
   design — it drops every fold and respawns the authored loose hands — but it still

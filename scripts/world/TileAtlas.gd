@@ -48,7 +48,8 @@ const K_PIN := 6
 const K_UFLOOR := 7
 const K_UWALL := 8
 const K_LAMP := 9           ## the glyph drawn at a light source
-const KINDS := 10
+const K_BURST := 10         ## the plate that fires a burst when you step on it
+const KINDS := 11
 
 # --- Palette -----------------------------------------------------------------
 # Hues carry over from the flat-colour build so the world reads the same; the
@@ -71,6 +72,10 @@ const _PALETTE := {
 	K_UFLOOR: [Color(0.20, 0.22, 0.26), Color(0.13, 0.14, 0.18), Color(0.30, 0.33, 0.39)],
 	K_UWALL: [Color(0.42, 0.44, 0.50), Color(0.26, 0.28, 0.33), Color(0.56, 0.59, 0.67)],
 	K_LAMP: [Color(1.00, 0.82, 0.50), Color(0.24, 0.18, 0.12), Color(1.00, 0.97, 0.86)],
+	# The teal that means "this can be opened" everywhere else on screen — the seam
+	# diamonds, the glue lines, the charge worn on the body. A plate is that promise
+	# lying on the floor, so it is not given a hue of its own.
+	K_BURST: [Color(0.35, 0.88, 0.82), Color(0.16, 0.45, 0.44), Color(0.72, 0.98, 0.94)],
 }
 
 ## type -> kind, for types that do not depend on their surroundings.
@@ -80,6 +85,7 @@ const _KIND_OF_TYPE := {
 	TileTypes.WATER: K_WATER,
 	TileTypes.GOAL: K_GOAL,
 	TileTypes.TRIGGER_FOLD: K_TRIGGER,
+	TileTypes.TRIGGER_BURST: K_BURST,
 	TileTypes.PIN: K_PIN,
 	TileTypes.UNANCHORABLE_FLOOR: K_UFLOOR,
 	TileTypes.UNANCHORABLE_WALL: K_UWALL,
@@ -210,6 +216,8 @@ static func _paint(img: Image, kind: int, v: int, o: Vector2i) -> void:
 			_paint_hatched_wall(img, o, v)
 		K_LAMP:
 			_paint_lamp(img, o, v)
+		K_BURST:
+			_paint_burst_plate(img, o, v)
 
 
 ## The sheet itself: near-black with a faint lattice, so folded-away space
@@ -314,6 +322,46 @@ static func _paint_plate(img: Image, o: Vector2i, v: int) -> void:
 			img.set_pixel(o.x + x, o.y + y, c)
 	if v % 2 == 1:
 		img.set_pixel(o.x + 7, o.y + 13, pal[2])
+
+
+## A burst plate: the same floor plate as a trigger, in the openable teal, with the
+## wave it lets off arching over it. Two facts in one glyph — it lies on the floor
+## like a plate, and something comes OUT of it.
+##
+## A FAN of ticks rather than the ring the overlay draws: a ring in sixteen pixels is
+## either a flat line or speckle — there are not enough of them for a curve to read as
+## one. Ticks radiating off the plate say the same thing (something leaves here, in
+## every direction) and survive the resolution. They step out by half a pixel on
+## alternate variants, so a run of plates pulses instead of being one sprite four times.
+##
+## It is NOT drawn at the plate's authored radius. Art is a base-space fact — a tile
+## looks the same however it has been folded — and a radius is per-instance. The
+## editor's board is where a reach is drawn to scale.
+static func _paint_burst_plate(img: Image, o: Vector2i, v: int) -> void:
+	_paint_paper(img, o, v)
+	var pal: Array = _PALETTE[K_BURST]
+	for y in range(12, TILE_PX):
+		for x in range(1, TILE_PX - 1):
+			var c: Color = pal[0]
+			if y == 12:
+				c = pal[2]
+			elif y >= TILE_PX - 2:
+				c = pal[1]
+			if (x == 3 or x == 12) and y == 14:
+				c = pal[1]        # rivets, as on the trigger plate
+			img.set_pixel(o.x + x, o.y + y, c)
+	# The wave, as a chevron standing on the plate: two contiguous diagonals meeting in
+	# an apex. Diagonals are the one curve sixteen pixels can hold — anything sampled
+	# off a circle at this size lands as loose dots. It rides a pixel higher on
+	# alternate variants, which is what makes a row of plates pulse.
+	var lift := v % 2
+	for k in range(5):
+		var y := 10 - k - lift
+		if y < 0:
+			continue
+		var c: Color = pal[2] if k >= 2 else pal[0]
+		img.set_pixel(o.x + 3 + k, o.y + y, c)
+		img.set_pixel(o.x + 12 - k, o.y + y, c)
 
 
 static func _paint_pin(img: Image, o: Vector2i, v: int) -> void:

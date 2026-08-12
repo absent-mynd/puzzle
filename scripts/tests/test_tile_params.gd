@@ -50,9 +50,29 @@ func test_every_declared_parameter_is_well_formed():
 				assert_gt(int(spec.get("count", 0)), 0, "%s says how many cells it wants" % where)
 
 
+func test_the_burst_plate_declares_one_number():
+	var keys: Array = []
+	for spec in TileParams.specs_for(TileTypes.TRIGGER_BURST):
+		keys.append(String(spec["key"]))
+	assert_eq(keys, ["radius"], "how far it reaches is the whole of a plate's configuration")
+	assert_eq(String(TileParams.spec_of(TileTypes.TRIGGER_BURST, "radius")["type"]),
+		TileParams.FLOAT, "a reach in cells, so half a cell is sayable")
+
+
+func test_a_plate_left_alone_reads_a_real_reach():
+	# Declaring the parameter is the whole job: a plate painted and never inspected
+	# still bursts, because the default is a number and not a hole.
+	assert_almost_eq(float(TileParams.get_value(TileTypes.TRIGGER_BURST, {}, "radius")),
+		1.3, 0.001, "an unconfigured plate reads its default reach")
+	assert_eq(TileParams.to_storage(TileTypes.TRIGGER_BURST, {"radius": 1.3}), {},
+		"...and stores nothing, like every other value that equals its default")
+
+
 func test_types_with_params_finds_the_trigger():
 	assert_true(TileParams.types_with_params().has(TileTypes.TRIGGER_FOLD),
 		"the trigger is listed as configurable")
+	assert_true(TileParams.types_with_params().has(TileTypes.TRIGGER_BURST),
+		"and so is the burst plate")
 	assert_false(TileParams.types_with_params().has(TileTypes.WALL), "a wall is not")
 
 

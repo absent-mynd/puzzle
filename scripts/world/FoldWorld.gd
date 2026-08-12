@@ -284,8 +284,14 @@ var _hold_elapsed := 0.0
 ## exact fuses and the exact hands in flight it was left with.
 var _aim = null
 
-## Seconds left on the burst ring the overlay draws.
+## Seconds left on the burst ring the overlay draws, and the sphere it is drawing.
+##
+## Recorded when the burst FIRES rather than read back per frame: a burst belongs to
+## the moment it went off, and neither of these is a fact about where the player is now
+## — a plate's burst is centred on the plate and reaches as far as the plate says.
 var _burst_flash_left := 0.0
+var _burst_at := Vector2.ZERO
+var _burst_radius := BURST_RADIUS
 
 # --- The fuse lives on each armed pair; see `armed`. ---
 
@@ -1205,20 +1211,39 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	if animating():
 		return
 	# Putting a raised hand back is something this gesture DID, and it is tracked apart
-	# from `freed` because it is not something that came loose: the burst sound belongs
-	# to hands and folds leaving their places, and no hand left one here. What it does
-	# earn is silence instead of "Nothing here to release" — a pop that cancelled a
-	# placement in open ground has not done nothing.
+	# from what the burst freed because it is not something that came loose: the burst
+	# sound belongs to hands and folds leaving their places, and no hand left one here.
+	# What it does earn is silence instead of "Nothing here to release" — a pop that
+	# cancelled a placement in open ground has not done nothing.
 	var cancelled := placing()
 	cancel_aim()
-	var origin := player.global_position
+	if _burst(player.global_position, BURST_RADIUS) == 0 and not cancelled:
+		_deny("Nothing here to release.")
+
+
+## Fire a burst: a sphere of `radius` centred on `origin`, and everything of yours
+## inside it comes loose at once. Returns how many things it freed.
+##
+## Two things fire one — your own release (at the body, at `BURST_RADIUS`) and a burst
+## plate (at the tile, at whatever reach it was authored with) — and they share this
+## function rather than the rule. **What a burst reaches is one question**, and a plate
+## that answered it for itself would be a second answer free to drift from this one:
+## it would be the plate, not the burst, that decided whether reaching half an armed
+## pair disarms it, or whether a hand with nowhere to go is dropped or destroyed.
+##
+## The count is what the caller says something happened with. It is not a hand ledger
+## — a released fold and a popped hand both count one — and nothing but the messaging
+## reads it.
+func _burst(origin: Vector2, radius: float) -> int:
 	_burst_flash_left = BURST_FLASH
+	_burst_at = origin
+	_burst_radius = radius
 	var freed := 0
 
 	# Your own placed hands first: cheap, and they change no geometry.
 	# An unpaired anchor in reach simply comes back.
 	for i in range(unpaired.size() - 1, -1, -1):
-		if _anchor_within(unpaired[i], origin, BURST_RADIUS):
+		if _anchor_within(unpaired[i], origin, radius):
 			_release_anchor(unpaired[i], true)
 			unpaired.remove_at(i)
 			freed += 1
@@ -1226,15 +1251,17 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	# so there is no such thing as half an armed pair — but only the halves you can
 	# actually reach come off. The far one stays pinned exactly where you put it.
 	for pair in armed.duplicate():
-		if _anchor_within(pair["a"], origin, BURST_RADIUS) \
-				or _anchor_within(pair["b"], origin, BURST_RADIUS):
-			freed += _disarm_pair(pair, origin, BURST_RADIUS)
+		if _anchor_within(pair["a"], origin, radius) \
+				or _anchor_within(pair["b"], origin, radius):
+			freed += _disarm_pair(pair, origin, radius)
 
 	# Inside a fold, the glue anchor in reach is the exit.
-	if mode == Mode.SUBSPACE and _glue_within(origin, BURST_RADIUS):
+	if mode == Mode.SUBSPACE and _glue_within(origin, radius):
 		AudioManager.play_sfx(Sounds.BURST)
+		# The way out counts as something found: a burst that opens the fold you are
+		# standing in has not done nothing, whatever `try_exit` then makes of it.
 		try_exit()
-		return
+		return freed + 1
 
 	# Then the folds — the ones that were unfoldable WHEN THE BURST FIRED, decided up
 	# front. A stack under one diamond clears one layer per burst: releasing the newer
@@ -1244,8 +1271,8 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	# The burst itself, before the folds it releases: it is the gesture, and the
 	# unfold it sets off should sound like a consequence of it. Only when
 	# something actually came loose — the flash always fires, but a burst into
-	# empty air is exactly the case the refusal below is for.
-	var releasing: Array = _unfoldable_within(origin, BURST_RADIUS)
+	# empty air is exactly the case the caller's refusal is for.
+	var releasing: Array = _unfoldable_within(origin, radius)
 	if freed > 0 or not releasing.is_empty():
 		AudioManager.play_sfx(Sounds.BURST)
 
@@ -1254,9 +1281,7 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 			break
 		unfold_space_fold(fold)
 		freed += 1
-
-	if freed == 0 and not cancelled:
-		_deny("Nothing here to release.")
+	return freed
 
 
 ## Is this anchor within `radius` of a point? False when it is unresolvable in the
@@ -2433,10 +2458,11 @@ func _build_overlay_view() -> OverlayView:
 		if i >= 0:
 			v.aim_pair = anchor_point(unpaired[i])
 
+	# Where the burst WAS, not where you are: the ring is the sphere that went off, and
+	# a plate's went off somewhere you may well have been carried away from since.
 	v.burst_t = burst_flash()
-	v.burst_radius = BURST_RADIUS
-	if player != null:
-		v.burst_at = player.global_position
+	v.burst_at = _burst_at
+	v.burst_radius = _burst_radius
 	return v
 
 
@@ -2561,6 +2587,11 @@ func _physics_process(delta: float) -> void:
 	_check_goal()
 	_check_pickups()
 	_check_triggers()
+	# A burst plate can start an unfold TRANSITION, so the same guard follows it as
+	# follows the fuse: everything below reads a position and a piece list that are
+	# halfway between two states while one is in flight.
+	if animating():
+		return
 	_check_doors()
 
 
@@ -2613,27 +2644,81 @@ func _wrap_body() -> void:
 		_show_flash("The fold turns back on itself here.")
 
 
+## Tiles that react to being stood on.
+##
+## The tile NAMES its reaction (`TileTypes.on_enter_kind`) and carries that reaction's
+## parameters in its own `data`; this is only the dispatch. Adding a reacting tile is a
+## row in the registry and a branch here — not a new latch, not a second definition of
+## what "entering" means.
+##
+## Edge-fired on ENTERING: the latch holds the base tile you were last checked against,
+## so standing on a plate fires it once and stepping off and back on fires it again.
+## The latch is kept in EVERY space, including inside a fold — it is a fact about where
+## the body is, and only what a given reaction does with that is space-dependent.
+func _check_triggers() -> void:
+	if base == null:
+		return
+	var here = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
+	if here == null:
+		_trigger_latch = -1
+		return
+	if here.base_id == _trigger_latch:
+		return
+	_trigger_latch = here.base_id
+	var tile := base.tile_by_id(here.base_id)
+	if tile == null:
+		return
+	match TileTypes.on_enter_kind(tile.type):
+		"fold":
+			_fire_fold_trigger()
+		"burst":
+			_fire_burst_plate(tile, here)
+
+
+## A BURST PLATE: stepping on one fires a burst (§"HOLD") centred on the plate, at the
+## reach the tile was authored with. The player's own gesture with two things taken
+## away — you do not choose when, and you do not choose where.
+##
+## Centred on the PLATE and not on the body, because the plate is what goes off: a wide
+## one then reaches the same things whichever side you stepped on from, and the ring
+## says where the sphere actually was. You are standing on it either way, so a plate can
+## only ever reach MORE than you could have from there, never less.
+##
+## Fires at any depth, unlike a fold plate. A burst takes folds out of the current
+## space's list rather than splicing new ones into it, and `_burst` is the same rule
+## inside a fold as in a region — including the clause that opens the way out.
+##
+## A plate authored with no reach at all (zero or less) is inert, on purpose — the same
+## latitude a trigger with no anchors gets. A half-authored tile is a thing you are
+## allowed to leave on the canvas overnight; the editor's job is to make sure you know.
+## A plate you paint and never touch is not that: it takes the registry's default,
+## which is your own reach.
+func _fire_burst_plate(tile: BaseTile, piece) -> void:
+	var radius := float(TileParams.get_value(tile.type, tile.data, "radius")) * CS
+	if radius <= 0.0:
+		return
+	# Where the plate is in THIS frame. `polygon == base_polygon + src_offset` is the
+	# invariant the whole game rides on, so the flap the player is standing on carries
+	# the plate's own centre with it — no crease arithmetic, and no second lookup that
+	# could land on the far half of a tile a crease has cut in two.
+	var center: Vector2 = (Vector2(tile.grid_position) + Vector2(0.5, 0.5)) * CS + piece.src_offset
+	# The plate answering, under whatever the burst then does. A plate you did not press
+	# has to be heard even when it finds nothing — unlike your own burst, you did not
+	# already know it was coming.
+	AudioManager.play_sfx(Sounds.TRIGGER)
+	if _burst(center, radius) > 0:
+		_show_flash("The plate lets go — space springs open.")
+
+
 ## Fold-on-enter tiles. The cascade is resolved by TriggerResolver against the region's
 ## fold list, then the settled result is adopted: the player transports with the folds
 ## that carried them, exactly as if they had folded by hand.
 ##
 ## Only fires in a region — a trigger inside a subspace would have to splice folds
 ## into an inner-fold list mid-cascade, which the resolver does not model yet.
-func _check_triggers() -> void:
-	if mode != Mode.WORLD or base == null:
+func _fire_fold_trigger() -> void:
+	if mode != Mode.WORLD:
 		return
-	var here = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
-	if here == null:
-		_trigger_latch = -1
-		return
-	# Edge-trigger on the tile: re-entering is what fires, not standing still.
-	if here.base_id == _trigger_latch:
-		return
-	_trigger_latch = here.base_id
-	var tile := base.tile_by_id(here.base_id)
-	if tile == null or TileTypes.on_enter_kind(tile.type) != "fold":
-		return
-
 	var settled := TriggerResolver.resolve(base, {
 		"folds": folds,
 		"pieces": current_pieces,

@@ -43,7 +43,7 @@ so region loading gets entered from more than one direction.
 | `water` | `~` — walkable, so it is air you can see |
 | `pins` | `P` — one pin vetoes every fold whose *strip* spans it, at every height |
 | `unanchor` | `_` and `X` — space and wall you cannot pin to |
-| `triggers` | `T` — every outcome `TriggerResolver` has |
+| `triggers` | `T` — every outcome `TriggerResolver` has — and `B`, the plate that bursts |
 | `prefold` | regions that ship already folded, in every orientation |
 | `lamps` | lights: colour, radius, energy, flicker, offset, and the light budget |
 | `hands` | loose hands, in every place a hand can be |
@@ -132,6 +132,17 @@ Trigger anchors are authored in **BASE** cells (`TriggerResolver` maps them
 through the current fold state itself), unlike pre-placed fold anchors — see
 below.
 
+Two **burst plates** (`B`) share the region, because the other reacting tile
+belongs where the reacting tiles are:
+
+| Where | Reach | What it shows |
+|---|---|---|
+| `26,16`, on the lower walk line | 2.5 cells | it sits a couple of cells past where `gate_a`'s seam lands, so the run is *fold it, walk on, un-fold it without touching a key* |
+| `44,11`, on the upper shelf | 4 cells | a reach nothing else in the game has: pin a hand three cells off and step on the plate to watch it come back from somewhere you could never have bursted it from |
+
+A plate has no channel and nothing to spend, so both fire every time you enter
+them — walk off and back on and they go again.
+
 ### `prefold` — regions that ship folded
 
 Five pre-folds in one region, none of them nested: horizontal (sealing a vault whole,
@@ -182,11 +193,12 @@ folding across the grain to get the torus.
 
 ### `kitchen` — the everything room
 
-34×16. Every authoring character in one row (`~ P _ X G T`, with walls and air
-around them), a trigger and the wall it opens, all three hand kinds, three
-lamps, a goal, a pre-folded vault carrying a door and a lamp inside it, and
-seven doors — including one half of the hub's two-in-one-cell pair and a
-kitchen→kitchen loop. One place to stand and watch everything interact at once.
+34×16. Every authoring character in one row (`~ P _ X G T B`, with walls and air
+around them), a trigger and the wall it opens with a burst plate beside it that
+takes that same fold back out, all three hand kinds, three lamps, a goal, a
+pre-folded vault carrying a door and a lamp inside it, and seven doors —
+including one half of the hub's two-in-one-cell pair and a kitchen→kitchen loop.
+One place to stand and watch everything interact at once.
 
 ---
 
