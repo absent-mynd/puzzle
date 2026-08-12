@@ -166,22 +166,16 @@ What they tell you is how many you have and what **kind** they are.
 - A pair that **fails at the fuse** drops both hands from where they were pinned.
 - **Unfolding gives back the same two hands that went in** — kinds and all.
 - Hands with nowhere to go **land on the ground** rather than being refused.
-- **A loose hand is a physical object.** Let go of one and it *falls* — as a light ball
-  with a lot of air drag, so it floats down rather than dropping like a stone. It rolls
-  off slopes, pops out of walls it was let go inside, and comes to rest hovering just
-  above the ground. That holds however it came loose: a burst, an unfold, a refused fold.
-  **You can catch one out of the air**, and a hand still falling is still yours to lose —
-  nothing is destroyed mid-flight.
-
-  A fold carries a hand in flight the same way it carries you. **A hand a fold sweeps
-  into a strip keeps falling inside the strip**, and because a strip is a cylinder, a
-  hand that finds no floor in there *wraps* and goes round again. When the wrap runs
-  vertically that is a hand in **orbit**, indefinitely — you can still reach into the
-  fold and pluck it out of the air, and it lands the moment a fold puts ground in its way.
-
-  And a hand at rest is not done forever: **fold the ground out from under a hand and it
-  falls again.** A fold that only slides its tile carries it, as it always did. So a
-  loose hand you remember the position of may not be where you left it after you fold nearby.
+- **A loose hand is a physical object.** Let go of one — by a burst, an unfold, or a
+  refused fold — and it *falls*, floating down rather than dropping like a stone,
+  rolling off slopes and coming to rest just above the ground. **You can catch one out
+  of the air.** A fold carries a hand in flight the way it carries you, and a hand
+  swept into a strip keeps falling in there; a strip is a cylinder, so one that finds
+  no floor wraps and goes round again — indefinitely, if the wrap runs vertically.
+  Fold the ground out from under a resting hand and it falls again, so a hand you
+  remember the position of may not be where you left it after you fold nearby.
+  (`WorldCore.hand_ball_step` is the whole simulation; `FoldWorld._land_ball` is
+  where a ball stops being one.)
 
 So the budget is not how many folds you may ever make but **how many folds may
 stand at once** — and with two slots, that is one, until you find more hands.
@@ -450,7 +444,7 @@ come back and the wall is still open.
 
 ## Why the west region has no pins
 
-Fold extent is infinite-crease (see below), which makes a pin a **global veto on a
+Fold extent is infinite-crease, which makes a pin a **global veto on a
 strip of folds** — a pin anywhere in a column forbids every horizontal fold spanning
 it, at any height. West carries the four authored beats and its geometry is load
 bearing for all of them, so pins went in east, where there is room to be wrong.
@@ -521,17 +515,9 @@ stays pinned at `PixelArt.CAMERA_ZOOM` forever.
   nodes instead of thousands.
 - **The wrap is a property of the space, not of the things in it.** Static content
   bakes its copies into vertices; anything that moves is a `WrapCanvas` and is
-  painted once per copy by its base class, in ordinary world coordinates. That is
-  the whole contract — add a floating object and it turns up in every copy without
-  knowing folds exist. (The hands orbiting your body are the object that proved
-  the point: they used to appear in one copy and nowhere else.)
-
-  The one thing a canvas does have to answer for is state it keeps between frames.
-  Crossing a glue line slides body and camera by a period, and a canvas that
-  remembers a world position is left a copy behind — so `carry_through_wrap` offers
-  every canvas that same displacement, and one holding positions of its own adds it.
-  `HandOrbit` is the only one that does; leaving it out was the hands appearing to
-  snap back to the copy you entered from and swim after you.
+  painted once per copy, in ordinary world coordinates — so a new floating object
+  turns up in every copy without knowing folds exist. See `AGENTS.md` §5 before
+  adding one, and `carry_through_wrap` if it remembers a position between frames.
 - **The seam stays a hard line.** Because the art is cut by the crease exactly
   as the geometry is, two flaps meeting at a seam show two tiles cut mid-pattern
   against each other. Nothing blends, blurs or fades across it. That is
@@ -569,114 +555,23 @@ Where the shipped lights are, and what each is for:
 | `e_vault` | east | inside east's pre-placed fold: invisible from the region, and the only thing lighting the vault when you arrive through door W1 |
 | `e_reward` | east | over the reward the pressure plate opens |
 
-Authoring, per region in `worlds/overworld.json`:
-
-```json
-"lights": [
-  {"id": "w_spawn", "cell": {"x": 3, "y": 13}, "color": "#ffd08a",
-   "radius": 5.0, "energy": 1.0, "flicker": 0.12}
-]
-```
-
-`radius` is in **cells**; `offset` (cell units, default centre) places the lamp
-within its tile; `flicker` is the idle amplitude, 0 for a steady lamp.
+Authoring is a `lights` array per region; `LightSource` declares the fields and
+their defaults.
 
 **No occlusion.** Lights pass through walls. Shadow casters would have to be
 re-derived per fold and would want to soften the seam, which is exactly what we
 do not want yet.
 
-## Current limits (deliberate)
+## Current limits
 
-- Fold extent is the whole world (infinite-crease semantics) — deliberately
-  kept so the "a fold over here guts a structure over there" problem is
-  *feelable*; it's the live design argument for barrier-scoped fold regions.
-- Unfold animation plays only when the unfolded fold is the newest of its space
-  (the reverse transform is exact only there); mid-stack unfolds are instant.
-- **A fold's own space is not re-derived when a fold cuts across its glue.** What
-  the fold TAKES is cut from the repeating space (so you land in sheet, not void),
-  but the flaps left behind are still drawn at the period the space came in with.
-  That configuration is already the one the game singles out — it blocks the exit
-  and reddens the glue diamond.
-- Movable seams are design-agreed but not implemented.
-- Triggers only fire in a region — a trigger inside a subspace would have to
-  splice folds into an inner-fold list mid-cascade, which the resolver does not model.
-- Unanchorable tiles (`_`, `X`) are supported by the format and covered by tests, but
-  the SHIPPED world does not place any yet. `worlds/testbed.json` does — its
-  `unanchor` region is nothing else — so the way to see one is `--world=testbed`
-  rather than a code change.
-- **You can strand yourself.** Put both hands into a fold, walk somewhere its seam
-  cannot be reached from, and short of finding a loose hand there is no way back to
-  them but `R` — which drops every fold and puts your starting pair back in your
-  hands. The accepted cost of having no remote unfold; save points are the real
-  answer and do not exist yet.
-- Loose hands are runtime state (`FoldWorld.hand_pickups`) — the one thing tracked
-  that is not `(base, folds)`. `R` rebuilds the list from the authored world, so
-  authored loose hands respawn and hands dropped in play are forgotten.
-- Lights do not cast shadows, and the seam is not lit specially — see *Art & light*.
-- The player and the overlay markers are drawn unlit, so they never disappear
-  into an unlit corner.
+The positions being deliberately held — infinite fold extent, region-only triggers,
+newest-fold-only unfold animation, unlit seams — are
+[docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) §"What is deliberately still
+open". What is merely missing or broken today is [STATUS.md](../../STATUS.md)
+§"Known issues".
 
 ## Files
 
-- `HandTypes.gd` (kernel) — the hand registry: one file per kind (colour, fuse).
-  Covered by `scripts/tests/test_hand_types.gd`.
-- `HandStock.gd` (kernel) — the slot ledger: conservation arithmetic, nothing
-  stored. Covered by `scripts/tests/test_hand_stock.gd`.
-- `HandPickup.gd` (kernel) — a hand lying in the world: base identity + point in
-  tile, exactly like a door or a lamp. One object for authored loose hands and dropped
-  hands alike.
-- `FoldLattice.gd` (kernel) — how the space you are in repeats: no periods in a
-  region, one inside a fold, two on the torus you get by folding yourself in
-  across the grain. Copies, colliders, wrap-around and framing all read off it.
-  Covered by `scripts/tests/test_fold_lattice.gd`.
-- `WrapCanvas.gd` — a canvas item that paints itself once per copy of the space.
-  Subclasses override `paint()` and never mention folds. `paint_once()` is for
-  what belongs to the frame instead (the preview strip, the full-extent guides), and
-  `carry_through_wrap()` for whatever a canvas remembers across frames.
-- `TileBatch.gd` — the sheet, batched into two canvas items, with the wrap baked
-  into the vertices. Also what the fold transition draws through: three batches,
-  two of which move by setting a position. Covered by
-  `scripts/tests/test_tile_batch.gd`.
-- `PlayerVisual.gd` — the player, drawn wherever the space says the body is.
-- `HandOrbit.gd` — the circles that float beside you, and `draw_hand`, the ONE place
-  a hand is drawn (the overlay draws loose ones through it, so they cannot drift
-  apart — which is also why the idle drift lives in `draw_hand` and no caller can
-  forget it). The spring is `WorldCore.spring_step`; the passive float is
-  `WorldCore.hand_drift`, a function of wall time rather than an integration, so it
-  needs no state and a hand dropped or picked up never restarts its phase. A
-  `WrapCanvas`, which is the whole of what it knows about folds.
-- **The falling hand**: `WorldCore.hand_ball_step` is the whole simulation (light, draggy,
-  swept collision, rolls, rests) and it is pure, so it is pinned by `test_world_core`
-  without a scene. `FoldWorld.hand_balls` is the transient in-flight list;
-  `_land_ball` converts one back into a `HandPickup`, `_carry_balls_through` takes them
-  through folds, `_wake_unsupported_hands` re-drops a resting hand whose ground has gone,
-  and `WorldCore.wrap_into_strip` is why a hand can orbit inside a fold. See `AGENTS.md`
-  for why a ball may hold a live position when nothing else in the world may.
-- `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
-  and glue segments, depenetration, anchor/fold eligibility, camera zoom and
-  lookahead). Covered by `scripts/tests/test_world_core.gd`.
-- `FoldWorld.gd` — scene driver. ONE space at a time (the region is the space
-  whose context is empty): derived geometry → batched tiles + colliders,
-  fold/unfold with player riding, folding yourself in to any depth, wrap and exit,
-  regions, doors, triggers, the tap/hold verb, the hand ledger, and the pixel
-  render target (which it resizes as the zoom changes).
-- `PlayerBody.gd` — the player's CharacterBody2D (coyote time, jump buffer, the
-  variable-height jump, squash) and the pixel-snapped camera, whose smoothing is
-  driven here so the wrap can displace it by a whole period without losing its
-  lag. It does not draw itself — `PlayerVisual` does, once per copy of the space.
-  Its readings (`look_dir`, `take_jump_press`, `motion_fraction`,
-  `motion_intensity`) and its jump arithmetic (`gravity_scale`, `step_fall`,
-  `jump_height_for_hold`) are covered by `scripts/tests/test_player_body.gd`.
-- `WorldOverlay.gd` — anchors, strip preview strip, seam markers, glue lines,
-  doors, loose hands. A `WrapCanvas`: it draws one copy's worth and they appear
-  in every copy. Seam diamonds are one per meeting CELL, since folds can share one
-  (`FoldWorld.seam_markers`). Stroke widths are multiples of one art pixel.
-- `PixelArt.gd` — how big an art pixel is; the one place that says so, including
-  the target size a given zoom needs (`target_size`).
-- `TileAtlas.gd` — the tileset: kinds, variants, and base-space UVs for pieces.
-- `LightRig.gd` — lit materials, per-frame light uniforms, lamp glyphs.
-- Audio lives outside this directory: `scripts/systems/Sounds.gd` is the
-  vocabulary and the mix, `AudioManager` is the autoload that plays it. `FoldWorld`
-  and `PlayerBody` only ever call into it — see `_deny` and `_update_music`.
-- Scene flows in `scripts/tests/test_fold_world.gd`; what the world sounds like in
-  `scripts/tests/test_world_audio.gd`.
+The code map is [docs/REFERENCE.md](../../docs/REFERENCE.md) — one table per layer,
+naming what each file is responsible for. It used to be repeated here at greater
+length, which made three copies of the same list counting the one in `AGENTS.md`.

@@ -17,39 +17,13 @@ If Godot's config directory is sandboxed, redirect `HOME`:
 HOME=/tmp/godot-home ./run_tests.sh
 ```
 
-Directly, without the wrapper:
-
-```bash
-godot --path . --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/ -gexit
-```
-
-**After adding or renaming a `class_name`**, run `godot --headless --editor --quit` once so
-the global class registry updates — otherwise you will see spurious
-"Identifier not declared in the current scope" parse errors that have nothing to do
-with your change.
-
 ## Layout
 
-One `test_<subject>.gd` per subject, matching the source file it covers.
+One `test_<subject>.gd` per subject, matching the source file it covers — so `ls`
+answers "what is covered" and there is no hand-maintained index here to fall behind
+the directory. (There was one. It listed half the scripts.)
 
-| File | Covers |
-|---|---|
-| `test_geometry_core.gd` | Sutherland-Hodgman, epsilon, area/centroid |
-| `test_collision_core.gd` | Polygon clipping under folds |
-| `test_base_grid.gd` | The immutable base model |
-| `test_fold_replay.gd` | The derivation engine |
-| `test_folded_state.gd` | Per-position stacks, dominant type |
-| `test_fold_unfold_inverse.gd` | Unfold as drop-and-re-derive |
-| `test_base_frame.gd` | Base ↔ derived point transport |
-| `test_tile_types.gd` | The tile registry |
-| `test_occupants.gd` | Entities riding tiles; split-on-unfold |
-| `test_trigger_cascade.gd` | Fold-on-enter cascade |
-| `test_world_data.gd` | World format + the shipped world |
-| `test_world_core.gd` | Map parsing, seams, anchor/fold eligibility, camera zoom + lookahead |
-| `test_player_body.gd` | Look/point keys, velocity-as-fraction-of-limits, motion scalar |
-| `test_audio_manager.gd` | Buses, playback, volume, the `Sounds` registry |
-| `test_world_audio.gd` | **Scene-driven**: that the world is actually heard |
-| **`test_fold_world.gd`** | **Scene-driven integration** |
+Two are different, and both deliberately:
 
 `test_fold_world.gd` is the important one. It instantiates the real world scene and
 drives the actual beats — riding a flap, being pinched into a fold, folding inside a
