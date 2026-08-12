@@ -126,10 +126,15 @@ static func draw_hand(on: CanvasItem, at: Vector2, kind: int, seed: float = 0.0,
 
 ## The one clock every hand drifts on.
 ##
-## Wall time, not accumulated delta: the drift is a function of absolute time rather
-## than an integration, so there is no state to keep and nothing to keep in sync. A
-## hand you drop, a hand that pops out of a burst and a hand still in your slots are
-## all read off the same clock, so none of them restarts its float at zero — which is
-## what would give away that the world had just handed you a different object.
+## WORLD time, not wall time, and still not an integration: the drift is a function of
+## absolute time, so there is no state to keep and nothing to keep in sync. A hand you
+## drop, a hand that pops out of a burst and a hand still in your slots are all read
+## off the same clock, so none of them restarts its float at zero — which is what
+## would give away that the world had just handed you a different object.
+##
+## It reads `WorldClock` rather than `Time` so that a hand stops floating when the
+## world stops. A frozen world with the hands still bobbing in it is a paused game
+## with its decorations left running, which is exactly the thing a still frame is
+## supposed to say it is not.
 static func drift_time() -> float:
-	return float(Time.get_ticks_msec()) / 1000.0
+	return WorldClock.now()

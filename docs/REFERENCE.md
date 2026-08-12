@@ -71,6 +71,7 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping | `PixelArt.gd` |
 | **The tileset.** Kinds, variants, and base-space UVs for cut fragments | `TileAtlas.gd` |
 | Lit materials, per-frame light uniforms, lamp glyphs | `LightRig.gd` |
+| **What time it is for things in the world.** Stops when the world does; everything that drifts, throbs or flickers reads it | `WorldClock.gd` |
 | Controls and the design beats | `README.md` |
 
 `FoldWorld.gd` is the largest file and the one to read first if you want to
@@ -98,6 +99,8 @@ understand how the pieces meet. Its header comment is the map.
 | …a hand get placed? | `FoldWorld.begin_aim()` / `move_aim()` / `finish_aim()` → `place_hand(cell)` |
 | …time stop while you aim? | `FoldWorld.placing()` — `_physics_process` returns early and the body is `frozen` |
 | …the cursor know how far it may go? | `WorldCore.within_anchor_reach` / `clamp_to_anchor_reach`, radius `FoldWorld.ANCHOR_REACH` |
+| …everything in the world stop animating at once? | `WorldClock` — `FoldWorld._process` stops advancing it |
+| …the screen say the world is held? | `assets/shaders/held.gdshader`, eased by `FoldWorld._tick_held_look` |
 
 ---
 
@@ -120,6 +123,7 @@ understand how the pieces meet. Its header comment is the map.
 | The authored world | `worlds/overworld.json` |
 | Main scene | `scenes/world/World.tscn` |
 | The lighting shader | `assets/shaders/pixel_lit.gdshader` |
+| The held-world screen effect | `assets/shaders/held.gdshader` |
 | Tileset layout & how to drop in a drawn one | `assets/sprites/README.md` |
 
 ---

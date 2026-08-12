@@ -367,6 +367,75 @@ func test_reset_puts_a_raised_hand_back_and_restarts_the_clock() -> void:
 	assert_eq(world.hands_held(), 2, "Both hands are yours again")
 
 
+func test_nothing_in_the_world_moves_while_a_hand_is_up() -> void:
+	# The stop has to reach the DECORATIONS, not only the simulation. A hand still
+	# bobbing and a lamp still breathing over a frozen world read as a paused game,
+	# which is the one thing a held frame is meant to say it is not — and standing
+	# still already looks exactly like a world that is not moving.
+	world.tap_action(Vector2i(1, 0))
+	var t: float = HandOrbit.drift_time()
+	var floated := WorldCore.hand_drift(1.3, HandOrbit.drift_time())
+	for _i in range(30):
+		world._process(1.0 / 60.0)
+
+	assert_eq(HandOrbit.drift_time(), t, "Half a second of frames, and the world has not aged")
+	assert_eq(WorldCore.hand_drift(1.3, HandOrbit.drift_time()), floated,
+		"...so a hand is drawn exactly where it was")
+
+	world.tap_action(Vector2i(1, 0))                        # pinned: the clock runs again
+	world._process(1.0 / 60.0)
+	assert_gt(HandOrbit.drift_time(), t, "Letting go of the clock starts it")
+
+
+func test_the_hands_beside_you_stop_where_they_are() -> void:
+	# The springs are the one thing here that INTEGRATES, so stopping them means
+	# handing them no time rather than skipping the call — which would also skip the
+	# slot bookkeeping and leave a hand drawn in a slot it had left.
+	world._process(1.0 / 60.0)
+	var at: Vector2 = world.hand_orbit._slots[0]["pos"]
+
+	world.tap_action(Vector2i(1, 0))
+	for _i in range(30):
+		world._process(1.0 / 60.0)
+	assert_eq(world.hand_orbit._slots[0]["pos"], at,
+		"The hands beside you are exactly where the stop caught them")
+
+
+func test_a_burst_ring_hangs_where_it_was_while_the_world_is_held() -> void:
+	# It is drawn out in the world with everything else, so it stops with everything
+	# else — a ring still shrinking over a still frame would be the one thing moving.
+	world.hold_action()                                     # fires the ring
+	world.hands[0] = HandTypes.PLAIN
+	var ring: float = world.burst_flash()
+	assert_gt(ring, 0.0, "A ring is showing")
+
+	world.tap_action(Vector2i(1, 0))
+	for _i in range(20):
+		world._physics_process(1.0 / 60.0)
+	assert_eq(world.burst_flash(), ring, "A third of a second held, and it has not faded")
+
+	world.tap_action(Vector2i(1, 0))
+	world._physics_process(1.0 / 60.0)
+	assert_lt(world.burst_flash(), ring, "...and it goes on fading once the world does")
+
+
+func test_the_held_look_closes_over_the_world_and_lets_go() -> void:
+	# The screen effect is the announcement, so it is the one thing that keeps
+	# animating while the world does not — and it has to finish arriving and finish
+	# leaving, or a stopped world would sit behind a screen half-way through saying so.
+	assert_eq(world._held, 0.0, "Nothing over a running world")
+
+	world.tap_action(Vector2i(1, 0))
+	for _i in range(30):
+		world._process(1.0 / 60.0)
+	assert_almost_eq(world._held, 1.0, 0.001, "Raised: the screen is fully held")
+
+	world.tap_action(Vector2i(1, 0))
+	for _i in range(30):
+		world._process(1.0 / 60.0)
+	assert_eq(world._held, 0.0, "...and pinning lets it go again")
+
+
 func test_the_cursor_previews_the_fold_that_placing_would_actually_arm() -> void:
 	# The band drawn under the cursor has to be the band the placement would arm, so
 	# both ask the same question about which hand this one pairs with. A second copy of

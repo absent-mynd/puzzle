@@ -120,11 +120,15 @@ func paint() -> void:
 
 ## A fuse, as a 0..1 throb. Frequency ramps with how far through that pair is, so it
 ## beats slowly when just lit and flutters when about to go.
+##
+## On `WorldClock`, so a fuse that has stopped burning has also stopped beating. A
+## pulse is a countdown drawn as a rhythm, and one still fluttering over a stopped
+## fuse would be counting down to nothing.
 func _pulse_at(p: float) -> float:
 	if p <= 0.0:
 		return 0.0
 	var hz: float = lerpf(2.2, 11.0, p * p)
-	var wave := 0.5 - 0.5 * cos(Time.get_ticks_msec() / 1000.0 * hz * TAU)
+	var wave := 0.5 - 0.5 * cos(WorldClock.now() * hz * TAU)
 	# Deepen the swing as well as quickening it: late pulses read as urgent, not
 	# merely fast.
 	return wave * lerpf(0.55, 1.0, p)

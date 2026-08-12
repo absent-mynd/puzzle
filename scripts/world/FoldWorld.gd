@@ -75,6 +75,12 @@ enum Mode { WORLD, SUBSPACE }
 
 const WORLD_PATH := "res://worlds/overworld.json"
 const CS := WorldCore.CELL
+## The screen effect that says the world is being held. See the shader's own header.
+const HELD_SHADER_PATH := "res://assets/shaders/held.gdshader"
+## How long the held look takes to close over the world, and to let go again. Short
+## enough to feel like a grip rather than a transition, long enough that the dither
+## dissolves in visibly rather than appearing whole.
+const HELD_EASE := 0.09
 ## Anchors are pinned at arm's length: any of the nine cells centred on the one you
 ## are standing in. What you can fold is exactly what you can stand next to.
 ##
@@ -335,6 +341,13 @@ var overlay: WorldOverlay
 var light_rig: LightRig
 ## The low-resolution render target everything in the world is drawn into.
 var pixel_view: SubViewport
+## The held look, on the rect that composites the render target. Null when the shader
+## is missing.
+var _held_mat: ShaderMaterial
+## How far into the held look the screen is, 0..1. Eased on WALL time, not world time:
+## it is the effect that announces the stop, so being stopped by it would leave the
+## world frozen behind a screen that never finished saying so.
+var _held := 0.0
 ## Decides what the camera should be showing; drives the body's lens and the
 ## render target. See WorldCamera.
 var camera: WorldCamera
@@ -437,6 +450,19 @@ func _build_pixel_view() -> void:
 	view.stretch_mode = TextureRect.STRETCH_SCALE
 	view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The whole world composites through here, which makes it the one place that can
+	# speak for all of it at once — so the held look lives on this rect rather than on
+	# anything in the scene. The HUD is a layer above and is deliberately not covered:
+	# the readout describing the stop must not be dimmed by it.
+	if ResourceLoader.exists(HELD_SHADER_PATH):
+		_held_mat = ShaderMaterial.new()
+		_held_mat.shader = load(HELD_SHADER_PATH)
+		_held_mat.set_shader_parameter("held", 0.0)
+		view.material = _held_mat
+	else:
+		# No shader, no effect, and the game is otherwise unchanged — the stop is
+		# still legible from the HUD and from nothing moving.
+		push_warning("FoldWorld: %s missing — the held look is off." % HELD_SHADER_PATH)
 	screen.add_child(view)
 
 
@@ -2205,7 +2231,18 @@ func _play_transition(pre_pieces: Array, fold: Fold, forward: bool, collapse_str
 
 
 func _process(delta: float) -> void:
+	# The world's own clock, and the ONE thing that decides whether the world is
+	# moving. Everything that drifts, throbs or flickers without being pushed reads
+	# `WorldClock`, so stopping it here stops all of them at once — and stops them
+	# where they stood, since none of them integrates.
+	#
+	# The charge, the HUD's flash and the held ease below take `delta` straight from
+	# the frame instead: they are not things in the world, and they are what tells you
+	# it has stopped.
+	if not placing():
+		WorldClock.advance(delta)
 	_tick_hold(delta)
+	_tick_held_look(delta)
 	# The body wears the charge. It is handed the number and nothing else — the body
 	# knows how to be a colour, not what folding is.
 	if player != null:
@@ -2216,7 +2253,13 @@ func _process(delta: float) -> void:
 	if overlay != null:
 		overlay.set_view(_build_overlay_view())
 	if hand_orbit != null and player != null:
-		hand_orbit.follow(hands, player.global_position, player.velocity, player.facing, delta)
+		# Zero while the world is held: the springs are an integration, so the way to
+		# stop them where they are is to hand them no time rather than to skip the
+		# call. Skipping it would also skip the slot bookkeeping, and a hand would be
+		# left drawn in a slot it had left.
+		var orbit_delta := 0.0 if placing() else delta
+		hand_orbit.follow(hands, player.global_position, player.velocity, player.facing,
+			orbit_delta)
 	# Before the early-out: the lens has to keep working while a fold plays.
 	_update_camera()
 	if _anim.is_empty():
@@ -2232,6 +2275,25 @@ func _process(delta: float) -> void:
 		light_rig.visible = true
 		geo.visible = true
 		finalize.call()
+
+
+## Close the held look over the world, or let it go again.
+##
+## Eased rather than switched, and eased on the frame's own time: a stop that arrives
+## whole in one frame reads as a dropped frame, and this is the one animation that has
+## to keep running while everything else is stopped — it is the announcement.
+##
+## The shader does the rest. It is handed a number between 0 and 1 and decides for
+## itself how a half-held world looks (a Bayer dissolve, not a crossfade); nothing
+## here knows what the effect is, which is why retuning it is a shader edit.
+func _tick_held_look(delta: float) -> void:
+	if _held_mat == null:
+		return
+	var want := 1.0 if placing() else 0.0
+	if is_equal_approx(_held, want):
+		return
+	_held = move_toward(_held, want, delta / HELD_EASE)
+	_held_mat.set_shader_parameter("held", _held)
 
 
 func _apply_anim_frame() -> void:
@@ -2414,7 +2476,14 @@ func _camera_focus() -> PackedVector2Array:
 # ---------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
-	_burst_flash_left = maxf(_burst_flash_left - delta, 0.0)
+	# The burst ring is a thing in the world and fades on the world's terms: held, it
+	# hangs where it was, like everything else drawn out there. It DOES keep fading
+	# through a fold animation — that draws no overlay at all, and a ring resuming
+	# afterwards would be a burst announcing itself late.
+	if not placing():
+		_burst_flash_left = maxf(_burst_flash_left - delta, 0.0)
+	# ...and the flash message does not, because it is not in the world. It counts how
+	# long a line of text has been readable, which is a fact about your eyes.
 	hud.tick(delta)
 	_update_status()
 	# Only the nearest handful of lights reach the shader; "nearest" is measured

@@ -287,6 +287,17 @@ Two consequences worth keeping:
   included. A one-tile shell keeps you out of what it encloses only because that
   radius is 1 (the sealed chamber is exactly that shell), so raising it is a design
   conversation, not tuning.
+- **The stop reaches the DECORATIONS, through one clock.** `WorldClock` is world
+  time: `FoldWorld._process` advances it only while the world runs, and everything
+  that drifts, throbs or flickers without being pushed reads it — the hands' idle
+  float, the fuse throb, the lamp flicker, the burst ring. It exists because there
+  were three clocks (two direct `Time.get_ticks_msec()` reads and `LightRig`'s own
+  accumulator) and all three kept running through a pause that had stopped everything
+  else, which reads as a paused game rather than as held time. **Anything new that
+  animates in the world reads `WorldClock`**, and `test_world_clock` fails the build
+  if it reads the wall clock instead. Wall time stays right for what is NOT in the
+  world: the input charge, the HUD's flash, and the held-look ease — all three are
+  about the pause rather than in it.
 - **`PlayerBody.frozen` means "do not step me" and nothing else.** It is set for two
   unrelated reasons now, and they want opposite framings: a fold ride leaves the
   velocity stale and the lens should read it as still, while a raised hand leaves it

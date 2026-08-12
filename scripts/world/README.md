@@ -84,6 +84,33 @@ under the cursor, at whatever angle the pair implies. It is fainter than an
 armed pair's band on purpose: it is a proposal you can still walk the cursor out
 of, not a fold that is coming.
 
+#### What a held world looks like
+
+A world that has stopped looks exactly like a world you are not moving in, so
+two things say the difference.
+
+**Nothing moves. At all.** Not the simulation, and not the decorations either —
+the idle float of every hand, the throb of a burning fuse, the breath of a
+flickering lamp and the fade of a burst ring all stop dead where they stood.
+They run on `WorldClock`, which is the world's own clock and only advances while
+the world does, so a held frame is a genuinely still image rather than a paused
+game with its ornaments left playing. (Three things stay live and all three are
+*about* the pause rather than in it: the charge on your body, the HUD's flash
+timer, and the effect below.)
+
+**The screen takes on a held look** (`assets/shaders/held.gdshader`): the world
+cools and dims, and a fixed 4×4 ordered dither settles over it — the same Bayer
+checker the lighting already uses for its bands, so it reads as something the
+game is made of rather than a filter laid over it. It **dissolves in** through
+that checker over about a tenth of a second, which is the only animation left
+on screen while the hold lasts.
+
+The colour drain is deliberately light. The overlay draws inside the same render
+target, so the effect reaches the markers too — and those are drawn unlit
+precisely so that what you navigate and fold by never dims. Wash them out and
+the cursor stops saying which *kind* of hand is about to be spent, which is the
+decision the pause exists to let you make.
+
 The charge is real time, not world time, so a raised hand can be popped back
 down: hold F until you turn teal and let go, and the placement is cancelled, the
 burst fires around you, and the clock starts again exactly as it would have.
