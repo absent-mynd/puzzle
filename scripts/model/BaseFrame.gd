@@ -13,7 +13,7 @@ class_name BaseFrame extends RefCounted
 ## points — exact through arbitrary fold/unfold sequences, rather than approximate
 ## crease arithmetic.
 ##
-## This is kernel-level: it depends only on the piece list, so both the world
+## This is kernel code: it depends only on the piece list, so both the world
 ## view and the pure derivation (trigger cascades) can use it.
 
 ## Index pieces by their plane cell for point queries.

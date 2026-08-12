@@ -2,7 +2,7 @@
 
 `worlds/testbed.json` is a **debug world**: fourteen regions holding one of
 everything the model can express, wired together so you can get at any of it in
-two door-steps. It is not a designed level, nothing in it is balanced, and
+two door-steps. It is not a designed world, nothing in it is balanced, and
 several arrangements in it are deliberately impossible. It exists so that
 "what happens if a door is on a crease" is a thirty-second question instead of
 an afternoon of editing.
@@ -134,7 +134,7 @@ below.
 
 ### `prefold` — regions that ship folded
 
-Five world-level pre-folds in one region: horizontal (sealing a vault whole,
+Five pre-folds in one region, none of them nested: horizontal (sealing a vault whole,
 and splitting the dormant door's tile), horizontal again (swallowing a door),
 one **straight through a pin** — authored folds are applied without the block
 check, so it goes, and it will not come apart — vertical (a strip of *rows*

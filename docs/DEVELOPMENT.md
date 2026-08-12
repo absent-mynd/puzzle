@@ -76,7 +76,7 @@ that had nothing to do with the change that caused them.
 - **Kernel and integration tests** (`test_fold_world`, `test_nested_folds`,
   `test_world_audio`) pin themselves to `worlds/fixtures/kernel.json` via
   `FoldWorld.world_override`. They assert against concrete geometry — a pit here, a
-  wall there — so they must not inherit whichever level happens to be shipping.
+  wall there — so they must not inherit whichever world happens to be shipping.
 - **Content tests** (`test_shipped_worlds`, `test_world_data`,
   `test_testbed_world`) read the real worlds, because checking the real content is
   the entire point.
@@ -86,7 +86,7 @@ See [`worlds/fixtures/README.md`](../worlds/fixtures/README.md). The rule:
 Neither test should be able to fail for the other's reason.
 
 Express invariants as **deltas**, not constants. `assert_eq(_total(), 5)` is a
-statement about one level's contents; `assert_eq(_total(), _start_total)` is the
+statement about one space's contents; `assert_eq(_total(), _start_total)` is the
 conservation law you actually meant.
 
 ---
@@ -190,15 +190,15 @@ frame contains.
 
 `scripts/world/FoldWorld.gd` is ~2390 lines and still the object most features get
 added to. Two seams have been lifted out (`WorldHud`, `WorldCamera`); the hand-ball
-physics has **not**, because it depends on ten separate pieces of current-level
+physics has **not**, because it depends on ten separate pieces of current-space
 state and extracting it today would only convert that into a ten-field context
 object or another back-reference.
 
-The prerequisite is a **`Level` value object**. `_compute_level` already returns
-`{base_pieces, level_folds, pieces}`, but the rest of the level's state —
+The prerequisite is a **`Space` value object**. `_compute_space` already returns
+`{base_pieces, space_folds, pieces}`, but the rest of the space's state —
 `pieces_by_pos`, `wall_polys`, `lattice`, `free_extent`, `mode`, `region_id`,
 `_spawn` — is scattered across members that `_apply_context` assigns. Gather those
-into one value and the hand field becomes `step(level, delta)` with a narrow
+into one value and the hand field becomes `step(space, delta)` with a narrow
 interface. Until then, leave it where it is.
 
 ---

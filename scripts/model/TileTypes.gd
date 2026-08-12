@@ -49,7 +49,7 @@ const UNANCHORABLE_WALL := 7
 ## (TriggerResolver) interprets the name. Kept as a string, not a Callable, so the
 ## registry stays a pure const data table.
 ##
-## `name` is what a human calls this tile — the label the level editor's palette
+## `name` is what a human calls this tile — the label the world editor's palette
 ## shows. It lives here rather than in the editor because a new tile type must
 ## still mean editing ONE file; a palette that kept its own name table would be a
 ## second place to forget.

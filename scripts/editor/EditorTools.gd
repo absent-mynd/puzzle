@@ -2,13 +2,13 @@ class_name EditorTools extends RefCounted
 
 ## EditorTools
 ##
-## Pure, headless helpers for the level editor: the tile palette, raster ops on a
+## Pure, headless helpers for the world editor: the tile palette, raster ops on a
 ## region's ASCII rows, the arithmetic of resizing a canvas, and the guide geometry
 ## that shows where a pre-placed fold WOULD cut without folding it.
 ##
 ## Everything here is static and side-effect free, and none of it touches a Node.
 ## The split mirrors `WorldCore` / `FoldWorld`: this file is the part you can assert
-## about in a headless test, `LevelEditor` is the part with a mouse in it.
+## about in a headless test, `WorldEditor` is the part with a mouse in it.
 ##
 ## Two things it deliberately does not own:
 ##

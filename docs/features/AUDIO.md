@@ -111,7 +111,7 @@ keeps the simultaneous pair sounding like two objects.
 ## Music
 
 Two beds, and which one plays is a function of where you are: `overworld` at
-world level, `subspace` inside a fold. `FoldWorld._update_music()` is called
+world space, `subspace` inside a fold. `FoldWorld._update_music()` is called
 from `_apply_context()`, the single place `mode` changes, and `play_music`
 ignores a request for the track already playing — so walking in and out of a
 fold crossfades, and everything else costs nothing.

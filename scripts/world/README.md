@@ -590,15 +590,15 @@ do not want yet.
 - Fold extent is the whole world (infinite-crease semantics) — deliberately
   kept so the "a fold over here guts a structure over there" problem is
   *feelable*; it's the live design argument for barrier-scoped fold regions.
-- Unfold animation plays only when the unfolded fold is the newest of its level
+- Unfold animation plays only when the unfolded fold is the newest of its space
   (the reverse transform is exact only there); mid-stack unfolds are instant.
-- **A fold's own level is not re-derived when a fold cuts across its glue.** What
+- **A fold's own space is not re-derived when a fold cuts across its glue.** What
   the fold TAKES is cut from the repeating space (so you land in sheet, not void),
-  but the flaps left behind are still drawn at the period the level came in with.
+  but the flaps left behind are still drawn at the period the space came in with.
   That configuration is already the one the game singles out — it blocks the exit
   and reddens the glue diamond.
 - Movable seams are design-agreed but not implemented.
-- Triggers only fire at world level — a trigger inside a subspace would have to
+- Triggers only fire in a region — a trigger inside a subspace would have to
   splice folds into an inner-fold list mid-cascade, which the resolver does not model.
 - Unanchorable tiles (`_`, `X`) are supported by the format and covered by tests, but
   the SHIPPED world does not place any yet. `worlds/testbed.json` does — its
@@ -655,7 +655,7 @@ do not want yet.
 - `WorldCore.gd` — pure logic (map parse, side classification, strip capture, seam
   and glue segments, depenetration, anchor/fold eligibility, camera zoom and
   lookahead). Covered by `scripts/tests/test_world_core.gd`.
-- `FoldWorld.gd` — scene driver. ONE space at a time (the region is the level
+- `FoldWorld.gd` — scene driver. ONE space at a time (the region is the space
   whose context is empty): derived geometry → batched tiles + colliders,
   fold/unfold with player riding, folding yourself in to any depth, wrap and exit,
   regions, doors, triggers, the tap/hold verb, the hand ledger, and the pixel

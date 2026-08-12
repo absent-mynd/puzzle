@@ -20,7 +20,7 @@ class_name LightRig extends Node2D
 ## standing *in front of* the sheet rather than painted onto it.
 ##
 ## HOW DEEP you are folded in is a tint on the same two materials rather than a
-## second pair of them (`set_depth`). Only one level is ever on screen, so a
+## second pair of them (`set_depth`). Only one space is ever on screen, so a
 ## uniform says it; and because it is a uniform rather than a material choice,
 ## folding yourself deeper than one layer tints further with no new state — the
 ## world outside is white, one fold in is lavender, two is more so.
@@ -45,7 +45,7 @@ const AMBIENT_BG := Vector3(0.40, 0.43, 0.56)
 const GAIN_FG := 1.0
 const GAIN_BG := 0.70
 
-## Hue shift per level of folded-in-ness, applied as a tint uniform so it
+## Hue shift per depth of folded-in-ness, applied as a tint uniform so it
 ## multiplies the tileset rather than replacing it. Depth 0 is the overworld.
 const TINT_WORLD := Vector3(1.0, 1.0, 1.0)
 const TINT_SUB := Vector3(0.86, 0.80, 1.12)

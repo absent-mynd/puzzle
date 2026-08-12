@@ -10,7 +10,7 @@ extends GutTest
 const SCENE := "res://scenes/world/World.tscn"
 ## The suite's OWN world, not the shipped one. These tests assert against concrete
 ## geometry — a pit here, a wall there, a door with that partner — so they must not
-## inherit whichever level happens to be shipping. See worlds/fixtures/README.md.
+## inherit whichever world happens to be shipping. See worlds/fixtures/README.md.
 const FIXTURE := "res://worlds/fixtures/kernel.json"
 const CS := 64.0
 
@@ -18,7 +18,7 @@ var world
 ## The world's hand budget when the test began. Conservation is a DELTA: the total
 ## may change only when a hand is picked up or a test injects one. Asserting against
 ## these instead of a literal keeps the invariant separate from how many hands the
-## fixture happens to contain — the coupling that turned an edited level into
+## fixture happens to contain — the coupling that turned an edited world into
 ## "[13] expected to equal [5]" across a dozen tests that were all working fine.
 var _start_total := 0
 var _start_loose := 0
@@ -74,7 +74,7 @@ func test_player_rides_a_side_flap_and_unfold_returns() -> void:
 	assert_almost_eq(world.player.global_position.x, start.x + 4 * CS, 130.0,
 		"A-side rides shift_a (4 cells right, +/- depenetration slack)")
 
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	assert_eq(world.folds.size(), 0, "Unfold removes the fold")
 	assert_almost_eq(world.player.global_position.x, start.x, 130.0,
 		"Unfold carries the player back exactly")
@@ -286,7 +286,7 @@ func test_pairs_fire_in_fuse_order_not_placement_order() -> void:
 	assert_eq(world.armed.size(), 2, "Both armed")
 
 	# Stand clear of the swift strip, or its fold swallows you and the patient pair —
-	# left at world level — stops resolving and quietly pauses.
+	# left in a region — stops resolving and quietly pauses.
 	world.player.teleport(Vector2(2.5 * CS, 12.5 * CS), false)
 
 	# Long enough for swift (0.65s), nowhere near patient (3.2s).
@@ -363,12 +363,12 @@ func test_unfold_blocked_by_newer_crossing_fold() -> void:
 	assert_eq(world.folds.size(), 2, "Both folds applied")
 	assert_false(world.can_unfold_fold(world.folds[0]), "Newer crossing fold blocks X")
 
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	assert_eq(world.folds.size(), 2, "Blocked unfold changes nothing")
 
-	world.unfold_level_fold(world.folds[1])            # newest first
+	world.unfold_space_fold(world.folds[1])            # newest first
 	assert_eq(world.folds.size(), 1, "Y unfolds fine")
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	assert_eq(world.folds.size(), 0, "X unfolds once nothing newer crosses it")
 
 
@@ -436,7 +436,7 @@ func test_interior_fold_rides_player_and_persists_on_exit() -> void:
 	# Inner fold PARALLEL to the glue (vertical creases, like the outer's).
 	var ok: bool = world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8))
 	assert_true(ok, "Inner fold commits")
-	assert_eq(world.level_folds().size(), 1, "Inner fold recorded")
+	assert_eq(world.space_folds().size(), 1, "Inner fold recorded")
 	assert_almost_eq(world.player.global_position.x, 13.2 * CS, 130.0,
 		"Player rides the inner A-flap inward")
 
@@ -459,8 +459,8 @@ func test_exit_blocked_by_glue_crossing_interior_fold() -> void:
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Exit is blocked by the crossing fold")
 	assert_eq(world.folds.size(), 1, "Outer fold still applied")
 
-	world.unfold_level_fold(world.level_folds()[0])
-	assert_eq(world.level_folds().size(), 0, "Inner fold unfolded from inside")
+	world.unfold_space_fold(world.space_folds()[0])
+	assert_eq(world.space_folds().size(), 0, "Inner fold unfolded from inside")
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Exit works once nothing crosses the glue")
 	assert_eq(world.folds.size(), 0, "Outer fold gone, no inner folds remained")
@@ -597,13 +597,13 @@ func test_everything_that_moves_is_drawn_in_every_copy_of_the_strip() -> void:
 
 func test_outside_unfold_splices_interiors() -> void:
 	# Rule 4: unfolding a fold from the outside carries its inner folds
-	# into the level at its index.
+	# into the space at its index.
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
 	var x: Fold = world.folds[0]
 	var inner := Fold.create(500, Vector2i(22, 3), Vector2i(25, 3), CS)
 	var arr: Array[Fold] = [inner]
 	world.inner_folds[x.fold_id] = arr
-	world.unfold_level_fold(x)
+	world.unfold_space_fold(x)
 	assert_eq(world.folds.size(), 1, "Inner fold spliced into the world on outside unfold")
 	assert_eq(world.folds[0].fold_id, 500, "The spliced fold is the inner one")
 
@@ -850,7 +850,7 @@ func test_a_standing_fold_holds_the_hands_and_unfolding_returns_them() -> void:
 	assert_eq(world.hands_held(), 0, "...so you are holding none")
 	assert_eq(_total(), _start_total, "Conserved")
 
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	assert_eq(world.hands_held(), 2, "Unfolding gave them back")
 	assert_eq(_total(), _start_total, "Still conserved")
 
@@ -864,7 +864,7 @@ func test_a_fold_gives_back_the_same_kinds_it_took() -> void:
 	assert_eq(world.folds[0].held_hands, [HandTypes.SWIFT, HandTypes.PATIENT] as Array[int],
 		"The fold is holding a swift and a patient hand")
 
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	var back: Array = world.hands.duplicate()
 	back.sort()
 	assert_eq(back, [HandTypes.SWIFT, HandTypes.PATIENT], "Both kinds came home")
@@ -1206,7 +1206,7 @@ func test_a_burst_leaves_its_hands_within_reach() -> void:
 
 	# Measured from where the burst LEAVES you, not from where you fired it: this burst
 	# opens a fold, and an unfold rides you back along the flap. The hands are let go at
-	# your feet after that move (see `unfold_level_fold`), which is the whole point of the
+	# your feet after that move (see `unfold_space_fold`), which is the whole point of the
 	# fix — measuring from the pre-burst spot is what a stale coordinate looks like.
 	var stand: Vector2 = world.player.global_position
 	var reach := PlayerBody.RADIUS + 8.0
@@ -1343,7 +1343,7 @@ func test_a_hand_that_runs_off_the_end_of_a_band_is_turned_back_into_it() -> voi
 	# itself rather than letting you go. That is the rule for the body (`_wrap_body`),
 	# and it has to be the rule for a hand, because they are the same event.
 	#
-	# It was not. The ball took the WORLD-level answer instead — `_recover_lost_hand`,
+	# It was not. The ball took the REGION-level answer instead — `_recover_lost_hand`,
 	# which settles the hand at the player's feet. Inside a fold that point is routinely
 	# outside the strip, so the hand bound to nothing, was put back in the air, drifted
 	# out again and was recovered again, indefinitely. Nothing caught it: the ledger
@@ -1429,7 +1429,7 @@ func test_unfolding_while_holding_one_leaves_the_spare_at_your_feet() -> void:
 	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
 	var total_before: int = world.hands_total()
 
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	assert_eq(world.hands_held(), 2, "One of the two filled your free slot")
 	assert_eq(world.hands_total(), total_before, "Nothing created or destroyed")
 	_step_flight()
@@ -1444,7 +1444,7 @@ func test_the_spare_hand_can_actually_be_picked_up_afterwards() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
 	world.hands[0] = HandTypes.SWIFT
 	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	_step_flight()
 
 	var spare = null
@@ -1465,7 +1465,7 @@ func test_the_spare_lands_on_ground_that_still_exists() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
 	world.hands[0] = HandTypes.SWIFT
 	world.player.teleport(Vector2(24.5 * CS, 12.5 * CS), false)
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	_step_flight()
 
 	for entry in world.loose_hand_points():
@@ -1731,7 +1731,7 @@ func test_folding_a_lamp_away_removes_it_from_the_overworld() -> void:
 	assert_eq(_light_ids(), ["w_chamber", "w_spawn"],
 		"the folded-away lamp is not in the world at all — it casts nothing here")
 
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	assert_eq(_light_ids(), ["w_chamber", "w_pit", "w_spawn"],
 		"unfolding re-derives it back into the world")
 

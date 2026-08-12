@@ -29,9 +29,9 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 
 | Concern | File |
 |---|---|
-| **The current level**: what space the player is in — its pieces, collision geometry, how it repeats, how far the one non-repeating axis runs. The value that lets a collaborator be handed "where you are" instead of the whole world | `Level.gd` |
+| **The current space**: what space the player is in — its pieces, collision geometry, how it repeats, how far the one non-repeating axis runs. The value that lets a collaborator be handed "where you are" instead of the whole world | `Space.gd` |
 | Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
-| Immutable base level: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
+| Immutable base space: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
 | One base tile: stable `base_id`, `grid_position`, `type`, per-instance `data` | `BaseTile.gd` |
 | One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel`, `held_hands` | `Fold.gd` |
 | **The derivation engine.** `derive()`, `derive_pieces()`, `apply_one_fold()` — replays a fold list over the base grid | `FoldReplay.gd` |
@@ -83,7 +83,7 @@ understand how the pieces meet. Its header comment is the map.
 | …a fold get committed? | `FoldWorld.do_fold()` / `do_sub_fold()` |
 | …the player ride a flap? | `do_fold()` → `BaseFrame.world_point_from_base` → `WorldCore.depenetrate` |
 | …getting pinched into a fold work? | `do_fold()`, the `dest == null` branch |
-| …a subspace get derived? | `FoldWorld._compute_level()` / `_apply_context()` |
+| …a subspace get derived? | `FoldWorld._compute_space()` / `_apply_context()` |
 | …unfold blocking work? | `FoldWorld.can_unfold_fold()`, `WorldCore.segment_intersects_strip` |
 | …exiting a subspace work? | `FoldWorld.try_exit()`, `exit_blocker()` |
 | …a door find its partner? | `FoldWorld._check_doors()`, `BaseFrame.resolve_base_point` |

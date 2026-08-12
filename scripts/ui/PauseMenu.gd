@@ -2,7 +2,7 @@
 ##
 ## In-world pause overlay: resume, respawn at the last checkpoint, settings, or quit.
 ##
-## There is no level select or main menu to return to — the world is continuous, so
+## There is no title screen or main menu to return to — the world is continuous, so
 ## "restart" means respawn, not reload. `respawn_requested` is what the world listens
 ## for; how far back a respawn goes is the world's business, not the menu's.
 

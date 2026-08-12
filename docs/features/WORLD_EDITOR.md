@@ -244,9 +244,9 @@ A fold entry is:
 
 `in` is the **index path of the subspaces the fold lives in**: `[]` (or absent)
 is the region's own sheet, `[0]` is inside the subspace of the region's first
-pre-placed fold, `[0, 1]` one level deeper. `WorldData.fold_pairs` returns only
+pre-placed fold, `[0, 1]` one step deeper. `WorldData.fold_pairs` returns only
 the entries with an empty path, so a nested one is authored, saved and drawn but
-does not ship folded — rather than being applied at world level, where its
+does not ship folded — rather than being applied at world space, where its
 anchors would fold a stranger part of the region.
 
 ### What implementing it would take
@@ -274,7 +274,7 @@ them.
    tool as-is and keeps "a canvas is a sheet you paint on" true.
 
 The reason to defer is item 2's interaction with `AGENTS.md` §open question
-"Triggers are world-level only" — the resolver does not model splicing folds
+"Triggers are region-level only" — the resolver does not model splicing folds
 into an inner-fold list mid-cascade either. Both want the same machinery, and
 building it once for both is better than building it twice.
 

@@ -2,8 +2,8 @@ class_name BaseTile extends Resource
 
 ## BaseTile
 ##
-## Immutable identity for one original grid square in the base (unfolded) level.
-## Base tiles are created once at level load and NEVER mutate. The folded
+## Immutable identity for one original grid square in the base (unfolded) space.
+## Base tiles are created once at world load and NEVER mutate. The folded
 ## configuration is derived by replaying folds over the base grid (see FoldReplay).
 ##
 ## There is NO "null" type here: void = the ABSENCE of any layer at a plane

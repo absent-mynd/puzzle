@@ -2,7 +2,7 @@ class_name WorldEditor extends Node2D
 
 ## WorldEditor
 ##
-## The level editor: an MS-Paint canvas for terrain, on a Mural-style board of
+## The world editor: an MS-Paint canvas for terrain, on a Mural-style board of
 ## canvases you can arrange, resize and connect.
 ##
 ## It is called a WORLD editor and not a level editor because there are no levels

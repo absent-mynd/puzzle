@@ -2,7 +2,7 @@ class_name EditorBoard extends Node2D
 
 ## EditorBoard
 ##
-## The drawing half of the level editor: the infinite board, the region cards on
+## The drawing half of the world editor: the infinite board, the region cards on
 ## it, and every overlay that shows what an authored world contains.
 ##
 ## The board's coordinate space IS a region's local space, scaled 1:1 — a cell is

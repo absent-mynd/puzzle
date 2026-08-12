@@ -643,7 +643,7 @@ func _refresh_issues(doc: EditorDoc) -> void:
 	var issues := doc.validate()
 	var errors := 0
 	for issue in issues:
-		if issue["level"] == "error":
+		if issue["severity"] == "error":
 			errors += 1
 	var warnings := issues.size() - errors
 	if issues.is_empty():
@@ -656,7 +656,7 @@ func _refresh_issues(doc: EditorDoc) -> void:
 
 	var lines: Array = []
 	for issue in issues:
-		var bad: bool = issue["level"] == "error"
+		var bad: bool = issue["severity"] == "error"
 		var where := "" if issue["region"] == "" else "%s: " % issue["region"]
 		lines.append("[color=%s]%s[/color] %s%s" % [
 			C_BAD.to_html(false) if bad else C_WARN.to_html(false),

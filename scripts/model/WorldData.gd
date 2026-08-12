@@ -8,7 +8,7 @@ extends Resource
 ##
 ## Replaces the old per-level LevelData. Two things changed with the pivot:
 ##
-##   - A world is not a level. There is no par, no fold budget, no difficulty rating,
+##   - A world is not a space. There is no par, no fold budget, no difficulty rating,
 ##     no win condition to score — the goal is somewhere in the world, and reaching it
 ##     is the whole game. What used to be "which level" is now "which region".
 ##   - Tiles are authored as ASCII ROWS, not a sparse position->type dictionary. For a
@@ -26,11 +26,11 @@ extends Resource
 ## A fold entry is `{"anchor1": {x,y}, "anchor2": {x,y}, "in": [i, ...]}`. `in` is the
 ## INDEX PATH of the subspaces this fold lives in — `[]` (or absent) is the region's own
 ## sheet, `[0]` is inside the subspace of the region's first pre-placed fold, `[0, 1]`
-## one level deeper. It is reserved, not yet implemented: `fold_pairs` returns only
-## world-level entries, so a nested one is authored, saved and drawn by the editor but
+## one step deeper. It is reserved, not yet implemented: `fold_pairs` returns only
+## region-level entries, so a nested one is authored, saved and drawn by the editor but
 ## does NOT ship folded. See `docs/features/WORLD_EDITOR.md` §"Nested pre-placed folds"
 ## for what implementing it would take. Ignoring it is the deliberate choice — applying
-## a nested fold's anchors at world level would fold a stranger part of the region.
+## a nested fold's anchors in a region would fold a stranger part of the region.
 
 ## Prefix of the command-line flag that names a world file to open instead of the
 ## shipped one: `-- --world=res://worlds/testbed.json`.
@@ -63,7 +63,7 @@ const WORLD_FLAG := "--world="
 ##   "editor":    Dictionary,     AUTHORING ONLY — see below. The game never reads it.
 ## }
 ##
-## `editor` is the level editor's scratch space, carried through the file so a
+## `editor` is the world editor's scratch space, carried through the file so a
 ## half-finished design survives a save. Nothing in `scripts/world/` may read it:
 ## a region's PLACE on the editor board is not a fact about the world (regions have
 ## no spatial relationship to each other — they are separate sheets), and a fold
@@ -246,7 +246,7 @@ func spawn_px(id: String) -> Vector2:
 	return (regions[id]["spawn"] as Vector2) * cell_size
 
 
-## A region's WORLD-LEVEL pre-placed folds as [anchor1, anchor2] Vector2i pairs, in
+## A region's OWN pre-placed folds — the ones not nested inside another — as [anchor1, anchor2] Vector2i pairs, in
 ## order. Entries with a non-empty `in` path are nested inside another fold's subspace
 ## and are SKIPPED: the world boot applies this list to the region's own sheet, and a
 ## nested fold's anchors mean nothing there. See the `folds` note in the header.

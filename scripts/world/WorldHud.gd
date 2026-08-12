@@ -29,7 +29,7 @@ const FLASH_TIME := 2.5
 const BG_BASE := Color("0a0b12")
 const BG_DEEP := Color("140a2a")
 
-## How fast the ground reaches BG_DEEP as you nest. At 0.7 per level you are most
+## How fast the ground reaches BG_DEEP as you nest. At 0.7 per depth you are most
 ## of the way there by the second fold, which is where "deep" stops being news.
 const DEPTH_TINT_RATE := 0.7
 

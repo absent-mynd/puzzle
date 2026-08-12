@@ -1,16 +1,16 @@
-class_name Level extends RefCounted
+class_name Space extends RefCounted
 
 ## Everything true about the space the player is standing in right now.
 ##
 ## "One space at a time" is the rule the whole game is built on (see FoldWorld's
-## header): the region world is simply the level with an empty fold context, a
-## subspace is a level with one, and a subspace of a subspace is a level with two.
-## That was always the design — but the *state* of the current level was scattered
+## header): the region world is simply the space with an empty fold context, a
+## subspace is a space with one, and a subspace of a subspace is a space with two.
+## That was always the design — but the *state* of the current space was scattered
 ## across a dozen separate members of `FoldWorld`, all written in three places and
 ## read from everywhere.
 ##
 ## The cost of that scattering was not tidiness. It was that nothing could be handed
-## "the current level" as an argument, so every collaborator that needed more than
+## "the current space" as an argument, so every collaborator that needed more than
 ## one or two facts about it had to be handed `FoldWorld` itself — which is how
 ## `WorldOverlay` ended up holding an untyped back-reference and reaching into two
 ## dozen members, and why the hand-ball physics could not be lifted out at all.
@@ -21,10 +21,10 @@ class_name Level extends RefCounted
 
 # --- Which sheet, and where in it ---
 
-## The region this level belongs to. A level is always inside exactly one.
+## The region this space belongs to. A space is always inside exactly one.
 var region_id := ""
 
-## The region's authored grid. The level derives from it but is not it: inside a
+## The region's authored grid. The space derives from it but is not it: inside a
 ## fold, `base_pieces` is the captured strip, while this stays the whole region.
 var base: BaseGrid = null
 
@@ -36,16 +36,16 @@ var spawn := Vector2.ZERO
 ## "is this a subspace" is the only part of the enum anything here needs.
 var in_subspace := false
 
-## The fold whose subspace this is, or null at region level.
+## The fold whose subspace this is, or null at region space.
 var host_fold: Fold = null
 
 # --- The geometry, derived ---
 
-## This level's own base: the region's identity pieces at world level, the parent's
+## This space's own base: the region's identity pieces at world space, the parent's
 ## captured strip inside a fold.
 var base_pieces: Array = []
 
-## `base_pieces` with this level's fold list replayed over it. What is on screen.
+## `base_pieces` with this space's fold list replayed over it. What is on screen.
 var pieces: Array = []
 
 ## `pieces` indexed by plane position, for point lookups.
@@ -92,6 +92,6 @@ func turn_back_point() -> Vector2:
 	return host_fold.crease_point1 + period * 0.5
 
 
-## How deep in folds this level sits. 0 is the region world.
+## How deep in folds this space sits. 0 is the region world.
 func depth() -> int:
 	return lattice.depth()

@@ -138,12 +138,12 @@ should be *felt* in play before it is engineered away. Do not quietly fix it.
 
 A fold's excised strip is not deleted — it is captured (`WorldCore.capture_strip`) as
 a real piece list retaining `base_id` and `src_offset`. Being pinched into a fold
-enters that list as a *level* with the same rules as the outside: you can fold within
+enters that list as a *space* with the same rules as the outside: you can fold within
 it, and inner folds persist into the world when you exit.
 
 **Why this needed no new machinery:** a subspace's base pieces are just the parent's
 strip content, and its fold list is just another `Array[Fold]`. So
-`FoldWorld._compute_level(path)` derives any level — region, strip, or a subspace
+`FoldWorld._compute_space(path)` derives any space — region, strip, or a subspace
 of a subspace — by the same replay. Recursion came free because the strip kept its base
 identity.
 
@@ -175,7 +175,7 @@ segment. The same test against a fold's two glue lines gates exiting a subspace.
 fold). Simpler, but far less interesting — it forbids legal, comprehensible
 configurations, and it cannot express the situation that makes subspaces tense: an
 inner fold whose creases are not parallel to the glue *locks you inside* until you
-undo it. One geometric predicate, applied at every level, produces that for free.
+undo it. One geometric predicate, applied at every space, produces that for free.
 
 ---
 
@@ -286,9 +286,9 @@ scene-driven `test_fold_world.gd` is what catches integration regressions.
 
 - **Fold extent** (infinite creases) — see Decision 3.
 - **No nested pinch:** you cannot fold yourself deeper while already inside a fold.
-- **Triggers are world-level only:** firing inside a subspace would require splicing
+- **Triggers are region-level only:** firing inside a subspace would require splicing
   folds into an inner-fold list mid-cascade.
-- **Unfold animation** plays only for newest-fold unfolds at world level; the reverse
+- **Unfold animation** plays only for newest-fold unfolds in a region; the reverse
   transform is exact only there.
 - **Lights do not cast shadows,** and the seam is not lit or blended specially.
   Occluders would have to be re-derived per fold and would want to soften the seam,

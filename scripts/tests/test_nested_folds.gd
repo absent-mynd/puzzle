@@ -3,7 +3,7 @@ extends GutTest
 ## Folding yourself deeper than one layer.
 ##
 ## A fold's subspace is a real place, and folding while you are in one is the same
-## act as folding outside one — so being swallowed twice puts you two levels down,
+## act as folding outside one — so being swallowed twice puts you two folds deep,
 ## and the space you are standing in is whatever the two folds together make of it.
 ##
 ## The headline case is the PERPENDICULAR one: fold yourself into a vertical strip,
@@ -13,7 +13,7 @@ extends GutTest
 const SCENE := "res://scenes/world/World.tscn"
 ## The suite's OWN world, not the shipped one. These tests assert against concrete
 ## geometry — a pit here, a wall there, a door with that partner — so they must not
-## inherit whichever level happens to be shipping. See worlds/fixtures/README.md.
+## inherit whichever world happens to be shipping. See worlds/fixtures/README.md.
 const FIXTURE := "res://worlds/fixtures/kernel.json"
 const CS := 64.0
 
@@ -57,8 +57,8 @@ func test_the_inner_fold_is_recorded_as_an_interior_of_the_outer() -> void:
 	_pinch_again()
 	assert_eq((world.inner_folds[outer.fold_id] as Array).size(), 1,
 		"The fold you made inside belongs to the fold you were inside")
-	assert_eq(world.level_folds().size(), 0,
-		"...and the level you are on now is fresh — nothing folded in here yet")
+	assert_eq(world.space_folds().size(), 0,
+		"...and the space you are on now is fresh — nothing folded in here yet")
 
 
 func test_folding_across_the_grain_puts_you_on_a_torus() -> void:
@@ -126,13 +126,13 @@ func test_surfacing_comes_up_one_layer_at_a_time() -> void:
 
 func test_the_inner_fold_persists_when_you_leave_it_standing() -> void:
 	# Surfacing by the glue anchor UNFOLDS the fold you came out of, so to leave
-	# one standing you have to go up past it — which splices it into the level
+	# one standing you have to go up past it — which splices it into the space
 	# above exactly as an inner fold always has.
 	_pinch_over_pit()
 	world.player.teleport(Vector2(11.2 * CS, 12.5 * CS), false)   # clear of the strip
 	world.do_sub_fold(Vector2i(12, 8), Vector2i(15, 8))           # rides, does not swallow
 	assert_eq(world.context.size(), 1, "Rode the flap rather than being pinched")
-	assert_eq(world.level_folds().size(), 1, "The inner fold stands inside the outer one")
+	assert_eq(world.space_folds().size(), 1, "The inner fold stands inside the outer one")
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Out")
 	assert_eq(world.folds.size(), 1, "The inner fold came out with you, as a world fold")
@@ -260,7 +260,7 @@ func test_a_fold_that_swallows_you_at_depth_says_how_deep_you_are() -> void:
 # ---------------------------------------------------------------------------
 # Reaching past a glue line
 # ---------------------------------------------------------------------------
-# A level stores ONE copy of a repeating space, but a fold's strip — and the
+# A space stores ONE copy of a repeating space, but a fold's strip — and the
 # preview of it — live in the space as it repeats. Anything reaching past a glue
 # line used to find nothing there.
 

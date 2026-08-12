@@ -5,6 +5,12 @@
 **Date:** 2026-08-11
 **Status:** point-in-time diagnosis. Not a document to maintain.
 
+> **Vocabulary note.** This review was written before `docs/GLOSSARY.md` settled the
+> project's terms, and its wording is left exactly as reviewed rather than
+> retranslated — a dated record that gets edited is no longer a record. Read
+> *fragment* as **piece**, *band* as **strip** or **copy**, *primed* as **armed**,
+> *anchor* (where it means the resource) as **hand**, and `Level` as `Space`.
+
 > **Remediation status — every finding in this review is closed.** The suite is
 > **795/795 green**, the gates now actually gate, and a full run emits **0 errors**
 > where it emitted 1,964.
@@ -204,7 +210,7 @@ real one. It wants to be a once-per-hand warning, or a counter.
 >
 > This is precisely the loop `_recover_lost_hand`'s own docstring says it exists
 > to prevent; it had moved from the world level into subspaces. Nothing caught it
-> — the ledger stayed correct, the hand really was still in the strip, and the two
+> — the ledger stayed correct, the hand really was still in the band, and the two
 > tests watching an orbiting hand watched the *wrap* axis while the escape was
 > along the *free* one.
 >
@@ -248,7 +254,7 @@ mechanically enforceable — a grep for `scripts/world/` identifiers inside
 
 2,441 lines, 103 functions, one `Node2D`. Its own header comment needs 64 lines
 to introduce it, and its internal section banners enumerate thirteen distinct
-responsibilities: region loading, space derivation, input, the hand ledger, the
+responsibilities: region loading, level derivation, input, the anchor ledger, the
 fuse, folding, unfolding, hand physics, doors, animation, camera framing,
 per-frame world logic, and the HUD.
 
@@ -302,8 +308,8 @@ var world  # FoldWorld; untyped to avoid a load-order cycle
 The comment is honest about what it is doing: there is a genuine cycle between
 `FoldWorld` and `WorldOverlay`, and it is being suppressed by giving up static
 typing on the reference. The overlay then reaches into **24 distinct members** of
-`FoldWorld` — `base`, `player`, `doors`, `lattice`, `armed`, `unpaired`,
-`host_fold`, `BURST_RADIUS`, and 16 more.
+`FoldWorld` — `base`, `player`, `doors`, `lattice`, `primed`, `unpaired`,
+`sub_fold`, `BURST_RADIUS`, and 16 more.
 
 That is not a view reading a model, it is a view sharing a brain with one. The
 cycle is the real finding; the missing type annotation is just the receipt.
@@ -317,11 +323,11 @@ also breaks the cycle for real, at which point the type annotation comes back.
 >
 > `WrapCanvas` splits drawing into `prepare()` — once, before any copy — and
 > `paint()` — once per copy. Its own docstring says why: *"so a question that costs
-> something is asked once rather than once per copy."* `WorldOverlay` overrides both,
+> something is asked once rather than once per band."* `WorldOverlay` overrides both,
 > gathers eighteen answers correctly in `prepare()`, and then asks **fifteen more
 > from inside `paint()`**. Two of those are not cheap: `glue_lines()` scans every
 > base piece for every period of the lattice, and `loose_hand_points()` resolves
-> every loose hand against every piece.
+> every loose hand against every fragment.
 >
 > A region does not repeat, so at world level this costs one extra call and is
 > invisible. Inside a fold the space repeats **7** times. Two folds deep it repeats

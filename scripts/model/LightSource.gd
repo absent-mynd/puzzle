@@ -13,7 +13,7 @@ class_name LightSource extends RefCounted
 ##
 ## Everything the design asks for falls out of that one call:
 ##
-##   - Fold the light's tile away and it resolves to null at world level: the
+##   - Fold the light's tile away and it resolves to null at world space: the
 ##     lamp is gone from the overworld and casts nothing there.
 ##   - Enter that fold's subspace and the same light resolves against the strip
 ##     content, so it lights the folded-away place from inside.

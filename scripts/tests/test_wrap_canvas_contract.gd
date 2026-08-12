@@ -31,7 +31,7 @@ extends GutTest
 const ALLOCATING_QUERIES := [
 	"glue_lines", "loose_hand_points", "hand_ball_points",
 	"seam_markers", "seams_within_burst", "all_anchors", "anchor_cells",
-	"lights_here", "level_folds",
+	"lights_here", "space_folds",
 ]
 
 const WORLD_DIR := "res://scripts/world"

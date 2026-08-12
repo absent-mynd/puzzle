@@ -9,11 +9,11 @@ extends Node2D
 ##   - REGIONS: each region is its own sheet — a BaseGrid + persistent fold
 ##     list + per-fold inner folds. Fold state survives leaving.
 ##   - CONTEXT STACK: the player is in a region, and optionally inside a
-##     stack of folds (subspaces), ARBITRARILY DEEP. Each level derives purely:
-##     the level's base pieces are the parent level's strip content of the
+##     stack of folds (subspaces), ARBITRARILY DEEP. Each space derives purely:
+##     the space's base pieces are the parent space's strip content of the
 ##     entered fold, and its fold list is that fold's persistent inner folds.
-##   - ONE SPACE AT A TIME. There is no world-level path and subspace path;
-##     there is the CURRENT LEVEL, and the region world is the level with an
+##   - ONE SPACE AT A TIME. There is no region path and subspace path; there
+##     is the CURRENT SPACE, and the region world is the space with an
 ##     empty context. Its periodicity is a `FoldLattice`: no periods in a
 ##     region, one inside a fold, TWO inside a fold whose creases run across
 ##     the fold outside it — at which point you are walking on a torus. Every
@@ -113,7 +113,7 @@ const TOSS_LIFT := 110.0
 ## flag if one was passed, else `WORLD_PATH`.
 ##
 ## Set it before the node enters the tree. It exists so the scene-driven tests can
-## pin themselves to a world the SUITE owns rather than to whichever level happens
+## pin themselves to a world the SUITE owns rather than to whichever world happens
 ## to be shipping — the coupling that let one commit re-point `WORLD_PATH` and fail
 ## 60 kernel tests that had nothing to do with the change. See
 ## `worlds/fixtures/README.md`.
@@ -126,18 +126,18 @@ var world_data: WorldData
 ## region id -> {"base", "folds", "seam_segs", "inner_folds", "spawn"}
 var regions: Dictionary = {}
 ## The space the player is standing in right now. Everything below that describes
-## the current level is a VIEW onto this object rather than a member of its own —
+## the current space is a VIEW onto this object rather than a member of its own —
 ## the state lives in one place that can be passed to a collaborator, while the
 ## hundred-odd existing call sites (and the tests) go on reading `world.lattice`,
 ## `world.mode`, `world.pieces_by_pos` exactly as before.
 ##
-## Migrating those call sites to `level.x` and deleting these properties is a
+## Migrating those call sites to `space.x` and deleting these properties is a
 ## mechanical follow-up; having the object at all is what unblocks anything else.
-var level := Level.new()
+var space := Space.new()
 
 var region_id: String:
-	get: return level.region_id
-	set(v): level.region_id = v
+	get: return space.region_id
+	set(v): space.region_id = v
 ## Doors: id -> {"region", "cell", "bid", "bp", "pair"}. Points, not tiles.
 var doors: Dictionary = {}
 var _door_latch: Dictionary = {}
@@ -146,8 +146,8 @@ var region_lights: Dictionary = {}
 
 # --- Current region working state (views into regions[region_id]) ---
 var base: BaseGrid:
-	get: return level.base
-	set(v): level.base = v
+	get: return space.base
+	set(v): space.base = v
 var folds: Array[Fold] = []
 var seam_segs: Dictionary = {}
 ## fold_id -> Array[Fold]: a fold's inner folds, persistent while it lives.
@@ -155,8 +155,8 @@ var inner_folds: Dictionary = {}
 ## Loose hands lying in THIS region (a view into `hand_pickups`).
 var loose_hands: Array = []
 var _spawn: Vector2:
-	get: return level.spawn
-	set(v): level.spawn = v
+	get: return space.spawn
+	set(v): space.spawn = v
 
 ## Loose hands, region id -> Array[HandPickup]. Authored caches and hands that popped
 ## out of a burst are the SAME list and the same object — to the player they are the
@@ -172,10 +172,10 @@ var _next_trigger_id := TriggerResolver.TRIGGER_FOLD_ID_BASE
 ## on entering a tile, not re-fired every frame you stand on it.
 var _trigger_latch := -1
 ## Kept as the enum the rest of the file and the tests read, backed by the kernel's
-## plain bool — `Level` may not name a view type (Decision 9).
+## plain bool — `Space` may not name a view type (Decision 9).
 var mode: Mode:
-	get: return Mode.SUBSPACE if level.in_subspace else Mode.WORLD
-	set(v): level.in_subspace = (v == Mode.SUBSPACE)
+	get: return Mode.SUBSPACE if space.in_subspace else Mode.WORLD
+	set(v): space.in_subspace = (v == Mode.SUBSPACE)
 ## Path of entered folds (outermost first). Empty = region world.
 var context: Array[Fold] = []
 
@@ -241,53 +241,53 @@ var _burst_flash_left := 0.0
 
 # --- The fuse lives on each armed pair; see `armed`. ---
 
-# --- The CURRENT LEVEL (derived from `context` by _apply_context) ---
-# One set of these, not one per mode. The region world is the level whose context
+# --- The CURRENT SPACE (derived from `context` by _apply_context) ---
+# One set of these, not one per mode. The region world is the space whose context
 # is empty; everything below reads these regardless of how deep you are folded in.
 
-## Identity pieces of this level: the region's base at the top, the entered
-## fold's strip content at every level below it.
-var level_base: Array:
-	get: return level.base_pieces
-	set(v): level.base_pieces = v
-## ...with this level's folds replayed over it. The geometry on screen.
+## Identity pieces of this space: the region's base at the top, the entered
+## fold's strip content at every depth below it.
+var space_base: Array:
+	get: return space.base_pieces
+	set(v): space.base_pieces = v
+## ...with this space's folds replayed over it. The geometry on screen.
 var current_pieces: Array:
-	get: return level.pieces
-	set(v): level.pieces = v
+	get: return space.pieces
+	set(v): space.pieces = v
 var pieces_by_pos: Dictionary:
-	get: return level.pieces_by_pos
-	set(v): level.pieces_by_pos = v
+	get: return space.pieces_by_pos
+	set(v): space.pieces_by_pos = v
 var wall_polys: Array:
-	get: return level.wall_polys
-	set(v): level.wall_polys = v
+	get: return space.wall_polys
+	set(v): space.wall_polys = v
 var goal_polys: Array:
-	get: return level.goal_polys
-	set(v): level.goal_polys = v
+	get: return space.goal_polys
+	set(v): space.goal_polys = v
 var _on_goal := false
 
-## How this level repeats. Flat in a region, a cylinder inside a fold, a torus
+## How this space repeats. Flat in a region, a cylinder inside a fold, a torus
 ## inside two crossing ones. The single source of truth for the wrap — copies,
 ## colliders, the body's wrap-around, the camera's framing and the lights all
 ## come off this.
 var lattice: FoldLattice:
-	get: return level.lattice
-	set(v): level.lattice = v
-## Where the copies of this level are drawn, nearest first, always including
+	get: return space.lattice
+	set(v): space.lattice = v
+## Where the copies of this space are drawn, nearest first, always including
 ## ZERO. Handed to every `WrapCanvas` and baked into the terrain batch.
 var wrap_offsets: Array:
-	get: return level.wrap_offsets
-	set(v): level.wrap_offsets = v
+	get: return space.wrap_offsets
+	set(v): space.wrap_offsets = v
 ## Content extent along the one direction a cylinder does NOT repeat in — the way
 ## you can run off the end of a strip. Unused when the space is flat or a torus.
 var free_extent: Dictionary:
-	get: return level.free_extent
-	set(v): level.free_extent = v
+	get: return space.free_extent
+	set(v): space.free_extent = v
 
-## The innermost entered fold, or null at region level. Convenience: it is always
+## The innermost entered fold, or null at region space. Convenience: it is always
 ## `context.back()`.
 var host_fold: Fold:
-	get: return level.host_fold
-	set(v): level.host_fold = v
+	get: return space.host_fold
+	set(v): space.host_fold = v
 
 # --- Animation ---
 var anim_enabled := true
@@ -327,7 +327,7 @@ func _ready() -> void:
 	light_rig.z_index = 20
 
 	# The sheet: batched tiles, and one body carrying the colliders of the copies
-	# the player could reach. Both are rebuilt whenever the level changes.
+	# the player could reach. Both are rebuilt whenever the space changes.
 	geo = TileBatch.new()
 	geo.z_index = 0
 	pixel_view.add_child(geo)
@@ -543,20 +543,20 @@ func _ensure_pickups(id: String) -> Array:
 
 
 # ---------------------------------------------------------------------------
-# The current level: derived state -> visuals + colliders
+# The current space: derived state -> visuals + colliders
 # ---------------------------------------------------------------------------
-# ONE space is on screen at a time — the region world is simply the level whose
+# ONE space is on screen at a time — the region world is simply the space whose
 # context is empty. There is no second set of anything here: one derivation, one
 # batch of geometry, one body of colliders, one lattice saying how it repeats.
 
-## Rebuild the geometry of the current level from its base pieces and fold list.
+## Rebuild the geometry of the current space from its base pieces and fold list.
 ##
 ## Everything that draws is either baked here (the sheet, whose copies cost only
 ## vertices) or a `WrapCanvas` that repeats itself (the body, the hands you carry,
 ## the markers). Nothing in between, and nothing that has to be taught about folds.
 func rebuild() -> void:
-	current_pieces = level_base.duplicate()
-	for fold in level_folds():
+	current_pieces = space_base.duplicate()
+	for fold in space_folds():
 		current_pieces = FoldReplay.apply_one_fold(current_pieces, fold, CS)
 	pieces_by_pos = BaseFrame.index_by_pos(current_pieces)
 	wall_polys = WorldCore.solid_polys_of(current_pieces)
@@ -644,9 +644,9 @@ func lights_here() -> Array:
 	return out
 
 
-## The fold list of the CURRENT level: the region's folds, or the entered
+## The fold list of the CURRENT space: the region's folds, or the entered
 ## fold's persistent inner folds — at whatever depth that is.
-func level_folds() -> Array:
+func space_folds() -> Array:
 	if context.is_empty():
 		return folds
 	return _ensure_inner_folds(context.back().fold_id)
@@ -659,29 +659,29 @@ func _ensure_inner_folds(fid: int) -> Array:
 	return inner_folds[fid]
 
 
-## Derive the state of a level addressed by a fold path (pure, from region
-## working state). Returns {"base_pieces", "level_folds", "pieces"}.
+## Derive the state of a space addressed by a fold path (pure, from region
+## working state). Returns {"base_pieces", "space_folds", "pieces"}.
 ##
 ## Recursive in the path, so it is indifferent to depth: each step captures the
-## strip of the next fold out of the prefix of its own level. That is why folding
+## strip of the next fold out of the prefix of its own space. That is why folding
 ## yourself deeper needed nothing new here.
-func _compute_level(path: Array) -> Dictionary:
-	var lvl_base: Array = FoldReplay.identity_pieces(base)
-	var lvl_folds: Array = folds
+func _compute_space(path: Array) -> Dictionary:
+	var sp_base: Array = FoldReplay.identity_pieces(base)
+	var sp_folds: Array = folds
 	for F in path:
-		var i: int = lvl_folds.find(F)
-		var prefix: Array = lvl_base.duplicate()
+		var i: int = sp_folds.find(F)
+		var prefix: Array = sp_base.duplicate()
 		for k in range(i):
-			prefix = FoldReplay.apply_one_fold(prefix, lvl_folds[k], CS)
+			prefix = FoldReplay.apply_one_fold(prefix, sp_folds[k], CS)
 		# A fold takes what is in front of it in the sheet it is cut FROM. Where a
 		# strip runs past a glue line it finds the end of that sheet rather than the
 		# next copy of it — see `FoldLattice` §"What the strip contains".
-		lvl_base = WorldCore.capture_strip(prefix, F, CS)
-		lvl_folds = _ensure_inner_folds(F.fold_id)
-	var pieces: Array = lvl_base.duplicate()
-	for f in lvl_folds:
+		sp_base = WorldCore.capture_strip(prefix, F, CS)
+		sp_folds = _ensure_inner_folds(F.fold_id)
+	var pieces: Array = sp_base.duplicate()
+	for f in sp_folds:
 		pieces = FoldReplay.apply_one_fold(pieces, f, CS)
-	return {"base_pieces": lvl_base, "level_folds": lvl_folds, "pieces": pieces}
+	return {"base_pieces": sp_base, "space_folds": sp_folds, "pieces": pieces}
 
 
 ## Make the view match `context` — at any depth. The region world is the empty
@@ -689,11 +689,11 @@ func _compute_level(path: Array) -> Dictionary:
 func _apply_context() -> void:
 	host_fold = null if context.is_empty() else context.back()
 	mode = Mode.WORLD if context.is_empty() else Mode.SUBSPACE
-	level_base = _compute_level(context)["base_pieces"]
+	space_base = _compute_space(context)["base_pieces"]
 	lattice = FoldLattice.for_path(context, CS)
 
 	# How many copies to draw: enough to fill the WIDEST frame the camera can pull
-	# out to, not the current one. The count is fixed when the level is built, and
+	# out to, not the current one. The count is fixed when the space is built, and
 	# a visible end to the repetition would break the wrap the moment the lens
 	# opened.
 	var reach := WorldCore.camera_view_radius(get_viewport_rect().size, WorldCore.ZOOM_WIDEST)
@@ -704,7 +704,7 @@ func _apply_context() -> void:
 	# The one direction a cylinder does not repeat in — the way you can run off
 	# the end of a strip, and so the only one that needs a turn-back.
 	var free := lattice.free_axis()
-	free_extent = WorldCore.strip_extent(level_base, free) if free != Vector2.ZERO else {}
+	free_extent = WorldCore.strip_extent(space_base, free) if free != Vector2.ZERO else {}
 
 	# Deeper reads darker and more lavender; the sheet's tint follows in the rig.
 	hud.set_depth(context.size())
@@ -717,13 +717,13 @@ func _apply_context() -> void:
 ## a cylinder, four around a torus — one pair per axis of the lattice, drawn so
 ## the wrap reads as a real join rather than a rendering glitch.
 func glue_lines() -> Array:
-	if lattice.is_flat() or level_base.is_empty():
+	if lattice.is_flat() or space_base.is_empty():
 		return []
 	var out: Array = []
 	for period in lattice.periods():
 		var n: Vector2 = (period as Vector2).normalized()
 		var t := Vector2(-n.y, n.x)
-		var ext := WorldCore.strip_extent(level_base, t)
+		var ext := WorldCore.strip_extent(space_base, t)
 		var base_d := lattice.domain_start(n)
 		for d in [base_d, base_d + (period as Vector2).length()]:
 			out.append(PackedVector2Array([
@@ -898,7 +898,7 @@ func place_hand(dir: Vector2i) -> void:
 func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
 	var cand := candidate_anchor(dir)
 	var here := player_cell()
-	var list: Array = level_folds()
+	var list: Array = space_folds()
 	var blocked: Fold = null
 	for i in range(list.size() - 1, -1, -1):
 		var fold: Fold = list[i]
@@ -984,7 +984,7 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	for fold in releasing:
 		if animating():
 			break
-		unfold_level_fold(fold)
+		unfold_space_fold(fold)
 		freed += 1
 
 	if freed == 0:
@@ -1007,12 +1007,12 @@ func _glue_within(origin: Vector2, radius: float) -> bool:
 	return false
 
 
-## Folds of this level whose seam is in reach AND can come out right now, newest
+## Folds of this space whose seam is in reach AND can come out right now, newest
 ## first — the older of a stacked pair is exactly the one the newer is blocking, so
 ## working backwards offers the ones that can actually move.
 func _unfoldable_within(origin: Vector2, radius: float) -> Array:
 	var out: Array = []
-	var list: Array = level_folds()
+	var list: Array = space_folds()
 	for i in range(list.size() - 1, -1, -1):
 		var fold: Fold = list[i]
 		var seam: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * CS
@@ -1027,7 +1027,7 @@ func _unfoldable_within(origin: Vector2, radius: float) -> Array:
 func seams_within_burst() -> Array:
 	var out: Array = []
 	var origin := player.global_position
-	for fold in level_folds():
+	for fold in space_folds():
 		var seam: Vector2 = (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * CS
 		if seam.distance_to(origin) <= BURST_RADIUS:
 			out.append(fold)
@@ -1330,7 +1330,7 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 	# both from the same cut, and asking for them separately clipped the whole world
 	# twice. See FoldReplay.fold_and_capture.
 	#
-	# Cut from the same content `_compute_level` will hand you when it swallows
+	# Cut from the same content `_compute_space` will hand you when it swallows
 	# you, so the refusal here and the place you land agree.
 	var cut := FoldReplay.fold_and_capture(pre, fold, CS)
 	var dropped: Array = cut["dropped"]
@@ -1397,7 +1397,7 @@ func do_sub_fold(a1: Vector2i, a2: Vector2i, pinned: Array[int] = []) -> bool:
 
 
 ## Take the fold into the world: claim its id, take custody of the hands, record
-## its seam and add it to THIS level's list.
+## its seam and add it to THIS space's list.
 ##
 ## Called at the point of no return, after every refusal — `_hands_for_fold`
 ## empties slots, and a fold rejected for a pin in its span must not have cost you
@@ -1406,16 +1406,16 @@ func _commit_fold(fold: Fold, dropped: Array, pinned: Array[int]) -> void:
 	next_fold_id += 1
 	fold.held_hands = _hands_for_fold(pinned)
 	seam_segs[fold.fold_id] = WorldCore.seam_segment(fold, dropped, CS)
-	level_folds().append(fold)
+	space_folds().append(fold)
 
 
 # ---------------------------------------------------------------------------
-# Unfolding (uniform blocking rules at every level)
+# Unfolding (uniform blocking rules at every space)
 # ---------------------------------------------------------------------------
 
 ## Newer folds in the same list whose strip crosses this fold's seam block it.
 func can_unfold_fold(fold: Fold) -> bool:
-	var list: Array = level_folds()
+	var list: Array = space_folds()
 	var idx := list.find(fold)
 	if idx < 0:
 		return false
@@ -1434,7 +1434,7 @@ func can_unfold_fold(fold: Fold) -> bool:
 ## `aimed_fold` makes, so the colour never promises what the act refuses.
 func seam_markers() -> Dictionary:
 	var out: Dictionary = {}
-	for fold in level_folds():
+	for fold in space_folds():
 		var cell: Vector2i = fold.meeting_pos
 		out[cell] = bool(out.get(cell, false)) or can_unfold_fold(fold)
 	return out
@@ -1443,11 +1443,11 @@ func seam_markers() -> Dictionary:
 ## An inner fold of `fold` whose strip crosses `fold`'s glue blocks
 ## unfolding it from EITHER side (the outer seam isn't the newest fold
 ## affecting itself). Returns the blocker or null.
-func _inner_glue_blocker(fold: Fold, lvl_base: Array, list: Array, idx: int) -> Fold:
+func _inner_glue_blocker(fold: Fold, sp_base: Array, list: Array, idx: int) -> Fold:
 	var kids: Array = inner_folds.get(fold.fold_id, [])
 	if kids.is_empty():
 		return null
-	var prefix: Array = lvl_base.duplicate()
+	var prefix: Array = sp_base.duplicate()
 	for k in range(idx):
 		prefix = FoldReplay.apply_one_fold(prefix, list[k], CS)
 	var strip := WorldCore.capture_strip(prefix, fold, CS)
@@ -1487,7 +1487,7 @@ func _give_hand(kind: int) -> void:
 ## let go and the physics takes it from there.
 func _drop_hand(kind: int, at: Vector2, nudge: Vector2 = Vector2.ZERO) -> void:
 	# Seeded from the launch point, which is stable for the whole flight.
-	hand_field.launch(kind, at, level, nudge,
+	hand_field.launch(kind, at, space, nudge,
 		WorldCore.hand_drift_seed(hand_field.size(), at))
 	AudioManager.play_sfx(Sounds.HAND_DROP)
 
@@ -1507,7 +1507,7 @@ func _toss_hand(kind: int, at: Vector2) -> void:
 ## one's floor. A ball in the view you are not in simply waits — which is right, because
 ## the fold it is inside is not a place where time is passing for you either.
 func _step_hand_balls(delta: float) -> void:
-	hand_field.step(level, delta)
+	hand_field.step(space, delta)
 
 
 ## Wake any resting hand whose ground has gone.
@@ -1537,7 +1537,7 @@ func _wake_unsupported_hands() -> void:
 		loose_hands.remove_at(i)
 		# Seeded from the base tile it was lying on, so a woken hand keeps a stable
 		# drift phase rather than one that depends on how many are already up.
-		hand_field.launch(pickup.kind, Vector2(wp), level, Vector2.ZERO,
+		hand_field.launch(pickup.kind, Vector2(wp), space, Vector2.ZERO,
 			WorldCore.hand_drift_seed(pickup.base_id, pickup.bp))
 
 
@@ -1634,7 +1634,7 @@ func _land_ball(ball: Dictionary) -> void:
 ## to the subspace from now on. A ball the fold leaves nowhere — its tile excised while
 ## the view stays put — is one the strip captured, and it flies on in there.
 func _carry_balls_through(new_pieces: Array, into_sub: bool) -> void:
-	hand_field.carry_through(level, new_pieces, into_sub)
+	hand_field.carry_through(space, new_pieces, into_sub)
 
 
 func _take_back(fold: Fold) -> void:
@@ -1643,18 +1643,18 @@ func _take_back(fold: Fold) -> void:
 	fold.held_hands = [] as Array[int]
 
 
-## Unfold a fold of the CURRENT level. Its inner folds (if any) splice
-## into this level at its index — they were made in exactly this frame.
-func unfold_level_fold(fold: Fold) -> void:
-	var list: Array = level_folds()
+## Unfold a fold of the CURRENT space. Its inner folds (if any) splice
+## into this space at its index — they were made in exactly this frame.
+func unfold_space_fold(fold: Fold) -> void:
+	var list: Array = space_folds()
 	var idx := list.find(fold)
 	if idx < 0:
 		return
 	if not can_unfold_fold(fold):
 		_deny("Blocked — a newer fold crosses this seam.")
 		return
-	var lvl_base: Array = level_base
-	if _inner_glue_blocker(fold, lvl_base, list, idx) != null:
+	var sp_base: Array = space_base
+	if _inner_glue_blocker(fold, sp_base, list, idx) != null:
 		_deny("Blocked — a fold inside it crosses its seam.")
 		return
 
@@ -1665,7 +1665,7 @@ func unfold_level_fold(fold: Fold) -> void:
 	inner_folds.erase(fold.fold_id)
 	seam_segs.erase(fold.fold_id)
 
-	var new_pieces: Array = lvl_base.duplicate()
+	var new_pieces: Array = sp_base.duplicate()
 	for f in list:
 		new_pieces = FoldReplay.apply_one_fold(new_pieces, f, CS)
 	var from_piece = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
@@ -1728,15 +1728,15 @@ func unfold_level_fold(fold: Fold) -> void:
 func exit_blocker() -> Fold:
 	if host_fold == null:
 		return null
-	for fold in level_folds():
-		for seg in WorldCore.glue_segments(host_fold, level_base):
+	for fold in space_folds():
+		for seg in WorldCore.glue_segments(host_fold, space_base):
 			if WorldCore.segment_intersects_strip(seg[0], seg[1], fold):
 				return fold
 	return null
 
 
 ## Exit = unfold the entered fold from inside. Inner folds splice into the
-## parent level at its index; the strip (and you, and any pinned anchors)
+## parent space at its index; the strip (and you, and any pinned anchors)
 ## land exactly where the subspace showed them.
 func try_exit() -> void:
 	if mode != Mode.SUBSPACE or animating():
@@ -1746,8 +1746,8 @@ func try_exit() -> void:
 		return
 	var outer := host_fold
 	var parent_path := context.slice(0, context.size() - 1)
-	var plvl := _compute_level(parent_path)
-	var plist: Array = plvl["level_folds"]
+	var plvl := _compute_space(parent_path)
+	var plist: Array = plvl["space_folds"]
 	var idx := plist.find(outer)
 	if idx < 0:
 		return
@@ -1760,14 +1760,14 @@ func try_exit() -> void:
 				_deny("Blocked — a newer fold outside crosses this seam.")
 				return
 
-	var kids: Array = level_folds()
+	var kids: Array = space_folds()
 	plist.remove_at(idx)
 	for k in range(kids.size()):
 		plist.insert(idx + k, kids[k])
 	inner_folds.erase(outer.fold_id)
 	seam_segs.erase(outer.fold_id)
 
-	var new_plvl := _compute_level(parent_path)
+	var new_plvl := _compute_space(parent_path)
 	var new_pieces: Array = new_plvl["pieces"]
 	var from_piece = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
 	var dest = player.global_position
@@ -1791,7 +1791,7 @@ func try_exit() -> void:
 		_apply_context()
 		player.teleport(landed)
 		# After the view swap and the teleport, for the same reason as in
-		# `unfold_level_fold`: a hand this cannot hand you is DROPPED, and it must be
+		# `unfold_space_fold`: a hand this cannot hand you is DROPPED, and it must be
 		# dropped where you are now, in the space you are now in. Called before
 		# `_apply_context` it launched the ball into the subspace you were just
 		# leaving — tagged `in_sub` in a world that no longer had a subspace, so it could
@@ -1804,7 +1804,7 @@ func try_exit() -> void:
 			_show_flash("Unfolded — you emerge where you walked to.")
 		else:
 			_show_flash("Up one — still %d folds in." % context.size())
-	# The reverse transform is exact only for the newest fold of the level being
+	# The reverse transform is exact only for the newest fold of the space being
 	# returned to, and only when nothing spliced into it. That holds at any depth,
 	# so surfacing from three folds deep animates exactly as surfacing to the world
 	# does — drawn against the PARENT's copies, which is the space it lands in.
@@ -1823,7 +1823,7 @@ func try_exit() -> void:
 # Doors: warp points at base-tile centers, resolved recursively
 # ---------------------------------------------------------------------------
 
-## Resolve a base point inside one level; recurse into whichever fold's strip
+## Resolve a base point inside one space; recurse into whichever fold's strip
 ## holds it. Returns {"path", "pos", "pieces"} or null (dormant: the point is
 ## on a cut, or nowhere).
 func _resolve_in(base_pieces: Array, list: Array, ints: Dictionary,
@@ -1853,7 +1853,7 @@ func resolve_door(id: String) -> Variant:
 		r["inner_folds"], d["bid"], d["bp"], [])
 
 
-## A door's current position in the CURRENT view level, or null (not here /
+## A door's current position in the CURRENT view space, or null (not here /
 ## dormant here). Used for overlap checks and rendering.
 func door_point_here(id: String) -> Variant:
 	var d: Dictionary = doors[id]
@@ -2208,11 +2208,11 @@ const STRIP_SLACK := 4.0 * CS
 
 
 func _left_the_strip(point: Vector2) -> bool:
-	return level.left_the_strip(point, STRIP_SLACK)
+	return space.left_the_strip(point, STRIP_SLACK)
 
 
 func _turn_back_point() -> Vector2:
-	return level.turn_back_point()
+	return space.turn_back_point()
 
 
 func _wrap_body() -> void:
@@ -2245,7 +2245,7 @@ func _wrap_body() -> void:
 ## fold list, then the settled result is adopted: the player transports with the folds
 ## that carried them, exactly as if they had folded by hand.
 ##
-## Only fires at world level — a trigger inside a subspace would have to splice folds
+## Only fires in a region — a trigger inside a subspace would have to splice folds
 ## into an inner-fold list mid-cascade, which the resolver does not model yet.
 func _check_triggers() -> void:
 	if mode != Mode.WORLD or base == null:
@@ -2295,7 +2295,7 @@ func _check_triggers() -> void:
 ## and a slot is free because you PUT A HAND DOWN — so a cache is not a stockpile you
 ## raid on the way past, it is the second half of a fold you have already started.
 ##
-## Works at world level AND inside a subspace: a hand the fold swallowed is lying in
+## Works in a region AND inside a subspace: a hand the fold swallowed is lying in
 ## there with everything else, and taking it in there counts.
 func _check_pickups() -> void:
 	if HandStock.first_empty(hands) < 0:
@@ -2345,7 +2345,7 @@ func loose_hand_points() -> Array:
 ## overlay draws them from their own position rather than by resolving a base point.
 ## Balls flying in the other view are not here: they are not in this space.
 func hand_ball_points() -> Array:
-	return hand_field.points_in(level)
+	return hand_field.points_in(space)
 
 
 func _check_goal() -> void:
@@ -2414,7 +2414,7 @@ func _update_status() -> void:
 		# a cylinder you can run off the ends of, two is a torus with no outside.
 		hud.set_status("Region: %s   Folds: %d   Mode: INSIDE FOLD x%d — %s (%d inner)\n%s"
 			% [region_id, folds.size(), context.size(), _space_name(),
-				level_folds().size(), stock])
+				space_folds().size(), stock])
 
 
 ## What shape the space you are standing in is, from how many ways it repeats.

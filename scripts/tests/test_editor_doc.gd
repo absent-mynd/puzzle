@@ -568,7 +568,7 @@ func test_a_nested_fold_is_saved_but_not_applied():
 		{"anchor1": {"x": 1, "y": 1}, "anchor2": {"x": 5, "y": 1}},
 		{"anchor1": {"x": 2, "y": 2}, "anchor2": {"x": 4, "y": 2}, "in": [0]},
 	]
-	assert_eq(doc.world.fold_pairs("west").size(), 1, "only the world-level fold is applied")
+	assert_eq(doc.world.fold_pairs("west").size(), 1, "only the region-level fold is applied")
 	assert_eq(doc.folds_of("west").size(), 2, "the editor still sees and draws both")
 	assert_eq(doc.folds_of("west")[1]["in"], [0], "and keeps the nesting path")
 
@@ -616,10 +616,10 @@ func test_starting_hands_are_written_as_authoring_keys():
 # Validation
 # ---------------------------------------------------------------------------
 
-func _messages(doc: EditorDoc, level: String) -> Array:
+func _messages(doc: EditorDoc, space: String) -> Array:
 	var out: Array = []
 	for issue in doc.validate():
-		if issue["level"] == level:
+		if issue["severity"] == space:
 			out.append(String(issue["message"]))
 	return out
 

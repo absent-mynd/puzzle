@@ -28,7 +28,7 @@ What exists and works today:
 | **Nesting: folding yourself in, and in again** | ✅ Playable, any depth, ⚙️ untuned |
 | Regions + doors (recursive partner resolution) | ✅ Playable |
 | Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
-| Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
+| Fold-on-enter triggers | ✅ Wired in a region, **in the world** |
 | Hands: two slots, typed, conserved (`HandStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
 | One-key verb (tap = place a hand, hold = release burst) | ✅ Playable |

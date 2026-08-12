@@ -75,7 +75,7 @@ var glue: Array = []
 
 # --- The way out of a fold ---
 
-## Where the outer fold's anchors coincide on the glue, or null at region level.
+## Where the outer fold's anchors coincide on the glue, or null at region space.
 var exit_at = null
 ## False when an inner fold crosses the seam and is holding the subspace shut.
 var exit_ok := true

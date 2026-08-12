@@ -148,7 +148,7 @@ layering, and there were two sections numbered 9.
 | Derive, never mutate — change the fold list and re-derive | Decision 1 |
 | Transport by `BaseFrame`, not crease arithmetic | Decision 2 |
 | `TileTypes` is the only authority on what a tile does | Decision 5 |
-| Unfold blocking is one rule at every level | Decision 6 |
+| Unfold blocking is one rule at every depth | Decision 6 |
 | Never compare floats with `==`; use `GeometryCore.EPSILON` | Decision 8 |
 | The kernel never sees the world — enforced by `test_layering.gd` | Decision 9 |
 | Anything in the world is an occupant, resolved through `BaseFrame` | Decision 10 |
@@ -202,8 +202,8 @@ the same guard has to follow it.
 
 ### 4. One space is on screen, and `FoldLattice` says how it repeats
 
-There is no world path and subspace path. There is the **current level** — the
-region is simply the level whose `context` is empty — and one set of everything
+There is no world path and subspace path. There is the **current space** — the
+region is simply the space whose `context` is empty — and one set of everything
 derived from it. `FoldLattice` is the whole of what "this space repeats" means:
 no periods in a region, one inside a fold, **two inside a fold whose creases run
 across the fold outside it**, which is a torus. Copies, colliders, the body's
@@ -470,9 +470,9 @@ These are live, not settled. Do not close them silently in a refactor.
   the strip out of the parent's full orbit) was implemented and reverted. What it
   costs is that a strip past the glue is emptier than the space it sits in; what it
   buys is that the glue line means something.
-- **Triggers are world-level only.** A trigger inside a subspace would have to
+- **Triggers are region-level only.** A trigger inside a subspace would have to
   splice folds into an inner-fold list mid-cascade; the resolver does not model that.
-- **Unfold animation** plays only for newest-fold unfolds at world level; mid-stack
+- **Unfold animation** plays only for newest-fold unfolds in a region; mid-stack
   unfolds are instant.
 - **Jump feel is a first guess, but jump HEIGHT is level design.** How long you hold
   Space sets the height, from a ~1.25-cell tap to a ~2.6-cell full hold. The curve

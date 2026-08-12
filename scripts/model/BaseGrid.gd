@@ -2,8 +2,8 @@ class_name BaseGrid extends Resource
 
 ## BaseGrid
 ##
-## The immutable base (unfolded) level: a set of BaseTiles plus grid metrics.
-## Created once at level load and never mutated. Together with an ordered list of
+## The immutable base (unfolded) space: a set of BaseTiles plus grid metrics.
+## Created once at world load and never mutated. Together with an ordered list of
 ## folds it is the SOLE source of truth; the folded state is a pure function of
 ## (BaseGrid, folds) computed by FoldReplay.derive().
 ##

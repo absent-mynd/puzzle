@@ -37,7 +37,7 @@ godot --path . scenes/world/World.tscn -- --world=testbed   # the debug world
 Controls and the design beats are in
 [scripts/world/README.md](scripts/world/README.md).
 
-`worlds/testbed.json` is a **debug world** rather than a level: fourteen regions
+`worlds/testbed.json` is a **debug world** rather than a designed one: fourteen regions
 holding one of everything the model can express, wired star-and-ring so nothing is
 more than two doors away — every tile character, every hand kind, every trigger
 outcome, pre-placed folds in every orientation, and door cases the shipped world has

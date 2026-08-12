@@ -8,7 +8,7 @@ extends GutTest
 ## The jump is variable-height, and its shape is `gravity_scale` — a pure function
 ## of "which way am I going" and "am I still holding it". `jump_height_for_hold`
 ## integrates the very step the body takes, so the heights asserted here are the
-## heights you get in the world, and the level-design bounds (a tap clears one
+## heights you get in the world, and the space-design bounds (a tap clears one
 ## cell, a full hold two, nothing clears three) are pinned rather than hoped for.
 ##
 ## The rest of the physics (coyote time, buffering, squash) is exercised through

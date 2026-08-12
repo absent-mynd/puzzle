@@ -4,8 +4,8 @@ extends GutTest
 ## actually boots.
 ##
 ## This is the CONTENT half of the split described in `worlds/fixtures/README.md`.
-## The scene-driven suites are pinned to a fixture so a level edit cannot break the
-## fold model; the price of that is that they no longer notice a broken level either.
+## The scene-driven suites are pinned to a fixture so a world edit cannot break the
+## fold model; the price of that is that they no longer notice a broken world either.
 ## This file is what notices.
 ##
 ## It exists because of a specific hole. `test_world_data.gd` validates

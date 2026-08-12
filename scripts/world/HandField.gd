@@ -14,11 +14,11 @@ class_name HandField extends RefCounted
 ## business: `landed` when it comes to rest, `lost` when it falls out of the world
 ## entirely. `FoldWorld` answers both by making an occupant.
 ##
-## Everything it needs to know about where it is arrives as a `Level`. Before that
+## Everything it needs to know about where it is arrives as a `Space`. Before that
 ## object existed this could not be lifted out of `FoldWorld` at all — the flight
 ## depends on the collision geometry, how the space repeats, how far the one
 ## non-repeating axis runs, and whether this is a subspace, and those were a
-## dozen separate members. Passing ten things is not an interface; passing the level
+## dozen separate members. Passing ten things is not an interface; passing the space
 ## is.
 
 ## A ball came to rest. The world turns it into an occupant of the sheet.
@@ -58,14 +58,14 @@ func clear() -> void:
 ## in lockstep. The caller supplies it because the two launch sites seed from
 ## different things — a dropped hand from its launch point, a woken one from the base
 ## tile it was lying on — and that is a policy question, not a flight one.
-func launch(kind: int, at: Vector2, level: Level, vel: Vector2, drift_seed: float) -> void:
+func launch(kind: int, at: Vector2, space: Space, vel: Vector2, drift_seed: float) -> void:
 	balls.append({
 		"kind": kind,
 		"pos": at,
 		"vel": vel,
 		"resting": false,
-		"region": level.region_id,
-		"in_sub": level.in_subspace,
+		"region": space.region_id,
+		"in_sub": space.in_subspace,
 		"seed": drift_seed,
 	})
 
@@ -88,14 +88,14 @@ func readmit(ball: Dictionary) -> void:
 ## with different ground, and a ball must not fall through the other one's floor. A
 ## ball in the view you are not in simply waits — which is right, because the fold it
 ## is inside is not a place where time is passing for you either.
-func step(level: Level, delta: float) -> void:
+func step(space: Space, delta: float) -> void:
 	if balls.is_empty():
 		return
-	var solids := level.wall_polys
-	var here := level.in_subspace
+	var solids := space.wall_polys
+	var here := space.in_subspace
 	for i in range(balls.size() - 1, -1, -1):
 		var ball: Dictionary = balls[i]
-		if bool(ball["in_sub"]) != here or String(ball["region"]) != level.region_id:
+		if bool(ball["in_sub"]) != here or String(ball["region"]) != space.region_id:
 			continue
 
 		var next := WorldCore.hand_ball_step(ball, solids, delta)
@@ -113,16 +113,16 @@ func step(level: Level, delta: float) -> void:
 			# real object in a real place rather than a leak: it is still counted,
 			# still catchable, and it still lands the moment a fold puts ground in
 			# its way.
-			ball["pos"] = level.lattice.wrap(Vector2(ball["pos"]))
+			ball["pos"] = space.lattice.wrap(Vector2(ball["pos"]))
 			# The one direction a space may NOT repeat in is the one direction a
 			# thing can genuinely leave by. Turn it back the way the fold turns the
 			# player back — and on a torus there is no such direction, so nothing to
 			# do.
-			if level.left_the_strip(Vector2(ball["pos"]), STRIP_SLACK):
-				ball["pos"] = level.turn_back_point()
+			if space.left_the_strip(Vector2(ball["pos"]), STRIP_SLACK):
+				ball["pos"] = space.turn_back_point()
 				ball["vel"] = Vector2.ZERO
-		elif Vector2(ball["pos"]).y > level.base.grid_size.y * WorldCore.CELL + FALL_OUT_MARGIN:
-			# At world level there is a bottom to fall off. Rather than lose the hand
+		elif Vector2(ball["pos"]).y > space.base.grid_size.y * WorldCore.CELL + FALL_OUT_MARGIN:
+			# In a region there is a bottom to fall off. Rather than lose the hand
 			# — the one thing this system must never do — hand it back to the world to
 			# put somewhere findable.
 			balls.remove_at(i)
@@ -140,13 +140,13 @@ func step(level: Level, delta: float) -> void:
 ## belong to the subspace from now on. A ball the fold leaves nowhere — its tile
 ## excised while the view stays put — is one the strip captured, and it flies on in
 ## there.
-func carry_through(level: Level, new_pieces: Array, into_sub: bool) -> void:
-	var here := level.in_subspace
+func carry_through(space: Space, new_pieces: Array, into_sub: bool) -> void:
+	var here := space.in_subspace
 	for ball in balls:
-		if bool(ball["in_sub"]) != here or String(ball["region"]) != level.region_id:
+		if bool(ball["in_sub"]) != here or String(ball["region"]) != space.region_id:
 			continue
 		var from = BaseFrame.piece_containing(
-			level.pieces_by_pos, Vector2(ball["pos"]), WorldCore.CELL)
+			space.pieces_by_pos, Vector2(ball["pos"]), WorldCore.CELL)
 		var dest = null
 		if from != null:
 			dest = BaseFrame.world_point_from_base(
@@ -163,11 +163,11 @@ func carry_through(level: Level, new_pieces: Array, into_sub: bool) -> void:
 
 
 ## Where the balls of the current view are, for drawing.
-func points_in(level: Level) -> Array:
+func points_in(space: Space) -> Array:
 	var out: Array = []
 	for ball in balls:
-		if bool(ball["in_sub"]) != level.in_subspace \
-				or String(ball["region"]) != level.region_id:
+		if bool(ball["in_sub"]) != space.in_subspace \
+				or String(ball["region"]) != space.region_id:
 			continue
 		out.append({
 			"kind": int(ball["kind"]),

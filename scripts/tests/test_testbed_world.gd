@@ -2,7 +2,7 @@
 ##
 ## `worlds/testbed.json` is the DEBUG world: fourteen regions wired star-and-ring,
 ## one element per themed region, three mashups, and a `kitchen` that crams every
-## tile character and occupant kind into one room. It is not a designed level and
+## tile character and occupant kind into one room. It is not a designed world and
 ## nothing here asserts that it is fun or even finishable — several arrangements in
 ## it are deliberately unsolvable.
 ##
@@ -396,7 +396,7 @@ func test_a_nested_pre_placed_fold_is_authored_and_ignored():
 			flat += 1
 	assert_gt(nested, 0, "a nested entry is authored")
 	assert_eq(wd.fold_pairs("prefold").size(), flat,
-		"...and fold_pairs hands back only the world-level ones")
+		"...and fold_pairs hands back only the region-level ones")
 
 
 func test_the_routing_doors_survive_the_folds_their_region_ships_with():

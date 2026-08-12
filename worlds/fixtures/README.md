@@ -11,7 +11,7 @@ geometry — a pit at a known place, a wall you can ride, a door with a known
 partner. That is the right way to catch integration regressions.
 
 What was wrong was *which* world they got. They inherited `FoldWorld.WORLD_PATH`,
-the shipped level. So the kernel's behavioural spec was pinned to content a
+the shipped world. So the kernel's behavioural spec was pinned to content a
 designer is expected to edit, and editing it broke the spec:
 
 > Commit `113c0f0` re-pointed `WORLD_PATH` at a different world and 60 kernel
@@ -21,7 +21,7 @@ designer is expected to edit, and editing it broke the spec:
 `kernel.json` is a **frozen snapshot** of `worlds/overworld.json` as it stood
 when the suite was written, so those coordinates keep meaning what the tests
 think they mean. It changes only when someone deliberately changes what the
-tests expect — never because a level was edited.
+tests expect — never because a world was edited.
 
 ## How a test uses one
 
@@ -40,7 +40,7 @@ Tests that validate the **shipped** worlds — every authored hand stands on
 ground, every door has a partner, the spawn is solid. Those must read
 `worlds/overworld.json` and `worlds/testbed.json` directly, because checking the
 real content is the entire point. They live in `test_world_data.gd`,
-`test_testbed_world.gd` and friends, and they are how a broken level gets
+`test_testbed_world.gd` and friends, and they are how a broken world gets
 caught.
 
 The split is the point: **fixtures prove the engine works, the shipped worlds

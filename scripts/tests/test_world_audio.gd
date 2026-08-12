@@ -18,7 +18,7 @@ extends GutTest
 const SCENE := "res://scenes/world/World.tscn"
 ## The suite's OWN world, not the shipped one. These tests assert against concrete
 ## geometry — a pit here, a wall there, a door with that partner — so they must not
-## inherit whichever level happens to be shipping. See worlds/fixtures/README.md.
+## inherit whichever world happens to be shipping. See worlds/fixtures/README.md.
 const FIXTURE := "res://worlds/fixtures/kernel.json"
 const CS := 64.0
 
@@ -176,7 +176,7 @@ func test_a_hand_caught_by_a_burst_is_silent_but_a_dropped_one_is_not() -> void:
 func test_unfolding_is_heard() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
 	_listen()
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	assert_eq(world.folds.size(), 0, "it came out")
 	assert_true(_heard(Sounds.UNFOLD))
 
@@ -185,7 +185,7 @@ func test_a_blocked_unfold_is_refused_not_unfolded() -> void:
 	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))
 	world.do_fold(Vector2i(30, 8), Vector2i(30, 11))   # crosses the first's seam
 	_listen()
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 
 	assert_eq(world.folds.size(), 2, "blocked: nothing moved")
 	assert_true(_heard(Sounds.DENY), "a blocked unfold should be refused audibly")
@@ -299,7 +299,7 @@ func test_the_world_never_asks_for_a_sound_that_is_not_there() -> void:
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	world.hold_action()
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
-	world.unfold_level_fold(world.folds[0])
+	world.unfold_space_fold(world.folds[0])
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)
 	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
 	world.try_exit()
