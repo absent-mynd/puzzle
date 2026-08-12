@@ -109,11 +109,16 @@ func paint() -> void:
 ## floats because it is a hand, so no caller can forget to make one float. `seed` is
 ## that hand's own phase (see `WorldCore.hand_drift_seed`); hands sharing a seed bob in
 ## lockstep, which is only ever right for the wrap copies of one hand.
+##
+## `drift` is how far it floats, and there is exactly one caller that passes 0: the
+## placement cursor. A hand being aimed at a cell is a tool rather than an object lying
+## about, and a tool that wobbles a pixel and a half is a tool you cannot aim. Every
+## other hand takes the default, which is the point of the parameter having one.
 static func draw_hand(on: CanvasItem, at: Vector2, kind: int, seed: float = 0.0,
-		scale: float = 1.0) -> void:
+		scale: float = 1.0, drift: float = WorldCore.DRIFT_RADIUS) -> void:
 	var c: Color = HandTypes.color(kind)
 	var r: float = HAND_RADIUS * scale
-	var p := at + WorldCore.hand_drift(seed, drift_time())
+	var p := at + WorldCore.hand_drift(seed, drift_time(), drift)
 	# A darker rim so a hand stays legible against ground of its own colour.
 	on.draw_circle(p, r + 1.5, Color(c.r * 0.25, c.g * 0.25, c.b * 0.25, 0.85))
 	on.draw_circle(p, r, c)

@@ -257,6 +257,45 @@ Do not scatter volume constants at call sites, and do not add a throttle at one:
 the floor that keeps per-frame events from emptying the voice pool is a registry
 field precisely so it is solved once. See `docs/features/AUDIO.md`.
 
+### 7. Placing a hand stops the clock, and stopping it is a NON-EVENT
+
+Placing is two taps: the first raises the hand into a cursor over the nine cells of
+arm's reach, the second pins it. Between them `_physics_process` returns early and
+the body is `frozen` — see `FoldWorld.placing()`.
+
+**The freeze is implemented by not running, and it must stay that way.** Nothing is
+saved, snapshotted or restored: the fuses are not paused-and-resumed, the balls are
+not parked, the velocity is not stashed. They are simply not stepped, which is why
+resuming is exact rather than approximately exact, and why no future addition to the
+frame has to remember to opt in. **If you find yourself writing "save X on freeze,
+restore X on resume", the guard is in the wrong place** — move it up so X is never
+stepped at all. This is the same argument as §2 and Decision 1: a second copy of a
+value is a second thing that can be wrong.
+
+`_process` deliberately keeps running. The camera has to go on easing onto the cell
+being chosen, and the hold that cancels the placement has to keep counting; neither
+moves the world. If you add something to `_process` that DOES move the world, it
+needs the guard that `_physics_process` has.
+
+Two consequences worth keeping:
+
+- **Raising a hand spends nothing.** It leaves its slot at the pin, not at the
+  raise, so a cancelled placement costs exactly nothing and conservation never sees
+  a hand in a fourth state. Do not make `begin_aim` take it out of the slot early.
+- **Reach is a square, and its radius is level design.** `WorldCore.within_anchor_reach`
+  is a box of `ANCHOR_REACH` cells around your own, diagonals and your own feet
+  included. A one-tile shell keeps you out of what it encloses only because that
+  radius is 1 (the sealed chamber is exactly that shell), so raising it is a design
+  conversation, not tuning.
+- **`PlayerBody.frozen` means "do not step me" and nothing else.** It is set for two
+  unrelated reasons now, and they want opposite framings: a fold ride leaves the
+  velocity stale and the lens should read it as still, while a raised hand leaves it
+  exactly intact and the lens must go on reading it — or the frame eases shut over the
+  second you spend aiming and blooms open again when you pin. So *which* is happening
+  is `WorldCamera`'s call, off the `frozen` fact the world passes it, and
+  `motion_intensity` is a plain statement about velocity. Do not put a mode check back
+  into the body.
+
 ---
 
 ## The hand economy
@@ -264,7 +303,7 @@ field precisely so it is solved once. See `docs/features/AUDIO.md`.
 | Where a hand can be | How it gets there | How it comes back |
 |---|---|---|
 | One of your two slots | the world's `starting_hands`; walking over a loose hand | — |
-| Pinned as an anchor | tap F pointing at a cell (leaves the slot at once) | a burst in reach |
+| Pinned as an anchor | tap F to raise it, walk the cursor, tap F to pin (leaves the slot at the pin, not the raise) | a burst in reach |
 | Pinned in an ARMED pair | pairing with a reachable unpaired anchor | a burst reaching either half |
 | Held by a standing fold | the fuse going off | a burst at its seam |
 | Lying on the ground | authored by the world; overflow from a burst; a fold that failed at the fuse | walk over it |
@@ -272,6 +311,10 @@ field precisely so it is solved once. See `docs/features/AUDIO.md`.
 **One key, two directions.** Tap puts a hand down; hold fires a **release burst**.
 There is no committing press — the second hand lights a **fuse** and the pair folds
 itself. The input mirrors the economy on purpose.
+
+**Putting one down is two taps, and the world is stopped between them** (see §7
+above). A hold while a hand is raised is still a hold: it cancels the placement,
+fires the burst, and starts the clock again.
 
 Those four places always sum to the same number. **Nothing in the game creates or
 destroys a hand** — placing, committing, unfolding, bursting and picking up all just

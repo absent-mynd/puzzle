@@ -45,6 +45,9 @@ var _view := OverlayView.new()
 ## `OverlayView`: `Geometry2D.intersect_polygons` is not free.
 var _bands: Array = []
 var _guides: Array = []
+## ...and the band the raised hand WOULD excise, kept apart from `_bands` because it is
+## a proposal rather than a fact and must not be drawn as one.
+var _aim_band: Array = []
 
 
 ## Take the frame's description and redraw. The only way anything gets in here.
@@ -58,8 +61,12 @@ func set_view(view: OverlayView) -> void:
 func _rebuild_preview() -> void:
 	_bands = []
 	_guides = []
+	_aim_band = []
 	if not _view.active:
 		return
+	if _view.aiming and _view.aim_pair != null:
+		_aim_band = _clip(_band_polygon(
+			_view.aim_at, Vector2(_view.aim_pair), _view.world_px))
 	var world_px := _view.world_px
 	for entry in _view.hands_down:
 		if entry["at"] == null:
@@ -187,17 +194,24 @@ func _draw_exit_anchor() -> void:
 		draw_arc(at, 20.0, 0, TAU, 24, col, STROKE)
 
 
+## The colour of the hand a tap would put down: that kind's own, and RED when you have
+## none to put down at all. Both the ring and the cursor are drawn in it, so "what am I
+## about to spend" is one answer wearing two shapes.
+func _aim_colour() -> Color:
+	return Color("e06a6a") if _view.aim_hand < 0 else HandTypes.color(_view.aim_hand)
+
+
 ## Where a tap would put a hand, what a burst from here would reach, and how far
 ## through a hold the key is.
 func _draw_aim() -> void:
-	# The aim ring takes the colour of the hand you would put down, so you can see
-	# what kind of fold you are about to start before you start it — and reddens when
-	# you have no hand to place at all.
-	var aim_col := Color("e06a6a", 0.55)
-	if _view.aim_hand >= 0:
-		aim_col = HandTypes.color(_view.aim_hand)
-		aim_col.a = 0.45
-	draw_arc(_view.aim_at, 16.0, 0, TAU, 24, aim_col, HAIR)
+	if _view.aiming:
+		_draw_cursor()
+	else:
+		# A ring on the cell a raise would START from, so you can see what kind of fold
+		# you would be starting before you start it.
+		var col := _aim_colour()
+		col.a = 0.55 if _view.aim_hand < 0 else 0.45
+		draw_arc(_view.aim_at, 16.0, 0, TAU, 24, col, HAIR)
 
 	# Seams a burst from here would reach. The burst is not aimed, so what the ring
 	# marks is REACH, not a target — walk closer and more of them light up.
@@ -210,6 +224,33 @@ func _draw_aim() -> void:
 	if _view.hold > 0.0:
 		draw_arc(_view.aim_at, 23.0, -PI / 2.0, -PI / 2.0 + TAU * _view.hold, 32,
 			Color("ffd27f"), STROKE)
+
+
+## The raised hand, as a cursor over the cells it may go into.
+##
+## Three things, and each answers a question the old aim ring could not:
+##
+##   - **The reach.** A box around the cell you are standing in, so how far your arm
+##     goes is drawn rather than discovered by pushing at it.
+##   - **The cell.** Filled, because the cursor picks a CELL and a ring floating at a
+##     centre point never quite said which one — least of all on a diagonal.
+##   - **The hand itself**, drawn through `HandOrbit.draw_hand` like every other hand
+##     in the game, so what you are moving is legibly the thing you are about to
+##     spend. It is the ONE hand drawn without its idle float: this one is a tool
+##     being aimed, and a tool that wobbles is a tool you cannot aim.
+##
+## Everything is in the hand's own colour, so the cursor already says which kind is
+## about to go down — the aim ring's one job, kept.
+func _draw_cursor() -> void:
+	var col := _aim_colour()
+	var cs := _view.cell_size
+	if _view.aim_box.size != Vector2.ZERO:
+		draw_rect(_view.aim_box, Color(col, 0.30), false, HAIR)
+	var cell := Rect2(_view.aim_at - Vector2(cs, cs) * 0.5, Vector2(cs, cs))
+	draw_rect(cell, Color(col, 0.12), true)
+	draw_rect(cell, Color(col, 0.75), false, HAIR)
+	if _view.aim_hand >= 0:
+		HandOrbit.draw_hand(self, _view.aim_at, _view.aim_hand, 0.0, 1.0, 0.0)
 
 
 ## Every hand you have put down, in its OWN kind's colour, so a mixed pair reads as a
@@ -236,6 +277,12 @@ func _draw_placed_hands() -> void:
 func _draw_preview() -> void:
 	for poly in _guides:
 		draw_colored_polygon(poly, Color(1, 1, 1, 0.08))
+	# The fold the raised hand would arm, under the ones already armed and fainter than
+	# them: a proposal you can still walk the cursor out of, not a band that is coming.
+	# Drawn at all because "which cells does this pair take" is the question the whole
+	# placement is about, and answering it after the fuse is lit is answering it late.
+	for poly in _aim_band:
+		draw_colored_polygon(poly, Color(0.95, 0.25, 0.3, 0.10))
 	for poly in _bands:
 		draw_colored_polygon(poly, Color(0.95, 0.25, 0.3, 0.22))
 

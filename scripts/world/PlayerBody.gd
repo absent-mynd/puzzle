@@ -382,11 +382,16 @@ func motion_fraction() -> Vector2:
 ## to see where you are going — and running least, since running is the resting
 ## state of play and should not sit the camera permanently at its limit.
 ##
-## Frozen (riding a fold) reports still: the velocity is stale, and the
-## transition frames itself from its own endpoints.
+## A plain statement about the velocity, and deliberately NOT about `frozen`. The
+## body is held still for two unrelated reasons and they want opposite framings: a
+## fold ride leaves the velocity stale and should report still, while a hand raised
+## into the placement cursor leaves it exactly, meaningfully intact — the frame you
+## are choosing in has to be the frame you resume into, or it drifts shut while you
+## aim and blooms open again the moment you pin.
+##
+## So which of those is happening is decided by `WorldCamera`, which the world
+## already tells whether a fold is in flight. This just reports the body.
 func motion_intensity() -> float:
-	if frozen:
-		return 0.0
 	var f := motion_fraction()
 	return clampf(0.45 * absf(f.x) + 0.75 * maxf(f.y, 0.0) + 0.25 * maxf(-f.y, 0.0), 0.0, 1.0)
 

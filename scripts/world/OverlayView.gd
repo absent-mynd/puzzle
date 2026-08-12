@@ -84,12 +84,22 @@ var exit_in_burst := false
 
 # --- The one-key verb ---
 
-## Where a tap would put a hand.
+## Where a tap would put a hand — the cursor's cell while one is raised, the cell you
+## are pointing at otherwise.
 var aim_at := Vector2.ZERO
 ## Which kind it would be, or -1 when you have none to place.
 var aim_hand := -1
 ## How far through a hold the key is, 0 when not held.
 var hold := 0.0
+
+## A hand is UP and the world is stopped. The cursor is drawn as the hand it is rather
+## than as a ring, and the two fields below mean something.
+var aiming := false
+## The cells the cursor may be walked to: arm's reach, as a rectangle. Empty off-mode.
+var aim_box := Rect2()
+## The placed hand this one would pair with, or null when it would start a fresh pair.
+## The band between the two is the fold you are about to arm, drawn before you arm it.
+var aim_pair = null
 
 # --- The release burst ---
 

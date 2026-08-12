@@ -31,7 +31,8 @@ What exists and works today:
 | Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
 | Hands: two slots, typed, conserved (`AnchorStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
-| One-key verb (tap = place a hand, hold = release burst) | ✅ Playable |
+| One-key verb (tap = raise a hand, tap = pin it, hold = release burst) | ✅ Playable |
+| **Placement cursor** — time stops between the two taps; nine cells of reach | ✅ Playable, ⚙️ untuned |
 | Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
 | Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |

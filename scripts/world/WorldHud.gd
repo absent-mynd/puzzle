@@ -34,7 +34,8 @@ const BG_DEEP := Color("140a2a")
 const DEPTH_TINT_RATE := 0.7
 
 const HELP_TEXT := \
-	"A/D move   Space tap/hold: jump   W/S aim   F tap: place hand · hold: pull back   R reset"
+	"A/D/W/S move & aim   Space tap/hold: jump   " \
+	+ "F tap: raise a hand — move it, tap to pin · hold: pull back   R reset"
 
 var _bg: ColorRect
 var _status: Label

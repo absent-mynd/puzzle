@@ -36,6 +36,20 @@ func before_each() -> void:
 	_start_loose_here = world.loose_hands.size()
 
 
+## Pin a hand one cell away in `dir` — which is TWO taps now, because the first raises
+## the hand into a cursor and stops the world and the second puts it down. The cursor
+## starts on the cell `dir` points at, so a pair of taps in a direction lands exactly
+## where one tap in that direction used to.
+##
+## Spelled out once here rather than at the fifty-odd call sites below: what those
+## tests are about is where a hand ends up and what the fold does about it, not how
+## many presses it took to get there. The gesture itself is pinned by the placement
+## tests further down, which drive the taps one at a time.
+func _pin(dir: Vector2i) -> void:
+	world.tap_action(dir)
+	world.tap_action(dir)
+
+
 ## Run the ball simulation until every hand in flight has landed.
 ##
 ## A dropped hand is a falling ball for a second or two now, so any test that asks
@@ -100,14 +114,15 @@ func test_pinch_applies_fold_for_real_and_exit_restores() -> void:
 
 
 func test_one_key_places_both_hands_and_the_fuse_does_the_rest() -> void:
-	# Player spawns in cell (4,12); reach is the adjacent cell, facing right.
-	world.tap_action(Vector2i(1, 0))
-	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "First tap puts a hand on the aimed cell")
+	# Player spawns in cell (4,12); the cursor starts on the cell you point at, and
+	# facing right that is the one beside you.
+	_pin(Vector2i(1, 0))
+	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "The first hand lands on the aimed cell")
 	assert_false(world.fuse_running(), "...and one hand is not a pair")
 
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
-	assert_true(world.anchor_cells().has(Vector2i(9, 12)), "Second tap puts the other one down")
+	_pin(Vector2i(1, 0))
+	assert_true(world.anchor_cells().has(Vector2i(9, 12)), "The second one goes down too")
 	assert_eq(world.folds.size(), 0, "Placing does not fold")
 	assert_true(world.fuse_running(), "...it lights the fuse")
 
@@ -119,9 +134,9 @@ func test_one_key_places_both_hands_and_the_fuse_does_the_rest() -> void:
 
 func test_neighbouring_hands_make_a_perfectly_good_fold() -> void:
 	# There is no minimum distance. A one-cell fold is a fold.
-	world.tap_action(Vector2i(1, 0))                # (5,12)
+	_pin(Vector2i(1, 0))                # (5,12)
 	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                # (6,12): the very next cell
+	_pin(Vector2i(1, 0))                # (6,12): the very next cell
 	assert_true(world.anchor_cells().has(Vector2i(6, 12)), "The neighbouring hand lands")
 	assert_true(world.fuse_running(), "...and lights the fuse like any pair")
 
@@ -132,10 +147,10 @@ func test_neighbouring_hands_make_a_perfectly_good_fold() -> void:
 func test_placement_asks_nothing_of_the_fold() -> void:
 	# The player may put hands anywhere there is sheet to pin to, valid pair or not.
 	# Whether it makes a fold is the fuse's question, not placement's.
-	world.tap_action(Vector2i(1, 0))                # (5,12)
+	_pin(Vector2i(1, 0))                # (5,12)
 	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "First hand down")
 
-	world.tap_action(Vector2i(0, 1))                # (4,13): would once have been refused
+	_pin(Vector2i(0, 1))                # (4,13): would once have been refused
 	assert_true(world.anchor_cells().has(Vector2i(4, 13)),
 		"The second lands wherever it was aimed")
 	assert_true(world.fuse_running(), "...and the pair is counting down")
@@ -145,9 +160,9 @@ func test_a_fold_that_cannot_go_drops_both_hands_where_they_stood() -> void:
 	# Both hands on ONE cell is the one pair with no crease direction at all. The
 	# fuse still runs — you had that long to move one of them — and when it fires
 	# the hands fall on the spots you chose rather than returning to you.
-	world.tap_action(Vector2i(1, 0))                # (5,12)
+	_pin(Vector2i(1, 0))                # (5,12)
 	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                # (5,12) again: the same cell
+	_pin(Vector2i(1, 0))                # (5,12) again: the same cell
 	assert_eq(world.anchor_cells(), [Vector2i(5, 12), Vector2i(5, 12)],
 		"Both hands on one cell")
 	assert_true(world.fuse_running(), "The pair still counts down")
@@ -167,10 +182,10 @@ func test_dropped_hands_fall_from_the_cells_they_were_pinned_to() -> void:
 	# chose. That used to be the assertion here, and the trade is deliberate: a hand
 	# always ends up somewhere you can see and walk to, and "hands behave like objects"
 	# gains no exceptions. See `_release_anchor`.
-	world.tap_action(Vector2i(1, 0))                # (5,12)
+	_pin(Vector2i(1, 0))                # (5,12)
 	var at = _plane_point(Vector2i(5, 12))
 	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                # (5,12) again — degenerate
+	_pin(Vector2i(1, 0))                # (5,12) again — degenerate
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	_let_hands_land()
 
@@ -189,8 +204,8 @@ func test_a_failed_folds_hands_come_to_rest_where_you_can_reach_them() -> void:
 	# tile and drawn buried in it. Wherever a refused pair ends up, it must be somewhere
 	# a player could walk to and pick up.
 	world.player.teleport(Vector2(4.5 * CS, 14.0 * CS - PlayerBody.RADIUS), false)
-	world.tap_action(Vector2i(0, 1))                # into the floor tile below
-	world.tap_action(Vector2i(0, 1))                # same cell — must fail at the fuse
+	_pin(Vector2i(0, 1))                # into the floor tile below
+	_pin(Vector2i(0, 1))                # same cell — must fail at the fuse
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	assert_eq(world.hands_loose(), _start_total, "Both are loose the instant they are unpinned")
 	_let_hands_land()
@@ -206,8 +221,8 @@ func test_the_fuse_is_a_window_to_make_a_doubtful_fold_work() -> void:
 	# The point of checking late: put both hands down from a spot the fold cannot
 	# put you, then move somewhere it can before it fires.
 	world.player.teleport(Vector2(13.5 * CS, 12.5 * CS), false)   # mid-air over the pit
-	world.tap_action(Vector2i(-1, 0))               # (12,12)
-	world.tap_action(Vector2i(1, 0))                # (14,12) — you are inside the band
+	_pin(Vector2i(-1, 0))               # (12,12)
+	_pin(Vector2i(1, 0))                # (14,12) — you are inside the band
 	assert_true(world.fuse_running(), "Both down, counting")
 
 	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)    # run clear of the band
@@ -215,6 +230,171 @@ func test_the_fuse_is_a_window_to_make_a_doubtful_fold_work() -> void:
 	assert_eq(world.mode, world.Mode.WORLD,
 		"Having left the band before it fired, you ride a flap instead of being swallowed")
 	assert_eq(world.folds.size(), 1, "And the fold went ahead")
+
+
+# ---------------------------------------------------------------------------
+# Placing a hand: the cursor, and the stopped clock
+# ---------------------------------------------------------------------------
+# Placing is two taps with the world held still between them: the first raises the
+# hand you are about to spend into a cursor, the movement keys walk it over the nine
+# cells within arm's reach, and the second pins it there. `_pin` above is that pair of
+# taps taken together; everything here drives them one at a time, because the gap
+# between them is the whole feature.
+
+func test_the_first_tap_raises_a_hand_and_places_nothing() -> void:
+	world.tap_action(Vector2i(1, 0))
+	assert_true(world.placing(), "A hand is up")
+	assert_eq(world.aim_cell(), Vector2i(5, 12), "...as a cursor on the cell you pointed at")
+	assert_eq(world.anchor_cells(), [], "Nothing is pinned yet")
+	assert_eq(world.hands_held(), 2, "...and the hand has not left its slot")
+	assert_eq(_total(), _start_total, "Conserved: raising one is not spending it")
+
+
+func test_the_second_tap_pins_the_hand_where_the_cursor_ended_up() -> void:
+	world.tap_action(Vector2i(1, 0))
+	world.move_aim(Vector2i(0, -1))
+	assert_eq(world.aim_cell(), Vector2i(5, 11), "The cursor walked up one")
+
+	world.tap_action(Vector2i(1, 0))    # the direction is ignored: the cursor decided
+	assert_false(world.placing(), "The hand is down")
+	assert_eq(world.anchor_cells(), [Vector2i(5, 11)], "...on the cell the cursor was on")
+	assert_eq(world.hands_held(), 1, "...and NOW it has left its slot")
+
+
+func test_the_cursor_reaches_cells_no_direction_could_name() -> void:
+	# The limitation this answers. Four-way pointing could not say "the cell down and
+	# to the right of me" at all, though nothing about your arm objected to it.
+	world.tap_action(Vector2i(1, 0))
+	world.move_aim(Vector2i(0, 1))
+	assert_eq(world.aim_cell(), Vector2i(5, 13), "Diagonally down-right of the body")
+
+	world.tap_action(Vector2i(1, 0))
+	assert_eq(world.anchor_cells(), [Vector2i(5, 13)], "...and a hand pins there like anywhere else")
+
+
+func test_the_cursor_cannot_leave_arms_reach() -> void:
+	# Reach is unchanged and deliberately so: a shell one tile thick keeps you out of
+	# what it encloses only while your arm is one cell long.
+	var here: Vector2i = world.player_cell()
+	world.tap_action(Vector2i(1, 0))
+	for _i in range(4):
+		world.move_aim(Vector2i(1, 0))
+	assert_eq(world.aim_cell(), here + Vector2i(1, 0),
+		"Pushing past the edge of your reach does nothing, four presses over")
+
+	for _i in range(4):
+		world.move_aim(Vector2i(0, -1))
+	assert_eq(world.aim_cell(), here + Vector2i(1, -1),
+		"The corner of the square is as far as the cursor goes")
+
+
+func test_time_stops_while_a_hand_is_up() -> void:
+	# The point of the pause: the world you are judging is the world you place into. A
+	# fuse burning down while you choose a cell would turn the choice into a race, which
+	# is precisely the thing that made placing while moving repetitive.
+	_pin(Vector2i(1, 0))                            # (5,12)
+	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
+	_pin(Vector2i(1, 0))                            # (9,12) — armed
+	assert_true(world.fuse_running(), "A fuse is burning")
+	world.hands[0] = HandTypes.PLAIN                # as if picked up
+
+	world.tap_action(Vector2i(1, 0))                # raise a third hand
+	var left: float = world.primed[0]["left"]
+	for _i in range(60):
+		world._physics_process(1.0 / 60.0)
+	assert_eq(world.primed[0]["left"], left, "A whole second went by and the fuse did not")
+	assert_eq(world.folds.size(), 0, "...so nothing fired while you were still choosing")
+
+	world.tap_action(Vector2i(1, 0))                # place it, and let go of the clock
+	world._physics_process(1.0 / 60.0)
+	assert_lt(world.primed[0]["left"], left, "The fuse picks up exactly where it stopped")
+
+
+func test_the_body_keeps_the_momentum_it_was_stopped_with() -> void:
+	var moving := Vector2(300.0, -120.0)
+	world.player.velocity = moving
+	var at: Vector2 = world.player.global_position
+
+	world.tap_action(Vector2i(1, 0))
+	assert_true(world.player.frozen, "The body is held while you choose")
+	for _i in range(30):
+		world._physics_process(1.0 / 60.0)
+		world.player._physics_process(1.0 / 60.0)
+	assert_eq(world.player.global_position, at, "Half a second, and it has not moved a unit")
+	assert_eq(world.player.velocity, moving, "...nor lost any of the run it was carrying")
+
+	world.tap_action(Vector2i(1, 0))
+	assert_false(world.player.frozen, "Placing lets go of the clock")
+	assert_eq(world.player.velocity, moving,
+		"...and hands the body back the same jump it was halfway through")
+
+
+func test_holding_while_a_hand_is_up_cancels_it_and_still_bursts() -> void:
+	# The hold does not stop meaning "pull back" because a hand happens to be raised:
+	# it cancels the placement AND fires the burst, and time resumes either way.
+	_pin(Vector2i(1, 0))                            # (5,12) is down
+	world.tap_action(Vector2i(1, 0))                # ...and another hand is up
+	assert_true(world.placing(), "Raised")
+	assert_eq(world.hands_held(), 1, "A raised hand is still in its slot")
+
+	world.hold_action()
+	assert_false(world.placing(), "The hold put the raised hand back")
+	assert_false(world.player.frozen, "...and started the clock again")
+	assert_eq(world.anchor_cells(), [], "The burst took the hand that was already down")
+	assert_eq(world.hands_held(), 2, "...so both are yours again")
+	assert_eq(_total(), _start_total, "Conserved")
+
+
+func test_a_cursor_over_nothing_keeps_the_hand_up() -> void:
+	# The mode ends when a hand goes DOWN. A tap at a cell with no sheet in it is a
+	# refusal, and one that also spent the gesture would make the cheapest mistake in
+	# the game the most expensive to recover from — nudge one cell over and tap again.
+	world.player.teleport(Vector2(-6.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))
+	world.tap_action(Vector2i(1, 0))
+	assert_true(world.placing(), "Still up, with nothing under the cursor to pin to")
+	assert_eq(world.anchor_cells(), [], "...nothing pinned")
+	assert_eq(world.hands_held(), 2, "...and nothing spent")
+
+
+func test_reset_puts_a_raised_hand_back_and_restarts_the_clock() -> void:
+	world.tap_action(Vector2i(1, 0))
+	assert_true(world.placing(), "A hand is up")
+
+	world._reset()
+	assert_false(world.placing(), "R puts it down")
+	assert_false(world.player.frozen, "...and does not leave the world it just rebuilt frozen")
+	assert_eq(world.hands_held(), 2, "Both hands are yours again")
+
+
+func test_the_cursor_previews_the_fold_that_placing_would_actually_arm() -> void:
+	# The band drawn under the cursor has to be the band the placement would arm, so
+	# both ask the same question about which hand this one pairs with. A second copy of
+	# that rule is a preview that can promise a fold placement would not make.
+	_pin(Vector2i(1, 0))                            # (5,12)
+	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
+	world.tap_action(Vector2i(1, 0))                # a hand up over (9,12)
+
+	var v = world._build_overlay_view()
+	assert_true(v.aiming, "The overlay is told a hand is up")
+	assert_eq(v.aim_at, world.cell_center(Vector2i(9, 12)), "...and where the cursor is")
+	assert_ne(v.aim_box.size, Vector2.ZERO, "...and how far it may be walked")
+	assert_not_null(v.aim_pair, "...and that there is a hand for it to pair with")
+	assert_almost_eq(Vector2(v.aim_pair).x, 5.5 * CS, 0.01,
+		"...namely the one already down at (5,12)")
+
+
+func test_a_hand_in_another_region_is_not_previewed_as_a_partner() -> void:
+	# Same rule as pairing itself: a hand you cannot see is not one you could finish a
+	# fold with, so the cursor must not draw a band reaching for it.
+	_pin(Vector2i(1, 0))                            # a hand down in west
+	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
+	world._check_doors()
+	assert_eq(world.region_id, "east", "Crossed to east")
+
+	world.tap_action(Vector2i(1, 0))
+	assert_null(world._build_overlay_view().aim_pair,
+		"The west hand is no partner, so there is no band to draw")
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +408,7 @@ func test_a_hand_left_in_another_region_does_not_wedge_you() -> void:
 	# used to sit in one of them forever: every pair formed afterwards contained a
 	# partner that could not be reached, so nothing ever fired and only one hand was
 	# ever placeable again.
-	world.tap_action(Vector2i(1, 0))                        # a hand down in west
+	_pin(Vector2i(1, 0))                        # a hand down in west
 	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "Placed in west")
 
 	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
@@ -238,31 +418,31 @@ func test_a_hand_left_in_another_region_does_not_wedge_you() -> void:
 
 	# The remaining hand starts a FRESH pair in east rather than being wasted on the
 	# unreachable one.
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_eq(world.hands_pending(), 2, "Both hands are out — one west, one east")
 	assert_false(world.fuse_running(), "...but the east one has no partner yet, so nothing is armed")
 
 	# Pick a hand up and the east pair completes and fires, with the west hand still
 	# waiting patiently where it was left.
 	world.hands[0] = HandTypes.PLAIN
-	world.tap_action(Vector2i(-1, 0))
+	_pin(Vector2i(-1, 0))
 	assert_true(world.fuse_running(), "The east pair armed")
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	assert_eq(world.hands_pending(), 1, "The east pair spent itself; the west hand is untouched")
 
 
 func test_two_pairs_can_be_armed_at_once() -> void:
-	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	_pin(Vector2i(1, 0))                        # (5,12)
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                        # (9,12) — pair one is armed
+	_pin(Vector2i(1, 0))                        # (9,12) — pair one is armed
 	assert_eq(world.primed.size(), 1, "One pair counting down")
 
 	world.hands[0] = HandTypes.PLAIN                        # as if picked up
 	world.hands[1] = HandTypes.PLAIN
 	world.player.teleport(Vector2(20.5 * CS, 5.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                        # (21,5)
+	_pin(Vector2i(1, 0))                        # (21,5)
 	world.player.teleport(Vector2(25.5 * CS, 5.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                        # (26,5) — pair two is armed
+	_pin(Vector2i(1, 0))                        # (26,5) — pair two is armed
 	assert_eq(world.primed.size(), 2, "Two folds armed at the same time")
 	assert_eq(world.hands_pending(), 4, "Four hands are out")
 
@@ -273,16 +453,16 @@ func test_pairs_fire_in_fuse_order_not_placement_order() -> void:
 	world.hands[0] = HandTypes.PATIENT
 	world.hands[1] = HandTypes.PATIENT
 	world.player.teleport(Vector2(20.5 * CS, 5.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(25.5 * CS, 5.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                        # patient pair, laid first
+	_pin(Vector2i(1, 0))                        # patient pair, laid first
 
 	world.hands[0] = HandTypes.SWIFT
 	world.hands[1] = HandTypes.SWIFT
 	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                        # swift pair, laid second
+	_pin(Vector2i(1, 0))                        # swift pair, laid second
 	assert_eq(world.primed.size(), 2, "Both armed")
 
 	# Stand clear of the swift band, or its fold swallows you and the patient pair —
@@ -299,9 +479,9 @@ func test_pairs_fire_in_fuse_order_not_placement_order() -> void:
 
 
 func test_an_armed_pair_in_another_region_waits_for_you() -> void:
-	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	_pin(Vector2i(1, 0))                        # (5,12)
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                        # (9,12) — armed in west
+	_pin(Vector2i(1, 0))                        # (9,12) — armed in west
 	assert_eq(world.primed.size(), 1, "Armed")
 
 	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
@@ -323,9 +503,9 @@ func test_an_armed_pair_in_another_region_waits_for_you() -> void:
 func test_a_burst_into_an_armed_pair_breaks_the_whole_pair() -> void:
 	# You cannot half-defuse a fold. What you can reach comes back; the far hand
 	# drops where it was pinned, so reaching into an armed pair always costs you one.
-	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	_pin(Vector2i(1, 0))                        # (5,12)
 	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                        # (21,12), far from the first
+	_pin(Vector2i(1, 0))                        # (21,12), far from the first
 	assert_eq(world.primed.size(), 1, "Armed")
 	var loose_before: int = world.hands_loose()
 
@@ -343,7 +523,7 @@ func test_a_tap_at_a_seam_places_and_the_burst_clears_everything() -> void:
 	world.player.teleport(Vector2(23.5 * CS, 12.5 * CS), false)
 	world.hands[0] = HandTypes.PLAIN                # as if picked up from a cache
 
-	world.tap_action(Vector2i(1, 0))                # a tap only ever places
+	_pin(Vector2i(1, 0))                # tapping only ever places
 	assert_eq(world.folds.size(), 1, "A TAP at a seam does not unfold")
 	assert_eq(world.anchor_cells(), [Vector2i(24, 12)], "...it put a hand there")
 
@@ -422,9 +602,9 @@ func test_a_shared_seam_cell_draws_one_diamond_that_reads_unblocked() -> void:
 
 
 func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
-	world.tap_action(Vector2i(1, 0))                # (5,12)
+	_pin(Vector2i(1, 0))                # (5,12)
 	world.player.teleport(Vector2(7.5 * CS, 10.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                # (8,10): off-axis, dist ~3.6
+	_pin(Vector2i(1, 0))                # (8,10): off-axis, dist ~3.6
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	assert_eq(world.mode, world.Mode.SUBSPACE, "Off-axis pinch folds the player in")
 	assert_eq(world.sub_fold.orientation, "diagonal", "The committed fold is diagonal")
@@ -469,7 +649,7 @@ func test_exit_blocked_by_glue_crossing_interior_fold() -> void:
 func test_placed_hands_survive_subspace_exit() -> void:
 	_pinch_over_pit()
 	world.hands[0] = HandTypes.PLAIN                # as if picked up in there
-	world.tap_action(Vector2i(1, 0))                # placed INSIDE the fold, cell (14,12)
+	_pin(Vector2i(1, 0))                # placed INSIDE the fold, cell (14,12)
 	assert_eq(world.anchor_cells(), [Vector2i(14, 12)], "Hand pinned inside the subspace")
 	world.try_exit()
 	assert_eq(world.mode, world.Mode.WORLD, "Exited")
@@ -657,7 +837,7 @@ func test_split_door_point_is_dormant() -> void:
 
 
 func test_a_placed_hand_is_inert_across_regions() -> void:
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "Hand pinned in west")
 	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
 	world._check_doors()
@@ -772,15 +952,15 @@ func test_you_start_with_a_full_pair() -> void:
 
 
 func test_placing_a_hand_takes_it_out_of_its_slot() -> void:
-	world.tap_action(Vector2i(1, 0))
-	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "The tap put a hand down")
+	_pin(Vector2i(1, 0))
+	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "The taps put a hand down")
 	assert_eq(world.hands_held(), 1, "...which left your slots")
 	assert_eq(world.hands_free_slots(), 1, "...freeing the slot it came from")
 	assert_eq(_total(), _start_total, "and nothing was created or destroyed")
 
 
 func test_holding_takes_a_placed_hand_back() -> void:
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.hold_action()
 	assert_eq(world.anchor_cells(), [], "The burst pulls it back")
 	assert_eq(world.hands_held(), 2, "...into a slot")
@@ -788,11 +968,11 @@ func test_holding_takes_a_placed_hand_back() -> void:
 
 
 func test_a_second_hand_lights_the_fuse_and_it_folds_itself() -> void:
-	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	_pin(Vector2i(1, 0))                        # (5,12)
 	assert_false(world.fuse_running(), "One hand down is not a fold")
 
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))                        # (9,12)
+	_pin(Vector2i(1, 0))                        # (9,12)
 	assert_true(world.fuse_running(), "The second hand lights the fuse")
 	assert_eq(world.folds.size(), 0, "...which has not gone off yet")
 	assert_eq(world.hands_held(), 0, "Both hands are down")
@@ -805,9 +985,9 @@ func test_a_second_hand_lights_the_fuse_and_it_folds_itself() -> void:
 
 
 func test_the_fuse_ticks_down_rather_than_firing_at_once() -> void:
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 
 	world._tick_fuse(HandTypes.BASE_FUSE * 0.5)
 	assert_eq(world.folds.size(), 0, "Half way through, nothing has folded")
@@ -817,9 +997,9 @@ func test_the_fuse_ticks_down_rather_than_firing_at_once() -> void:
 
 
 func test_pulling_a_hand_back_defuses_the_pair() -> void:
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_true(world.fuse_running(), "Lit")
 
 	world.hold_action()
@@ -832,9 +1012,9 @@ func test_pulling_a_hand_back_defuses_the_pair() -> void:
 func test_the_fuse_waits_while_an_anchor_is_out_of_frame() -> void:
 	# Walk through a door mid-count and the fold should wait for you, not fire
 	# somewhere you cannot see or fail on an anchor that is merely elsewhere.
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
 	world._check_doors()
 	assert_eq(world.region_id, "east", "Left the region with a fuse burning")
@@ -876,8 +1056,9 @@ func test_with_no_hands_a_tap_places_nothing() -> void:
 	assert_false(world.can_place_hand(), "Nothing to place")
 	assert_eq(world.next_hand_type(), -1, "...and the aim ring knows it")
 
-	world.tap_action(Vector2i(1, 0))
-	assert_eq(world.anchor_cells(), [], "A tap with empty hands puts nothing down")
+	_pin(Vector2i(1, 0))
+	assert_eq(world.anchor_cells(), [], "Tapping with empty hands puts nothing down")
+	assert_false(world.placing(), "...and does not even raise one: there is none to raise")
 
 
 func test_a_refused_fold_does_not_eat_your_hands() -> void:
@@ -944,7 +1125,7 @@ func test_a_loose_hand_gives_one_hand_into_one_free_slot() -> void:
 	assert_eq(world.hands_held(), 2, "With both hands full it is left where it is")
 	assert_eq(_loose_count(), _start_loose_here, "...and stays in the world")
 
-	world.tap_action(Vector2i(1, 0))                        # put one down to free a slot
+	_pin(Vector2i(1, 0))                        # put one down to free a slot
 	world.player.teleport(Vector2(spot), false)
 	world._check_pickups()
 	assert_eq(world.hands_held(), 2, "The free slot took it")
@@ -953,7 +1134,7 @@ func test_a_loose_hand_gives_one_hand_into_one_free_slot() -> void:
 
 
 func test_a_loose_hand_gives_the_kind_it_was_authored_with() -> void:
-	world.tap_action(Vector2i(1, 0))                        # free a slot
+	_pin(Vector2i(1, 0))                        # free a slot
 	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
 	world._check_pickups()
 	var got: Array = []
@@ -999,7 +1180,7 @@ func test_a_loose_hand_rides_folds_like_any_occupant() -> void:
 func test_a_hand_folded_away_is_collectable_inside_the_fold() -> void:
 	# East's shipped pre-fold excised the hand at (14,9) along with door E1. A hand
 	# inside a fold is not lost — the strip is a real place, and taking it counts.
-	world.tap_action(Vector2i(1, 0))                        # free a slot first
+	_pin(Vector2i(1, 0))                        # free a slot first
 	var before: int = _total()
 	world.player.teleport(Vector2(1.5 * CS, 13.5 * CS), false)
 	world._check_doors()
@@ -1014,7 +1195,7 @@ func test_a_hand_folded_away_is_collectable_inside_the_fold() -> void:
 func test_reset_puts_both_the_world_and_your_hands_back() -> void:
 	# Nothing you can hold grows, so a reset has no progression to confiscate — and
 	# hands are exactly what it must restore, or the escape hatch leaves you worse off.
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(_plane_point(Vector2i(24, 6))), false)
 	world._check_pickups()
 	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))
@@ -1034,7 +1215,7 @@ func test_reset_puts_both_the_world_and_your_hands_back() -> void:
 # it comes loose, and anything with nowhere to go lands on the ground.
 
 func test_the_burst_takes_back_a_hand_you_placed_in_reach() -> void:
-	world.tap_action(Vector2i(1, 0))                        # (5,12), one cell away
+	_pin(Vector2i(1, 0))                        # (5,12), one cell away
 	assert_eq(world.hands_held(), 1, "A hand is down")
 
 	world.hold_action()
@@ -1044,7 +1225,7 @@ func test_the_burst_takes_back_a_hand_you_placed_in_reach() -> void:
 
 
 func test_the_burst_leaves_a_hand_out_of_reach_alone() -> void:
-	world.tap_action(Vector2i(1, 0))                        # (5,12)
+	_pin(Vector2i(1, 0))                        # (5,12)
 	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)   # walk well away
 
 	world.hold_action()
@@ -1102,7 +1283,7 @@ func test_a_popped_hand_can_be_picked_straight_back_up() -> void:
 	world.hold_action()
 	_let_hands_land()
 
-	# Free a slot WITHOUT moving: `tap_action` pins a hand at arm's length, and the
+	# Free a slot WITHOUT moving: `_pin` pins a hand at arm's length, and the
 	# placement is not what this test is about — walking back over a hand you dropped is.
 	# One slot freed means one hand back; `_check_pickups` takes a single hand per call.
 	world.hands[0] = null
@@ -1561,9 +1742,9 @@ func test_a_fold_firing_under_you_does_not_let_a_door_fire_too() -> void:
 	# spot computed in the region they had just left. You ended up in a wall, or as
 	# here, off the map entirely.
 	world.anim_enabled = true
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	assert_true(world.fuse_running(), "A fold is armed")
 
 	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)   # standing on door W2
@@ -1590,9 +1771,9 @@ func test_the_door_still_fires_once_the_fold_has_landed() -> void:
 	# The guard defers the door, it does not swallow it: standing on one after the
 	# transition settles still takes you through.
 	world.anim_enabled = true
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(8.5 * CS, 12.5 * CS), false)
-	world.tap_action(Vector2i(1, 0))
+	_pin(Vector2i(1, 0))
 	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
 	world._door_latch["W2"] = false
 	world._physics_process(HandTypes.BASE_FUSE + 0.01)
@@ -1799,7 +1980,7 @@ func test_running_pulls_the_frame_out() -> void:
 func test_a_far_pinned_anchor_stays_in_frame() -> void:
 	world._update_camera()
 	var before: float = world.player.zoom_target
-	world.place_hand(Vector2i(1, 0))                    # a hand at (5,12)
+	world.place_hand(Vector2i(5, 12))                   # a hand one cell to the right
 	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "Hand placed")
 
 	# Walk 20 cells away: the fold being composed is now wider than the frame.
@@ -1873,6 +2054,28 @@ func test_a_fold_transition_steps_the_camera_back() -> void:
 	world._update_camera()
 	assert_almost_eq(world.player.zoom_target, before, 0.001,
 		"...and the frame settles back once it has")
+
+
+func test_raising_a_hand_does_not_change_the_frame_you_are_choosing_in() -> void:
+	# The other half of "resuming is exact". The body is held while you aim, but its
+	# velocity is not stale the way a fold ride's is — it is precisely what you will
+	# resume with — so the lens must go on reading it. Keyed to `frozen` (as
+	# `motion_intensity` used to be) the frame eased shut over the second or two of a
+	# placement and bloomed open again the instant you pinned.
+	world.player.velocity.y = PlayerBody.MAX_FALL           # falling hard: a wide frame
+	world._update_camera()
+	var falling: float = world.player.zoom_target
+
+	world.tap_action(Vector2i(1, 0))
+	assert_true(world.placing(), "A hand is up and the world is stopped")
+	world._update_camera()
+	assert_almost_eq(world.player.zoom_target, falling, 0.001,
+		"The frame is the one the fall had opened, not the one standing still would")
+
+	world.tap_action(Vector2i(1, 0))
+	world._update_camera()
+	assert_almost_eq(world.player.zoom_target, falling, 0.001,
+		"...and pinning changes nothing about it either")
 
 
 func test_a_hard_relocation_cuts_the_lens_as_well_as_the_position() -> void:
@@ -1961,7 +2164,7 @@ func test_the_zoom_is_measured_from_the_led_camera_not_the_body() -> void:
 	# cover. Running away from a pinned anchor must open the frame wider than
 	# running toward it at the same speed. (Same speed in both, so the motion pull
 	# is identical and the lead is the only difference.)
-	world.place_hand(Vector2i(1, 0))                            # a hand at (5,12)
+	world.place_hand(Vector2i(5, 12))                           # a hand one cell right
 	assert_eq(world.anchor_cells(), [Vector2i(5, 12)], "Hand placed")
 	world.player.teleport(Vector2(16.0 * CS, 12.5 * CS), false)
 

@@ -201,6 +201,17 @@ def sfx_hand_place(rng):
     return add(gain(tick, 0.7), gain(body, 0.5))
 
 
+def sfx_hand_raise(rng):
+    """A hand comes UP into the cursor, and the world stops with it.
+
+    Literally `hand_place` played backwards, which is the same trick `fold` /
+    `unfold` and `pinch` / `surface` are built on: two events that are one event
+    in opposite directions should be one waveform in opposite directions. A
+    swell into a stop instead of a tick, so the pause is audible without a
+    second idea being introduced to say so."""
+    return reverse(sfx_hand_place(rng))
+
+
 def sfx_pair_armed(rng):
     """The second hand lands and the fuse lights: two rising tones. Rising
     because something is now COMING — the pair commits itself, and this is the
@@ -403,6 +414,7 @@ def sfx_ui_click(rng):
 
 
 SFX = {
+    "hand_raise": sfx_hand_raise,
     "hand_place": sfx_hand_place,
     "pair_armed": sfx_pair_armed,
     "fold": sfx_fold,

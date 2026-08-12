@@ -42,10 +42,17 @@ extends Node2D
 ##     away and it leaves the overworld and lights the fold's interior
 ##     instead (see LightSource). Fold something else and it rides the flap.
 ##
-## ONE KEY drives all of it. Tap = push anchors in (pin, pin, commit); hold =
-## pull them back out (retrieve a pending anchor, unfold the fold you point at,
-## or exit a subspace by its glue anchor). There is no remote unfold: to get the
-## anchors out of a fold you must go back to its seam.
+## ONE KEY drives all of it. Tap = push anchors in; hold = pull them back out
+## (retrieve a pending anchor, unfold the fold you are standing at, or exit a
+## subspace by its glue anchor). There is no remote unfold: to get the anchors out
+## of a fold you must go back to its seam.
+##
+## Pushing one in takes TWO taps and STOPS TIME between them. The first raises the
+## hand you are about to spend into a cursor and freezes the world; the movement keys
+## walk that cursor over the cells within arm's reach, diagonals included; the second
+## pins it there and time resumes with exactly the momentum, fuses and flight it was
+## carrying. A hold while the hand is up is still a hold — it cancels the placement,
+## fires the burst and resumes the same way. See §"Placing a hand".
 ##
 ## Rendering is a PIXEL pass: the world draws into a low-resolution SubViewport
 ## (see PixelArt) that is scaled up with nearest filtering, tiles are textured
@@ -67,8 +74,16 @@ enum Mode { WORLD, SUBSPACE }
 
 const WORLD_PATH := "res://worlds/overworld.json"
 const CS := WorldCore.CELL
-## Anchors are pinned at arm's length: the cell immediately in the pointed
-## direction. What you can fold is exactly what you can stand next to.
+## Anchors are pinned at arm's length: any of the nine cells centred on the one you
+## are standing in. What you can fold is exactly what you can stand next to.
+##
+## A square of this radius, not a compass direction — the four axis-aligned cells the
+## old 4-way pointing could name were a limit of the INPUT, not of your arm, and cells
+## you could obviously touch were unpinnable for no reason a player could see.
+##
+## Raising this is a design change, not a tuning knob: a shell one tile thick keeps
+## you out of what it encloses only while your reach is one cell (see
+## `WorldCore.within_anchor_reach`), and the sealed chamber is exactly that shell.
 const ANCHOR_REACH := 1
 const ANIM_TIME := 0.24
 ## How long the fold key must be held before it reads as "pull back" rather than
@@ -231,6 +246,16 @@ var hand_balls: Array:
 var _hold_active := false
 var _hold_fired := false
 var _hold_elapsed := 0.0
+
+## Where the placement cursor is, or null when no hand is up. **Its emptiness IS the
+## mode** — there is no second flag that could disagree with it, the same shape as
+## `_anim` / `animating()` and `sub_fold` / `mode`.
+##
+## While it is set, time is stopped: `_physics_process` returns before it moves
+## anything and the body is `frozen`, so nothing is saved and nothing is restored. The
+## world simply is not stepped, which is why resuming keeps the exact momentum, the
+## exact fuses and the exact hands in flight it was left with.
+var _aim = null
 
 ## Seconds left on the burst ring the overlay draws.
 var _burst_flash_left := 0.0
@@ -735,17 +760,37 @@ func animating() -> bool:
 # Input
 # ---------------------------------------------------------------------------
 
-## One key for the whole verb. TAP pushes an anchor in (pin, pin, then commit);
-## HOLD pulls one back out (your last anchor, or the fold you are pointing at).
+## Which way the placement cursor steps for a key. The SAME keys that move the body,
+## because while a hand is up they are what moves instead of it — there is no second
+## set of controls to learn, and the hand goes where you would have gone.
+const AIM_STEPS := {
+	KEY_A: Vector2i(-1, 0), KEY_LEFT: Vector2i(-1, 0),
+	KEY_D: Vector2i(1, 0), KEY_RIGHT: Vector2i(1, 0),
+	KEY_W: Vector2i(0, -1), KEY_UP: Vector2i(0, -1),
+	KEY_S: Vector2i(0, 1), KEY_DOWN: Vector2i(0, 1),
+}
+
+
+## One key for the whole verb. TAP pushes an anchor in (raise the hand, then pin it);
+## HOLD pulls one back out (your last anchor, or the fold you are standing at).
 ## The two directions of a conserved resource are the two ways to press one key.
 ##
-## The tap fires on RELEASE, so a press that grows into a hold never also commits.
+## The tap fires on RELEASE, so a press that grows into a hold never also places.
+##
+## Cursor steps fire on PRESS and echoes are dropped at the top, so one press is one
+## cell. That matters more than it looks: you tap F while already holding the key you
+## were running with, and a cursor driven by the HELD key would set off for the edge
+## of your reach the moment it appeared. One press, one cell, and the run key you are
+## still leaning on does nothing until you press it again.
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or event.echo:
 		return
 	if event.physical_keycode == KEY_R:
 		if event.pressed:
 			_reset()
+		return
+	if placing() and event.pressed and AIM_STEPS.has(event.physical_keycode):
+		move_aim(AIM_STEPS[event.physical_keycode])
 		return
 	if event.physical_keycode != KEY_F:
 		return
@@ -788,9 +833,112 @@ func player_cell() -> Vector2i:
 	return Vector2i((player.global_position / CS).floor())
 
 
+func cell_center(cell: Vector2i) -> Vector2:
+	return (Vector2(cell) + Vector2(0.5, 0.5)) * CS
+
+
+## Where the cursor STARTS when you raise a hand: the cell you are pointing at, so
+## the common placement is still "point, tap, tap" and the keys you were already
+## holding have put the cursor where you meant before you look at it.
 func candidate_anchor(dir: Vector2i = Vector2i.ZERO) -> Vector2i:
 	var d := dir if dir != Vector2i.ZERO else Vector2i(player.point_dir())
 	return player_cell() + d * ANCHOR_REACH
+
+
+# ---------------------------------------------------------------------------
+# Placing a hand: the cursor, and the stopped clock
+# ---------------------------------------------------------------------------
+# Placing used to be one tap in one of four directions, sampled off the keys you
+# happened to be holding at that instant. Two things were wrong with that, and both
+# of them were about a game where you are usually MOVING:
+#
+#   - Aiming at a particular cell meant arriving at a particular position with a
+#     particular key held, which is a demand on your hands rather than a decision
+#     about the fold. Missing meant bursting the hand back and running the approach
+#     again, which is repetition standing in for precision.
+#   - Only four cells could be named at all, so a cell plainly within reach — the one
+#     diagonally under the ledge you are standing on — was unpinnable for a reason
+#     that lives in the input code and nowhere in the world.
+#
+# So the hand comes UP first. Raising it stops the clock and turns it into a cursor
+# over the nine cells within arm's reach; the movement keys walk it; the next tap pins
+# it. Nothing about the world is saved or restored across that — `_physics_process`
+# simply does not run — so the moment you resume is the moment you left, momentum,
+# fuses and hands in flight and all. What the pause buys is that WHERE to pin is
+# decided as a decision, not as a reflex.
+#
+# A hold is still a hold while the hand is up: it cancels, bursts, and resumes time
+# the same way. The pull-back direction of the one key does not stop meaning
+# pull-back because a hand happens to be raised.
+
+## Is a hand up, waiting to be placed? While this is true the world is not stepping.
+func placing() -> bool:
+	return _aim != null
+
+
+## The cell the hand would go into. Clamped on the way out rather than only on the way
+## in, so it stays inside your reach even if something moved the body while the hand
+## was up — a reset, a test, a future path that relocates you. Off-mode it answers
+## where a raise would start, which is what the aim ring reads.
+func aim_cell() -> Vector2i:
+	if _aim == null:
+		return candidate_anchor()
+	return WorldCore.clamp_to_anchor_reach(player_cell(), _aim, ANCHOR_REACH)
+
+
+## Raise the hand you are about to spend. Refused with no hand to raise: the mode
+## exists to place one, and standing in it empty-handed would be a pause button.
+func begin_aim(dir: Vector2i = Vector2i.ZERO) -> bool:
+	if animating() or placing():
+		return false
+	if not can_place_hand():
+		_deny("No hand to place.")
+		return false
+	_aim = candidate_anchor(dir)
+	player.frozen = true
+	# The mirror of `hand_place`, because that is exactly what this is: the same
+	# gesture running the other way, like `fold`/`unfold` and `pinch`/`surface`.
+	AudioManager.play_sfx(Sounds.HAND_RAISE)
+	return true
+
+
+## Walk the cursor one cell. Clamped, so pressing into the edge of your reach is a
+## no-op rather than a refusal — there is nothing to say no to.
+func move_aim(step: Vector2i) -> void:
+	if not placing() or step == Vector2i.ZERO:
+		return
+	var from := aim_cell()
+	var to := WorldCore.clamp_to_anchor_reach(player_cell(), from + step, ANCHOR_REACH)
+	if to == from:
+		return
+	_aim = to
+	AudioManager.play_sfx(Sounds.UI_MOVE)
+
+
+## Pin the raised hand where the cursor is, and start the clock again.
+##
+## A placement that finds no sheet KEEPS the hand up: the mode ends when a hand goes
+## down or you cancel it, and ending it on a refusal would spend the whole gesture on
+## a cell the player can see is empty. Nudge one cell over and tap again.
+func finish_aim() -> void:
+	if not placing():
+		return
+	if not place_hand(aim_cell()):
+		return
+	_end_aim()
+
+
+## Put the hand back down without placing it. Time resumes exactly as it would have.
+func cancel_aim() -> void:
+	if not placing():
+		return
+	_end_aim()
+
+
+func _end_aim() -> void:
+	_aim = null
+	if player != null:
+		player.frozen = false
 
 
 ## Where an anchor lies in THIS frame, or null if it is not here — wrong region, or
@@ -838,11 +986,15 @@ func all_anchors() -> Array:
 	return out
 
 
-func place_hand(dir: Vector2i) -> void:
+## Pin a hand in an absolute cell. Takes the CELL rather than a direction because the
+## cursor has already answered "which cell" — a direction here would be a second
+## opinion about the same question, resolved against wherever the body had drifted to.
+##
+## Returns whether a hand actually went down.
+func place_hand(cell: Vector2i) -> bool:
 	if animating():
-		return
-	var cand := candidate_anchor(dir)
-	var center := (Vector2(cand) + Vector2(0.5, 0.5)) * CS
+		return false
+	var center := cell_center(cell)
 	# The ONLY thing placement asks of a spot is that there be sheet there to pin to.
 	# That is not a rule, it is storage: an anchor is a base identity plus a point in
 	# a tile, and over void there is no tile to be a point in.
@@ -855,31 +1007,47 @@ func place_hand(dir: Vector2i) -> void:
 	var piece = BaseFrame.piece_containing(pieces_by_pos, center, CS)
 	if piece == null:
 		_deny("Nothing there to pin to.")
-		return
+		return false
 	# Placing puts a HAND down: it leaves your slot now, and its kind travels with
 	# the anchor because the fold will need to know what it was pinned with. Re-siting
 	# an anchor you already placed reuses the hand already in it.
 	var from_slot := AnchorStock.first_held(hands)
 	if from_slot < 0:
 		_deny("No hand to place.")
-		return
+		return false
 	var kind := int(hands[from_slot])
 	hands[from_slot] = null
 	AudioManager.play_sfx(Sounds.HAND_PLACE)
 	var entry := {"bid": piece.base_id, "bp": center - piece.src_offset,
 		"hand": kind, "region": region_id}
 
-	# Pair with the most recently placed unpaired anchor YOU CAN CURRENTLY SEE. An
-	# anchor left in another region (or sealed inside a fold) is not a partner you
-	# could finish a fold with, so it waits where it is and this hand starts a fresh
-	# pair instead of being wasted on one that could never fire.
+	var i := partner_index()
+	if i < 0:
+		unpaired.append(entry)
+		return true
+	var partner = unpaired[i]
+	unpaired.remove_at(i)
+	_prime(partner, entry)
+	return true
+
+
+## The unpaired anchor the next hand down would pair with, as an index into `unpaired`,
+## or -1 for none.
+##
+## The most recently placed one YOU CAN CURRENTLY SEE. An anchor left in another region
+## (or sealed inside a fold) is not a partner you could finish a fold with, so it waits
+## where it is and the next hand starts a fresh pair instead of being wasted on one that
+## could never fire.
+##
+## Asked in two places, which is why it is a function: `place_hand` pairs with it, and
+## the cursor draws the band it would arm through it. The preview promising a fold that
+## placement would not actually make is exactly the kind of lie a second copy of this
+## rule would tell.
+func partner_index() -> int:
 	for i in range(unpaired.size() - 1, -1, -1):
 		if anchor_here(unpaired[i]):
-			var partner = unpaired[i]
-			unpaired.remove_at(i)
-			_prime(partner, entry)
-			return
-	unpaired.append(entry)
+			return i
+	return -1
 
 
 ## The fold that F should unfold from where you are standing / aiming. Several
@@ -907,7 +1075,11 @@ func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
 	return blocked
 
 
-## TAP: put a hand down. That is all it ever does.
+## TAP: raise a hand, or put the raised one down. That is all it ever does.
+##
+## Two taps rather than one, and the world does not move between them — see
+## §"Placing a hand". `dir` seeds the cursor on the first tap and is ignored by the
+## second, which pins wherever the cursor was walked to.
 ##
 ## The second hand of a pair lights that pair's fuse and it commits ITSELF; the next
 ## hand after that starts another pair, which arms alongside the first. There is no
@@ -915,7 +1087,10 @@ func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
 func tap_action(dir: Vector2i) -> void:
 	if animating():
 		return
-	place_hand(dir)
+	if placing():
+		finish_aim()
+		return
+	begin_aim(dir)
 
 
 ## HOLD: a release BURST around you.
@@ -935,9 +1110,16 @@ func tap_action(dir: Vector2i) -> void:
 ##
 ## Folds come apart one at a time and the first to animate takes the burst with it,
 ## so a stack under one diamond clears over several bursts rather than all at once.
+##
+## With a hand raised this is also the CANCEL: the hand goes back into its slot, time
+## resumes exactly as it would have, and the burst fires around you as it always does.
+## One key, two directions — the pull-back direction does not stop meaning pull-back
+## because a hand happens to be up, and a player who wants out of the cursor reaches
+## for the key that means "undo what I pushed in" without being taught to.
 func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	if animating():
 		return
+	cancel_aim()
 	var origin := player.global_position
 	_burst_flash_left = BURST_FLASH
 	var freed := 0
@@ -2077,9 +2259,20 @@ func _build_overlay_view() -> OverlayView:
 			v.exit_ok = exit_blocker() == null
 			v.exit_in_burst = glue_within_burst()
 
-	v.aim_at = (Vector2(candidate_anchor()) + Vector2(0.5, 0.5)) * v.cell_size
+	v.aiming = placing()
+	v.aim_at = cell_center(aim_cell())
 	v.aim_hand = next_hand_type()
 	v.hold = hold_progress()
+	if v.aiming:
+		# The cells the cursor may go to, as a rectangle, because the overlay should be
+		# told the shape of the reach and not the arithmetic that produced it.
+		var corner := player_cell() - Vector2i.ONE * ANCHOR_REACH
+		var span := float(2 * ANCHOR_REACH + 1) * v.cell_size
+		v.aim_box = Rect2(Vector2(corner) * v.cell_size, Vector2(span, span))
+		# ...and the fold this hand would arm, if it has a partner to arm one with.
+		var i := partner_index()
+		if i >= 0:
+			v.aim_pair = anchor_point(unpaired[i])
 
 	v.burst_t = burst_flash()
 	v.burst_radius = BURST_RADIUS
@@ -2138,6 +2331,11 @@ func _camera_focus() -> PackedVector2Array:
 		var wp = anchor_point(entry)
 		if wp != null:
 			pts.append(Vector2(wp))
+	# The cell you are choosing. It is within arm's reach, so it barely moves the
+	# frame — but "barely" is not "never" at the widest zoom, and the one thing that
+	# must not be off screen while you pick it is the cell you are picking.
+	if placing():
+		pts.append(cell_center(aim_cell()))
 	# Inside a fold the band IS the room: frame the fundamental domain, so a wide
 	# strip reads as the cylinder it is rather than a corridor with no visible
 	# walls. On a torus that is all four walls, and it comes out of the same call.
@@ -2162,6 +2360,16 @@ func _physics_process(delta: float) -> void:
 	if light_rig != null:
 		light_rig.set_focus(player.global_position)
 	if animating():
+		return
+	# Time is stopped while a hand is up. Everything below this line MOVES THE WORLD ON
+	# — the body's wrap, the fuses, the falling hands, doors, triggers — and none of it
+	# should happen while you are choosing which cell to pin. Nothing is stored and
+	# nothing is put back: the frame is simply not stepped, so the moment you resume is
+	# the moment you left, down to the fraction of a fuse.
+	#
+	# `_process` deliberately keeps running: the camera goes on easing onto the cell you
+	# are choosing, and the hold that cancels this has to keep counting.
+	if placing():
 		return
 
 	_wrap_body()
@@ -2374,6 +2582,10 @@ func _reset() -> void:
 		geo.visible = true       # the transition had hidden the sheet it stands in for
 	_hold_active = false
 	_hold_fired = false
+	# A hand up over a world that is about to be replaced is a cursor pointing at cells
+	# that will not exist. R unfreezes as well as rebuilding.
+	_aim = null
+	player.frozen = false
 	_burst_flash_left = 0.0
 	context.clear()
 	_setup_all()
@@ -2402,6 +2614,11 @@ func _update_status() -> void:
 		% [" ".join(kinds), hands_pending(), hands_in_folds()]
 	if not primed.is_empty():
 		stock += "   %d armed" % primed.size()
+	# The one state the world itself cannot show, because the way it shows it is by
+	# not moving — and a world that is not moving looks the same as a world you are
+	# not moving in.
+	if placing():
+		stock += "   ⏸ PLACING (time stopped)"
 	if context.is_empty():
 		hud.set_status("Region: %s   Folds: %d   Mode: WORLD\n%s"
 			% [region_id, folds.size(), stock])

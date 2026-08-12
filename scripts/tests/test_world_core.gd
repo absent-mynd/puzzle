@@ -519,6 +519,38 @@ func test_anchors_valid_rejects_only_the_degenerate_pair() -> void:
 		"Both on one cell has no crease direction — the one refusal left")
 
 
+func test_arms_reach_is_a_square_of_nine_cells_not_four_directions() -> void:
+	# Arm's length is every cell within one of the one you stand in, diagonals and your
+	# own included. The four-way version was a limit of the input, not of your arm.
+	var here := Vector2i(4, 12)
+	var inside := 0
+	for dy in range(-2, 3):
+		for dx in range(-2, 3):
+			var d := Vector2i(dx, dy)
+			var far := maxi(absi(dx), absi(dy))
+			if WorldCore.within_anchor_reach(here, here + d, 1):
+				inside += 1
+				assert_true(far <= 1, "%s is inside the square" % d)
+			else:
+				assert_true(far > 1, "%s is outside it" % d)
+	assert_eq(inside, 9, "Nine cells: the eight around you and the one you are on")
+
+
+func test_the_reach_clamp_pulls_a_cell_back_per_axis() -> void:
+	# The cursor clamps rather than refusing a step, so pushing at the edge of your
+	# reach is a no-op rather than a rejection — and stepping diagonally off a corner
+	# still moves along the axis that has room.
+	var here := Vector2i(4, 12)
+	assert_eq(WorldCore.clamp_to_anchor_reach(here, Vector2i(5, 11), 1), Vector2i(5, 11),
+		"A cell already inside the square is left alone")
+	assert_eq(WorldCore.clamp_to_anchor_reach(here, Vector2i(6, 12), 1), Vector2i(5, 12),
+		"One cell too far right comes back to the edge")
+	assert_eq(WorldCore.clamp_to_anchor_reach(here, Vector2i(9, 20), 1), Vector2i(5, 13),
+		"Far outside clamps to the nearest corner, per axis")
+	assert_eq(WorldCore.clamp_to_anchor_reach(here, Vector2i(6, 11), 1), Vector2i(5, 11),
+		"...and the axis with room keeps the step the axis without it lost")
+
+
 func test_a_one_cell_fold_is_geometrically_sound() -> void:
 	# The distance rule used to hide this case; with it gone, the narrowest fold has
 	# to actually work.
