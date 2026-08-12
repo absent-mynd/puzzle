@@ -597,7 +597,7 @@ func _unique_door_id(region_id: String) -> String:
 
 ## A fold is authored the way the player makes one: pin an anchor, pin another,
 ## and the pair becomes a fold. The difference is that an editor anchor waits
-## indefinitely — it is saved as a loose anchor in the region's `editor` block, so
+## indefinitely — it is saved as an unpaired anchor in the region's `editor` block, so
 ## a design left half-finished on Friday is still half-finished on Monday.
 
 func anchors_of(id: String) -> Array:

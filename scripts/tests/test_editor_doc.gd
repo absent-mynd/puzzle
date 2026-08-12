@@ -382,7 +382,7 @@ func test_growing_the_left_edge_carries_everything_with_the_terrain():
 	assert_eq(doc.light_at("west", Vector2i(4, 1)).cell, Vector2i(4, 1), "so did the light")
 	assert_eq(doc.hand_at("west", Vector2i(5, 1)).cell, Vector2i(5, 1), "and the hand")
 	assert_eq(doc.world.doors[door]["cell"], Vector2i(6, 1), "and the door")
-	assert_eq(doc.anchors_of("west"), [Vector2i(7, 1)], "and the loose anchor")
+	assert_eq(doc.anchors_of("west"), [Vector2i(7, 1)], "and the unpaired anchor")
 	assert_eq(doc.region("west")["spawn"], Vector2(8.5, 1.5), "and the spawn point")
 
 

@@ -1,8 +1,5 @@
 # The world editor
 
-**Last updated:** 2026-08-06 · **Tests:** `test_editor_tools`, `test_editor_doc`,
-`test_world_editor`
-
 An MS-Paint canvas for terrain, on a Mural-style board of canvases you can
 arrange, resize and connect.
 
@@ -34,7 +31,7 @@ So the vocabulary lines up like this:
 | where the card **sits** | `regions.<id>.editor.pos` | *nothing* |
 | a **door** | `doors.<id>` | a warp point at a base tile's centre |
 | a **connected pair of anchors** | `regions.<id>.folds[]` | a fold applied before you spawn |
-| a **loose anchor** | `regions.<id>.editor.anchors[]` | *nothing* |
+| a **unpaired anchor** | `regions.<id>.editor.anchors[]` | *nothing* |
 
 **A card's position is not a fact about the world.** Regions have no spatial
 relationship to each other — they are connected by doors, not by adjacency — so
@@ -189,7 +186,7 @@ outside the new grid is dropped, and you are told how much.
 
 A fold is authored the way the player makes one: **pin an anchor, pin another,
 and the pair becomes a fold.** The difference is that an editor anchor waits
-indefinitely — it is saved as a loose anchor in the region's `editor` block, so
+indefinitely — it is saved as an unpaired anchor in the region's `editor` block, so
 a half-finished design is still half-finished tomorrow.
 
 **They are drawn, not applied.** The card keeps its full shape and the fold is

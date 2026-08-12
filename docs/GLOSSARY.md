@@ -94,6 +94,7 @@ Grep for these; each is a leftover.
 |---|---|---|
 | anchor stock, anchor economy | hand ledger, **hand economy** | The ledger counts hands, wherever they are. |
 | anchor cache, hand cache, a pickup | **loose hand** | The type is still `HandPickup` — see above. |
+| loose anchor | **unpaired anchor** | An editor anchor with no partner yet. "Loose" belongs to hands. |
 | release burst | **burst** | The burst *is* the release. |
 | excision band, excision strip | **excised strip** | |
 | the blob (meaning the character) | **the player** | |
