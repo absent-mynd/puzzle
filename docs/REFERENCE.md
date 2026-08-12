@@ -30,7 +30,7 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | Concern | File |
 |---|---|
 | **The current level**: what space the player is in — its pieces, collision geometry, how it repeats, how far the one non-repeating axis runs. The value that lets a collaborator be handed "where you are" instead of the whole world | `Level.gd` |
-| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
+| Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, circle-vs-polygon depenetration, anchor reach & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
 | Immutable base level: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
 | One base tile: stable `base_id`, `grid_position`, `type`, per-instance `data` | `BaseTile.gd` |
 | One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel`, `held_hands` | `Fold.gd` |
@@ -61,16 +61,17 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 
 | Concern | File |
 |---|---|
-| **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/burst verb, the hand ledger, the auto-commit fuse, loose hands, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
+| **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/burst verb, the placement cursor and its stopped clock, the hand ledger, the auto-commit fuse, loose hands, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
 | **The window-resolution overlay**: background, controls line, status readout, the centre flash and its lifetime. Told what to say; holds no reference back | `WorldHud.gd` |
 | **What the camera should be showing**: the lead, the lens, and the render-target size that stands in for zoom. Takes the world's facts as a context dictionary | `WorldCamera.gd` |
 | **Hands in the air**: the flight, the wrap, the turn-back at a band's end. Emits `landed` / `lost`; a hand at rest is an occupant and belongs to `FoldWorld` | `HandField.gd` |
-| Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing); wears the loading burst as a colour (`charge_color`) | `PlayerBody.gd` |
-| Anchors, fold preview band, seam diamonds, glue lines, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
+| Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing, all held still by `camera_held`); wears the loading burst as a colour (`charge_color`) | `PlayerBody.gd` |
+| Anchors, fold preview band, the placement cursor and its reach, seam diamonds, glue lines, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
 | The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |
 | **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping | `PixelArt.gd` |
 | **The tileset.** Kinds, variants, and base-space UVs for cut fragments | `TileAtlas.gd` |
 | Lit materials, per-frame light uniforms, lamp glyphs | `LightRig.gd` |
+| **What time it is for things in the world.** Stops when the world does; everything that drifts, throbs or flickers reads it | `WorldClock.gd` |
 | Controls and the design beats | `README.md` |
 
 `FoldWorld.gd` is the largest file and the one to read first if you want to
@@ -95,6 +96,13 @@ understand how the pieces meet. Its header comment is the map.
 | …the camera decide where to look ahead? | `FoldWorld._update_camera()` → `WorldCore.camera_lookahead_for` (+ `PlayerBody.motion_fraction` / `look_dir`) |
 | …zoom stay compatible with pixel art? | `PixelArt.target_size` → `FoldWorld._size_pixel_view()` — the target resizes, the lens never moves |
 | …F pick which fold to unfold? | `FoldWorld.aimed_fold()` — newest-first, prefers one that can actually come out |
+| …a hand get placed? | `FoldWorld.begin_aim()` / `move_aim()` / `finish_aim()` → `place_hand(cell)` |
+| …time stop while you aim? | `FoldWorld.placing()` — `_physics_process` returns early and the body is `frozen` |
+| …the cursor know how far it may go? | `WorldCore.within_anchor_reach` / `clamp_to_anchor_reach`, radius `FoldWorld.ANCHOR_REACH` |
+| …everything in the world stop animating at once? | `WorldClock` — `FoldWorld._process` stops advancing it |
+| …the screen say the world is held? | `assets/shaders/held.gdshader`, eased by `FoldWorld._tick_held_look` |
+| …the held look know where to stay clear? | `FoldWorld._body_in_target_px()` → the shader's `clear_at` / `clear_radius` |
+| …the camera stop while you aim? | `PlayerBody.camera_held`, set each frame by `FoldWorld._process` |
 
 ---
 
@@ -117,6 +125,7 @@ understand how the pieces meet. Its header comment is the map.
 | The authored world | `worlds/overworld.json` |
 | Main scene | `scenes/world/World.tscn` |
 | The lighting shader | `assets/shaders/pixel_lit.gdshader` |
+| The held-world screen effect | `assets/shaders/held.gdshader` |
 | Tileset layout & how to drop in a drawn one | `assets/sprites/README.md` |
 
 ---

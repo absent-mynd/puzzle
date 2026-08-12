@@ -62,7 +62,9 @@ var _lamps: Node2D
 ## Live lights: [{"pos", "color", "radius", "energy", "flicker"}, ...]
 var _lights: Array = []
 var _focus := Vector2.ZERO
-var _time := 0.0
+## The `WorldClock` reading the uniforms currently on the GPU were computed at.
+## Not a clock of its own — only a note of how fresh the upload is.
+var _uploaded_at := -1.0
 var _any_flicker := false
 
 
@@ -158,10 +160,18 @@ func set_focus(point: Vector2) -> void:
 	_focus = point
 
 
-func _process(delta: float) -> void:
-	_time += delta
-	if _any_flicker:
-		_upload()
+## Re-upload the flickering lamps once per frame — but only when the world has
+## actually moved on. The flicker runs on `WorldClock`, so when the world stops the
+## energies stop with it and there is nothing new to send; a lamp still breathing over
+## a stopped world would be the one thing on screen giving away that the pause is a
+## pause and not a still frame.
+func _process(_delta: float) -> void:
+	if not _any_flicker:
+		return
+	var now := WorldClock.now()
+	if absf(now - _uploaded_at) < GeometryCore.EPSILON:
+		return
+	_upload()
 
 
 func _rebuild_lamps() -> void:
@@ -187,6 +197,7 @@ func _rebuild_lamps() -> void:
 func _upload() -> void:
 	if _materials.is_empty():
 		return
+	_uploaded_at = WorldClock.now()
 	var chosen := _nearest()
 	var positions := PackedVector2Array()
 	var colors := PackedVector3Array()
@@ -216,7 +227,8 @@ func _energy_of(entry: Dictionary, index: int) -> float:
 	if absf(amount) <= 0.0:
 		return energy
 	var phase := float(index) * 1.7
-	var wave := 0.6 * sin(_time * 9.3 + phase) + 0.4 * sin(_time * 5.1 + phase * 2.3)
+	var t := WorldClock.now()
+	var wave := 0.6 * sin(t * 9.3 + phase) + 0.4 * sin(t * 5.1 + phase * 2.3)
 	return maxf(energy * (1.0 + amount * wave), 0.0)
 
 

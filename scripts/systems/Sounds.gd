@@ -33,6 +33,9 @@ class_name Sounds extends RefCounted
 
 # --- Folding: the verb the whole game is made of -----------------------------
 
+## A hand comes up into the placement cursor, and the world stops with it. The
+## mirror of `HAND_PLACE`, in sound as well as in meaning.
+const HAND_RAISE := "hand_raise"
 ## A hand goes down as an anchor.
 const HAND_PLACE := "hand_place"
 ## A pair completes and its fuse lights. The player's only warning.
@@ -108,6 +111,10 @@ const _REGISTRY := {
 	# different pitch each time is harder to learn to recognise.
 	PAIR_ARMED:   {"vol": -3.0, "pitch": 0.00, "gap": 0.0},
 	HAND_PLACE:   {"vol": -6.0, "pitch": 0.09, "gap": 0.0},
+	# Under its mirror, and with less jitter. Raising a hand is the quieter half of
+	# the gesture — it spends nothing and commits nothing — and it wants to read as
+	# the same sound as the pin that follows it, not as a separate announcement.
+	HAND_RAISE:   {"vol": -9.0, "pitch": 0.05, "gap": 0.0},
 
 	HAND_PICKUP:  {"vol": -3.0, "pitch": 0.03, "gap": 0.0},
 	# NOT throttled, deliberately. A failed fold scatters both its hands in one

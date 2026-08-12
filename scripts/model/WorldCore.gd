@@ -664,6 +664,35 @@ static func anchors_valid(a: Vector2i, b: Vector2i) -> bool:
 	return a != b
 
 
+## The cells an anchor may be pinned in from where you are standing: a square of
+## `reach` cells around your own, **diagonals included**.
+##
+## A square rather than a circle because what is being chosen is a CELL. A radius
+## measured from the body to cell centres admits or refuses a diagonal depending on
+## where inside your own cell you happen to be standing, which is a rule whose effects
+## a player can see and whose cause they never can. A square around your cell is one
+## you can count.
+##
+## `reach` is arm's length, and it is load bearing in a way worth knowing before
+## raising it: a shell one tile thick keeps you out of what it encloses precisely
+## because every cell inside it is two away from every cell outside. That is the whole
+## of why the sealed chamber is sealed (see `scripts/world/README.md` §beat 4).
+static func within_anchor_reach(from: Vector2i, cell: Vector2i, reach: int) -> bool:
+	return absi(cell.x - from.x) <= reach and absi(cell.y - from.y) <= reach
+
+
+## `cell` pulled back inside that square.
+##
+## The placement cursor CLAMPS rather than refusing a step: pushing at the edge of
+## your reach should do nothing rather than cost you the press. It also makes "step,
+## then clamp" total — there is no direction that can leave the cursor somewhere it is
+## not allowed to be, so no caller has to check afterwards.
+static func clamp_to_anchor_reach(from: Vector2i, cell: Vector2i, reach: int) -> Vector2i:
+	return Vector2i(
+		clampi(cell.x, from.x - reach, from.x + reach),
+		clampi(cell.y, from.y - reach, from.y + reach))
+
+
 ## Can an anchor be pinned on the surface at this plane cell? Refused when the dominant
 ## piece there is an anchor-blocking type (UNANCHORABLE_*), or when the cell is void.
 static func can_anchor_at(pieces_by_pos: Dictionary, cell: Vector2i) -> bool:

@@ -242,13 +242,19 @@ func test_motion_intensity_is_bounded_and_still_at_rest() -> void:
 	assert_almost_eq(body.motion_intensity(), 1.0, 0.001, "It saturates at 1")
 
 
-func test_frozen_reports_still_however_stale_the_velocity_is() -> void:
-	# Riding a fold, the velocity is left over from before the transition and the
-	# transition frames itself from its own endpoints.
+func test_motion_intensity_reports_the_body_and_not_why_it_is_held() -> void:
+	# `frozen` means only "do not step me", and it is now set for two unrelated
+	# reasons. Riding a fold leaves the velocity stale, and the frame should read it as
+	# still; a hand raised into the placement cursor leaves it exactly intact, and the
+	# frame must go on reading it, or the lens drifts shut while you aim and blooms
+	# open again the instant you pin. Which one is happening is `WorldCamera`'s call
+	# (it is told whether a fold is in flight); this reports the velocity either way.
 	body.velocity = Vector2(PlayerBody.RUN_SPEED, PlayerBody.MAX_FALL)
-	assert_gt(body.motion_intensity(), 0.0, "Moving hard while free")
+	var moving := body.motion_intensity()
+	assert_gt(moving, 0.0, "Moving hard while free")
 	body.frozen = true
-	assert_eq(body.motion_intensity(), 0.0, "Frozen reads as still")
+	assert_eq(body.motion_intensity(), moving,
+		"Being held still does not make the body still")
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment. The
 world is now **authored in an editor** rather than by hand-editing JSON.
-**Tests:** 800 passing / 800, 32 scripts, ~23s.
+**Tests:** 843 passing / 843, 34 scripts, ~25s.
 
 ---
 
@@ -31,7 +31,8 @@ What exists and works today:
 | Fold-on-enter triggers | ✅ Wired at world level, **in the world** |
 | Hands: two slots, typed, conserved (`AnchorStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
-| One-key verb (tap = place a hand, hold-and-release = burst; charge worn on the body) | ✅ Playable |
+| One-key verb (tap = raise a hand, tap = pin it, hold-and-release = burst; charge worn on the body) | ✅ Playable |
+| **Placement cursor** — time stops between the two taps; nine cells of reach; dithered held-world look | ✅ Playable, ⚙️ untuned |
 | Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
 | Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
