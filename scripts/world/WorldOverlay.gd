@@ -101,9 +101,10 @@ func _rebuild_preview() -> void:
 	_aim_strip = []
 	if not _view.active:
 		return
-	if _view.aiming and _view.aim_pair != null:
-		_aim_strip = _clip(_strip_polygon(
-			_view.aim_at, Vector2(_view.aim_pair), _view.world_px))
+	if _view.aiming:
+		for at in _view.aim_pairs:
+			_aim_strip.append_array(_clip(_strip_polygon(
+				_view.aim_at, Vector2(at), _view.world_px)))
 	var world_px := _view.world_px
 	for entry in _view.hands_down:
 		if entry["at"] == null:
@@ -262,6 +263,7 @@ func _aim_colour() -> Color:
 ## you look at through every tap.
 func _draw_aim() -> void:
 	if _view.aiming:
+		_draw_span(_view.aim_at, _view.aim_span, _aim_colour())
 		_draw_cursor()
 	else:
 		# A ring on the cell a raise would START from, so you can see what kind of fold
@@ -316,9 +318,33 @@ func _draw_placed_hands() -> void:
 		var at := Vector2(entry["at"])
 		var pulse := _pulse_at(float(entry["fuse"]))
 		var c: Color = HandTypes.color(int(entry["kind"]))
+		_draw_span(at, float(entry["span"]), c)
 		draw_arc(at, 16.0 + pulse * 5.0, 0, TAU, 24, c, STROKE)
 		if pulse > 0.0:
 			draw_circle(at, 3.0 + pulse * 2.5, c)
+		# A bolted anchor is the world's, and a burst will not answer for it. Said with
+		# a second ring rather than a colour, because colour already means KIND and a
+		# hand the world drove in is a hand of some kind like any other.
+		if bool(entry.get("bolted", false)):
+			draw_arc(at, 11.0, 0, TAU, 20, Color(c, 0.8), HAIR)
+
+
+## How far an anchor reaches for a partner — a dotted circle, four cells or six of it.
+##
+## Drawn because a hand you place is a PLAN: with pairing done by proximity, where the
+## next one has to go is a fact about this one, and a player made to discover it by
+## trial is being asked to guess. Drawn in DASHES and at a tenth of the hand's own
+## alpha because at this size a solid ring is a quarter of the frame, and there may be
+## several on screen at once — the eye should be able to find it when it looks for it
+## and lose it when it does not.
+func _draw_span(at: Vector2, radius: float, c: Color) -> void:
+	if radius <= 0.0:
+		return
+	var steps := 48
+	var arc := TAU / float(steps)
+	for i in range(0, steps, 2):
+		var t := float(i) * arc
+		draw_arc(at, radius, t, t + arc, 3, Color(c, 0.14), HAIR)
 
 
 ## The strip an armed pair would excise, and the alignment guides — in every copy

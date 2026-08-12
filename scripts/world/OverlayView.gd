@@ -55,10 +55,14 @@ var in_reach: Array = []
 ## cut is dormant and appears nowhere.
 var doors: Array = []
 
-## Hands you have put down: `{"at": Vector2 or null, "kind": int, "fuse": float}`.
-## `at` is null for a hand pinned somewhere this frame cannot show. `fuse` is that
-## pair's progress 0..1, or negative for a hand that is not part of an armed pair —
-## the overlay turns it into a throb.
+## Anchors standing in this space:
+## `{"at": Vector2 or null, "kind": int, "fuse": float, "span": float, "bolted": bool}`.
+##
+## `at` is null for an anchor pinned somewhere this frame cannot show. `fuse` is the
+## progress 0..1 of whichever pair is closest to taking it, or negative when nothing
+## reaches it — the overlay turns that into a throb. `span` is how far it reaches for a
+## partner, in world units, drawn faintly so that placing a hand can be PLANNED rather
+## than discovered. `bolted` marks the world's own: a burst does not answer for them.
 var hands_down: Array = []
 
 ## Armed pairs, as the two points a preview strip spans: `{"a": Vector2, "b": Vector2}`.
@@ -106,9 +110,13 @@ var aim_hand := -1
 var aiming := false
 ## The cells the cursor may be walked to: arm's reach, as a rectangle. Empty off-mode.
 var aim_box := Rect2()
-## The placed hand this one would pair with, or null when it would start a fresh pair.
-## The strip between the two is the fold you are about to arm, drawn before you arm it.
-var aim_pair = null
+## Every placed anchor this hand would reach from the cursor's cell — the folds you
+## are about to arm, drawn before you arm them. More than one is possible: a hand
+## dropped between two lone anchors starts a pair with each.
+var aim_pairs: Array = []
+## How far the hand being placed would reach, in world units. The cursor wears its own
+## span, because how far it will reach is half of where to put it.
+var aim_span := 0.0
 
 # --- The burst ---
 
