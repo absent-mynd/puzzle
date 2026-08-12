@@ -70,6 +70,11 @@ var pairs: Array = []
 var loose: Array = []
 var balls: Array = []
 
+## The meeting lines of this space's standing folds — where two flaps came together.
+## Segments, like `glue`, because they are the same kind of statement about the sheet:
+## the seam is where it was joined by a fold, the glue where it is joined to itself.
+var seams: Array = []
+
 ## The identified crease lines of a repeating space.
 var glue: Array = []
 

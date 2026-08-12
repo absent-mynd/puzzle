@@ -786,6 +786,45 @@ func test_a_shared_seam_cell_draws_one_diamond_that_reads_unblocked() -> void:
 		"With one fold left the cell still has its diamond, still open")
 
 
+func test_a_fold_draws_a_seam_line_through_its_diamond() -> void:
+	# A seam is a LINE, and the diamond is only where you burst it. Both come off the
+	# one fold — the diamond from `meeting_pos`, the line from the segment already
+	# recorded for unfold blocking — so the line runs through the diamond by
+	# construction. Pinned here because drawing them off two different facts is
+	# exactly how they would come to disagree.
+	assert_eq(world.seam_lines(), [], "A region with nothing folded has no seams to draw")
+
+	world.do_fold(Vector2i(20, 12), Vector2i(28, 12))       # seam cell (24,12)
+	var segs: Array = world.seam_lines()
+	assert_eq(segs.size(), 1, "One fold, one seam line")
+	var seg: PackedVector2Array = segs[0]
+	var diamond := (Vector2(24, 12) + Vector2(0.5, 0.5)) * CS
+	assert_lt(diamond.distance_to(
+			Geometry2D.get_closest_point_to_segment(diamond, seg[0], seg[1])), 0.01,
+		"...running through the diamond that marks it")
+	assert_gt(seg[0].distance_to(seg[1]), CS,
+		"...and spanning what the fold actually joined, rather than sitting on a point")
+
+	world.unfold_space_fold(world.folds[0])
+	assert_eq(world.seam_lines(), [], "Opening the fold takes its seam line with it")
+
+
+func test_every_standing_fold_draws_its_own_seam() -> void:
+	# One line per fold, not per meeting cell: two folds sharing a cell share their
+	# diamond (above) and still met along two different lines. The diamond is about
+	# what a burst there would do; the line is about where the sheet is joined.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)   # clear of both strips
+	world.do_fold(Vector2i(20, 12), Vector2i(24, 12))           # X: seam cell (22,12)
+	world.do_fold(Vector2i(22, 10), Vector2i(22, 14))           # Y: the SAME seam cell
+	assert_eq(world.seam_markers().size(), 1, "One diamond between them")
+	assert_eq(world.seam_lines().size(), 2, "...and a line each, crossing there")
+
+	# Blocked or free changes nothing about it. The refusal is the diamond's to say —
+	# the seam is where the halves met either way.
+	assert_false(world.can_unfold_fold(world.folds[0]), "The older fold is buried")
+	assert_eq(world.seam_lines().size(), 2, "...and its seam is drawn all the same")
+
+
 func test_off_axis_anchor_pair_makes_a_diagonal_fold() -> void:
 	_pin(Vector2i(1, 0))                # (5,12)
 	world.player.teleport(Vector2(7.5 * CS, 10.5 * CS), false)

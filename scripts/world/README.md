@@ -632,7 +632,10 @@ stays pinned at `PixelArt.CAMERA_ZOOM` forever.
 - **The seam stays a hard line.** Because the art is cut by the crease exactly
   as the geometry is, two flaps meeting at a seam show two tiles cut mid-pattern
   against each other. Nothing blends, blurs or fades across it. That is
-  deliberate for now.
+  deliberate for now. What the seam does get is a **marker over that cut** — a
+  muted version of the glue line, in the unlit overlay layer with everything else
+  you read the world by, so a fold you left standing an hour ago is still legible
+  as a fold rather than as a place where the tiles happen to disagree.
 - **The HUD is outside the pixel viewport**, at window resolution, so text stays
   legible over chunky tiles. So are the overlay's markers — they are drawn
   unlit, because what you navigate by must never dim.

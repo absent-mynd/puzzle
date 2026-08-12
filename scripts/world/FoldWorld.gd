@@ -805,6 +805,30 @@ func glue_lines() -> Array:
 	return out
 
 
+## The meeting lines of the folds standing in the current space: where two flaps came
+## together, over the extent of what the fold actually excised.
+##
+## The segments themselves are not computed here — they are the ones `_commit_fold`
+## already recorded for unfold blocking, which IS the meeting line. A seam drawn from
+## its own arithmetic would be a second copy of a fact that can drift from the first,
+## and the one it would drift from is the one that decides whether the fold can come
+## out at all.
+##
+## THIS space's, like everything else the overlay draws. The fold you were swallowed
+## by is the wall of the room from inside it, and it is already drawn as that — see
+## `glue_lines()`.
+##
+## A fold that excised nothing leaves a zero-length segment; it is dropped here rather
+## than in the overlay, so nothing undrawable ever reaches the view.
+func seam_lines() -> Array:
+	var out: Array = []
+	for fold in space_folds():
+		var seg: PackedVector2Array = seam_segs.get(fold.fold_id, PackedVector2Array())
+		if seg.size() == 2 and not seg[0].is_equal_approx(seg[1]):
+			out.append(seg)
+	return out
+
+
 func animating() -> bool:
 	return not _anim.is_empty()
 
@@ -2374,6 +2398,8 @@ func _build_overlay_view() -> OverlayView:
 	v.world_px = Vector2(base.grid_size) * v.cell_size
 	v.domain = lattice.domain_polygon(v.world_px.length())
 
+	# Where this space's folds met, and the diamonds sitting on those lines.
+	v.seams = seam_lines()
 	v.markers = seam_markers()
 	for fold in seams_within_burst():
 		v.in_reach.append({

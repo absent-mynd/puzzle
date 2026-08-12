@@ -107,6 +107,20 @@ func test_a_real_pair_still_previews_a_band() -> void:
 	assert_gte(_fewest_points(overlay._strips), 3, "and its clipped strip is drawable too")
 
 
+func test_a_seam_is_drawn_as_a_muted_glue_line() -> void:
+	# The two lines say the same kind of thing about the sheet — it is joined along
+	# here — so they are one look at two strengths rather than two looks. What makes
+	# the seam the quiet one is only its alpha, and that is the whole of the design:
+	# a hue of its own would read as a different KIND of join, and equal weight would
+	# have a region full of standing folds shouting over the markers you navigate by.
+	assert_eq(Color(WorldOverlay.SEAM_COLOR, 1.0), Color(WorldOverlay.GLUE_COLOR, 1.0),
+		"the seam is the glue line's own colour")
+	assert_lt(WorldOverlay.SEAM_COLOR.a, WorldOverlay.GLUE_COLOR.a,
+		"...drawn quieter than it")
+	assert_gt(WorldOverlay.SEAM_COLOR.a, 0.0,
+		"...but still drawn")
+
+
 func test_nothing_the_overlay_would_draw_has_fewer_than_three_points() -> void:
 	# The invariant itself, over a frame holding both kinds of pair and the guides
 	# that a placed hand draws — in both kinds of space, because the bug lived in the
