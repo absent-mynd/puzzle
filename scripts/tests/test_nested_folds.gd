@@ -269,6 +269,76 @@ func test_the_seams_drawn_are_the_ones_in_the_space_you_are_standing_in() -> voi
 		"...to the region, where the inner fold persisted and brought its seam with it")
 
 
+# ---------------------------------------------------------------------------
+# A seam the strip took in with it
+# ---------------------------------------------------------------------------
+# Fold over an older seam and that seam does not vanish — it goes into the new fold's
+# subspace along with the sheet it was cut into. It is still a join, and it is under
+# your feet in the room you are now standing in. It just belongs to a fold in the space
+# outside, so drawing `space_folds()` alone left a hard line in the art with nothing to
+# say what it was.
+
+
+## An older fold, and then a strip laid straight over its seam with you standing on it.
+func _swallow_an_older_seam() -> Fold:
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)
+	world.do_fold(Vector2i(30, 12), Vector2i(34, 12))            # seam cell (32,12)
+	var older: Fold = world.folds[0]
+	world.player.teleport(Vector2(32.5 * CS, 12.5 * CS), false)  # stand on that seam
+	world.do_fold(Vector2i(28, 12), Vector2i(36, 12))            # a strip right over it
+	return older
+
+
+func test_a_seam_the_strip_took_in_is_drawn_inside_the_fold() -> void:
+	var older := _swallow_an_older_seam()
+	assert_eq(world.mode, world.Mode.SUBSPACE, "Swallowed, standing on the older seam")
+	assert_eq(world.space_folds().size(), 0, "Nothing has been folded in HERE")
+
+	assert_eq(world.seam_lines().size(), 1, "...and there is still a seam in here")
+	assert_eq(world.seam_cell(older), Vector2i(32, 12),
+		"...the older fold's, at the cell the strip took it in at")
+	assert_eq(world.seam_markers(), {Vector2i(32, 12): false},
+		"It gets its diamond, and it reads blocked — this space cannot open it")
+
+
+func test_a_seam_held_from_outside_says_so_rather_than_nothing() -> void:
+	# The marker has to promise what the act delivers, and that cuts both ways: a burst
+	# that reaches a drawn seam and reports an empty sphere is the marker lying.
+	_swallow_an_older_seam()
+	assert_eq(world.seams_within_burst().size(), 1, "The seam is inside the burst")
+	world.hold_action()
+	assert_eq(world.folds.size(), 2, "Nothing came apart")
+	assert_string_contains(world.hud.flash_text(), "outside",
+		"...and it says why, rather than claiming there was nothing there")
+
+
+func test_only_the_part_of_a_seam_inside_the_strip_comes_in_with_it() -> void:
+	# A seam running ACROSS the strip is cut at the glue like everything else: what is
+	# in here is in here, and the rest is still out in the space you came from.
+	world.player.teleport(Vector2(4.5 * CS, 5.5 * CS), false)
+	world.do_fold(Vector2i(30, 12), Vector2i(34, 12))            # vertical seam, full height
+	var older: Fold = world.folds[0]
+	var whole: PackedVector2Array = world.seam_lines()[0]
+	assert_gt(absf(Vector2(whole[0]).y - Vector2(whole[1]).y), 10.0 * CS,
+		"Out here it runs the height of the sheet")
+
+	world.player.teleport(Vector2(32.5 * CS, 12.5 * CS), false)
+	world.do_fold(Vector2i(32, 10), Vector2i(32, 14))            # a band ACROSS it
+	assert_eq(world.mode, world.Mode.SUBSPACE, "In the band")
+	var inside: Array = world.seam_lines()
+	assert_eq(inside.size(), 1, "One piece of the older seam came in")
+	var seg: PackedVector2Array = inside[0]
+	assert_almost_eq(absf(Vector2(seg[0]).y - Vector2(seg[1]).y), 4.0 * CS, 2.0,
+		"...exactly the four cells the band reaches, cut at both glue lines")
+	assert_eq(world.seam_cell(older), Vector2i(32, 12), "Its meeting cell came in too")
+
+	world.try_exit()
+	assert_eq(world.mode, world.Mode.WORLD, "Back out")
+	assert_gt(absf(Vector2(world.seam_lines()[0][0]).y
+		- Vector2(world.seam_lines()[0][1]).y), 10.0 * CS,
+		"...and the seam is its whole self again — the strip was only a window onto it")
+
+
 func test_how_deep_you_are_tints_the_sheet() -> void:
 	assert_eq(world.light_rig.depth(), 0, "The region is untinted")
 	_pinch_over_pit()

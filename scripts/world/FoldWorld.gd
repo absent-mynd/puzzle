@@ -811,45 +811,86 @@ func glue_lines() -> Array:
 	return out
 
 
-## The meeting lines of the folds standing in the current space, WHERE THEY ARE NOW:
-## where two flaps came together, over the extent of what the fold actually excised,
-## carried through every fold made since.
+## Every seam with a presence in the space you are standing in: this space's own
+## folds, and the folds of the spaces OUTSIDE it whose seams the strip took in with it.
 ##
-## The recorded segments are not computed here — they are the ones `_commit_fold`
-## already stored for unfold blocking, which IS the meeting line. A seam drawn from
-## its own arithmetic would be a second copy of a fact that can drift from the first,
-## and the one it would drift from is the one that decides whether the fold can come
-## out at all.
+## Each mark is `{"fold", "segs", "at", "outer"}` — the line where it lies now, the
+## meeting point a burst measures to (null when nothing of it is in here), and whether
+## the fold belongs to a space you are not standing in.
 ##
-## But a recorded segment is a statement about the configuration it was recorded in,
-## and the next fold moves the sheet under it — see `_seam_now`. One fold's seam can
-## come back as two.
+## Two things make this one walk rather than a query per space:
 ##
-## THIS space's, like everything else the overlay draws. The fold you were swallowed
-## by is the wall of the room from inside it, and it is already drawn as that — see
-## `glue_lines()`.
-func seam_lines() -> Array:
-	var list: Array = space_folds()
+##   - **A seam moves.** The recorded segment is a statement about the configuration it
+##     was recorded in, and every fold made afterwards slides the sheet under it. So it
+##     is carried down the list, one fold at a time. It can come back as two where a
+##     later fold cut it, and as none where one swallowed it whole.
+##   - **A seam can be somewhere else entirely.** A fold laid OVER an older seam takes
+##     that seam into its subspace along with the sheet it was cut into — the join is
+##     still there, under your feet, in the room you are now standing in. It just
+##     belongs to a fold in the space outside. Drawn from `space_folds()` alone it was
+##     invisible: a hard line in the art with nothing to say what it was.
+##
+## The walk mirrors `_compute_space` exactly, because it is answering the same question
+## about the same derivation — at each level, carry every mark through that space's
+## folds up to the one you went INTO, then keep what lies inside that fold's strip. No
+## frame changes on the way down: a strip is captured where it stands.
+##
+## The recorded segments are not computed here. They are the ones `_commit_fold` stored
+## for unfold blocking, which IS the meeting line; a seam drawn from its own arithmetic
+## would be a second copy of a fact that can drift from the one deciding whether the
+## fold can come out at all.
+func seam_marks() -> Array:
+	var marks: Array = []
+	var sp_folds: Array = folds
+	for level in range(context.size() + 1):
+		var host: Fold = context[level] if level < context.size() else null
+		var limit: int = sp_folds.size() if host == null else sp_folds.find(host)
+		if limit < 0:
+			return marks              # a context fold missing from its parent's list
+		for i in range(limit):
+			for m in marks:
+				m["segs"] = _carry_segments(m["segs"], sp_folds[i])
+				if m["at"] != null:
+					m["at"] = WorldCore.carry_point(Vector2(m["at"]), sp_folds[i], CS)
+			# ...and only then its own, because a fold does not move its own seam.
+			marks.append({
+				"fold": sp_folds[i],
+				"segs": _recorded_seam(sp_folds[i]),
+				"at": cell_center(sp_folds[i].meeting_pos),
+				"outer": host != null,
+			})
+		if host != null:
+			marks = _taken_into(marks, host)
+			sp_folds = _ensure_inner_folds(host.fold_id)
+	return marks
+
+
+## What the strip took in with it. A seam running out through a crease is kept for the
+## part that came in and cut at the glue; one left entirely outside is dropped, and so
+## is a meeting point that stayed behind — what is not in here cannot be burst from in
+## here.
+func _taken_into(marks: Array, host: Fold) -> Array:
 	var out: Array = []
-	for i in range(list.size()):
-		out.append_array(_seam_now(list, i))
+	for m in marks:
+		var segs: Array = []
+		for seg in m["segs"]:
+			var part := WorldCore.segment_within_strip(seg[0], seg[1], host)
+			if part.size() == 2:
+				segs.append(part)
+		var at = m["at"]
+		if at != null and not WorldCore.point_within_strip(Vector2(at), host):
+			at = null
+		if not segs.is_empty() or at != null:
+			out.append({"fold": m["fold"], "segs": segs, "at": at, "outer": true})
 	return out
 
 
-## The seam of `list[idx]` as it lies today: its recorded line carried through every
-## fold made after it, in order.
-##
-## Nothing here is a fresh fact about the world — it is the fold list replaying, which
-## is how everything else in this file is derived (Decision 1). What it fixes is a seam
-## that used to be drawn, aimed at and burst wherever it happened to be when it was
-## made: a later fold slides both its flaps inward, and the seams standing on them go
-## with the sheet or go nowhere at all. Comes back as two segments where a later fold
-## cut it in half, and as none where one swallowed it whole.
-func _seam_now(list: Array, idx: int) -> Array:
-	var segs: Array = _recorded_seam(list[idx])
-	for j in range(idx + 1, list.size()):
-		segs = _carry_segments(segs, list[j])
-	return segs
+## The seam lines to draw, from every mark that has one.
+func seam_lines() -> Array:
+	var out: Array = []
+	for m in seam_marks():
+		out.append_array(m["segs"])
+	return out
 
 
 ## A fold that excised nothing leaves a zero-length segment and has no seam to carry or
@@ -870,25 +911,17 @@ func _carry_segments(segs: Array, through: Fold) -> Array:
 
 
 ## Where the fold's meeting point is NOW — the spot its diamond is drawn on, the burst
-## measures to, and F unfolds it at. Null once a later fold has swallowed it: the hands
-## it is holding went into that fold's subspace with the sheet they were pinned to, and
-## there is nothing left in this space to burst.
+## measures to, and F unfolds it at. Null when nothing of it is in this space: the
+## hands it holds went wherever its seam went, and there is nothing here to burst.
 ##
-## Every reader of this goes through here rather than through `meeting_pos`, because
-## the marker, the reach and the act have to agree about one place — a diamond drawn
-## where a burst does not reach is the bug that rule exists to prevent.
+## Every reader of this goes through the marks rather than through `meeting_pos`,
+## because the marker, the reach and the act have to agree about one place — a diamond
+## drawn where a burst does not reach is the bug that rule exists to prevent.
 func seam_point(fold: Fold):
-	var list: Array = space_folds()
-	var idx := list.find(fold)
-	if idx < 0:
-		return null
-	var at := cell_center(fold.meeting_pos)
-	for j in range(idx + 1, list.size()):
-		var moved = WorldCore.carry_point(at, list[j], CS)
-		if moved == null:
-			return null
-		at = Vector2(moved)
-	return at
+	for m in seam_marks():
+		if m["fold"] == fold:
+			return m["at"]
+	return null
 
 
 ## ...and the cell that point is in. Folds shift by whole cells, so a meeting point
@@ -1235,17 +1268,19 @@ func partner_index() -> int:
 func aimed_fold(dir: Vector2i = Vector2i.ZERO) -> Fold:
 	var cand := candidate_anchor(dir)
 	var here := player_cell()
-	var list: Array = space_folds()
+	var marks: Array = seam_marks()
 	var blocked: Fold = null
-	for i in range(list.size() - 1, -1, -1):
-		var fold: Fold = list[i]
-		var cell = seam_cell(fold)
-		if cell == null or (cell != cand and cell != here):
+	for i in range(marks.size() - 1, -1, -1):
+		var m: Dictionary = marks[i]
+		if m["at"] == null:
 			continue
-		if can_unfold_fold(fold):
-			return fold
+		var cell := Vector2i((Vector2(m["at"]) / CS).floor())
+		if cell != cand and cell != here:
+			continue
+		if not bool(m["outer"]) and can_unfold_fold(m["fold"]):
+			return m["fold"]
 		if blocked == null:
-			blocked = fold
+			blocked = m["fold"]
 	return blocked
 
 
@@ -1306,7 +1341,12 @@ func hold_action(_dir: Vector2i = Vector2i.ZERO) -> void:
 	var cancelled := placing()
 	cancel_aim()
 	if _burst(player.global_position, BURST_RADIUS) == 0 and not cancelled:
-		_deny("Nothing here to release.")
+		# "Nothing here" has to be true. A seam the strip took in with it is standing
+		# right there — drawn, and reached by this very burst — and held by a fold in
+		# the space outside, which is a different answer from an empty sphere.
+		_deny("Held from outside the fold."
+			if _outer_seam_within(player.global_position, BURST_RADIUS)
+			else "Nothing here to release.")
 
 
 ## Fire a burst: a sphere of `radius` centred on `origin`, and everything of yours
@@ -1372,6 +1412,15 @@ func _burst(origin: Vector2, radius: float) -> int:
 	return freed
 
 
+## Is a seam belonging to the space OUTSIDE within reach of a burst from here?
+func _outer_seam_within(origin: Vector2, radius: float) -> bool:
+	for m in seam_marks():
+		if bool(m["outer"]) and m["at"] != null \
+				and Vector2(m["at"]).distance_to(origin) <= radius:
+			return true
+	return false
+
+
 ## Is this anchor within `radius` of a point? False when it is unresolvable in the
 ## frame we are looking at — an anchor you cannot see is not one you can reach.
 func _anchor_within(entry, origin: Vector2, radius: float) -> bool:
@@ -1392,14 +1441,14 @@ func _glue_within(origin: Vector2, radius: float) -> bool:
 ## first — the older of a stacked pair is exactly the one the newer is blocking, so
 ## working backwards offers the ones that can actually move.
 func _unfoldable_within(origin: Vector2, radius: float) -> Array:
+	var marks: Array = seam_marks()
 	var out: Array = []
-	var list: Array = space_folds()
-	for i in range(list.size() - 1, -1, -1):
-		var fold: Fold = list[i]
-		var seam = seam_point(fold)
-		if seam != null and Vector2(seam).distance_to(origin) <= radius \
-				and can_unfold_fold(fold):
-			out.append(fold)
+	for i in range(marks.size() - 1, -1, -1):
+		var m: Dictionary = marks[i]
+		if bool(m["outer"]) or m["at"] == null:
+			continue          # a seam this space can see but cannot open
+		if Vector2(m["at"]).distance_to(origin) <= radius and can_unfold_fold(m["fold"]):
+			out.append(m["fold"])
 	return out
 
 
@@ -1409,10 +1458,9 @@ func _unfoldable_within(origin: Vector2, radius: float) -> Array:
 func seams_within_burst() -> Array:
 	var out: Array = []
 	var origin := player.global_position
-	for fold in space_folds():
-		var seam = seam_point(fold)
-		if seam != null and Vector2(seam).distance_to(origin) <= BURST_RADIUS:
-			out.append(fold)
+	for m in seam_marks():
+		if m["at"] != null and Vector2(m["at"]).distance_to(origin) <= BURST_RADIUS:
+			out.append(m["fold"])
 	return out
 
 
@@ -1834,17 +1882,22 @@ func can_unfold_fold(fold: Fold) -> bool:
 ## them and reads unblocked when F there would DO something — the same choice
 ## `aimed_fold` makes, so the colour never promises what the act refuses.
 ##
-## Keyed by where each seam is NOW (`seam_cell`). A fold whose meeting cell a later
-## fold swallowed has no diamond at all: it is not reachable from this space, and a
-## diamond left behind at the cell it used to be in is an invitation to burst at a
-## place where nothing will happen.
+## Keyed by where each seam is NOW. A fold whose meeting point is not in this space has
+## no diamond at all — a diamond left behind where it used to be is an invitation to
+## burst at a place where nothing will happen.
+##
+## A seam belonging to the space OUTSIDE gets its diamond too, and it reads blocked: the
+## join is genuinely there under your feet, and the fold holding it is not one this
+## space can open. Drawing nothing said the line was not a seam; drawing it open would
+## promise a burst this space cannot deliver.
 func seam_markers() -> Dictionary:
 	var out: Dictionary = {}
-	for fold in space_folds():
-		var cell = seam_cell(fold)
-		if cell == null:
+	for m in seam_marks():
+		if m["at"] == null:
 			continue
-		out[cell] = bool(out.get(cell, false)) or can_unfold_fold(fold)
+		var cell := Vector2i((Vector2(m["at"]) / CS).floor())
+		var free: bool = not bool(m["outer"]) and can_unfold_fold(m["fold"])
+		out[cell] = bool(out.get(cell, false)) or free
 	return out
 
 
@@ -2057,6 +2110,11 @@ func unfold_space_fold(fold: Fold) -> void:
 	var list: Array = space_folds()
 	var idx := list.find(fold)
 	if idx < 0:
+		# A seam the strip took in with it: visible and standing on real sheet, but held
+		# by a fold in the space outside, which this space has no way to reach into. It
+		# used to fail silently here, and a marker you can press F at that answers
+		# nothing is worse than one that says no.
+		_deny("Blocked — this seam is held from outside the fold.")
 		return
 	if not can_unfold_fold(fold):
 		_deny("Blocked — a newer fold crosses this seam.")

@@ -262,6 +262,22 @@ static func shift_segment(seg: PackedVector2Array, by: Vector2) -> PackedVector2
 	return PackedVector2Array([seg[0] + by, seg[1] + by])
 
 
+## The part of a segment that lies INSIDE the strip — what the fold's subspace takes in
+## with it, and the exact complement of what `carry_segment` hands back. A mark is
+## either carried out with a flap or taken in with the strip; the two share one
+## tolerance so it can never be both and never neither.
+static func segment_within_strip(p0: Vector2, p1: Vector2, fold: Fold) -> PackedVector2Array:
+	var n := fold.crease_normal
+	return _span_between(p0, p1, (p0 - fold.crease_point1).dot(n),
+		(p1 - fold.crease_point1).dot(n), GRAZE, fold.gap_distance() - GRAZE)
+
+
+## ...and for a point: true exactly when `carry_point` would find nothing to carry.
+static func point_within_strip(p: Vector2, fold: Fold) -> bool:
+	var d := (p - fold.crease_point1).dot(fold.crease_normal)
+	return d > GRAZE and d < fold.gap_distance() - GRAZE
+
+
 # ---------------------------------------------------------------------------
 # Circle-vs-polygon collision (physics-server-independent)
 # ---------------------------------------------------------------------------
