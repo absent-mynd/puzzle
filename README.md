@@ -1,7 +1,7 @@
 # Space Folding
 
 A side-view gravity **metroidvania** where the traversal verb is folding space,
-built with Godot 4.3.
+built with Godot 4.7.
 
 > **Contributors & AI agents:** start with **[AGENTS.md](AGENTS.md)** (architecture,
 > layering, critical decisions) and **[STATUS.md](STATUS.md)** (current progress).
@@ -56,7 +56,7 @@ the world file in place.
 
 ## Development Setup
 
-**Prerequisites:** Godot 4.3+ and Git.
+**Prerequisites:** Godot 4.7+ and Git.
 
 ```
 scripts/
@@ -104,12 +104,12 @@ first time it bites.
 
 [![GUT Tests](https://github.com/absent-mynd/puzzle/actions/workflows/gut-tests.yml/badge.svg)](https://github.com/absent-mynd/puzzle/actions/workflows/gut-tests.yml)
 
-All pull requests run the full suite via GitHub Actions (Ubuntu 22.04, Godot 4.3.0).
+All pull requests run the full suite via GitHub Actions (Ubuntu 22.04, Godot 4.7.1).
 Tests must pass before merging. To reproduce the CI environment locally:
 
 ```bash
 docker run --rm -v $(pwd):/workspace -w /workspace \
-  barichello/godot-ci:4.3 \
+  barichello/godot-ci:4.7.1 \
   bash -c "godot --headless --import --quit && \
            godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://scripts/tests/ -gexit"
 ```
