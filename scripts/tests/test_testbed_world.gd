@@ -367,25 +367,45 @@ func test_every_plate_loop_reaches_the_seam_its_trigger_leaves():
 			"%s %s is a burst plate" % [id, plate_cell])
 		var radius := float(TileParams.get_value(plate_tile.type, plate_tile.data, "radius"))
 
-		# Fire the trigger exactly as the world does: standing on it, through the resolver.
+		# The fold the trigger's declared pair makes, built the way the world builds it:
+		# its two BASE cells resolved through whatever the region already ships folded.
 		var trigger_cell: Vector2i = loop["trigger"]
 		var stood_on = BaseFrame.world_point_from_base(booted["pieces"],
 			base.tile_at(trigger_cell).base_id, (Vector2(trigger_cell) + Vector2(0.5, 0.5)) * cs)
 		assert_not_null(stood_on, "%s's trigger is reachable at boot" % id)
-		var out := TriggerResolver.resolve(base, {
-			"folds": booted["folds"], "pieces": booted["pieces"],
-			"player_pos": stood_on, "next_trigger_id": TriggerResolver.TRIGGER_FOLD_ID_BASE,
-		})
-		assert_eq((out["folds"] as Array).size(), (booted["folds"] as Array).size() + 1,
-			"%s's trigger fires" % id)
+		var fold = _declared_fold(booted, base.tile_at(trigger_cell), cs)
+		assert_not_null(fold, "%s's trigger declares a fold that goes" % id)
+		var after := FoldReplay.apply_one_fold(booted["pieces"], fold, cs)
 
-		var fold: Fold = (out["folds"] as Array)[-1]
-		var plate_at = BaseFrame.world_point_from_base(out["pieces"],
+		var plate_at = BaseFrame.world_point_from_base(after,
 			plate_tile.base_id, (Vector2(plate_cell) + Vector2(0.5, 0.5)) * cs)
 		assert_not_null(plate_at, "%s's plate rode the fold rather than being excised" % id)
 		var seam := (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs
 		assert_lte(seam.distance_to(Vector2(plate_at)), radius * cs,
 			"%s's plate reaches the seam its trigger leaves behind" % id)
+
+
+## The fold a trigger tile declares, in the configuration `booted` describes, or null
+## if it would not go. The world reaches this by pinning two bolted anchors and letting
+## the fuse fold them (`FoldWorld._plant_pair`); here it is the same two base cells,
+## resolved the same way, without a scene to boot.
+func _declared_fold(booted: Dictionary, tile: BaseTile, cs: float):
+	var cells: Array = tile.data.get("anchors", [])
+	if cells.size() < 2:
+		return null
+	var base: BaseGrid = booted["base"]
+	var at: Array = []
+	for raw in cells.slice(0, 2):
+		var cell := Vector2i(int(raw[0]), int(raw[1]))
+		var wp = BaseFrame.world_point_from_base(booted["pieces"],
+			base.tile_at(cell).base_id, (Vector2(cell) + Vector2(0.5, 0.5)) * cs)
+		if wp == null:
+			return null
+		at.append(Vector2i((Vector2(wp) / cs).floor()))
+	if at[0] == at[1]:
+		return null
+	var f := Fold.create(0, at[0], at[1], cs, String(tile.data.get("channel", "")))
+	return null if FoldReplay.blocked_by_tile(booted["pieces"], f, cs) else f
 
 
 func test_a_pin_still_vetoes_the_fold_a_plate_would_make():

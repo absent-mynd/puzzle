@@ -197,9 +197,6 @@ var _spawn: Vector2:
 var hand_pickups: Dictionary = {}
 
 var next_fold_id := 0
-## Triggered folds draw ids from a reserved high range so they never collide with
-## player-fold ids (which count up from 0).
-var _next_trigger_id := TriggerResolver.TRIGGER_FOLD_ID_BASE
 ## Base tile the player last fired a trigger check against — triggers are edge-fired
 ## on entering a tile, not re-fired every frame you stand on it.
 var _trigger_latch := -1
@@ -531,6 +528,20 @@ func _setup_all() -> void:
 			else:
 				push_error("FoldWorld: hand pickup in %s sits outside the region" % id)
 		hand_pickups[id] = region_hands
+
+		# Anchors the world has driven into its own sheet. They bind exactly as lights
+		# and loose hands do — a base identity, no world position — and from here on
+		# they are anchors like any other: they ride folds, they pair, and the ones
+		# that reach each other light a fuse. What they are not is HANDS
+		# (`Anchor.BOLTED`), so a burst does not answer for them and the ledger does
+		# not count them.
+		var region_anchors: Array = []
+		for anchor in world_data.anchors_of(id):
+			if anchor.bind(rbase):
+				region_anchors.append(field.add(anchor))
+			else:
+				push_error("FoldWorld: anchor in %s sits outside region %s" % [id, id])
+		Anchor.link_pairs(region_anchors)
 
 		# Lights bind to base tiles exactly as doors do: from here on a light has
 		# no world position, only a base identity that the current configuration
@@ -1487,6 +1498,16 @@ func _scatter_pair(pair: Dictionary) -> void:
 		AudioManager.play_sfx(Sounds.FOLD_REFUSED)
 
 
+## The channel a pair's fold should be tagged with, or "" — what makes a plate's fold
+## findable so the plate does not fire a second one on top of it.
+func _channel_of(pair: Dictionary) -> String:
+	for entry in [pair["a"], pair["b"]]:
+		var arms: String = (entry as Anchor).arms
+		if arms != Anchor.PROXIMITY and arms != Anchor.NEVER:
+			return arms
+	return ""
+
+
 ## Fire one armed pair. Called by its fuse, never by a keypress.
 ##
 ## `pair` is `{"a": Anchor, "b": Anchor}` as `AnchorField.step` produced it, so both
@@ -1522,7 +1543,7 @@ func fire_pair(pair: Dictionary) -> void:
 	for anchor in [a, b]:
 		if (anchor as Anchor).is_hand():
 			pinned.append((anchor as Anchor).hand)
-	if do_fold(ca, cb, pinned):
+	if do_fold(ca, cb, pinned, _channel_of(pair)):
 		# The fold is holding the SAME hands that were pinned — they went from your
 		# slots to the anchors to the fold without ever being duplicated. The anchors
 		# are spent, so they leave the field and every pair they were in goes with them.
@@ -1713,8 +1734,8 @@ func _hands_for_fold(pinned) -> Array[int]:
 ##     many folds deep that already is. Folding yourself deeper used to be
 ##     refused here; there is no longer anything to refuse, because there is no
 ##     longer a second code path to be missing.
-func do_fold(a1: Vector2i, a2: Vector2i, pinned = null) -> bool:
-	var fold := Fold.create(next_fold_id, a1, a2, CS)
+func do_fold(a1: Vector2i, a2: Vector2i, pinned = null, channel := "") -> bool:
+	var fold := Fold.create(next_fold_id, a1, a2, CS, channel)
 	var pre: Array = current_pieces
 	# ONE clip pass for both halves. The flaps become the new piece list and the
 	# strip between them becomes the subspace; `CollisionCore.fold_polygons` produces
@@ -2801,7 +2822,7 @@ func _check_triggers() -> void:
 		return
 	match TileTypes.on_enter_kind(tile.type):
 		"fold":
-			_fire_fold_trigger()
+			_fire_fold_trigger(tile)
 		"burst":
 			_fire_burst_plate(tile, here)
 
@@ -2841,39 +2862,79 @@ func _fire_burst_plate(tile: BaseTile, piece) -> void:
 		_show_flash("The plate lets go — space springs open.")
 
 
-## Fold-on-enter tiles. The cascade is resolved by TriggerResolver against the region's
-## fold list, then the settled result is adopted: the player transports with the folds
-## that carried them, exactly as if they had folded by hand.
+## Fold-on-enter tiles: a plate does not make a FOLD, it makes a CHANNEL LIVE.
 ##
-## Only fires in a region — a trigger inside a subspace would have to splice folds
-## into an inner-fold list mid-cascade, which the resolver does not model yet.
-func _fire_fold_trigger() -> void:
-	if mode != Mode.WORLD:
+## This is where the unification pays for itself. A plate used to run its own cascade
+## — resolve the authored cells against the current fold state, build a fold, check
+## the pin rule, transport the player, iterate to a fixpoint under a cap — a second
+## implementation of folding that had to be kept in step with the real one and could
+## only ever work in a region. Now it drives two bolted anchors into the sheet and
+## steps back, and everything after that is the path every other fold takes: they
+## pair because they were declared, a fuse lights, `fire_pair` applies it with the
+## animation and the ride, and the player rides or is pinched exactly as they would
+## be by a fold of their own.
+##
+## Three consequences worth naming, because each was a rule that lived in the
+## resolver and now lives nowhere:
+##
+##   - **A plate's fold takes a fuse.** The ground answering you comes with the same
+##     beat of warning every other fold gives, instead of arriving as a teleport.
+##   - **A plate's fold may PINCH you**, because `do_fold` swallows whoever is in the
+##     strip and there is no longer a second path that could refuse to. Deliberate:
+##     with a fuse you can see it coming, which was most of the old objection.
+##   - **A plate works at any depth.** The resolver could only splice into a region's
+##     fold list; `do_fold` splices into whatever list the space it is called in owns.
+##
+## Idempotence is the anchors themselves: a site holds one anchor, and a channel whose
+## fold is already standing is not fired again. The cascade cap is gone with the
+## cascade — firing consumes two anchors and nothing here makes one without the player
+## walking onto a plate, so there is nothing left to run away.
+func _fire_fold_trigger(tile: BaseTile) -> void:
+	var channel := str(tile.data.get("channel", ""))
+	if channel != "":
+		for f in space_folds():
+			if f.channel == channel:
+				return              # its fold is already standing
+	var cells: Array = tile.data.get("anchors", [])
+	if cells.size() < HandStock.HANDS_PER_FOLD:
+		return                      # half-configured plate: nothing to pin
+	if not _plant_pair(cells, channel):
 		return
-	var settled := TriggerResolver.resolve(base, {
-		"folds": folds,
-		"pieces": current_pieces,
-		"player_pos": player.global_position,
-		"next_trigger_id": _next_trigger_id,
-	})
-	var new_folds: Array = settled["folds"]
-	if new_folds.size() == folds.size():
-		return  # nothing fired (channel already taken, anchors unresolvable, ...)
-
-	for f in new_folds:
-		if not seam_segs.has(f.fold_id):
-			seam_segs[f.fold_id] = WorldCore.seam_segment(
-				f, WorldCore.capture_strip(current_pieces, f, CS), CS)
-	folds.assign(new_folds)
-	regions[region_id]["folds"] = folds
-	_next_trigger_id = settled["next_trigger_id"]
-	rebuild()
-	var landed := WorldCore.depenetrate(
-		settled["player_pos"], PlayerBody.RADIUS, WorldCore.solid_polys_of(current_pieces))
-	player.teleport(settled["player_pos"] if landed == Vector2.INF else landed)
-	_wake_unsupported_hands()
 	AudioManager.play_sfx(Sounds.TRIGGER)
 	_show_flash("The ground answers — space folds around you.")
+
+
+## Drive a declared pair of bolted anchors into the sheet at two BASE cells of this
+## region. Returns whether anything went down.
+##
+## Refused rather than half-done if either site is taken or unresolvable: half a
+## declared pair is an anchor that can never fire, and leaving one standing would be
+## a permanent mark on the world for a plate that did nothing.
+func _plant_pair(cells: Array, channel: String) -> bool:
+	var planted: Array = []
+	var sites: Array = []
+	for raw in cells.slice(0, HandStock.HANDS_PER_FOLD):
+		sites.append(Vector2i(int(raw[0]), int(raw[1])))
+	if not WorldCore.anchors_valid(sites[0], sites[1]):
+		return false                # both cells the same: no crease direction to have
+	for cell in sites:
+		var anchor := Anchor.new()
+		anchor.cell = cell
+		anchor.region = region_id
+		anchor.bond = Anchor.BOLTED
+		anchor.arms = channel if channel != "" else Anchor.PROXIMITY
+		if not anchor.bind(base):
+			return false
+		var wp = anchor.point_in(current_pieces, region_id)
+		if wp == null or field.at_point(space, Vector2(wp), CS * 0.5) != null:
+			return false            # folded away, or something is already pinned there
+		planted.append(anchor)
+	for anchor in planted:
+		field.add(anchor)
+	planted[0].partner = planted[1].id
+	planted[1].partner = planted[0].id
+	field.light_channel(channel)
+	return true
 
 
 ## Loose hands: walk onto one and it is yours, if you have a slot free.

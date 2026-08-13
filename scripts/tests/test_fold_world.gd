@@ -1186,15 +1186,84 @@ func test_pinned_pillar_refuses_a_fold_that_spans_it() -> void:
 	assert_eq(world.folds.size(), before + 1, "A fold clear of the pillar still commits")
 
 
+## Stand on east's plate and let its fold happen. Two steps, because a plate does not
+## make a fold any more — it drives in two bolted anchors, and they fold themselves on
+## the same fuse as a pair of yours.
+func _press_plate() -> void:
+	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
+	world._check_triggers()
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+
+
+func test_a_plate_pins_a_pair_and_the_fuse_does_the_rest() -> void:
+	# The whole of the unification, in one test: what a plate makes is ANCHORS, and
+	# every step after that is the step a pair of your own hands would take.
+	_enter_east()
+	var before: int = world.folds.size()
+	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
+	world._check_triggers()
+	assert_eq(world.folds.size(), before, "Standing on it folds nothing yet")
+	assert_eq(world.all_anchors().size(), 2, "It pinned a pair")
+	assert_eq(world.hands_pending(), 0, "...and neither of them is a hand of yours")
+	assert_true(world.fuse_running(), "The pair is counting down like any other")
+
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.folds.size(), before + 1, "...and folds itself when it runs out")
+	assert_eq(world.all_anchors().size(), 0, "The anchors were spent on it")
+	assert_eq(world.folds[-1].held_hands, [], "The fold holds no hands, so it pays none back")
+
+
+func test_a_burst_will_not_take_a_bolted_anchor() -> void:
+	# A bolted anchor is authored world state with no way back. Popping one would let a
+	# burst quietly delete a puzzle, in exchange for a hand that was never yours.
+	_enter_east()
+	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
+	world._check_triggers()
+	assert_eq(world.all_anchors().size(), 2, "The plate's pair is down")
+
+	var at = world.anchor_point(world.all_anchors()[0])
+	world.player.teleport(Vector2(at), false)
+	world.hold_action()
+	assert_eq(world.all_anchors().size(), 2, "A burst standing on one does not take it")
+	assert_eq(world.hands_held(), 2, "...and hands you nothing")
+	assert_eq(_total(), _start_total, "Conserved")
+
+
+func test_a_plate_with_no_anchors_does_nothing() -> void:
+	_enter_east()
+	var tile: BaseTile = world.base.tile_at(Vector2i(25, 9))
+	tile.data = {"channel": "vault"}                     # half-authored: no cells named
+	var before: int = world.folds.size()
+	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
+	world._check_triggers()
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.all_anchors().size(), 0, "Nothing was pinned")
+	assert_eq(world.folds.size(), before, "...and nothing folded")
+
+
+func test_a_plates_anchors_ride_the_folds_made_before_it() -> void:
+	# The cells a plate names are BASE cells, so they follow whatever the sheet has
+	# already done — which is not a rule this has to implement, it is what an anchor IS.
+	_enter_east()
+	var moved = _plane_point(Vector2i(26, 9))
+	assert_not_null(moved, "The plate's first anchor cell is on the sheet")
+	assert_ne(moved, Vector2(26.5 * CS, 9.5 * CS),
+		"...and east's pre-fold has already carried it off its authored spot")
+
+	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
+	world._check_triggers()
+	var wp = world.anchor_point(world.all_anchors()[0])
+	assert_almost_eq(Vector2(wp), Vector2(moved), Vector2(0.01, 0.01),
+		"The anchor lands where that base cell is NOW, not where it was authored")
+
+
 func test_pressure_plate_folds_the_wall_away() -> void:
 	_enter_east()
 	assert_not_null(_plane_point(Vector2i(27, 9)), "The wall stands before the plate is pressed")
-	var plate = _plane_point(Vector2i(25, 9))
-	assert_not_null(plate, "The plate is reachable in normal space")
+	assert_not_null(_plane_point(Vector2i(25, 9)), "The plate is reachable in normal space")
 
 	var before: int = world.folds.size()
-	world.player.teleport(Vector2(plate), false)
-	world._check_triggers()
+	_press_plate()
 	assert_eq(world.folds.size(), before + 1, "Standing on the plate fires one fold")
 	assert_null(_plane_point(Vector2i(27, 9)), "...which folds the wall away")
 	assert_not_null(_plane_point(Vector2i(29, 9)), "The reward behind it survives")
@@ -1203,27 +1272,26 @@ func test_pressure_plate_folds_the_wall_away() -> void:
 
 func test_pressure_plate_does_not_re_fire() -> void:
 	_enter_east()
-	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
-	world._check_triggers()
+	_press_plate()
 	var after_first: int = world.folds.size()
 
 	# Still standing on it: the latch holds.
 	world._check_triggers()
-	assert_eq(world.folds.size(), after_first, "Standing still does not re-fire the plate")
+	assert_eq(world.all_anchors().size(), 0, "Standing still does not re-pin the plate's pair")
 
-	# Step off and back on: the channel is already taken, so still nothing.
+	# Step off and back on: the channel's fold is already standing, so still nothing.
 	world.player.teleport(Vector2(5.5 * CS, 9.5 * CS), false)
 	world._check_triggers()
 	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
 	world._check_triggers()
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 	assert_eq(world.folds.size(), after_first,
 		"Re-entering the plate spawns no duplicate for a channel that already folded")
 
 
 func test_triggered_fold_persists_across_leaving_the_region() -> void:
 	_enter_east()
-	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
-	world._check_triggers()
+	_press_plate()
 	var east_folds: int = world.regions["east"]["folds"].size()
 	assert_gt(east_folds, 1, "The plate's fold joined east's persistent fold list")
 
@@ -1512,8 +1580,7 @@ func test_world_made_folds_hold_none_of_your_hands() -> void:
 	assert_eq(world.hands_held(), 2, "So you start with both")
 
 	_enter_east()
-	world.player.teleport(Vector2(_plane_point(Vector2i(25, 9))), false)
-	world._check_triggers()
+	_press_plate()
 	assert_gt(world.folds.size(), 1, "The plate fired its fold")
 	assert_eq(world.hands_held(), 2, "A trigger fold costs you nothing either")
 

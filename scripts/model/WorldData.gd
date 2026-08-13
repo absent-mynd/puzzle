@@ -60,6 +60,7 @@ const WORLD_FLAG := "--world="
 ##   "folds":     Array,          pre-placed folds, [{anchor1:{x,y}, anchor2:{x,y}}, ...]
 ##   "lights":    Array[LightSource], lights placed on base cells (see LightSource)
 ##   "hands":     Array[HandPickup], loose hands lying on base cells (see HandPickup)
+##   "anchors":   Array[Anchor], anchors the WORLD has driven into the sheet (see Anchor)
 ##   "editor":    Dictionary,     AUTHORING ONLY — see below. The game never reads it.
 ## }
 ##
@@ -308,6 +309,23 @@ func starting_hand_slots() -> Array:
 	var out: Array = HandStock.empty_slots()
 	for i in range(mini(starting_hands.size(), out.size())):
 		out[i] = HandTypes.from_name(String(starting_hands[i]))
+	return out
+
+
+## A region's authored ANCHORS, as fresh unbound copies. Always bolted (see Anchor):
+## the world may drive an anchor into its own sheet, but it may not hand out hands.
+##
+## A pre-placed FOLD (`folds`) is the same idea one step further on — a bolted pair
+## that already fired, before the player arrived. It is authored separately because
+## what it states is fold state, not anchor state: there is nothing left standing to
+## interact with, and unfolding it returns nothing, exactly as bursting a bolted
+## anchor returns nothing.
+func anchors_of(id: String) -> Array:
+	var out: Array = []
+	if not regions.has(id):
+		return out
+	for anchor in regions[id].get("anchors", []):
+		out.append(anchor.duplicate_anchor())
 	return out
 
 

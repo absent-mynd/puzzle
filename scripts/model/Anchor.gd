@@ -72,6 +72,16 @@ var bond := LOOSE
 var partner := -1
 
 
+## The authored cell, for one the world places. Runtime anchors bind directly from
+## the piece under the cursor and never look at this.
+var cell: Vector2i = Vector2i.ZERO
+
+## The authoring name of this anchor and of the one it is declared with. Resolved to
+## `partner` (an id) once both are in a field, exactly as a door pairs by id.
+var key := ""
+var pair_key := ""
+
+
 static func make(base_id_: int, bp_: Vector2, region_: String, hand_: int) -> Anchor:
 	var a := Anchor.new()
 	a.base_id = base_id_
@@ -79,6 +89,77 @@ static func make(base_id_: int, bp_: Vector2, region_: String, hand_: int) -> An
 	a.region = region_
 	a.hand = hand_
 	return a
+
+
+## Attach an authored anchor to its base tile, at that tile's centre. False if the
+## cell lies outside the grid, in which case it stays unbound and is skipped.
+func bind(base: BaseGrid) -> bool:
+	if base == null:
+		return false
+	var tile := base.tile_at(cell)
+	if tile == null:
+		base_id = -1
+		return false
+	base_id = tile.base_id
+	bp = (Vector2(cell) + Vector2(0.5, 0.5)) * base.cell_size
+	return true
+
+
+func is_bound() -> bool:
+	return base_id >= 0
+
+
+# ---------------------------------------------------------------------------
+# Serialization (the authored form; `base_id`/`bp` are bound at load, not stored)
+# ---------------------------------------------------------------------------
+#
+# An authored anchor is always BOLTED, and that is not stored either. A world that
+# could author a LOOSE one would be handing out free hands the moment the player
+# walked past with a burst charged, which is the payout this design says no to.
+
+static func from_dict(d: Dictionary) -> Anchor:
+	var a := Anchor.new()
+	var c: Dictionary = d.get("cell", {})
+	a.cell = Vector2i(int(c.get("x", 0)), int(c.get("y", 0)))
+	a.hand = HandTypes.from_name(String(d.get("kind", "plain")))
+	a.arms = String(d.get("arms", PROXIMITY))
+	a.key = String(d.get("id", ""))
+	a.pair_key = String(d.get("pair", ""))
+	a.bond = BOLTED
+	return a
+
+
+func to_dict() -> Dictionary:
+	var out := {"cell": {"x": cell.x, "y": cell.y}, "kind": HandTypes.type_name(hand)}
+	if arms != PROXIMITY:
+		out["arms"] = arms
+	if key != "":
+		out["id"] = key
+	if pair_key != "":
+		out["pair"] = pair_key
+	return out
+
+
+## A fresh unbound copy — same reasoning as `LightSource.duplicate_light`: binding
+## writes into an anchor, and a reset must re-bind from the authored world rather
+## than from whatever the last session did to it.
+func duplicate_anchor() -> Anchor:
+	var copy := Anchor.from_dict(to_dict())
+	copy.region = region
+	return copy
+
+
+## Resolve `pair_key` names into `partner` ids, over a list of anchors that have
+## already been given ids. An anchor naming a partner that is not there keeps its
+## declaration and simply never pairs — which is what a half-authored fold IS.
+static func link_pairs(anchors: Array) -> void:
+	var by_key: Dictionary = {}
+	for a in anchors:
+		if a.key != "":
+			by_key[a.key] = a
+	for a in anchors:
+		if a.pair_key != "" and by_key.has(a.pair_key):
+			a.partner = (by_key[a.pair_key] as Anchor).id
 
 
 ## Where this anchor lies in `pieces`, or null if it is not there — wrong region, or
