@@ -43,7 +43,8 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | A hand lying in the world: base identity + point in tile, `dropped_at()`, `resolve_all()`. One object for authored loose hands and hands a burst popped out | `HandPickup.gd` |
 | **The hand ledger.** `SLOTS`, `free_slots()`, `first_empty()`, `held_in()`, `total()` — conservation across slots / pinned / folds / ground, nothing stored | `HandStock.gd` |
 | Entities that ride base tiles: split-on-unfold latents, carried geometry, footprints | `Occupants.gd` |
-| Fold-on-enter cascade: channels, fire-once guard, bounded fixpoint | `TriggerResolver.gd` |
+| One anchor: a base identity, the kind of hand in it, what arms it and whether a burst may take it back | `Anchor.gd` |
+| **Which two anchors are about to fold together**, and their fuses. The pairing rule, derived per frame | `AnchorField.gd` |
 | Authored world: regions (ASCII rows), doors, pre-placed folds, lights, `starting_hands`; JSON round trip | `WorldData.gd` |
 | A light as an occupant: base identity + point in tile, resolved per configuration | `LightSource.gd` |
 
@@ -89,7 +90,7 @@ understand how the pieces meet. Its header comment is the map.
 | …exiting a subspace work? | `FoldWorld.try_exit()`, `exit_blocker()` |
 | …a door find its partner? | `FoldWorld._check_doors()`, `BaseFrame.resolve_base_point` |
 | …a tile react to being stood on? | `FoldWorld._check_triggers()` — dispatches on `TileTypes.on_enter_kind` |
-| …a fold trigger fire? | `FoldWorld._fire_fold_trigger()` → `TriggerResolver.resolve` |
+| …a fold trigger fire? | `FoldWorld._fire_fold_trigger()` → `_plant_pair` → the ordinary fuse |
 | …a burst plate fire? | `FoldWorld._fire_burst_plate()` → `FoldWorld._burst()` — the same one your release fires |
 | …a tile get its art? | `FoldWorld._make_tile()` → `TileAtlas.uv_for` |
 | …a light know where it is? | `FoldWorld.lights_here()` → `LightSource.position_in` |

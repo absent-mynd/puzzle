@@ -32,7 +32,7 @@ func test_the_trigger_declares_a_channel_and_two_anchors():
 	var keys: Array = []
 	for spec in TileParams.specs_for(TileTypes.TRIGGER_FOLD):
 		keys.append(String(spec["key"]))
-	assert_eq(keys, ["channel", "anchors"], "the two things TriggerResolver reads")
+	assert_eq(keys, ["channel", "anchors"], "the two things a fold plate reads")
 
 
 func test_every_declared_parameter_is_well_formed():

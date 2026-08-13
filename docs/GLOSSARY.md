@@ -24,8 +24,14 @@ in the tree, it is a leftover — fix it.
 | The resource you carry, pin and spend | **hand** | anchor, peg | A hand is an *object*: you hold two, and the game never creates or destroys one. `HandTypes`, `HandStock`, `HandPickup`. |
 | A hand pinned to a cell | **anchor** | pin, marker | Not a synonym for *hand* — it is the *role* a hand takes while it is down. `Fold.anchor_a/anchor_b` are positions, and they outlive the fold's hands. |
 | A hand lying in the world | **loose hand** | cache, drop | One object (`HandPickup`) for the ones a world authored and the ones a burst pops out; say **authored** or **dropped** when the difference matters (only the authored ones respawn on `R`). |
-| A pair whose fuse is running | **armed** | primed | The countdown is a *fuse*, and a fuse is armed. Also the word the player-facing README already used. |
-| Breaking an armed pair without folding it | **disarm** | break, defuse | `_disarm_pair`. It takes the fuse, not necessarily both hands — see *pop*. |
+| Two anchors close enough to fold together | **pair** | link, bond, match | Derived, not recorded: `AnchorField.pairs_in` asks it of where they are, every frame. |
+| A pair whose fuse is running | **armed** | primed | The countdown is a *fuse*, and a fuse is armed. Every pair that exists is armed, so *armed pair* and *pair* name the same thing from two sides. |
+| How far an anchor reaches for a partner | **span** | reach, radius, grasp | `HandTypes.span`, in cells, per kind. A pair folds when `gap <= span(a) + span(b)`. |
+| How far you can PIN from where you stand | **arm's reach** (`ARM_REACH`) | anchor reach, range | The nine cells around your own. A different distance from *span*, and both were called reach until both became load bearing. |
+| An anchor of yours, that a burst takes back | **loose** (`Anchor.LOOSE`) | free, held | The bond, not the hand. A *loose hand* is on the ground; a *loose anchor* is pinned and still yours. |
+| An anchor the world drove in | **bolted** (`Anchor.BOLTED`) | fixed, locked, authored anchor | A burst does not answer for it and the ledger does not count it. Say *bolted*, not *world anchor*, when the point is that it resists. |
+| What has to be true before an anchor will pair | **arms on** (`Anchor.arms`) | trigger, condition | Proximity, a channel name, or never. "This one arms on `vault`." |
+| Losing a pair without folding it | **disarm** | break, defuse | Now a consequence rather than an action: take one anchor away and the pair is not there to be counted. |
 | A hand coming off an anchor | **pop** | retrieve, recall, refund | What a burst does to what it reaches. A popped hand goes to a free slot, or to the ground if there is none. |
 | A hand up but not yet pinned | **raised** | held (that means the world), aiming | `FoldWorld.placing()` is true, and the cursor is on a cell within reach. |
 | A burst loading while F is down | **charge** | wind-up, hold | `PlayerBody.charge_color` wears it. It fires on release. |
@@ -75,9 +81,10 @@ Three pairs get confused often enough to be worth stating flat.
 
 **hand ≠ anchor.** A hand is a thing you own; an anchor is a place a hand is
 pinned. The distinction is load-bearing: a fold *holds hands* (`Fold.held_hands`,
-and it holds their kinds, because unfolding must give the same two back) while it
+and it holds their kinds, because unfolding must give the same ones back) while it
 *has anchors* (`anchor_a`, `anchor_b`, which are cells and define the geometry).
-Folds the world makes have anchors and hold no hands.
+An `Anchor` the world bolted in has a KIND without being a hand, which is how a fold
+can hold one hand, or none, and still have two anchors.
 
 **crease ≠ seam ≠ glue.** Three lines, three jobs. A fold has two **creases** (one
 per anchor, where the cut happens), one **seam** (where the halves meet after they
@@ -100,7 +107,8 @@ Grep for these; each is a leftover.
 |---|---|---|
 | anchor stock, anchor economy | hand ledger, **hand economy** | The ledger counts hands, wherever they are. |
 | anchor cache, hand cache, a pickup | **loose hand** | The type is still `HandPickup` — see above. |
-| loose anchor | **unpaired anchor** | An editor anchor with no partner yet. "Loose" belongs to hands. |
+| unpaired anchor (in the game) | **an anchor** | Every anchor is unpaired until something comes within its span; there is no list to be in. The EDITOR still has unpaired anchors — a fold it has not finished authoring. |
+| trigger cascade, fold cascade | **a plate lighting a channel** | `TriggerResolver` is gone; a plate pins a bolted pair and the ordinary fuse does the rest. |
 | release burst | **burst** | The burst *is* the release. |
 | pop tile, pop plate | **burst plate** | *Pop* is what a burst does to one hand; the sphere is a **burst**, whoever fires it. |
 | excision band, excision strip | **excised strip** | |

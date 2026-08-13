@@ -52,7 +52,7 @@ const TRIGGER_BURST := 8
 ## `on_enter` names the reaction a tile fires when the player enters it (""=none) —
 ## "fold" for a trigger, "burst" for a burst plate. The reaction's parameters come from
 ## the tile's per-instance `data`; `FoldWorld._check_triggers` dispatches on the name
-## (and hands a fold cascade to `TriggerResolver`). Kept as a string, not a Callable,
+## (and the world pins the pair it names). Kept as a string, not a Callable,
 ## so the registry stays a pure const data table.
 ##
 ## `name` is what a human calls this tile — the label the world editor's palette

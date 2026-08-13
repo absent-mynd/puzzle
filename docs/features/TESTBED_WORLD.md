@@ -43,7 +43,7 @@ so region loading gets entered from more than one direction.
 | `water` | `~` — walkable, so it is air you can see |
 | `pins` | `P` — one pin vetoes every fold whose *strip* spans it, at every height |
 | `unanchor` | `_` and `X` — space and wall you cannot pin to |
-| `triggers` | `T` — every outcome `TriggerResolver` has — and `B`, the plate that bursts |
+| `triggers` | `T` — every outcome a fold plate has — and `B`, the plate that bursts |
 | `prefold` | regions that ship already folded, in every orientation |
 | `lamps` | lights: colour, radius, energy, flicker, offset, and the light budget |
 | `hands` | loose hands, in every place a hand can be |
@@ -115,7 +115,7 @@ refuses anchors, with a goal and a hand inside it.
 
 ### `triggers` — `T`
 
-Eleven plates covering every outcome `TriggerResolver` has. Channel names are
+Eleven plates covering every outcome a fold plate has. Channel names are
 the index:
 
 | Channel | What it shows |
@@ -128,7 +128,7 @@ the index:
 | `swallow` | a fold whose strip contains the plate: it would pinch in whoever fired it, so it is refused |
 | `ghost` | **order-dependent** — its anchors sit inside `gate_a`'s strip, so it folds if you reach it first and finds nothing if you do not |
 
-Trigger anchors are authored in **BASE** cells (`TriggerResolver` maps them
+Trigger anchors are authored in **BASE** cells (a plate binds them
 through the current fold state itself), unlike pre-placed fold anchors — see
 below.
 
@@ -168,13 +168,23 @@ shader's twelve-light budget, and a lamp buried inside the floor. And one lamp
 inside a one-column pre-fold, which is therefore **not in the region at
 all**: it lights the strip's subspace, for whoever ends up in there.
 
-### `hands` — loose hands
+### `hands` — loose hands, and anchors the world drove in
 
 The three kinds on the ground; **two in one cell**; one let go at the ceiling
 so it falls the whole height of the region; one perched on a pin; one sealed in
 a pocket with no way in; one resting under water; and one inside a pre-fold, to
 be found by getting in there. Fold near any of them and watch what a hand does
 when its ground goes away.
+
+It also authors the three ways an anchor can belong to the WORLD (`regions[].anchors`),
+all of them bolted — a burst does not answer for any of them:
+
+- **scenery** at (6,16), which arms on nothing and so pairs with nothing;
+- **half a fold held out for you** at (11,16): a patient anchor that arms on
+  proximity, so bringing a hand of your own within reach folds it. The fold that
+  results holds the ONE hand that was actually spent on it;
+- **a declared pair** at (36,3) and (41,14) on channel `sealed`, which nothing in
+  this region lights — an authored fold waiting for a switch that is not there.
 
 ### `goals` — `G`
 

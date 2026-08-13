@@ -153,7 +153,7 @@ nothing and so costs nothing.
 ### What validation says
 
 All of it is a warning, deliberately — the runtime already refuses to act on a
-half-configured tile (`TriggerResolver` returns no reaction when the anchors are
+half-configured tile (a plate pins nothing when the anchors are
 missing), so the world loads; it just contains a plate that does nothing, which
 is precisely the thing worth being told. Reported:
 

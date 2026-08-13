@@ -23,9 +23,14 @@ Three things make it a metroidvania rather than a puzzle game:
   door you jammed; unfolding is the key you already had.
 
 **You fold with HANDS, and you have two.** A hand is an object you carry, not an
-ability you have; a fold standing in the world is holding the two hands you pinned it
-with, and unfolding gives those same two back. Two slots, never more — so the budget
-is how many folds may stand *at once*. See §"The hand economy".
+ability you have; a fold standing in the world is holding the hands that were spent on
+it, and unfolding gives those same ones back. Two slots, never more — so the budget is
+how many folds may stand *at once*. See §"The hand economy".
+
+**Two anchors fold together when they can REACH each other.** A hand pinned alone
+stands there indefinitely; how far it reaches for a partner is its kind's `span`. So
+hands placed around the world are a plan you lay out, and a fold happens where the
+plan closes.
 
 ---
 
@@ -155,6 +160,7 @@ were rejected and why:
 | Derive, never mutate — change the fold list and re-derive | Decision 1 |
 | Transport by `BaseFrame`, not crease arithmetic | Decision 2 |
 | `TileTypes` is the only authority on what a tile does | Decision 5 |
+| Which anchors are a pair is DERIVED; only the fuse is stored | Decision 11 |
 | Unfold blocking is one rule at every depth | Decision 6 |
 | Never compare floats with `==`; use `GeometryCore.EPSILON` | Decision 8 |
 | The kernel never sees the world — enforced by `test_layering.gd` | Decision 9 |
@@ -170,7 +176,7 @@ says what those declarations mean. The editor's tile inspector is generated from
 them and names no tile type, so declaring a parameter is the whole job. Do not add a
 bespoke editor panel for a new parameter; add a row to the schema.
 
-### 2. The hand ledger is derived, never stored
+### 2. The hand ledger is derived, never stored — and so is the pairing
 
 `HandStock` computes; it does not remember. Every number is summed from where the
 hands actually are, which is why unfolding gives them back with no bookkeeping — the
@@ -178,11 +184,18 @@ fold leaves the list and stops being counted. **Never add a "hands spent" counte
 it would be a second source of truth that can drift from the fold list.
 
 A fold stores the KINDS it took, not just how many, because unfolding has to return
-the same two hands that went in. Folds the *world* makes hold none.
+the same hands that went in. It may hold two, one or none: what it holds is what was
+actually spent on it, and the world's own anchors cost nothing.
 
 `_hands_for_fold` is the one place hands leave your slots, and it must be called
 **late**, at the point of no return: a fold refused for a pin in its span must not
 have cost you the hands it never took.
+
+**`AnchorField` is the same rule one level up.** There is one list of anchors, and
+which two of them are a pair is recomputed from where they are — never stored. The
+only thing kept is each pair's countdown, because time cannot be derived. If you find
+yourself adding a field that remembers a relationship between two anchors, that is the
+`unpaired`/`armed` pair of lists coming back; see ARCHITECTURE Decision 11.
 
 ### 3. A fold in flight owns the frame
 
@@ -301,13 +314,16 @@ Two consequences worth keeping:
 |---|---|---|
 | One of your two slots | the world's `starting_hands`; walking over a loose hand | — |
 | Pinned as an anchor | tap F to raise it, walk the cursor, tap F to pin (leaves the slot at the pin, not the raise) | a burst in reach |
-| Pinned in an ARMED pair | pairing with a reachable unpaired anchor | a burst in reach of that half (which also disarms the pair; the other half stays pinned) |
-| Held by a standing fold | the fuse going off | a burst at its seam |
+| Held by a standing fold | the fuse of a pair going off | a burst at its seam |
 | Lying on the ground | authored; overflow from a burst; a fold that failed at the fuse | walk over it |
 
+There is no fifth place. "In an armed pair" is not one: a pair is two anchors that can
+reach each other, asked afresh every frame, so being in one is something an anchor
+*is*, not somewhere it has gone.
+
 **One key, two directions.** Tap puts a hand down; F held and then *released* fires
-a **burst**. There is no committing press — the second hand lights a **fuse** and the
-pair folds itself.
+a **burst**. There is no committing press — a pair that can reach lights a **fuse**
+and folds itself.
 
 **Putting one down is two taps, and the world is stopped between them** (§7). A
 charged release while a hand is raised is still a burst: it cancels the placement,
@@ -340,11 +356,13 @@ what you must not quietly change:
   "openable" everywhere else on screen (`PlayerBody.charge_color`). Not a ring on the
   aimed cell — a burst does not go off there. If you need to say something new about
   the charge, say it on the body.
-- **The burst reaches exactly what is inside it.** Reaching one half of an armed pair
-  disarms the pair, but pops only the halves inside the sphere; the far one stays
-  pinned where you chose and goes back to `unpaired` (`_disarm_pair`). Reaching in
-  costs you the fuse, not the hand at the other end — which is what makes a badly
-  aimed pair correctable one end at a time.
+- **The burst reaches exactly what is inside it.** It takes the anchors in the sphere
+  and nothing else; the far half of a pair stays pinned where you chose, and the pair
+  stops existing because there is nothing left to pair with. Reaching in costs you the
+  fuse, not the hand at the other end — which is what makes a badly aimed pair
+  correctable one end at a time. **A BOLTED anchor does not answer**: it is authored
+  world state with no way back, and popping one would let a burst quietly delete a
+  puzzle for a hand that was never yours.
 - **Fold validity is asked at the FUSE, not at placement.** That is what makes the
   fuse a *window*: you can put both hands down from a spot the fold could not put you
   and run clear before it fires. Moving a check back to placement closes it.
@@ -352,12 +370,21 @@ what you must not quietly change:
   would make a mistimed fold free.
 - **A loose hand is a BALL in flight and an occupant at rest.** That boundary is what
   lets a hand behave physically without giving anything persistent a live position.
-- **There is no fixed number of placed anchors.** Two fixed registers is what wedged
-  the game once. The bound is how many hands you are carrying.
-- **A hand pairs with the last unpaired anchor you can SEE**, and anchors carry their
-  region — base ids are per-region and DO overlap.
-- **A kind only changes the fuse.** If you give kinds a second behaviour, that is a
+- **There is no fixed number of placed anchors, and no fixed number of unpaired ones.**
+  Two fixed registers is what wedged the game once. The bound is how many hands you are
+  carrying, and a hand nothing reaches simply stands where you put it.
+- **A hand pairs with whatever it can REACH** — `gap <= span(a) + span(b)`, measured
+  the way the space is walked (`FoldLattice.shortest_delta`), asked every frame. Not
+  with whichever anchor was placed last. Anchors carry their region, because base ids
+  are per-region and DO overlap.
+- **A site holds one anchor.** Two on one spot are a pair at zero gap: guaranteed to
+  arm, guaranteed to be refused. This is the only thing besides "is there sheet here"
+  that placement asks, and it is a question about the SPOT, not about the fold.
+- **A kind changes its fuse and its span, and nothing else.** A third behaviour is a
   design change; do it in `HandTypes` and nowhere else.
+- **`ARM_REACH` and `span` are different distances.** Your arm is how far you can PIN
+  (a square of nine cells). A span is how far the anchor then reaches for a PARTNER.
+  Both were called reach once; that is why one of them is not now.
 - **There is no remote unfold**, so **you can strand yourself**. Do not paper over
   that with a recall key without a design conversation. A **burst plate**
   (`TileTypes.TRIGGER_BURST`) is not that key: it fires the same burst at a reach the

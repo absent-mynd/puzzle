@@ -916,7 +916,7 @@ func validate() -> Array:
 ## Everything wrong with a region's per-tile parameters.
 ##
 ## All of it is a WARNING, deliberately. The runtime already refuses to act on a
-## half-configured tile — `TriggerResolver._next_reaction` returns no reaction
+## half-configured tile — `FoldWorld._fire_fold_trigger` pins nothing
 ## when the anchors are missing — so the world loads; it just contains a plate
 ## that does nothing, which is precisely the thing worth being told. Only data
 ## stranded outside the grid is an error, because that is a file the loader
