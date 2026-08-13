@@ -127,7 +127,7 @@ The charge is real time, not world time, so a raised hand can be popped back
 down: hold F until you turn teal and let go, and the placement is cancelled, the
 burst fires around you, and the clock starts again exactly as it would have.
 
-The reach is deliberately still one cell (`FoldWorld.ANCHOR_REACH`), and that
+The reach is deliberately still one cell (`FoldWorld.ARM_REACH`), and that
 number is load bearing rather than a taste: a shell one tile thick keeps you out
 of what it encloses **precisely because** every cell inside it is two away from
 every cell outside. Raise it and the sealed chamber (beat 4 below) stops being

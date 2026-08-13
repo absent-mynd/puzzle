@@ -94,6 +94,9 @@ func to_dict() -> Dictionary:
 		var out_hands: Array = []
 		for pickup in r.get("hands", []):
 			out_hands.append(pickup.to_dict())
+		var out_anchors: Array = []
+		for anchor in r.get("anchors", []):
+			out_anchors.append(anchor.to_dict())
 		out_regions[id] = {
 			"rows": (r.get("rows", []) as Array).duplicate(),
 			"spawn": {"x": r.get("spawn", Vector2.ZERO).x, "y": r.get("spawn", Vector2.ZERO).y},
@@ -101,6 +104,7 @@ func to_dict() -> Dictionary:
 			"folds": (r.get("folds", []) as Array).duplicate(true),
 			"lights": out_lights,
 			"hands": out_hands,
+			"anchors": out_anchors,
 			"editor": (r.get("editor", {}) as Dictionary).duplicate(true),
 		}
 	var out_doors: Dictionary = {}
@@ -148,6 +152,11 @@ func from_dict(dict: Dictionary) -> void:
 			var pickup := HandPickup.from_dict(entry)
 			pickup.region = id
 			hands.append(pickup)
+		var anchors: Array = []
+		for entry in r.get("anchors", []):
+			var anchor := Anchor.from_dict(entry)
+			anchor.region = id
+			anchors.append(anchor)
 		regions[id] = {
 			"rows": rows,
 			"spawn": Vector2(float(sp.get("x", 0.0)), float(sp.get("y", 0.0))),
@@ -155,6 +164,7 @@ func from_dict(dict: Dictionary) -> void:
 			"folds": r.get("folds", []),
 			"lights": lights,
 			"hands": hands,
+			"anchors": anchors,
 			"editor": (r.get("editor", {}) as Dictionary).duplicate(true),
 		}
 

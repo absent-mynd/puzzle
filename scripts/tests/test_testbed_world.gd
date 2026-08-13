@@ -214,6 +214,48 @@ func test_every_loose_hand_binds_and_is_a_real_kind():
 				"hand at %s in %s is a registered kind" % [pickup.cell, id])
 
 
+func test_every_authored_anchor_binds_and_declares_something_real():
+	# An anchor the WORLD drove in is an occupant like a lamp: a base identity and a
+	# point in it. One authored outside the grid binds to nothing and would stand
+	# nowhere; one naming a partner that is not there is half a fold that can never go.
+	var wd := _world()
+	var found := 0
+	for id in wd.regions:
+		var base := wd.build_base(id)
+		var anchors: Array = wd.anchors_of(id)
+		var keys := {}
+		for anchor in anchors:
+			if anchor.key != "":
+				keys[anchor.key] = true
+		for anchor in anchors:
+			found += 1
+			assert_true(anchor.bind(base),
+				"%s's anchor at %s sits on a real tile" % [id, anchor.cell])
+			assert_eq(anchor.bond, Anchor.BOLTED, "an authored anchor is the world's, not yours")
+			assert_true(HandTypes.is_registered(anchor.hand),
+				"%s's anchor at %s is a kind that exists" % [id, anchor.cell])
+			if anchor.pair_key != "":
+				assert_true(keys.has(anchor.pair_key),
+					"%s's anchor at %s names a partner that is in the region"
+						% [id, anchor.cell])
+	assert_gt(found, 0, "the testbed authors anchors at all")
+
+
+func test_the_hands_region_shows_every_way_an_anchor_can_be_authored():
+	var anchors: Array = _world().anchors_of("hands")
+	var arms := {}
+	for anchor in anchors:
+		arms[anchor.arms] = true
+	assert_true(arms.has(Anchor.NEVER), "scenery: an anchor that pairs with nothing")
+	assert_true(arms.has(Anchor.PROXIMITY),
+		"the world holding one end out: bring a hand within reach and it folds")
+	var declared := 0
+	for anchor in anchors:
+		if anchor.pair_key != "":
+			declared += 1
+	assert_eq(declared, 2, "...and a declared pair, waiting on a channel")
+
+
 func test_it_lays_out_every_kind_of_hand():
 	var wd := _world()
 	var kinds := {}

@@ -100,7 +100,7 @@ understand how the pieces meet. Its header comment is the map.
 | …F pick which fold to unfold? | `FoldWorld.aimed_fold()` — newest-first, prefers one that can actually come out |
 | …a hand get placed? | `FoldWorld.begin_aim()` / `move_aim()` / `finish_aim()` → `place_hand(cell)` |
 | …time stop while you aim? | `FoldWorld.placing()` — `_physics_process` returns early and the body is `frozen` |
-| …the cursor know how far it may go? | `WorldCore.within_anchor_reach` / `clamp_to_anchor_reach`, radius `FoldWorld.ANCHOR_REACH` |
+| …the cursor know how far it may go? | `WorldCore.within_arm_reach` / `clamp_to_arm_reach`, radius `FoldWorld.ARM_REACH` |
 | …everything in the world stop animating at once? | `WorldClock` — `FoldWorld._process` stops advancing it |
 | …the screen say the world is held? | `assets/shaders/held.gdshader`, eased by `FoldWorld._tick_held_look` |
 | …the held look know where to stay clear? | `FoldWorld._body_in_target_px()` → the shader's `clear_at` / `clear_radius` |

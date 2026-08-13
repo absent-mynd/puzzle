@@ -417,6 +417,56 @@ func _with_light() -> WorldData:
 	return wd
 
 
+## A world with an anchor of its own driven into the sheet, half of a declared pair.
+func _with_anchor() -> WorldData:
+	var wd := _sample()
+	var a := Anchor.from_dict({"cell": {"x": 1, "y": 0}, "kind": "patient",
+		"arms": "vault", "id": "gate_a", "pair": "gate_b"})
+	var b := Anchor.from_dict({"cell": {"x": 3, "y": 0}, "kind": "swift", "pair": "gate_a",
+		"id": "gate_b", "arms": "vault"})
+	wd.regions["a"]["anchors"] = [a, b]
+	return wd
+
+
+func test_anchors_round_trip_through_dict():
+	var copy := WorldData.new()
+	copy.from_dict(_with_anchor().to_dict())
+	var anchors: Array = copy.regions["a"]["anchors"]
+	assert_eq(anchors.size(), 2, "the region's anchors survive the round trip")
+	assert_eq(anchors[0].cell, Vector2i(1, 0), "with their cells")
+	assert_eq(anchors[0].hand, HandTypes.PATIENT, "their kinds")
+	assert_eq(anchors[0].arms, "vault", "the channel they wait on")
+	assert_eq(anchors[0].pair_key, "gate_b", "and who they are declared with")
+	assert_eq(anchors[0].bond, Anchor.BOLTED,
+		"an authored anchor is always the world's — a loose one would be a free hand")
+	assert_eq(anchors[0].region, "a", "a decoded anchor knows which region it belongs to")
+
+
+func test_anchors_round_trip_is_json_safe():
+	var parsed = JSON.parse_string(JSON.stringify(_with_anchor().to_dict()))
+	assert_true(parsed is Dictionary, "anchors encode to JSON")
+	var copy := WorldData.new()
+	copy.from_dict(parsed)
+	assert_eq((copy.regions["a"]["anchors"] as Array).size(), 2, "and decode back")
+
+
+func test_anchors_of_hands_out_copies_and_links_pairs():
+	# Binding writes base_id/bp into an anchor, and `add` writes its id; the authored
+	# world must not be edited by the act of loading it.
+	var wd := _with_anchor()
+	var taken: Array = wd.anchors_of("a")
+	taken[0].bind(wd.build_base("a"))
+	assert_false((wd.regions["a"]["anchors"][0] as Anchor).is_bound(),
+		"the authored anchor is untouched by binding the copy")
+
+	var field := AnchorField.new()
+	for anchor in taken:
+		field.add(anchor)
+	Anchor.link_pairs(taken)
+	assert_eq(taken[0].partner, taken[1].id, "a declared pair finds each other by name")
+	assert_eq(taken[1].partner, taken[0].id, "...both ways")
+
+
 func test_lights_round_trip_through_dict():
 	var copy := WorldData.new()
 	copy.from_dict(_with_light().to_dict())

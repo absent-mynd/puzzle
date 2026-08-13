@@ -91,8 +91,12 @@ const HELD_EASE := 0.09
 ## fade is wide so the checker THINS toward you rather than ending at a line.
 const HELD_CLEAR_CELLS := 2.6
 const HELD_FADE_CELLS := 2.4
-## Anchors are pinned at arm's length: any of the nine cells centred on the one you
-## are standing in. What you can fold is exactly what you can stand next to.
+## Anchors are pinned at ARM'S LENGTH: any of the nine cells centred on the one you
+## are standing in. What you can PIN is exactly what you can stand next to.
+##
+## Not to be confused with a hand's SPAN (`HandTypes.span`), which is how far a pinned
+## anchor reaches for a PARTNER. This is how far your arm goes; that is how far the
+## fold goes. They were both called reach once, which is why one of them is not now.
 ##
 ## A square of this radius, not a compass direction — the four axis-aligned cells the
 ## old 4-way pointing could name were a limit of the INPUT, not of your arm, and cells
@@ -100,8 +104,8 @@ const HELD_FADE_CELLS := 2.4
 ##
 ## Raising this is a design change, not a tuning knob: a shell one tile thick keeps
 ## you out of what it encloses only while your reach is one cell (see
-## `WorldCore.within_anchor_reach`), and the sealed chamber is exactly that shell.
-const ANCHOR_REACH := 1
+## `WorldCore.within_arm_reach`), and the sealed chamber is exactly that shell.
+const ARM_REACH := 1
 const ANIM_TIME := 0.24
 ## How long the fold key must be held before the release reads as "pull back"
 ## rather than "push in". Long enough that a tap never trips it by accident.
@@ -1014,7 +1018,7 @@ func cell_center(cell: Vector2i) -> Vector2:
 ## holding have put the cursor where you meant before you look at it.
 func candidate_anchor(dir: Vector2i = Vector2i.ZERO) -> Vector2i:
 	var d := dir if dir != Vector2i.ZERO else Vector2i(player.point_dir())
-	return player_cell() + d * ANCHOR_REACH
+	return player_cell() + d * ARM_REACH
 
 
 # ---------------------------------------------------------------------------
@@ -1055,7 +1059,7 @@ func placing() -> bool:
 func aim_cell() -> Vector2i:
 	if _aim == null:
 		return candidate_anchor()
-	return WorldCore.clamp_to_anchor_reach(player_cell(), _aim, ANCHOR_REACH)
+	return WorldCore.clamp_to_arm_reach(player_cell(), _aim, ARM_REACH)
 
 
 ## Raise the hand you are about to spend. Refused with no hand to raise: the mode
@@ -1080,7 +1084,7 @@ func move_aim(step: Vector2i) -> void:
 	if not placing() or step == Vector2i.ZERO:
 		return
 	var from := aim_cell()
-	var to := WorldCore.clamp_to_anchor_reach(player_cell(), from + step, ANCHOR_REACH)
+	var to := WorldCore.clamp_to_arm_reach(player_cell(), from + step, ARM_REACH)
 	if to == from:
 		return
 	_aim = to
@@ -2589,9 +2593,9 @@ func _build_overlay_view() -> OverlayView:
 	if v.aiming:
 		# The cells the cursor may go to, as a rectangle, because the overlay should be
 		# told the shape of the reach and not the arithmetic that produced it.
-		var corner := player_cell() - Vector2i.ONE * ANCHOR_REACH
-		var span := float(2 * ANCHOR_REACH + 1) * v.cell_size
-		v.aim_box = Rect2(Vector2(corner) * v.cell_size, Vector2(span, span))
+		var corner := player_cell() - Vector2i.ONE * ARM_REACH
+		var side := float(2 * ARM_REACH + 1) * v.cell_size
+		v.aim_box = Rect2(Vector2(corner) * v.cell_size, Vector2(side, side))
 		# ...and every fold this hand would arm from where the cursor is standing. More
 		# than one, now that a hand pairs with whatever it reaches: dropping one
 		# between two lone anchors starts both, and the preview has to say so.

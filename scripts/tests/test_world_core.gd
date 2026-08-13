@@ -591,7 +591,7 @@ func test_arms_reach_is_a_square_of_nine_cells_not_four_directions() -> void:
 		for dx in range(-2, 3):
 			var d := Vector2i(dx, dy)
 			var far := maxi(absi(dx), absi(dy))
-			if WorldCore.within_anchor_reach(here, here + d, 1):
+			if WorldCore.within_arm_reach(here, here + d, 1):
 				inside += 1
 				assert_true(far <= 1, "%s is inside the square" % d)
 			else:
@@ -604,13 +604,13 @@ func test_the_reach_clamp_pulls_a_cell_back_per_axis() -> void:
 	# reach is a no-op rather than a rejection — and stepping diagonally off a corner
 	# still moves along the axis that has room.
 	var here := Vector2i(4, 12)
-	assert_eq(WorldCore.clamp_to_anchor_reach(here, Vector2i(5, 11), 1), Vector2i(5, 11),
+	assert_eq(WorldCore.clamp_to_arm_reach(here, Vector2i(5, 11), 1), Vector2i(5, 11),
 		"A cell already inside the square is left alone")
-	assert_eq(WorldCore.clamp_to_anchor_reach(here, Vector2i(6, 12), 1), Vector2i(5, 12),
+	assert_eq(WorldCore.clamp_to_arm_reach(here, Vector2i(6, 12), 1), Vector2i(5, 12),
 		"One cell too far right comes back to the edge")
-	assert_eq(WorldCore.clamp_to_anchor_reach(here, Vector2i(9, 20), 1), Vector2i(5, 13),
+	assert_eq(WorldCore.clamp_to_arm_reach(here, Vector2i(9, 20), 1), Vector2i(5, 13),
 		"Far outside clamps to the nearest corner, per axis")
-	assert_eq(WorldCore.clamp_to_anchor_reach(here, Vector2i(6, 11), 1), Vector2i(5, 11),
+	assert_eq(WorldCore.clamp_to_arm_reach(here, Vector2i(6, 11), 1), Vector2i(5, 11),
 		"...and the axis with room keeps the step the axis without it lost")
 
 

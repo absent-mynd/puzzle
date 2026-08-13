@@ -1020,7 +1020,44 @@
 					}
 				}
 			],
-			"editor": {}
+			"editor": {},
+			"anchors": [
+				{
+					"cell": {
+						"x": 6,
+						"y": 16
+					},
+					"kind": "plain",
+					"arms": "never"
+				},
+				{
+					"cell": {
+						"x": 11,
+						"y": 16
+					},
+					"kind": "patient"
+				},
+				{
+					"cell": {
+						"x": 36,
+						"y": 3
+					},
+					"kind": "swift",
+					"arms": "sealed",
+					"id": "h_a",
+					"pair": "h_b"
+				},
+				{
+					"cell": {
+						"x": 41,
+						"y": 14
+					},
+					"kind": "swift",
+					"arms": "sealed",
+					"id": "h_b",
+					"pair": "h_a"
+				}
+			]
 		},
 		"goals": {
 			"rows": [

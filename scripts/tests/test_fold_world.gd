@@ -1229,6 +1229,29 @@ func test_a_burst_will_not_take_a_bolted_anchor() -> void:
 	assert_eq(_total(), _start_total, "Conserved")
 
 
+func test_the_world_can_hold_out_half_a_fold() -> void:
+	# A bolted anchor that arms on PROXIMITY is the world offering one end: bring a hand
+	# of your own within reach and the fold goes. What it holds is the one hand that was
+	# actually spent on it — so unfolding gives back one, not two, and not none.
+	var tile: BaseTile = world.base.tile_at(Vector2i(12, 12))
+	var offered: Anchor = world.field.add(Anchor.make(
+		tile.base_id, Vector2(12.5, 12.5) * CS, "west", HandTypes.PLAIN))
+	offered.bond = Anchor.BOLTED
+	assert_eq(world.hands_pending(), 0, "The world's anchor is not one of your hands")
+	assert_eq(world.hands_total(), _start_total, "...and not in the ledger at all")
+
+	world.player.teleport(Vector2(6.5 * CS, 12.5 * CS), false)
+	_pin(Vector2i(1, 0))                                # (7,12): five cells off
+	assert_eq(_armed(), 1, "Your hand and the world's reach each other")
+
+	world.player.teleport(Vector2(2.5 * CS, 12.5 * CS), false)   # clear of the strip
+	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
+	assert_eq(world.folds.size(), 1, "The fold went")
+	assert_eq(world.folds[0].held_hands.size(), 1,
+		"...holding the one hand that was spent on it")
+	assert_eq(world.hands_total(), _start_total, "Conserved")
+
+
 func test_a_plate_with_no_anchors_does_nothing() -> void:
 	_enter_east()
 	var tile: BaseTile = world.base.tile_at(Vector2i(25, 9))

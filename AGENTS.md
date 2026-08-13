@@ -260,8 +260,8 @@ Two consequences worth keeping:
 - **Raising a hand spends nothing.** It leaves its slot at the pin, not at the
   raise, so a cancelled placement costs exactly nothing and conservation never sees
   a hand in a fourth state. Do not make `begin_aim` take it out of the slot early.
-- **Reach is a square, and its radius is level design.** `WorldCore.within_anchor_reach`
-  is a box of `ANCHOR_REACH` cells around your own, diagonals and your own feet
+- **Reach is a square, and its radius is level design.** `WorldCore.within_arm_reach`
+  is a box of `ARM_REACH` cells around your own, diagonals and your own feet
   included. A one-tile shell keeps you out of what it encloses only because that
   radius is 1 (the sealed chamber is exactly that shell), so raising it is a design
   conversation, not tuning.
