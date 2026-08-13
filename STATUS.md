@@ -35,7 +35,7 @@ What exists and works today:
 | **Anchors as one system** (`Anchor`/`AnchorField`) — yours, the world's, a plate's | ✅ In the world |
 | **Proximity pairing** — a pair is two anchors within their spans, derived per frame | ✅ Playable, ⚙️ untuned |
 | Spans per hand kind (plain 4 / swift 3 / patient 6 cells) | ✅ Wired, ⚙️ **first guess** |
-| Authored anchors (`regions[].anchors`) — bolted, channel- or proximity-armed | ⚙️ Format + loader + testbed; **no editor tool** |
+| Authored anchors (`regions[].anchors`) — bolted, channel- or proximity-armed | ✅ Format, loader, editor tool (`W`), testbed |
 | Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
 | One-key verb (tap = raise a hand, tap = pin it, hold-and-release = burst) | ✅ Playable |
 | **Placement cursor** — time stops between the two taps; nine cells of reach; dithered held-world look | ✅ Playable, ⚙️ untuned |
@@ -125,10 +125,10 @@ Roughly in priority order — nothing here is committed to yet:
    getter/setter properties forwarding to `space.x`, so the current space can be
    read two ways. Moving the call sites over and deleting them is mechanical.
 10. **Three gaps in the editor** (`./run_editor.sh` — see
-    `docs/features/WORLD_EDITOR.md`): no tool authors a world anchor, a light's
-    colour/radius/flicker are not yet on the `TileParams` pattern, and nested
-    pre-placed folds are designed but deferred — the format reserves `folds[].in`
-    and the loader ignores it.
+    `docs/features/WORLD_EDITOR.md`): a world anchor's arming rule is tool state
+    rather than per-anchor, a light's colour/radius/flicker are not yet on the
+    `TileParams` pattern, and nested pre-placed folds are designed but deferred —
+    the format reserves `folds[].in` and the loader ignores it.
 
 ---
 
@@ -151,10 +151,10 @@ Roughly in priority order — nothing here is committed to yet:
   patient hand that would cover it is sealed inside the chamber. Beat 1 was fixed by
   narrowing the pit a column; this one wants a design pass rather than an edit, which
   is why it is recorded instead of guessed at.
-- **The editor cannot author a world anchor.** `regions[].anchors` loads, binds, saves
-  and round-trips, and the testbed uses all three arming modes — but the only way to
-  add one today is to edit the JSON. The editor's existing anchor tool still authors
-  pre-placed FOLDS, which is a different thing.
+- **The editor cannot set a world anchor's arming rule.** The `W` tool places, pairs,
+  removes and draws them, and `validate()` reports the ones the game would refuse in
+  silence — but every anchor it places takes the tool's current setting, so a channel
+  name still has to be typed into the JSON.
 - **You can strand yourself.** Spend your last hands on a fold, walk somewhere its
   seam cannot be reached from, and `R` is the only way back. `R` is survivable by
   design — it drops every fold and respawns the authored loose hands — but it still

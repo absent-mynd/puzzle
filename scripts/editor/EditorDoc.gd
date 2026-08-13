@@ -632,6 +632,86 @@ func remove_anchor(id: String, cell: Vector2i, tag: String = "") -> bool:
 	return true
 
 
+# ---------------------------------------------------------------------------
+# World anchors — the ones that ship STANDING
+# ---------------------------------------------------------------------------
+
+## An anchor in `regions[].anchors` is a different thing from the scratch anchors
+## above, and the difference is worth stating because they look identical on the
+## board: those are a fold you have not finished AUTHORING, and these are anchors
+## that ship, stand in the world, and pair with whatever comes within reach.
+##
+## Always bolted (`Anchor.BOLTED`) — see `Anchor`. There is no `kind` argument here
+## for the same reason there is no bond one: what an authored anchor is FOR is the
+## arming rule, and its kind follows from that. Give it one from the inspector when
+## the inspector learns about anchors.
+
+func world_anchors_of(id: String) -> Array:
+	return world.anchors_of(id)
+
+
+func world_anchor_at(id: String, cell: Vector2i) -> int:
+	if not world.regions.has(id):
+		return -1
+	var list: Array = world.regions[id].get("anchors", [])
+	for i in range(list.size()):
+		if (list[i] as Anchor).cell == cell:
+			return i
+	return -1
+
+
+## Drive an anchor into the region's own sheet. `arms` is `Anchor.PROXIMITY`,
+## `Anchor.NEVER`, or a channel name.
+func add_world_anchor(id: String, cell: Vector2i, kind: int = HandTypes.PLAIN,
+		arms: String = Anchor.PROXIMITY, tag: String = "") -> bool:
+	if not world.regions.has(id) or not EditorTools.in_bounds(cell, size_of(id)):
+		return false
+	if world_anchor_at(id, cell) >= 0:
+		return false            # a site holds one anchor, in the editor as in the game
+	_snapshot(tag)
+	var anchor := Anchor.new()
+	anchor.cell = cell
+	anchor.hand = kind
+	anchor.arms = arms
+	anchor.bond = Anchor.BOLTED
+	anchor.region = id
+	var list: Array = world.regions[id].get("anchors", [])
+	list.append(anchor)
+	world.regions[id]["anchors"] = list
+	return true
+
+
+func remove_world_anchor(id: String, cell: Vector2i, tag: String = "") -> bool:
+	var at := world_anchor_at(id, cell)
+	if at < 0:
+		return false
+	_snapshot(tag)
+	var list: Array = world.regions[id]["anchors"]
+	list.remove_at(at)
+	world.regions[id]["anchors"] = list
+	return true
+
+
+## Declare two authored anchors as a pair, so they fold together whatever the
+## distance between them. Names are generated from the region, as door ids are, so a
+## file stays readable. Returns whether the pair was made.
+func pair_world_anchors(id: String, a: Vector2i, b: Vector2i, tag: String = "") -> bool:
+	var ia := world_anchor_at(id, a)
+	var ib := world_anchor_at(id, b)
+	if ia < 0 or ib < 0 or ia == ib:
+		return false
+	_snapshot(tag)
+	var list: Array = world.regions[id]["anchors"]
+	var first: Anchor = list[ia]
+	var second: Anchor = list[ib]
+	var stem := "%s_%d" % [id, list.size()]
+	first.key = "%s_a" % stem
+	second.key = "%s_b" % stem
+	first.pair_key = second.key
+	second.pair_key = first.key
+	return true
+
+
 ## The pre-placed folds of a region, as `{"a": Vector2i, "b": Vector2i,
 ## "in": Array}` in file order. `in` is the nesting path — always empty today; see
 ## the `folds` note in `WorldData`.
@@ -881,6 +961,26 @@ func validate() -> Array:
 			out.append({"severity": "warn", "region": id,
 				"message": "%d fold anchor(s) placed but not connected" %
 					world.unpaired_anchors(id).size()})
+
+		# World anchors. The failures worth reporting are the ones the GAME will meet
+		# in silence: an anchor off the sheet binds to nothing, one on an unanchorable
+		# tile is refused at the fuse, and a declared pair whose partner is missing is
+		# half a fold that can never go.
+		var anchor_keys: Dictionary = {}
+		for anchor in world.regions[id].get("anchors", []):
+			if anchor.key != "":
+				anchor_keys[anchor.key] = true
+		for anchor in world.regions[id].get("anchors", []):
+			if not EditorTools.in_bounds(anchor.cell, size):
+				out.append({"severity": "error", "region": id,
+					"message": "world anchor at %s is outside the region" % anchor.cell})
+				continue
+			if TileTypes.blocks_anchor(EditorTools.type_of_char(char_at(id, anchor.cell))):
+				out.append({"severity": "warn", "region": id,
+					"message": "world anchor at %s is on an unanchorable tile" % anchor.cell})
+			if anchor.pair_key != "" and not anchor_keys.has(anchor.pair_key):
+				out.append({"severity": "warn", "region": id,
+					"message": "world anchor at %s names a partner that is not here" % anchor.cell})
 
 		for light in world.regions[id].get("lights", []):
 			if not EditorTools.in_bounds(light.cell, size):

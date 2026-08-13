@@ -480,6 +480,78 @@ func test_removing_a_door_unpairs_its_partner():
 
 
 # ---------------------------------------------------------------------------
+# World anchors — the ones that ship STANDING
+# ---------------------------------------------------------------------------
+
+func test_a_world_anchor_ships_standing():
+	var doc := _doc()
+	assert_true(doc.add_world_anchor("west", Vector2i(1, 1)), "the anchor went in")
+	var anchors: Array = doc.world_anchors_of("west")
+	assert_eq(anchors.size(), 1, "and it is in the region, not in the editor's scratch")
+	assert_eq(anchors[0].cell, Vector2i(1, 1), "on the cell that was clicked")
+	assert_eq(anchors[0].bond, Anchor.BOLTED,
+		"authored anchors are the world's — a loose one would be a free hand")
+	assert_eq(doc.anchors_of("west"), [], "and it is not a half-authored fold")
+	assert_eq(doc.folds_of("west").size(), 0, "nor a fold")
+
+
+func test_a_world_anchor_site_holds_one_anchor():
+	var doc := _doc()
+	doc.add_world_anchor("west", Vector2i(1, 1))
+	assert_false(doc.add_world_anchor("west", Vector2i(1, 1)),
+		"the same rule the game refuses a second hand by")
+
+
+func test_a_world_anchor_outside_the_region_is_refused():
+	var doc := _doc()
+	assert_false(doc.add_world_anchor("west", Vector2i(999, 999)),
+		"an anchor off the sheet has nothing to be pinned to")
+
+
+func test_world_anchors_can_be_declared_a_pair():
+	var doc := _doc()
+	doc.add_world_anchor("west", Vector2i(1, 1), HandTypes.PLAIN, "vault")
+	doc.add_world_anchor("west", Vector2i(6, 1), HandTypes.PLAIN, "vault")
+	assert_true(doc.pair_world_anchors("west", Vector2i(1, 1), Vector2i(6, 1)),
+		"the two were declared with each other")
+	var anchors: Array = doc.world_anchors_of("west")
+	assert_eq(anchors[0].pair_key, anchors[1].key, "each names the other")
+	assert_eq(anchors[1].pair_key, anchors[0].key, "both ways")
+	assert_eq(anchors[0].arms, "vault", "and they still wait on their channel")
+
+
+func test_a_world_anchor_off_the_sheet_or_on_a_bad_tile_is_reported():
+	var doc := _doc()
+	doc.add_world_anchor("west", Vector2i(1, 1))
+	doc.paint("west", Vector2i(1, 1), "X")                # unanchorable wall
+	var warned := false
+	for issue in doc.validate():
+		if String(issue["message"]).contains("unanchorable"):
+			warned = true
+	assert_true(warned, "an anchor the fuse would refuse is worth saying out loud")
+
+
+func test_a_world_anchor_naming_a_missing_partner_is_reported():
+	var doc := _doc()
+	doc.add_world_anchor("west", Vector2i(1, 1))
+	(doc.world.regions["west"]["anchors"][0] as Anchor).pair_key = "nobody"
+	var warned := false
+	for issue in doc.validate():
+		if String(issue["message"]).contains("partner that is not here"):
+			warned = true
+	assert_true(warned, "half a declared pair can never fold, and says so")
+
+
+func test_removing_a_world_anchor_is_undoable():
+	var doc := _doc()
+	doc.add_world_anchor("west", Vector2i(1, 1))
+	assert_true(doc.remove_world_anchor("west", Vector2i(1, 1)), "it came out")
+	assert_eq(doc.world_anchors_of("west").size(), 0, "and is gone")
+	doc.undo()
+	assert_eq(doc.world_anchors_of("west").size(), 1, "undo puts it back")
+
+
+# ---------------------------------------------------------------------------
 # Pre-placed folds
 # ---------------------------------------------------------------------------
 
