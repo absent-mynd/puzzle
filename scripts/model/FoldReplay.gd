@@ -140,7 +140,7 @@ static func make_fold(fold_id: int, anchor1: Vector2i, anchor2: Vector2i, cell_s
 ## Such a fold must be refused: the space a pin holds can never be folded away.
 ##
 ## Kernel rather than view, because every path that creates a fold has to honor it —
-## the player's own folds AND the ones TriggerResolver fires. A pin that a pressure
+## the player's own folds AND the ones a plate pins. A pin that a pressure
 ## plate could quietly delete would not be a pin.
 static func blocked_by_tile(pieces: Array, fold: Fold, cell_size: float) -> bool:
 	for piece in pieces:

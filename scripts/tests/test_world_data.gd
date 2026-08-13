@@ -322,19 +322,13 @@ func test_shipped_trigger_opens_the_wall():
 	var plate = _plane_centre(e, Vector2i(25, 9))
 	assert_not_null(plate, "the plate is reachable in normal space")
 
-	var out := TriggerResolver.resolve(base, {
-		"folds": e["folds"],
-		"pieces": e["pieces"],
-		"player_pos": plate,
-		"next_trigger_id": TriggerResolver.TRIGGER_FOLD_ID_BASE,
-	})
-	assert_eq((out["folds"] as Array).size(), (e["folds"] as Array).size() + 1,
-		"standing on the plate fires exactly one fold")
+	var after := _plate_pieces(e, Vector2i(25, 9))
+	assert_false(after.is_empty(), "the plate's declared pair makes a fold")
 
-	var wall_bid: int = base.tile_by_id(base.tile_at(wall_cell).base_id).base_id
+	var wall_bid: int = base.tile_at(wall_cell).base_id
 	var still_there := false
-	for p in out["pieces"]:
-		if p.base_id == wall_bid:
+	for piece in after:
+		if piece.base_id == wall_bid:
 			still_there = true
 			break
 	assert_false(still_there, "the triggered fold excised the wall")
@@ -343,15 +337,9 @@ func test_shipped_trigger_opens_the_wall():
 func test_shipped_trigger_leaves_the_pin_and_the_reward_alone():
 	var e := _east()
 	var base: BaseGrid = e["base"]
-	var out := TriggerResolver.resolve(base, {
-		"folds": e["folds"],
-		"pieces": e["pieces"],
-		"player_pos": _plane_centre(e, Vector2i(25, 9)),
-		"next_trigger_id": TriggerResolver.TRIGGER_FOLD_ID_BASE,
-	})
 	var survivors := {}
-	for p in out["pieces"]:
-		survivors[p.base_id] = true
+	for piece in _plate_pieces(e, Vector2i(25, 9)):
+		survivors[piece.base_id] = true
 	assert_true(survivors.has(base.tile_at(Vector2i(21, 9)).base_id),
 		"the pinned pillar survives the triggered fold")
 	assert_true(survivors.has(base.tile_at(Vector2i(29, 9)).base_id),
@@ -359,16 +347,42 @@ func test_shipped_trigger_leaves_the_pin_and_the_reward_alone():
 
 
 func test_shipped_trigger_carries_the_player():
-	# A trigger that would swallow the player is refused; this one must ride them.
+	# A plate's fold may pinch you now — there is one fold path and it swallows whoever
+	# is in the strip. This one must not: the plate is on a flap, so standing on it when
+	# the fuse runs out rides you rather than taking you in.
 	var e := _east()
 	var plate = _plane_centre(e, Vector2i(25, 9))
-	var out := TriggerResolver.resolve(e["base"], {
-		"folds": e["folds"],
-		"pieces": e["pieces"],
-		"player_pos": plate,
-		"next_trigger_id": TriggerResolver.TRIGGER_FOLD_ID_BASE,
-	})
-	assert_ne(out["player_pos"], plate, "the plate's fold rides the player with its flap")
+	var after := _plate_pieces(e, Vector2i(25, 9))
+	var dest = BaseFrame.transport(e["pieces"], after, Vector2(plate), e["wd"].cell_size)
+	assert_not_null(dest, "the plate's fold rides the player rather than swallowing them")
+	assert_ne(dest, plate, "...and carries them with the flap")
+
+
+## The piece list after a plate's declared pair has folded, or [] if it would not.
+##
+## The plate names two BASE cells; an anchor pinned in one resolves through whatever
+## the sheet has already done, which is what `FoldWorld._plant_pair` binds and
+## `fire_pair` then folds between. This is the content half of that: does the world as
+## AUTHORED declare a fold that goes.
+func _plate_pieces(e: Dictionary, plate_cell: Vector2i) -> Array:
+	var base: BaseGrid = e["base"]
+	var cs: float = e["wd"].cell_size
+	var tile := base.tile_at(plate_cell)
+	var cells: Array = tile.data.get("anchors", [])
+	if cells.size() < 2:
+		return []
+	var at: Array = []
+	for raw in cells.slice(0, 2):
+		var wp = BaseFrame.world_point_from_base(e["pieces"],
+			base.tile_at(Vector2i(int(raw[0]), int(raw[1]))).base_id,
+			(Vector2(int(raw[0]), int(raw[1])) + Vector2(0.5, 0.5)) * cs)
+		if wp == null:
+			return []
+		at.append(Vector2i((Vector2(wp) / cs).floor()))
+	var f := Fold.create(0, at[0], at[1], cs, String(tile.data.get("channel", "")))
+	if FoldReplay.blocked_by_tile(e["pieces"], f, cs):
+		return []
+	return FoldReplay.apply_one_fold(e["pieces"], f, cs)
 
 
 func test_shipped_preplaced_folds_are_applicable():
@@ -401,6 +415,56 @@ func _with_light() -> WorldData:
 	light.flicker = 0.2
 	wd.regions["a"]["lights"] = [light]
 	return wd
+
+
+## A world with an anchor of its own driven into the sheet, half of a declared pair.
+func _with_anchor() -> WorldData:
+	var wd := _sample()
+	var a := Anchor.from_dict({"cell": {"x": 1, "y": 0}, "kind": "patient",
+		"arms": "vault", "id": "gate_a", "pair": "gate_b"})
+	var b := Anchor.from_dict({"cell": {"x": 3, "y": 0}, "kind": "swift", "pair": "gate_a",
+		"id": "gate_b", "arms": "vault"})
+	wd.regions["a"]["anchors"] = [a, b]
+	return wd
+
+
+func test_anchors_round_trip_through_dict():
+	var copy := WorldData.new()
+	copy.from_dict(_with_anchor().to_dict())
+	var anchors: Array = copy.regions["a"]["anchors"]
+	assert_eq(anchors.size(), 2, "the region's anchors survive the round trip")
+	assert_eq(anchors[0].cell, Vector2i(1, 0), "with their cells")
+	assert_eq(anchors[0].hand, HandTypes.PATIENT, "their kinds")
+	assert_eq(anchors[0].arms, "vault", "the channel they wait on")
+	assert_eq(anchors[0].pair_key, "gate_b", "and who they are declared with")
+	assert_eq(anchors[0].bond, Anchor.BOLTED,
+		"an authored anchor is always the world's — a loose one would be a free hand")
+	assert_eq(anchors[0].region, "a", "a decoded anchor knows which region it belongs to")
+
+
+func test_anchors_round_trip_is_json_safe():
+	var parsed = JSON.parse_string(JSON.stringify(_with_anchor().to_dict()))
+	assert_true(parsed is Dictionary, "anchors encode to JSON")
+	var copy := WorldData.new()
+	copy.from_dict(parsed)
+	assert_eq((copy.regions["a"]["anchors"] as Array).size(), 2, "and decode back")
+
+
+func test_anchors_of_hands_out_copies_and_links_pairs():
+	# Binding writes base_id/bp into an anchor, and `add` writes its id; the authored
+	# world must not be edited by the act of loading it.
+	var wd := _with_anchor()
+	var taken: Array = wd.anchors_of("a")
+	taken[0].bind(wd.build_base("a"))
+	assert_false((wd.regions["a"]["anchors"][0] as Anchor).is_bound(),
+		"the authored anchor is untouched by binding the copy")
+
+	var field := AnchorField.new()
+	for anchor in taken:
+		field.add(anchor)
+	Anchor.link_pairs(taken)
+	assert_eq(taken[0].partner, taken[1].id, "a declared pair finds each other by name")
+	assert_eq(taken[1].partner, taken[0].id, "...both ways")
 
 
 func test_lights_round_trip_through_dict():

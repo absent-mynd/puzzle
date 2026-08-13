@@ -53,7 +53,8 @@ func _view(pairs: Array, hands: Array = [], repeating := false) -> OverlayView:
 	for pair in pairs:
 		v.pairs.append({"a": pair[0], "b": pair[1]})
 	for at in hands:
-		v.hands_down.append({"at": at, "kind": 0, "fuse": -1.0})
+		v.hands_down.append({"at": at, "kind": HandTypes.PLAIN, "fuse": -1.0,
+			"span": HandTypes.span(HandTypes.PLAIN) * CELL, "bolted": false})
 	return v
 
 
@@ -105,6 +106,29 @@ func test_a_real_pair_still_previews_a_band() -> void:
 	overlay.set_view(_view([[_cell(4, 5), _cell(9, 5)]], [], true))
 	assert_gt(overlay._strips.size(), 0, "so does the same pair in a repeating space")
 	assert_gte(_fewest_points(overlay._strips), 3, "and its clipped strip is drawable too")
+
+
+func test_a_span_circle_is_one_run_per_kind_however_many_hands_are_down() -> void:
+	# `paint()` runs once per COPY of the space — 77 of them two folds deep — so a
+	# circle drawn as an arc per dash is a few thousand draw calls a frame on a torus.
+	# Packed by kind at view time, it is at most three whatever is on screen.
+	overlay.set_view(_view([], [_cell(2, 2), _cell(6, 2), _cell(10, 2)]))
+	assert_eq(overlay._span_runs.size(), 1, "three plain hands share one run")
+	var runs: PackedVector2Array = overlay._span_runs[HandTypes.PLAIN]
+	assert_eq(runs.size(), 3 * WorldOverlay.SPAN_DASHES * 2, "...holding all three circles")
+	assert_almost_eq(runs[0].distance_to(_cell(2, 2)),
+		HandTypes.span(HandTypes.PLAIN) * CELL, 0.01,
+		"and every point of it sits on that hand's span")
+
+
+func test_an_anchor_with_no_span_draws_no_circle() -> void:
+	# A hand pinned somewhere this frame cannot show has no span to draw, and a
+	# zero-radius circle is 24 segments of nothing.
+	var v := _view([])
+	v.hands_down.append({"at": _cell(3, 3), "kind": HandTypes.PLAIN, "fuse": -1.0,
+		"span": 0.0, "bolted": true})
+	overlay.set_view(v)
+	assert_eq(overlay._span_runs.size(), 0, "nothing to draw, nothing drawn")
 
 
 func test_a_seam_is_drawn_as_a_muted_glue_line() -> void:

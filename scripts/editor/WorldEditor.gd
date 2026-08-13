@@ -37,7 +37,7 @@ const ZOOM_STEP := 1.15
 const MIN_CELLS := 2
 const MAX_CELLS := 512
 
-enum Tool { PAINT, RECT, PICK, SPAWN, DOOR, FOLD, LIGHT, HAND, TILE }
+enum Tool { PAINT, RECT, PICK, SPAWN, DOOR, FOLD, ANCHOR, LIGHT, HAND, TILE }
 
 ## Tool -> the one-line hint the status bar shows. Kept beside the enum so adding a
 ## tool means adding a row, not hunting for the place that describes it.
@@ -48,6 +48,7 @@ const TOOL_HINT := {
 	Tool.SPAWN: "click to move this region's spawn point",
 	Tool.DOOR: "click to place a door · drag door→door to connect · right-click to remove",
 	Tool.FOLD: "click to place an anchor · drag anchor→anchor to make a pre-placed fold · right-click to remove",
+	Tool.ANCHOR: "click to bolt an anchor into the world · drag anchor→anchor to declare a pair · right-click to remove",
 	Tool.LIGHT: "click to place a light · right-click to remove",
 	Tool.HAND: "click to leave a hand on the ground · right-click to remove",
 	Tool.TILE: "click a tile to edit what it DOES · right-click to clear its settings",
@@ -62,6 +63,11 @@ var cam: Camera2D = null
 var tool: int = Tool.PAINT
 var brush: String = "#"
 var hand_kind: int = HandTypes.PLAIN
+## What a world anchor placed now will ARM on: `Anchor.PROXIMITY`, `Anchor.NEVER`,
+## or a channel name. Tool state rather than a per-anchor prompt, for the same reason
+## `hand_kind` is: you place several of a kind at a time, and a dialog per click is a
+## dialog you learn to dismiss.
+var anchor_arms: String = Anchor.PROXIMITY
 
 # --- Selection and hover ---
 var selected_region: String = ""
@@ -424,6 +430,8 @@ func _tool_press(id: String, cell: Vector2i, at: Vector2, alt: bool) -> void:
 			_door_press(id, cell, at, alt)
 		Tool.FOLD:
 			_fold_press(id, cell, at, alt)
+		Tool.ANCHOR:
+			_anchor_press(id, cell, at, alt)
 		Tool.LIGHT:
 			if alt:
 				doc.remove_light(id, cell)
@@ -483,6 +491,23 @@ func _fold_press(id: String, cell: Vector2i, at: Vector2, alt: bool) -> void:
 	_gesture = {"kind": "link_fold", "id": id, "from": cell, "at": at}
 
 
+## The world-anchor tool. Deliberately the same GESTURE as the fold tool — click to
+## place, drag one onto another to relate them — because "these two things are the
+## same thing" is one idea, and it is the idea this whole system is about. What
+## differs is what the relation MEANS: connecting two fold anchors consumes them into
+## a fold that ships already folded, while declaring two world anchors leaves both
+## standing and waiting for their channel.
+func _anchor_press(id: String, cell: Vector2i, at: Vector2, alt: bool) -> void:
+	if alt:
+		doc.remove_world_anchor(id, cell)
+		return
+	if doc.world_anchor_at(id, cell) < 0 \
+			and not doc.add_world_anchor(id, cell, hand_kind, anchor_arms):
+		toast("nothing to bolt an anchor to there", EditorBoard.C_WARN)
+		return
+	_gesture = {"kind": "pair_anchor", "id": id, "from": cell, "at": at}
+
+
 func _drag(at: Vector2, relative: Vector2) -> void:
 	match _gesture.get("kind", ""):
 		"pan":
@@ -501,7 +526,7 @@ func _drag(at: Vector2, relative: Vector2) -> void:
 			board.drop_tile_cache(id)
 		"rect":
 			_gesture["to"] = cell_at(String(_gesture["id"]), at)
-		"link_door", "link_fold":
+		"link_door", "link_fold", "pair_anchor":
 			_gesture["at"] = at
 	board.queue_redraw()
 
@@ -518,8 +543,25 @@ func _release(at: Vector2) -> void:
 			_finish_door_link(at)
 		"link_fold":
 			_finish_fold_link(at)
+		"pair_anchor":
+			_finish_anchor_pair(at)
 	_end_gesture()
 	refresh()
+
+
+## Declare the two anchors a drag connected. Both stay standing — that is the whole
+## difference from `_finish_fold_link`, which consumes its two into a fold.
+func _finish_anchor_pair(at: Vector2) -> void:
+	var id := String(_gesture["id"])
+	var from: Vector2i = _gesture["from"]
+	if hover_region != "" and hover_region != id:
+		toast("a declared pair's two anchors must be in the same region", EditorBoard.C_WARN)
+		return
+	var target := cell_at(id, at)
+	if target == from or doc.world_anchor_at(id, target) < 0:
+		return
+	if doc.pair_world_anchors(id, from, target):
+		toast("anchors declared — they fold together whatever the distance", EditorBoard.C_OK)
 
 
 func _end_gesture() -> void:
@@ -780,6 +822,7 @@ func _key(event: InputEventKey) -> void:
 		KEY_P: set_tool(Tool.SPAWN)
 		KEY_D: set_tool(Tool.DOOR)
 		KEY_A: set_tool(Tool.FOLD)
+		KEY_W: set_tool(Tool.ANCHOR)
 		KEY_L: set_tool(Tool.LIGHT)
 		KEY_H: set_tool(Tool.HAND)
 		KEY_T: set_tool(Tool.TILE)

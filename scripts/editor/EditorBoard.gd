@@ -64,6 +64,9 @@ const C_SPAWN := Color(0.45, 1.0, 0.62)
 const C_DOOR := Color(0.55, 0.80, 1.0)
 const C_DOOR_LOOSE := Color(1.0, 0.45, 0.45)
 const C_ANCHOR := Color(1.00, 0.62, 0.36)
+## A world anchor is drawn in its own hand's colour; this is the ring that says the
+## world put it there rather than that it is waiting to become a fold.
+const C_BOLT := Color(0.86, 0.88, 0.94)
 const C_FOLD := Color(0.72, 0.55, 1.00)
 const C_STRIP := Color(0.72, 0.55, 1.00, 0.16)
 const C_HOVER := Color(1, 1, 1, 0.22)
@@ -129,6 +132,7 @@ func _draw_card(doc: EditorDoc, id: String) -> void:
 	_draw_spawn(doc, id, cell)
 	_draw_lights(doc, id, cell)
 	_draw_hands(doc, id, cell)
+	_draw_world_anchors(doc, id, cell)
 	_draw_doors(doc, id, cell)
 	_draw_hover(doc, id, cell)
 	_origin = Vector2.ZERO
@@ -371,6 +375,37 @@ func _draw_hands(doc: EditorDoc, id: String, cell: float) -> void:
 		var col := HandTypes.color(pickup.kind)
 		draw_circle(at, cell * 0.20, col)
 		draw_arc(at, cell * 0.30, 0, TAU, 20, col, _px(LINE_PX))
+
+
+## Anchors the world ships STANDING, with the reach each one has.
+##
+## Drawn distinctly from the fold tool's scratch anchors on purpose: those are half a
+## fold you have not finished authoring, these are objects that will be in the world.
+## The span circle is the whole reason to see one on the board at all — where the next
+## one has to go to pair with it is the thing you are authoring.
+func _draw_world_anchors(doc: EditorDoc, id: String, cell: float) -> void:
+	var anchors: Array = doc.region(id).get("anchors", [])
+	var by_key: Dictionary = {}
+	for anchor in anchors:
+		if anchor.key != "":
+			by_key[anchor.key] = anchor
+	for anchor in anchors:
+		var at := _center(anchor.cell, cell)
+		var col: Color = HandTypes.color(anchor.hand)
+		# Only a proximity anchor HAS a reach — one waiting on a channel pairs with the
+		# partner it names, at any distance, so a circle round it would be a lie.
+		if anchor.arms == Anchor.PROXIMITY:
+			draw_arc(at, HandTypes.span(anchor.hand) * cell, 0, TAU, 64,
+				Color(col, 0.18), _px(LINE_PX))
+		draw_circle(at, cell * 0.16, col)
+		draw_arc(at, cell * 0.30, 0, TAU, 20, C_BOLT, _px(LINE_PX))
+		if anchor.arms == Anchor.NEVER:
+			# Scenery: crossed through, because it will never do anything.
+			var r := cell * 0.30
+			draw_line(at + Vector2(-r, -r), at + Vector2(r, r), C_BOLT, _px(LINE_PX))
+		if anchor.pair_key != "" and by_key.has(anchor.pair_key):
+			draw_line(at, _center((by_key[anchor.pair_key] as Anchor).cell, cell),
+				Color(C_BOLT, 0.45), _px(LINE_PX))
 
 
 func _draw_doors(doc: EditorDoc, id: String, cell: float) -> void:

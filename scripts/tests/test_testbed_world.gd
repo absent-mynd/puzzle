@@ -214,6 +214,48 @@ func test_every_loose_hand_binds_and_is_a_real_kind():
 				"hand at %s in %s is a registered kind" % [pickup.cell, id])
 
 
+func test_every_authored_anchor_binds_and_declares_something_real():
+	# An anchor the WORLD drove in is an occupant like a lamp: a base identity and a
+	# point in it. One authored outside the grid binds to nothing and would stand
+	# nowhere; one naming a partner that is not there is half a fold that can never go.
+	var wd := _world()
+	var found := 0
+	for id in wd.regions:
+		var base := wd.build_base(id)
+		var anchors: Array = wd.anchors_of(id)
+		var keys := {}
+		for anchor in anchors:
+			if anchor.key != "":
+				keys[anchor.key] = true
+		for anchor in anchors:
+			found += 1
+			assert_true(anchor.bind(base),
+				"%s's anchor at %s sits on a real tile" % [id, anchor.cell])
+			assert_eq(anchor.bond, Anchor.BOLTED, "an authored anchor is the world's, not yours")
+			assert_true(HandTypes.is_registered(anchor.hand),
+				"%s's anchor at %s is a kind that exists" % [id, anchor.cell])
+			if anchor.pair_key != "":
+				assert_true(keys.has(anchor.pair_key),
+					"%s's anchor at %s names a partner that is in the region"
+						% [id, anchor.cell])
+	assert_gt(found, 0, "the testbed authors anchors at all")
+
+
+func test_the_hands_region_shows_every_way_an_anchor_can_be_authored():
+	var anchors: Array = _world().anchors_of("hands")
+	var arms := {}
+	for anchor in anchors:
+		arms[anchor.arms] = true
+	assert_true(arms.has(Anchor.NEVER), "scenery: an anchor that pairs with nothing")
+	assert_true(arms.has(Anchor.PROXIMITY),
+		"the world holding one end out: bring a hand within reach and it folds")
+	var declared := 0
+	for anchor in anchors:
+		if anchor.pair_key != "":
+			declared += 1
+	assert_eq(declared, 2, "...and a declared pair, waiting on a channel")
+
+
 func test_it_lays_out_every_kind_of_hand():
 	var wd := _world()
 	var kinds := {}
@@ -367,25 +409,45 @@ func test_every_plate_loop_reaches_the_seam_its_trigger_leaves():
 			"%s %s is a burst plate" % [id, plate_cell])
 		var radius := float(TileParams.get_value(plate_tile.type, plate_tile.data, "radius"))
 
-		# Fire the trigger exactly as the world does: standing on it, through the resolver.
+		# The fold the trigger's declared pair makes, built the way the world builds it:
+		# its two BASE cells resolved through whatever the region already ships folded.
 		var trigger_cell: Vector2i = loop["trigger"]
 		var stood_on = BaseFrame.world_point_from_base(booted["pieces"],
 			base.tile_at(trigger_cell).base_id, (Vector2(trigger_cell) + Vector2(0.5, 0.5)) * cs)
 		assert_not_null(stood_on, "%s's trigger is reachable at boot" % id)
-		var out := TriggerResolver.resolve(base, {
-			"folds": booted["folds"], "pieces": booted["pieces"],
-			"player_pos": stood_on, "next_trigger_id": TriggerResolver.TRIGGER_FOLD_ID_BASE,
-		})
-		assert_eq((out["folds"] as Array).size(), (booted["folds"] as Array).size() + 1,
-			"%s's trigger fires" % id)
+		var fold = _declared_fold(booted, base.tile_at(trigger_cell), cs)
+		assert_not_null(fold, "%s's trigger declares a fold that goes" % id)
+		var after := FoldReplay.apply_one_fold(booted["pieces"], fold, cs)
 
-		var fold: Fold = (out["folds"] as Array)[-1]
-		var plate_at = BaseFrame.world_point_from_base(out["pieces"],
+		var plate_at = BaseFrame.world_point_from_base(after,
 			plate_tile.base_id, (Vector2(plate_cell) + Vector2(0.5, 0.5)) * cs)
 		assert_not_null(plate_at, "%s's plate rode the fold rather than being excised" % id)
 		var seam := (Vector2(fold.meeting_pos) + Vector2(0.5, 0.5)) * cs
 		assert_lte(seam.distance_to(Vector2(plate_at)), radius * cs,
 			"%s's plate reaches the seam its trigger leaves behind" % id)
+
+
+## The fold a trigger tile declares, in the configuration `booted` describes, or null
+## if it would not go. The world reaches this by pinning two bolted anchors and letting
+## the fuse fold them (`FoldWorld._plant_pair`); here it is the same two base cells,
+## resolved the same way, without a scene to boot.
+func _declared_fold(booted: Dictionary, tile: BaseTile, cs: float):
+	var cells: Array = tile.data.get("anchors", [])
+	if cells.size() < 2:
+		return null
+	var base: BaseGrid = booted["base"]
+	var at: Array = []
+	for raw in cells.slice(0, 2):
+		var cell := Vector2i(int(raw[0]), int(raw[1]))
+		var wp = BaseFrame.world_point_from_base(booted["pieces"],
+			base.tile_at(cell).base_id, (Vector2(cell) + Vector2(0.5, 0.5)) * cs)
+		if wp == null:
+			return null
+		at.append(Vector2i((Vector2(wp) / cs).floor()))
+	if at[0] == at[1]:
+		return null
+	var f := Fold.create(0, at[0], at[1], cs, String(tile.data.get("channel", "")))
+	return null if FoldReplay.blocked_by_tile(booted["pieces"], f, cs) else f
 
 
 func test_a_pin_still_vetoes_the_fold_a_plate_would_make():

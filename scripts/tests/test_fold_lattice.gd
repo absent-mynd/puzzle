@@ -55,6 +55,53 @@ func test_wrapping_crosses_as_many_copies_as_it_needs_to() -> void:
 	assert_almost_eq(lat.wrap(far).x, 10.5 * CS + 30.0, 0.01, "Five laps back in one step")
 
 
+func test_two_points_either_side_of_a_glue_line_are_neighbours() -> void:
+	# The bug this exists to prevent: in a repeating space the raw distance between
+	# two points is not the distance a player experiences, because the space is
+	# identified across the glue. A hand pinned just past the near glue is drawn
+	# beside your feet and measures a whole period away.
+	var lat := FoldLattice.flat().push(_fold(Vector2i(10, 12), Vector2i(18, 12)), CS)
+	# Domain: x in [10.5, 18.5) cells. These two sit either side of the FAR glue.
+	var a := Vector2(18.4 * CS, 0)
+	var b := Vector2(10.6 * CS, 0)
+	assert_almost_eq(a.distance_to(b), 7.8 * CS, 0.01, "Raw: most of the strip apart")
+	assert_almost_eq(lat.distance(a, b), 0.2 * CS, 0.01, "...and a fifth of a cell, really")
+	assert_almost_eq(lat.shortest_delta(a, b), Vector2(0.2 * CS, 0), Vector2(0.01, 0.01),
+		"The delta points the short way round, which is the way you would walk")
+
+
+func test_the_short_way_round_is_symmetric_and_flat_space_is_untouched() -> void:
+	var lat := FoldLattice.flat().push(_fold(Vector2i(10, 12), Vector2i(18, 12)), CS)
+	var a := Vector2(18.4 * CS, 0)
+	var b := Vector2(10.6 * CS, 0)
+	assert_almost_eq(lat.shortest_delta(b, a), -lat.shortest_delta(a, b),
+		Vector2(0.01, 0.01), "Measuring the other way gives the same gap, mirrored")
+	var flat := FoldLattice.flat()
+	assert_eq(flat.shortest_delta(a, b), b - a, "A region has no short way round")
+	assert_almost_eq(flat.distance(a, b), a.distance_to(b), 0.01, "...so it is the plain distance")
+
+
+func test_a_torus_measures_the_short_way_on_both_axes() -> void:
+	var lat := FoldLattice.flat() \
+		.push(_fold(Vector2i(10, 12), Vector2i(18, 12)), CS) \
+		.push(_fold(Vector2i(12, 8), Vector2i(12, 11)), CS)
+	# Periods 8 cells across, 3 cells down. Opposite corners of the domain are
+	# diagonal neighbours, not the length of the room apart.
+	var a := Vector2(10.6 * CS, 8.6 * CS)
+	var b := Vector2(18.4 * CS, 11.4 * CS)
+	assert_almost_eq(lat.distance(a, b), Vector2(0.2, 0.2).length() * CS, 0.01,
+		"Both axes wrap, and the diagonal falls out of the two")
+
+
+func test_half_a_period_lands_on_one_side_rather_than_wobbling() -> void:
+	# Exactly half way round is a tie. It has to break the same way every time, or a
+	# pair sitting on it would arm and disarm frame to frame.
+	var lat := FoldLattice.flat().push(_fold(Vector2i(0, 0), Vector2i(8, 0)), CS)
+	var d := lat.shortest_delta(Vector2.ZERO, Vector2(4.0 * CS, 0))
+	assert_eq(d, lat.shortest_delta(Vector2.ZERO, Vector2(4.0 * CS, 0)), "Same answer twice")
+	assert_almost_eq(absf(d.x), 4.0 * CS, 0.01, "...and it is half a period, whichever side")
+
+
 func test_a_perpendicular_inner_fold_makes_a_torus() -> void:
 	# THE nested case. The outer fold's strip runs vertically; folding across it
 	# horizontally excises a strip that reaches both outer glue lines, so walking

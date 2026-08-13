@@ -32,6 +32,11 @@ const ALLOCATING_QUERIES := [
 	"glue_lines", "seam_lines", "seam_marks", "loose_hand_points", "hand_ball_points",
 	"seam_markers", "seams_within_burst", "all_anchors", "anchor_cells",
 	"lights_here", "space_folds",
+	# The anchor field resolves every anchor against every piece to answer either of
+	# these, and then compares every pair. Cheap for the handful of anchors a frame
+	# usually holds, and once per copy of a torus it is the same mistake as the two
+	# above it.
+	"armed_pairs", "aim_partners",
 ]
 
 const WORLD_DIR := "res://scripts/world"

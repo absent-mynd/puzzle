@@ -3,7 +3,7 @@
 **Purpose:** *why* the code is shaped the way it is. For *where* things live, see
 [REFERENCE.md](REFERENCE.md). For onboarding, see [AGENTS.md](../AGENTS.md).
 
-**Last Updated:** 2026-08-04
+**Last Updated:** 2026-08-13
 
 > **History note.** This document was rewritten during the 2026-08-04 consolidation.
 > The decisions it used to record — the hybrid grid-polygon cell system, the
@@ -196,9 +196,9 @@ open work item.
 
 **What this cost:** triggered folds used to be undoable for free (dropping the
 authored step re-derived the prefix without the cascade). They are now applied
-directly and stay applied. `TriggerResolver` keeps the properties that made the
-cascade safe — fire-once guard, per-channel idempotence, bounded fixpoint — because
-those were never about undo.
+directly and stay applied. The properties that made the cascade safe — fire-once,
+per-channel idempotence, a bounded fixpoint — were never about undo, and they
+outlived the resolver that held them; see Decision 11.
 
 ---
 
@@ -231,8 +231,10 @@ coverage, and it is testable precisely because it has no scene tree. The moment 
 model file imports `WorldCore`, that property is gone.
 
 This is why `BaseFrame` lives in `scripts/model/` rather than inside `WorldCore` where
-it started: `TriggerResolver` needs exact point transport during a pure derivation.
-Extracting the pure part was the fix; importing upward would have been a cycle.
+it started: a pure derivation needs exact point transport. Extracting the pure part was
+the fix; importing upward would have been a cycle. `AnchorField` is the current
+beneficiary — the rule that decides every fold in the game is headless because
+`BaseFrame`, `FoldLattice` and `HandTypes` all are.
 
 ---
 
@@ -265,6 +267,64 @@ unchanged.
 
 ---
 
+## Decision 11: Pairing is derived; only the fuse is stored
+
+**Two anchors are a pair when the gap between them is within their two spans added
+together.** Not when something married them and wrote it down.
+
+The predecessor kept `unpaired` and `armed`: two lists with traffic running both ways,
+where pairing was an EVENT (the hand you put down took the last unpaired anchor you
+could see, at any distance) and the result was stored. That is the same shape as the
+mutating fold system Decision 1 replaced, at a smaller scale, and it had the same
+symptom — every rule was about keeping the two lists agreeing rather than about the
+game. "Bursting one half of a pair puts the other half back into `unpaired`, and being
+the newest entry there it is the one your next tap finds" is three facts about
+bookkeeping standing in for one fact about the world.
+
+Now there is one list (`AnchorField.anchors`) and a predicate. The far half of a burst
+pair is not put back; it never moved, and the pair stopped existing because a pair is
+a question, not a record.
+
+**What had to stay stored, and why it is not a second source of truth.** Time cannot be
+derived. Each pair keeps a countdown keyed by its two anchor ids — the countdown and
+nothing else, so there is no copy of the pair itself to disagree with the anchors. It
+takes THREE states rather than two:
+
+| Edge | Meaning | Its fuse |
+|---|---|---|
+| live | both ends here, in range | ticks |
+| broken | both ends here, out of range | **dropped** — a pair that re-forms is a new pair |
+| suspended | an end is not resolvable in this space | **kept, not ticked** |
+
+The third row is the one a naive derivation loses, and it is worth the complexity: it
+is what makes "leave a pair armed, walk through a door, come back and find it still
+counting" true.
+
+**Every pair arms; firing is first-past-the-post.** Three anchors all in range of each
+other light three fuses, and whichever runs out first takes its two anchors, which
+deletes the others. So nothing has to choose a matching, and what the player sees —
+several pairs beating at their own rates — *is* the rule.
+
+**The cascade cannot run away, and not because of a cap.** A fold fires, the sheet
+moves, anchors move with it, new pairs light: that is a cascade, and it terminates
+because firing consumes two anchors and nothing automatic creates one. Anchor count is
+non-increasing while the player does nothing, so at most `floor(N/2)` folds can follow
+from N anchors — hand conservation bounds it. `TriggerResolver.MAX_CASCADE` was a
+backstop against a loop this model cannot have, and it went with the resolver.
+
+**That proof has a load-bearing precondition: unfolding must return HANDS, never
+anchors.** Put the anchors back and a fold whose ends are still within span refolds on
+the next frame, forever. What was a design preference is now a correctness constraint.
+
+**What the span rule costs.** A fold's gap is now bounded by the two spans that made
+it, so the widest fold in the game is a fixed number of cells. That is a real
+constraint on level design — west's pit had to lose a column to stay crossable — and it
+is also what lets the camera frame an armed pair without a heuristic. It does NOT
+resolve the infinite-crease question (Decision 3): a crease is still a full line, and
+what is bounded is the strip's width.
+
+---
+
 ## Implementation patterns
 
 **Validate before folding.** `WorldCore.fold_blocked_by_tile` (pins) and
@@ -290,7 +350,9 @@ positions, are `STATUS.md` §"Known issues".)
 
 - **Fold extent is infinite-crease** — see Decision 3. A fold here guts a structure
   over there. It is the argument for barrier-scoped folds, and it is kept unresolved
-  so it can be *felt* before it is designed away.
+  so it can be *felt* before it is designed away. Spans (Decision 11) bound the strip's
+  WIDTH and change nothing about its length; if anything they make barrier-scoping
+  cheaper to add, not unnecessary.
 - **How deep nesting stays legible** is untested by play. It works to arbitrary depth
   and the tint deepens with each layer, but three folds in is a claim about the game,
   not just about the code.
@@ -302,18 +364,22 @@ positions, are `STATUS.md` §"Known issues".)
   it. A design choice, not a geometric necessity — the alternative was implemented and
   reverted. It costs a strip past the glue being emptier than the space it sits in; it
   buys the glue line meaning something.
-- **A hand's kind changes only its fuse.** Whether that is enough to make picking up a
-  colour feel like a choice is open. A second axis would be a design change, made in
-  `HandTypes` and nowhere else.
 - **Jump feel is a first guess; jump HEIGHT is level design.** The curve wants
   playtesting, the two bounds around it do not — the pinned pillar is two tiles
   because it is meant to be jumped, the plate's wall is three because it is meant to
   need a fold. `test_player_body` asserts both bounds, so tune the gravity constants
   and let that test tell you when you have moved the world.
-- **Triggers are region-level only:** firing inside a subspace would require splicing
-  folds into an inner-fold list mid-cascade, which the resolver does not model.
 - **Unfold animation** plays only for newest-fold unfolds in a region; the reverse
   transform is exact only there, so mid-stack unfolds are instant.
+- **How big a span should be** is a calibration, not a position. Plain 4 cells, swift
+  3, patient 6 are first guesses sized so that two plain hands exactly cross west's
+  pit — a fold you can only just make being the clearest way to teach what a span is.
+  Whether a world wants that number smaller (folds as local stitches, long reach as a
+  found upgrade) is a playtesting question, and the shipped beats move with it.
+- **What a bolted anchor is freed by** — nothing, today. A burst does not answer for
+  one, and no other key does either. A channel that releases as well as arms is the
+  obvious next move if a world wants to hand the player something back; it is not
+  built because "authored folds pay out" was answered no.
 - **Lights do not cast shadows,** and the seam is not lit or blended specially.
   Occluders would have to be re-derived per fold and would want to soften the seam,
   which is the one thing the art is currently committed to keeping hard.

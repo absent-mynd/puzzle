@@ -179,6 +179,7 @@ func _build_tools(col: VBoxContainer) -> void:
 		[WorldEditor.Tool.PAINT, "Paint (B)"], [WorldEditor.Tool.RECT, "Rect (E)"],
 		[WorldEditor.Tool.PICK, "Pick (I)"], [WorldEditor.Tool.SPAWN, "Spawn (P)"],
 		[WorldEditor.Tool.DOOR, "Door (D)"], [WorldEditor.Tool.FOLD, "Fold anchor (A)"],
+		[WorldEditor.Tool.ANCHOR, "World anchor (W)"],
 		[WorldEditor.Tool.LIGHT, "Light (L)"], [WorldEditor.Tool.HAND, "Hand (H)"],
 		[WorldEditor.Tool.TILE, "Tile data (T)"],
 	]:

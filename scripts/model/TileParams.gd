@@ -194,7 +194,7 @@ static func to_storage(type: int, data: Dictionary) -> Dictionary:
 ##
 ## `grid_size` bounds-checks `cells` values; pass `Vector2i.ZERO` to skip that.
 ## Everything here is advisory — the runtime already refuses to act on a
-## half-configured tile (`TriggerResolver._next_reaction` returns no reaction when
+## half-configured tile (`FoldWorld._fire_fold_trigger` pins nothing when
 ## the anchors are missing), so an unfinished trigger is a thing you are allowed
 ## to leave on the canvas overnight. The editor's job is to make sure you know.
 static func issues(type: int, data: Dictionary, grid_size: Vector2i = Vector2i.ZERO) -> Array:

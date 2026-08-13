@@ -51,6 +51,7 @@ why it lives in an authoring-only `editor` block that nothing in
 | `P` | Spawn | move the region's spawn point | — |
 | `D` | Door | place a door; **drag door→door to connect** | remove the door |
 | `A` | Fold anchor | place an anchor; **drag anchor→anchor to make a fold** | disconnect / remove |
+| `W` | World anchor | bolt an anchor into the sheet; **drag anchor→anchor to declare a pair** | remove it |
 | `L` | Light | place a light | remove it |
 | `H` | Hand | leave a hand of the chosen kind on the ground | remove it |
 | `T` | Tile data | select a tile and edit what it DOES | clear its settings |
@@ -63,6 +64,31 @@ pans, **Home** frames everything, **Ctrl+Z / Ctrl+Shift+Z** undo and redo,
 Chrome always wins a click. A card's title bar moves it and its corner grips
 resize it, whichever tool is armed — that is what makes the board navigable
 without a modal "select" tool to switch back to.
+
+### Two anchor tools, and why they are not one
+
+They share a gesture on purpose — click to place, drag one onto another to relate
+them — and they make different things.
+
+**`A` fold anchor** authors a **pre-placed fold**. Connecting two consumes both: what
+is saved is a fold, the region ships already folded, and there is nothing left
+standing. An anchor you place and do not connect is a design in progress, saved in
+the authoring-only `editor` block.
+
+**`W` world anchor** authors an anchor that **ships standing**. It is bolted (a burst
+in the game will not take it), it carries a hand KIND — which decides how far it
+reaches — and it pairs with whatever comes within that reach. Declaring two with a
+drag leaves both standing and makes them each other's partner, which lets them fold
+together at any distance once their channel is live.
+
+The board draws the difference: a world anchor wears its own kind's colour inside a
+white ring, with a faint circle showing its span. A declared pair is joined by a line;
+one that arms on nothing is crossed through; one waiting on a channel has no circle,
+because distance is not what will decide it.
+
+What the tool does not yet do is set the arming rule per anchor — every one it places
+takes the tool's current setting (`WorldEditor.anchor_arms`), and a channel name still
+has to be typed into the JSON. That is the gap `STATUS.md` records.
 
 ### The palette is derived, not listed
 
@@ -153,7 +179,7 @@ nothing and so costs nothing.
 ### What validation says
 
 All of it is a warning, deliberately — the runtime already refuses to act on a
-half-configured tile (`TriggerResolver` returns no reaction when the anchors are
+half-configured tile (a plate pins nothing when the anchors are
 missing), so the world loads; it just contains a plate that does nothing, which
 is precisely the thing worth being told. Reported:
 

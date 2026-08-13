@@ -127,7 +127,7 @@ The charge is real time, not world time, so a raised hand can be popped back
 down: hold F until you turn teal and let go, and the placement is cancelled, the
 burst fires around you, and the clock starts again exactly as it would have.
 
-The reach is deliberately still one cell (`FoldWorld.ANCHOR_REACH`), and that
+The reach is deliberately still one cell (`FoldWorld.ARM_REACH`), and that
 number is load bearing rather than a taste: a shell one tile thick keeps you out
 of what it encloses **precisely because** every cell inside it is two away from
 every cell outside. Raise it and the sealed chamber (beat 4 below) stops being
@@ -198,11 +198,9 @@ leave them and pin somewhere better.
 There is **no remote unfold**. The hands in a fold are exactly where you left
 them, so getting them back means walking to its seam and bursting.
 
-A hand you leave in another region (or sealed inside a fold) is **not a partner
-you could finish a fold with**, so the next hand you place starts a fresh pair
-instead of being wasted on one that could never fire. The stranded hand waits
-where it is until you go back for it — with a burst, or by pairing it with a new
-one when you return.
+A hand you leave in another region (or sealed inside a fold) is **not somewhere
+anything can reach it**, so it simply waits where it is until you go back for it —
+with a burst, or by putting a new one within its span.
 
 An armed pair **outside the region you are in pauses**. Leave a fold ticking in
 west, walk to east, and it waits; come back and it resumes. Leaving one armed
@@ -291,22 +289,32 @@ the drift is a fraction of the distance you have to be within to pick one up.
 What they tell you is how many you have and what **kind** they are.
 
 - Placing a hand takes it out of its slot **immediately**.
-- A hand pairs with the last unpaired one **you can currently see**, and the pair
-  lights its **fuse**. Both hands pulse, slowly at first and faster as the fold
-  comes due, then it folds. No press commits it.
+- **Two anchors fold together when they can reach each other.** Every kind has a
+  **span** — how far it reaches for a partner — and a pair forms when the gap
+  between them is inside the two spans added together. A dotted circle round each
+  placed hand shows you exactly how far that is; two circles touching is a fold
+  coming.
+- **A hand nothing reaches just stands there.** Indefinitely. So placing hands is
+  laying out a plan, and the fold happens where the plan closes — put one down
+  between two lone anchors and you have started a race between two pairs.
+- A pair lights its **fuse** the moment it forms. Both hands pulse, slowly at first
+  and faster as the fold comes due, then it folds. No press commits it.
 - **Several pairs can be armed at once** — as many as you have hands for. Each
   counts its own fuse, so they go off in the order their fuses run out rather
   than the order you laid them: a swift pair laid second fires before a patient
   pair laid first.
+- **A pair that comes apart forgets its fuse.** Walk one end out of the other's
+  reach — or take it — and there is nothing counting; bring them back together and
+  it starts over. A pair you merely walked AWAY from, into another region, keeps
+  its count and picks up where it stopped.
 - **Bursting takes back** whatever is in reach, and *only* that. Reaching either
   half of an armed pair disarms the pair — a fold needs two hands — but takes
   back only the halves you actually reached. The far one stays pinned where you
-  put it and goes back to waiting for a partner, so reaching into an armed pair
-  costs you the fuse, not a hand. Since the survivor is the newest hand waiting,
-  it is the one your next tap pairs with: **re-aim a pair by bursting the end
-  you got wrong, walking, and tapping again.**
+  put it, so reaching into an armed pair costs you the fuse, not a hand:
+  **re-aim a pair by bursting the end you got wrong, walking, and tapping again.**
 - A pair that **fails at the fuse** drops both hands from where they were pinned.
-- **Unfolding gives back the same two hands that went in** — kinds and all.
+- **Unfolding gives back the same hands that went in** — kinds and all. A fold the
+  world pinned holds none, and gives none.
 - Hands with nowhere to go **land on the ground** rather than being refused.
 - **A loose hand is a physical object.** Let go of one — by a burst, an unfold, or a
   refused fold — and it *falls*, floating down rather than dropping like a stone,
@@ -326,18 +334,27 @@ burst behind you, keep your hands.
 
 ### Kinds
 
-Hands come in kinds, told apart by **colour**, and a kind changes the **fuse**
-of the fold it makes:
+Hands come in kinds, told apart by **colour**, and a kind changes two things: how
+long the fold waits, and how far the hand reaches for a partner.
 
-| Kind | Colour | Fuse |
-|---|---|---|
-| `plain` | orange | 1.6s |
-| `swift` | cyan | 0.65s |
-| `patient` | violet | 3.2s |
+| Kind | Colour | Fuse | Span |
+|---|---|---|---|
+| `plain` | orange | 1.6s | 4 cells |
+| `swift` | cyan | 0.65s | 3 cells |
+| `patient` | violet | 3.2s | 6 cells |
 
-A fold may be pinned with **two different kinds**, and its fuse is the mean of
-the two — so a mixed pair lands genuinely between its parents rather than being
-decided by one of them. That is what makes mixing a decision.
+The two read as one character. A **swift** hand is quick and short in the arm; a
+**patient** one is slow and long. So a kind is a trade rather than a rank, and the
+hand you go and fetch changes what you can fold as well as how fast.
+
+A fold may be pinned with **two different kinds**, and both stats are read the same
+way: the fuse is the mean of the two, and the reach is the two spans added — which is
+the same thing said twice, since two spans added is twice their mean. A long hand
+does some of a short partner's reaching for it. That is what makes mixing a decision.
+
+**How far a pair can span is a hard limit on what you can fold.** Two plain hands
+reach eight cells and no further, which is exactly the width of the pit in beat 1 —
+you can only just make the game's first fold, and that is the lesson.
 
 ### Hands on the ground
 
@@ -510,8 +527,10 @@ pinned and resolve again when you return.
 
 ## What to try (the beats)
 
-1. **Ride a fold.** Cross the wide pit by folding it away: F-F on one rim, then
-   F-F on the other (raise, then pin). The pair starts pulsing and folds itself —
+1. **Ride a fold.** Cross the pit by folding it away: F-F on one rim, then
+   F-F on the other (raise, then pin). It is eight cells rim to rim and two plain
+   hands reach exactly eight, so watch the two dotted circles: they touch, and not
+   by much. The pair starts pulsing and folds itself —
    so where you are standing when it goes off is a decision, not a keypress. You
    ride your flap; the seam diamond marks the meeting line. Walk over it, hold F
    until you turn teal and let go, and you ride the unfold back — and get both
@@ -535,7 +554,10 @@ pinned and resolve again when you return.
    have to be pinned from inside. Diagonal folds are the crack in that logic:
    a fold pinned from two *outside* positions at different heights can lay a
    slanted strip across the chamber's corner and bite it off. One of the two
-   anchors has to be pinned mid-jump. (Note the fold stays active: unfold it
+   anchors has to be pinned mid-jump. **This one is out of reach of two plain
+   hands** — the diagonal is nearly eleven cells and they reach eight — so it now
+   wants the patient hand, which is the one thing sealed inside. That circularity
+   is real and unplaytested: see `STATUS.md` §"Known issues". (Note the fold stays active: unfold it
    from inside and you've sealed yourself in.) This is the beat where the
    economy bites: being in there means **leaving that fold standing**, so both
    your hands are in its seam the whole time you are inside — and the patient
@@ -579,7 +601,8 @@ special-cased:
 - The plate's fold **rides you and door E2 with it** — the whole A-side flap moves,
   so when you walk back the door is one cell right of where you left it.
 - The plate's fold **refuses to cut the pillar**. A trigger is not a back door around
-  a pin; `TriggerResolver` runs the same fold-block predicate a player commit does.
+  a pin: a plate pins bolted anchors and the ordinary fuse folds them, so it meets
+  the same refusal a pair of yours would.
 
 The triggered fold is persistent world state like any other: leave the region and
 come back and the wall is still open.

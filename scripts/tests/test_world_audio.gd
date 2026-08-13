@@ -140,6 +140,10 @@ func test_completing_a_pair_lights_an_audible_fuse() -> void:
 	_listen()
 	_pin(Vector2i(1, 0))
 	assert_true(world.fuse_running(), "the pair armed")
+	# Arming is DERIVED now — the world notices the pair on the frame after the hand
+	# lands, not at the keypress — so the sound belongs to the noticing. One frame
+	# later than the placement sound, which is where it has always sat in the ear.
+	world._tick_fuse(0.0)
 	assert_true(_heard(Sounds.PAIR_ARMED), "arming should be heard")
 	assert_true(_heard(Sounds.HAND_PLACE), "...over the hand that armed it")
 
@@ -176,13 +180,20 @@ func test_a_pinch_sounds_different_from_a_ride() -> void:
 ## hands are heard hitting the ground. The two together are the whole message —
 ## the fold did not happen, and here is where your hands are now.
 func test_a_fold_that_will_not_go_is_heard_to_fail_and_scatter() -> void:
-	_pin(Vector2i(1, 0))
-	world.player.teleport(Vector2(4.5 * CS, 12.5 * CS), false)
-	_pin(Vector2i(1, 0))            # the same cell: no crease direction
+	# East's pinned pillar refuses every fold whose strip spans it.
+	world.player.teleport(Vector2(42.5 * CS, 13.5 * CS), false)
+	world._check_doors()
+	var pin: Vector2 = Vector2(BaseFrame.world_point_from_base(
+		world.current_pieces, world.base.tile_at(Vector2i(21, 9)).base_id,
+		Vector2(21.5, 9.5) * CS))
+	var cell := Vector2i((pin / CS).floor())
+	world.place_hand(cell - Vector2i(1, 0))
+	world.place_hand(cell + Vector2i(1, 0))
+	var folds_before: int = world.folds.size()
 	_listen()
 	world._tick_fuse(HandTypes.BASE_FUSE + 0.01)
 
-	assert_eq(world.folds.size(), 0, "nothing folded")
+	assert_eq(world.folds.size(), folds_before, "nothing folded")
 	assert_eq(_count(Sounds.FOLD_REFUSED), 1, "refused exactly once, not once per check")
 	assert_eq(_count(Sounds.HAND_DROP), 2, "both hands are heard to land")
 	assert_false(_heard(Sounds.FOLD), "a refusal must never sound like a fold")
@@ -193,8 +204,8 @@ func test_a_burst_that_pops_one_half_of_a_pair_drops_nothing() -> void:
 	# far one pinned. A hand caught is silent and a hand untouched is silent, so the
 	# whole gesture is — the ground is not involved.
 	_pin(Vector2i(1, 0))                                        # (5,12)
-	world.player.teleport(Vector2(20.5 * CS, 12.5 * CS), false)
-	_pin(Vector2i(1, 0))                            # (21,12)
+	world.player.teleport(Vector2(11.5 * CS, 12.5 * CS), false)
+	_pin(Vector2i(1, 0))                            # (12,12) — in reach, out of the burst
 	world.player.teleport(Vector2(5.5 * CS, 12.5 * CS), false)
 	_listen()
 	world.hold_action()

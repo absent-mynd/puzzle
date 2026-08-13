@@ -60,6 +60,7 @@ const WORLD_FLAG := "--world="
 ##   "folds":     Array,          pre-placed folds, [{anchor1:{x,y}, anchor2:{x,y}}, ...]
 ##   "lights":    Array[LightSource], lights placed on base cells (see LightSource)
 ##   "hands":     Array[HandPickup], loose hands lying on base cells (see HandPickup)
+##   "anchors":   Array[Anchor], anchors the WORLD has driven into the sheet (see Anchor)
 ##   "editor":    Dictionary,     AUTHORING ONLY — see below. The game never reads it.
 ## }
 ##
@@ -93,6 +94,9 @@ func to_dict() -> Dictionary:
 		var out_hands: Array = []
 		for pickup in r.get("hands", []):
 			out_hands.append(pickup.to_dict())
+		var out_anchors: Array = []
+		for anchor in r.get("anchors", []):
+			out_anchors.append(anchor.to_dict())
 		out_regions[id] = {
 			"rows": (r.get("rows", []) as Array).duplicate(),
 			"spawn": {"x": r.get("spawn", Vector2.ZERO).x, "y": r.get("spawn", Vector2.ZERO).y},
@@ -100,6 +104,7 @@ func to_dict() -> Dictionary:
 			"folds": (r.get("folds", []) as Array).duplicate(true),
 			"lights": out_lights,
 			"hands": out_hands,
+			"anchors": out_anchors,
 			"editor": (r.get("editor", {}) as Dictionary).duplicate(true),
 		}
 	var out_doors: Dictionary = {}
@@ -147,6 +152,11 @@ func from_dict(dict: Dictionary) -> void:
 			var pickup := HandPickup.from_dict(entry)
 			pickup.region = id
 			hands.append(pickup)
+		var anchors: Array = []
+		for entry in r.get("anchors", []):
+			var anchor := Anchor.from_dict(entry)
+			anchor.region = id
+			anchors.append(anchor)
 		regions[id] = {
 			"rows": rows,
 			"spawn": Vector2(float(sp.get("x", 0.0)), float(sp.get("y", 0.0))),
@@ -154,6 +164,7 @@ func from_dict(dict: Dictionary) -> void:
 			"folds": r.get("folds", []),
 			"lights": lights,
 			"hands": hands,
+			"anchors": anchors,
 			"editor": (r.get("editor", {}) as Dictionary).duplicate(true),
 		}
 
@@ -308,6 +319,23 @@ func starting_hand_slots() -> Array:
 	var out: Array = HandStock.empty_slots()
 	for i in range(mini(starting_hands.size(), out.size())):
 		out[i] = HandTypes.from_name(String(starting_hands[i]))
+	return out
+
+
+## A region's authored ANCHORS, as fresh unbound copies. Always bolted (see Anchor):
+## the world may drive an anchor into its own sheet, but it may not hand out hands.
+##
+## A pre-placed FOLD (`folds`) is the same idea one step further on — a bolted pair
+## that already fired, before the player arrived. It is authored separately because
+## what it states is fold state, not anchor state: there is nothing left standing to
+## interact with, and unfolding it returns nothing, exactly as bursting a bolted
+## anchor returns nothing.
+func anchors_of(id: String) -> Array:
+	var out: Array = []
+	if not regions.has(id):
+		return out
+	for anchor in regions[id].get("anchors", []):
+		out.append(anchor.duplicate_anchor())
 	return out
 
 

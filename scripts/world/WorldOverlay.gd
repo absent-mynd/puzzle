@@ -71,12 +71,22 @@ var _guides: Array = []
 ## a proposal rather than a fact and must not be drawn as one.
 var _aim_strip: Array = []
 
+## The dashed span circles, as line segments grouped by hand kind — `HandTypes` id ->
+## a flat run of point pairs.
+##
+## Grouped and packed here rather than drawn as arcs where they are described, for the
+## reason `_seam_runs` is: `paint()` runs once per COPY of the space, 77 of them two
+## folds deep. An arc per dash per anchor is a few thousand draw calls a frame on a
+## torus; a `draw_multiline` per KIND is at most three, however many anchors are down.
+var _span_runs: Dictionary = {}
+
 
 ## Take the frame's description and redraw. The only way anything gets in here.
 func set_view(view: OverlayView) -> void:
 	_view = view if view != null else OverlayView.new()
 	_rebuild_preview()
 	_rebuild_lines()
+	_rebuild_spans()
 	queue_redraw()
 
 
@@ -94,6 +104,42 @@ func _rebuild_lines() -> void:
 		_glue_runs.append_array(PixelArt.hairline_runs(seg[0], seg[1]))
 
 
+## How many dashes a span circle is drawn in. A straight chord at a 24th of the
+## circumference is under a third of an art pixel off the true arc at any span the
+## registry holds, so nothing here has to curve.
+const SPAN_DASHES := 24
+
+## The dashed circle round every placed hand, and round the cursor while one is up.
+##
+## Drawn at all because placing a hand is a PLAN: with pairing done by proximity,
+## where the NEXT one has to go is a fact about this one, and a player made to
+## discover it by trial is being asked to guess. Drawn faint and broken because at
+## four to six cells a solid ring is a quarter of the frame and there may be several
+## at once — the eye should find it when it looks and lose it when it does not.
+func _rebuild_spans() -> void:
+	_span_runs = {}
+	if not _view.active:
+		return
+	for entry in _view.hands_down:
+		if entry["at"] == null:
+			continue
+		_add_span(Vector2(entry["at"]), float(entry.get("span", 0.0)), int(entry["kind"]))
+	if _view.aiming:
+		_add_span(_view.aim_at, _view.aim_span, _view.aim_hand)
+
+
+func _add_span(at: Vector2, radius: float, kind: int) -> void:
+	if radius <= 0.0 or kind < 0:
+		return
+	var runs: PackedVector2Array = _span_runs.get(kind, PackedVector2Array())
+	var step := TAU / float(SPAN_DASHES)
+	for i in range(SPAN_DASHES):
+		var a := float(i) * step
+		runs.append(at + Vector2(cos(a), sin(a)) * radius)
+		runs.append(at + Vector2(cos(a + step * 0.5), sin(a + step * 0.5)) * radius)
+	_span_runs[kind] = runs
+
+
 ## The strip an armed pair would excise, and the guides through every placed hand.
 func _rebuild_preview() -> void:
 	_strips = []
@@ -101,9 +147,10 @@ func _rebuild_preview() -> void:
 	_aim_strip = []
 	if not _view.active:
 		return
-	if _view.aiming and _view.aim_pair != null:
-		_aim_strip = _clip(_strip_polygon(
-			_view.aim_at, Vector2(_view.aim_pair), _view.world_px))
+	if _view.aiming:
+		for at in _view.aim_pairs:
+			_aim_strip.append_array(_clip(_strip_polygon(
+				_view.aim_at, Vector2(at), _view.world_px)))
 	var world_px := _view.world_px
 	for entry in _view.hands_down:
 		if entry["at"] == null:
@@ -152,6 +199,7 @@ func paint() -> void:
 	_draw_doors()
 	_draw_loose_hands()
 	_draw_aim()
+	_draw_spans()
 	_draw_placed_hands()
 	_draw_preview()
 	_draw_burst()
@@ -319,6 +367,17 @@ func _draw_placed_hands() -> void:
 		draw_arc(at, 16.0 + pulse * 5.0, 0, TAU, 24, c, STROKE)
 		if pulse > 0.0:
 			draw_circle(at, 3.0 + pulse * 2.5, c)
+		# A bolted anchor is the world's, and a burst will not answer for it. Said with
+		# a second ring rather than a colour, because colour already means KIND and a
+		# hand the world drove in is a hand of some kind like any other.
+		if bool(entry.get("bolted", false)):
+			draw_arc(at, 11.0, 0, TAU, 20, Color(c, 0.8), HAIR)
+
+
+## Every span circle on screen, in at most one draw call per hand kind.
+func _draw_spans() -> void:
+	for kind in _span_runs:
+		draw_multiline(_span_runs[kind], Color(HandTypes.color(int(kind)), 0.16), HAIR)
 
 
 ## The strip an armed pair would excise, and the alignment guides — in every copy
