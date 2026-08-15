@@ -2,7 +2,7 @@
 
 **START HERE.** The context you need before touching anything.
 
-**Engine:** Godot 4.3 · **Language:** GDScript · **Approach:** TDD
+**Engine:** Godot 4.7 · **Language:** GDScript · **Approach:** TDD
 
 ---
 

@@ -9,24 +9,24 @@ on:
 
 jobs:
   run-gut-tests:
-    name: Run GUT Tests (Godot 4.3)
+    name: Run GUT Tests (Godot 4.7.1)
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Godot 4.3
+      - name: Setup Godot 4.7.1
         uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.3.0
+          version: 4.7.1
           use-dotnet: false
 
       - name: Verify Godot installation
         run: godot --version
 
       # One runner, one invocation. run_tests.sh imports the project, picks the
-      # bundled 4.3 binary (falling back to the `godot` installed above), and
+      # bundled 4.7.1 binary (falling back to the `godot` installed above), and
       # propagates GUT's exit code. Do not inline a godot call here: when CI and
       # the script drift, CI is the copy that stops telling the truth.
       #
