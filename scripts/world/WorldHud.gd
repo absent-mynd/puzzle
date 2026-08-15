@@ -42,6 +42,7 @@ const HELP_TEXT := \
 var _bg: ColorRect
 var _status: Label
 var _flash: Label
+var _session: Label
 var _flash_left := 0.0
 
 
@@ -92,11 +93,42 @@ func build() -> void:
 	_flash.visible = false
 	hud.add_child(_flash)
 
+	# Off in the corner opposite the controls, because it is not one of them: the
+	# controls are the game, and this is about the session the game is running in.
+	_session = Label.new()
+	_session.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_session.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_session.offset_left = -12
+	_session.offset_right = -12
+	_session.offset_top = 8
+	_session.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_session.add_theme_font_size_override("font_size", 12)
+	_session.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
+	_session.visible = false
+	hud.add_child(_session)
+
 
 ## The persistent readout, already composed by whoever knows what it means.
 func set_status(text: String) -> void:
 	if _status != null:
 		_status.text = text
+
+
+## How to get out of this run — "Esc — back to the editor" — or "" when there is
+## nowhere to go back to and Escape does nothing. Shown only when there is something
+## to say, so a world played on its own carries no chrome about a session it is not in.
+func set_session_hint(text: String) -> void:
+	if _session == null:
+		return
+	_session.text = text
+	_session.visible = not text.is_empty()
+
+
+## What the session hint currently reads, or "" when none is showing.
+func session_hint() -> String:
+	if _session == null or not _session.visible:
+		return ""
+	return _session.text
 
 
 ## How deep in folds the player is, which is all this needs to know to tint the

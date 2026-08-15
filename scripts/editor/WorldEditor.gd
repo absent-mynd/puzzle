@@ -27,7 +27,18 @@ class_name WorldEditor extends Node2D
 ##
 ## This file owns exactly one thing the others do not: what an input EVENT means.
 
-const WORLD_PATH := "res://worlds/overworld.json"
+## Play the world as it stands: `(source, at)`, where `source` is the live `WorldData`
+## and `at` is `{}` or `{"region", "cell"}`. What OPENS a run is not this file's
+## business — `Shell` listens, and the editor run on its own has nobody to hear it.
+## See `docs/features/SHELL.md`.
+signal play_requested(source, at)
+
+## Done with this editor — Esc, once anything unsaved has been acknowledged.
+signal left
+
+## The world this editor opens when nothing says otherwise — the same file the game
+## boots. See `WorldData.SHIPPED_WORLD`.
+const WORLD_PATH := WorldData.SHIPPED_WORLD
 const MIN_ZOOM := 0.04
 const MAX_ZOOM := 4.0
 const ZOOM_STEP := 1.15
@@ -58,6 +69,17 @@ var doc: EditorDoc = null
 var board: EditorBoard = null
 var ui = null
 var cam: Camera2D = null
+
+## The world to open, overriding `--world=` and the shipped one. Set before the node
+## enters the tree — the same contract as `FoldWorld.world_override`, and for the same
+## reason: `_ready` opens whatever it is pointed at and does not look again.
+var world_override := ""
+## The card to open ON, when something sent you here to look at a particular region.
+## Empty frames the whole board, which is the right answer when nothing did.
+var open_region := ""
+## One line of chrome about how to leave, shown in the status bar. Set by whoever
+## opened this editor — see `left`.
+var session_hint := ""
 
 # --- Tool state ---
 var tool: int = Tool.PAINT
@@ -91,6 +113,10 @@ var picking: Dictionary = {}
 var _gesture: Dictionary = {}
 var _space_held: bool = false
 
+## Has a leave with unsaved work already been refused once? Cleared by any other key,
+## so the second Escape has to be the next thing you do — see `leave()`.
+var _leave_armed: bool = false
+
 
 ## The board, the panel and the camera are nodes of `WorldEditor.tscn`, not
 ## objects made here. That is not only tidiness: `EditorUI` needs this file's
@@ -117,14 +143,29 @@ func _ready() -> void:
 	# The panel has not been laid out yet, so it cannot say how wide it is until
 	# a frame has passed — and the opening view is framed AROUND it.
 	await get_tree().process_frame
+	open_board()
+
+
+## Frame what this editor was opened to look at: one card if something named one,
+## the whole board otherwise.
+func open_board() -> void:
+	if not open_region.is_empty() and doc.has_region(open_region):
+		selected_region = open_region
+		focus_region(open_region)
+		refresh()
+		return
 	frame_all()
 
 
-## The world to open: `--world=res://...` if given, else the shipped one. A flag
-## rather than a file dialog because the usual case is "edit the world I am
-## playing", and the unusual one is a shell away. `WorldData` owns the reading of
-## it, so the game and the editor cannot disagree about which world a run means.
+## The world to open: `world_override` if something set one, else `--world=res://...`
+## if the flag was passed, else the shipped one. A flag rather than a file dialog
+## because the usual case is "edit the world I am playing", and the unusual one is a
+## shell away. `WorldData` owns the reading of it, so the game and the editor cannot
+## disagree about which world a run means; the launcher goes through the override,
+## because by then the world has already been chosen by hand.
 func _startup_path() -> String:
+	if not world_override.is_empty():
+		return world_override
 	return WorldData.selected_path(WORLD_PATH)
 
 
@@ -805,6 +846,10 @@ func _key(event: InputEventKey) -> void:
 		return
 	if not event.pressed or event.echo:
 		return
+	# An armed leave expires the moment you do anything else, so "Esc, Esc" has to be
+	# two presses in a row rather than one now and one after ten minutes of painting.
+	if event.keycode != KEY_ESCAPE:
+		_leave_armed = false
 	if event.ctrl_pressed or event.meta_pressed:
 		match event.keycode:
 			KEY_S: save()
@@ -827,11 +872,15 @@ func _key(event: InputEventKey) -> void:
 		KEY_H: set_tool(Tool.HAND)
 		KEY_T: set_tool(Tool.TILE)
 		KEY_HOME: frame_all()
+		KEY_F5: playtest()
+		KEY_F6: playtest(cursor_spawn())
 		KEY_ESCAPE:
 			if not picking.is_empty():
 				cancel_pick()
-			else:
+			elif not _gesture.is_empty():
 				_end_gesture()
+			else:
+				leave()
 		_:
 			var index := event.keycode - KEY_1
 			if index >= 0 and index < 9:
@@ -874,7 +923,53 @@ func _brush_name() -> String:
 	return TileTypes.type_name(EditorTools.type_of_char(brush))
 
 
+## Play the world as it stands, right now.
+##
+## What is handed over is the DOCUMENT, not the file. That is the whole of what makes
+## this a loop worth having: you do not save to try something, so a change you tried
+## and did not like is still a change you can undo — and a world file only ever
+## changes when you press Ctrl+S. `FoldWorld` clones what it is given, so a run cannot
+## write back into the thing you are still editing.
+##
+## `at` is where to drop in: `{}` for the world's own start, or a region and a cell.
+func playtest(at: Dictionary = {}) -> void:
+	if doc == null:
+		return
+	if doc.error_count() > 0:
+		# Not a refusal. The runtime already declines to act on a half-configured tile,
+		# so the world runs — it just contains a plate that does nothing, which is worth
+		# knowing BEFORE you spend two minutes wondering why it did nothing.
+		toast("playing with %d error(s) in the world" % doc.error_count(), EditorBoard.C_WARN)
+	play_requested.emit(doc.world, at)
+
+
+## Where "play from here" starts: the cell under the cursor, the selected card's own
+## spawn when the cursor is off the board, and the world's start when nothing is
+## selected either. Falling back rather than refusing, because the answer to "play
+## from here" is never "no".
+func cursor_spawn() -> Dictionary:
+	if not hover_region.is_empty():
+		return {"region": hover_region, "cell": hover_cell}
+	if not selected_region.is_empty():
+		return {"region": selected_region}
+	return {}
+
+
+## Ask to leave the editor.
+##
+## Unsaved work gets ONE refusal and is then believed: an editor that will not let go
+## of a world you are finished with is worse than one that drops an edit you could
+## have saved, and the message it refuses with says which key saves it.
+func leave() -> void:
+	if doc != null and doc.dirty and not _leave_armed:
+		_leave_armed = true
+		toast("unsaved changes — Esc again to leave, Ctrl+S to save", EditorBoard.C_WARN)
+		return
+	left.emit()
+
+
 func save() -> void:
+	_leave_armed = false
 	var errors := doc.error_count()
 	if not doc.save():
 		toast("could not write %s" % doc.path, EditorBoard.C_BAD)

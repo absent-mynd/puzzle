@@ -12,11 +12,17 @@ class_name FileUtils
 
 ## The names of the .json files in a directory, without the extension, sorted.
 ##
-## NOTE: nothing calls this. It is the last of the campaign-era file helpers —
-## worlds are loaded by path (`FoldWorld.WORLD_PATH`), not discovered by scan.
+## Non-recursive, which is the property `Launcher` relies on: it lists `worlds/` and
+## the suite's fixtures in `worlds/fixtures/` stay out of it without anything having
+## to know they are there.
+##
+## Nothing in the GAME discovers a world by scanning — a run is given a path
+## (`FoldWorld.WORLD_PATH`, `--world=`, or a document in memory). Only the launcher
+## asks what is on disk, because "what worlds do I have" is a question about the tree
+## you are working in rather than about the game.
 ##
 ## Example:
-##   var names = FileUtils.json_names_in("user://worlds/")
+##   var names = FileUtils.json_names_in("res://worlds/")
 static func json_names_in(directory: String) -> Array[String]:
 	var files: Array[String] = []
 

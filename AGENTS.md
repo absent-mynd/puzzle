@@ -51,7 +51,10 @@ The pre-consolidation tree is `git checkout 8bf8193`.
   and that is not a contradiction: it edits a file, not play state.)
 - **There is no level campaign.** One world, many regions — `worlds/overworld.json`,
   plus `worlds/testbed.json`, a DEBUG world of one-of-everything you boot with
-  `--world=testbed`. Never balance or design against the testbed.
+  `--world=testbed`. Never balance or design against the testbed. The app opens on a
+  **launcher** listing the files in `worlds/`, and that is a developer's world select,
+  not a campaign: nothing about its order or its contents means anything to the game.
+  See [docs/features/SHELL.md](docs/features/SHELL.md).
 - **The player does not ride a tile.** It is a `CharacterBody2D` at a continuous
   position, transported through folds by exact base-frame mapping (`BaseFrame`).
   `Occupants` — the tile-riding model — is for world entities, not the player.
@@ -115,6 +118,7 @@ ever had. **Move it down; do not relax the rule.**
 | What you want | Where |
 |---|---|
 | What a file is responsible for | [docs/REFERENCE.md](docs/REFERENCE.md) |
+| How you get from editing a world to playing it and back | [docs/features/SHELL.md](docs/features/SHELL.md) |
 | Why it is shaped this way, and what was rejected | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | What a thing is called | [docs/GLOSSARY.md](docs/GLOSSARY.md) |
 | How to run, test and debug | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
@@ -461,6 +465,25 @@ you will get spurious "Identifier not declared" errors.
 **Write the test first.** The suite is the behavioral spec — to know how something
 behaves, read its `test_*.gd` before reading the implementation. See
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for what each gate catches.
+
+---
+
+## Running it
+
+`scenes/Shell.tscn` is the main scene: the launcher, the editor and a run of the game
+are three **screens** of one app, and the editor plays what you are editing with `F5`
+(or `F6`, from the cell under the cursor) and gets you back with `Esc`.
+
+```bash
+./run.sh                 # the launcher
+./run.sh testbed         # play the debug world
+./run_editor.sh          # edit the shipped world (= ./run.sh --edit)
+```
+
+Every screen still runs on its own, and must keep doing so — the scene-driven tests
+instantiate them directly, and a screen that needed a shell could not be tested.
+That is why a screen asks by SIGNAL and never names `Shell`. See
+[docs/features/SHELL.md](docs/features/SHELL.md).
 
 ---
 

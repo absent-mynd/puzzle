@@ -93,6 +93,9 @@ understand how the pieces meet. Its header comment is the map.
 | …a fold trigger fire? | `FoldWorld._fire_fold_trigger()` → `_plant_pair` → the ordinary fuse |
 | …a burst plate fire? | `FoldWorld._fire_burst_plate()` → `FoldWorld._burst()` — the same one your release fires |
 | …a tile get its art? | `FoldWorld._make_tile()` → `TileAtlas.uv_for` |
+| …the editor play the world it is editing? | `WorldEditor.playtest()` → `Shell._on_play_requested` → `FoldWorld.data_override` |
+| …a playtest drop you where you were looking? | `FoldWorld._apply_spawn_override()` |
+| …Escape get you back to what you came from? | `Shell.close_top()` — the stack IS the return path |
 | …a light know where it is? | `FoldWorld.lights_here()` → `LightSource.position_in` |
 | …lighting stay pixelly? | `assets/shaders/pixel_lit.gdshader` (snap, quantize, dither) |
 | …the camera decide how far to zoom? | `FoldWorld._update_camera()` / `_camera_focus()` → `WorldCore.camera_zoom_for` |
@@ -116,7 +119,9 @@ understand how the pieces meet. Its header comment is the map.
 | **The sound vocabulary + the mix** (one file per sound) | `scripts/systems/Sounds.gd` |
 | Audio buses, SFX/music playback, volume persistence | `scripts/systems/AudioManager.gd` (autoload) |
 | Generating the shipped audio assets | `tools/gen_audio.py` |
-| In-world pause: resume / respawn / settings / quit | `scripts/ui/PauseMenu.gd` |
+| **The screen stack**: what is running, what it suspended to run it, and how a run or an editor is built | `scripts/ui/Shell.gd` |
+| **The world select**: what is in `worlds/`, and playing or editing one | `scripts/ui/Launcher.gd` |
+| In-world pause: resume / respawn / settings / quit (**not yet reachable**) | `scripts/ui/PauseMenu.gd` |
 | Audio & display settings | `scripts/ui/Settings.gd` |
 
 ---
@@ -126,7 +131,9 @@ understand how the pieces meet. Its header comment is the map.
 | Concern | Path |
 |---|---|
 | The authored world | `worlds/overworld.json` |
-| Main scene | `scenes/world/World.tscn` |
+| Main scene — the app: launcher, editor and game as three screens | `scenes/Shell.tscn` |
+| A run of the game | `scenes/world/World.tscn` |
+| The world select | `scenes/ui/Launcher.tscn` |
 | The lighting shader | `assets/shaders/pixel_lit.gdshader` |
 | The held-world screen effect | `assets/shaders/held.gdshader` |
 | Tileset layout & how to drop in a drawn one | `assets/sprites/README.md` |

@@ -36,6 +36,11 @@ extends Resource
 ## shipped one: `-- --world=res://worlds/testbed.json`.
 const WORLD_FLAG := "--world="
 
+## The world that ships: what the game boots, what the editor opens, and what the
+## launcher offers first. Here rather than in any of the three because all three mean
+## the same file, and it lived in two of them separately until a third wanted it.
+const SHIPPED_WORLD := "res://worlds/overworld.json"
+
 
 @export var world_id: String = ""
 @export var world_name: String = ""

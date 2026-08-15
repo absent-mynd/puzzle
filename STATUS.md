@@ -1,12 +1,13 @@
 # Project Status — Space Folding
 
-**Last Updated:** 2026-08-13
+**Last Updated:** 2026-08-15
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
 dynamic lighting, framed by a camera that zooms and leads with the moment. The
-world is now **authored in an editor** rather than by hand-editing JSON.
-**Tests:** 877 passing / 877, 34 scripts, ~35s. (`./run_tests.sh` prints the real
+world is **authored in an editor** rather than by hand-editing JSON, and the editor
+and the game are now **one app**: `F5` plays what you are editing.
+**Tests:** 956 passing / 956, 37 scripts, ~25s. (`./run_tests.sh` prints the real
 numbers; this line is a snapshot and the runner is the authority.)
 
 ---
@@ -45,6 +46,9 @@ What exists and works today:
 | World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
 | **Testbed world** (`worlds/testbed.json`, `--world=testbed`) | ✅ 14 regions of one-of-everything, for poking at mechanics |
 | **World editor** — paint, canvases, doors, folds, per-tile params | ✅ Usable (`./run_editor.sh`) |
+| **One app** (`Shell`) — launcher, editor and a run of the game as three screens | ✅ Usable (`./run.sh`) |
+| **Playtest from the editor** — `F5`, `F6` from the cursor, on the UNSAVED document; `Esc` back to the editor untouched | ✅ Usable |
+| **Launcher** — the worlds in `worlds/`, played or edited, and a run started in any region | ✅ Usable, ⚙️ developer-facing |
 | Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested; placed in the testbed, not in the shipped world |
 | Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
 | **One wrap for the whole view** (`FoldLattice` / `WrapCanvas`) | ✅ In the world |
@@ -129,6 +133,12 @@ Roughly in priority order — nothing here is committed to yet:
     rather than per-anchor, a light's colour/radius/flicker are not yet on the
     `TileParams` pattern, and nested pre-placed folds are designed but deferred —
     the format reserves `folds[].in` and the loader ignores it.
+11. **Playtest the playtest loop.** `F5`/`F6` and the launcher are new and have had no
+    authoring session run through them. The question to answer by use is whether
+    "play from the cursor" wants to remember where you last played from, and whether
+    a run should be able to hand a cell BACK to the editor ("open the card I died
+    on"). Both are cheap; neither is worth guessing at. See
+    `docs/features/SHELL.md` §"Known gaps".
 
 ---
 
@@ -138,7 +148,10 @@ Roughly in priority order — nothing here is committed to yet:
   (session credentials are scoped to the working branch). Use `git checkout 8bf8193`.
 - The pause menu and settings screen are complete and wired but **unreachable** —
   nothing opens them, so the volume sliders cannot be used in-game. Volumes are
-  read from `user://settings.json` at startup, so they are settable by hand.
+  read from `user://settings.json` at startup, so they are settable by hand. `Esc` is
+  now taken: it leaves the run for whatever opened it. What `Esc` should mean in a
+  FINISHED game is the decision that has not been made — see
+  [docs/features/SHELL.md](docs/features/SHELL.md) §"Known gaps".
 - Audio is not positional: a fold across the room sounds like one at your feet.
 - The shipped sounds are generated placeholders (`tools/gen_audio.py`), not art.
 - Unanchorable tiles (`_`, `X`), burst plates (`B`) and occupants are covered by tests

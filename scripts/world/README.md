@@ -6,8 +6,17 @@ colliders generated from derived pieces.
 
 ## Run it
 
-`scenes/world/World.tscn` is the project's main scene, so just press play. Or from
-a terminal:
+```bash
+./run.sh                 # the launcher, then pick a world
+./run.sh testbed         # straight into the debug world
+```
+
+`scenes/Shell.tscn` is the project's main scene — the launcher, the editor and a run
+of the game are three screens of one app, which is what lets the editor play the world
+you are editing (`F5`, or `F6` from the cursor) and `Esc` bring you back. See
+[docs/features/SHELL.md](../../docs/features/SHELL.md).
+
+This scene still runs on its own, which is how the tests drive it:
 
 ```bash
 godot --path . res://scenes/world/World.tscn
@@ -24,9 +33,9 @@ godot --path . res://scenes/world/World.tscn -- --world=testbed
 ```
 
 A bare name means `res://worlds/<name>.json`; a path is taken as written. The editor
-takes the same flag (`./run_editor.sh testbed`), because both read it through
-`WorldData.selected_path` — so the game and the editor cannot disagree about which
-world a run means.
+and the launcher take the same flag (`./run.sh testbed`, `./run_editor.sh testbed`),
+because all of them read it through `WorldData.selected_path` — so nothing can
+disagree about which world a run means.
 
 `worlds/testbed.json` is the **debug world**: fourteen regions holding one of
 everything the model can express — every tile character, every hand kind, every
@@ -46,6 +55,7 @@ one sealed inside a fold). See [docs/features/TESTBED_WORLD.md](../../docs/featu
 | **tap F again** | pin it there and start the clock again — the second one lights the fuse |
 | **hold F, then let go** | **burst**: everything of yours within about a tile and a third comes loose at once. With a hand raised it cancels the placement too |
 | R | reset |
+| Esc | leave this run, back to whatever opened it (the editor, the launcher). On its own, nothing |
 
 One key, two directions. **Tapping puts a hand down; holding bursts them loose.**
 There is no committing press: put both hands down and the fold goes off by itself.
