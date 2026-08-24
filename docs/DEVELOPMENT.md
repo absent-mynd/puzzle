@@ -226,9 +226,10 @@ interface. Until then, leave it where it is.
 ## Debugging
 
 ```bash
-godot --path . scenes/world/World.tscn                      # run the game
-godot --path . scenes/world/World.tscn -- --world=testbed   # the debug world
+./run.sh                                                    # the launcher
+./run.sh testbed                                            # the debug world
 ./run_editor.sh                                             # the world editor
+godot --path . scenes/world/World.tscn -- --world=testbed   # just the game, no shell
 ```
 
 `worlds/testbed.json` holds one of everything the model can express, wired so

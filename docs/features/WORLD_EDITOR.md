@@ -12,8 +12,13 @@ It is a **scene in this project**, not a Godot editor plugin — so it runs the
 way the game runs, and it draws terrain with the game's own tileset. What you
 paint is what you will be standing on.
 
+**`F5` plays it. `F6` plays it from the cell under the cursor**, unsaved edits and
+all, and `Esc` brings you back here exactly as you left it. That loop is described in
+[SHELL.md](SHELL.md); what is below is the editor itself.
+
 > **It writes to the world file.** `Ctrl+S` overwrites `worlds/overworld.json` in
-> place. Work in a tree you can `git checkout --`.
+> place. Work in a tree you can `git checkout --`. A playtest does not write
+> anything — it runs the document you are holding.
 
 ---
 
@@ -59,7 +64,8 @@ why it lives in an authoring-only `editor` block that nothing in
 `1`–`9` pick a brush from the palette. Navigation is the same whatever tool is
 selected: **wheel** zooms about the cursor, **middle-drag** or **space-drag**
 pans, **Home** frames everything, **Ctrl+Z / Ctrl+Shift+Z** undo and redo,
-**Ctrl+S** saves.
+**Ctrl+S** saves. **F5** and **F6** play the world (see [SHELL.md](SHELL.md)), and
+**Esc** cancels whatever is half-done — a pick, a drag — and then leaves the editor.
 
 Chrome always wins a click. A card's title bar moves it and its corner grips
 resize it, whichever tool is armed — that is what makes the board navigable
@@ -352,6 +358,7 @@ gesture when the mouse comes up.
   editable through `EditorDoc.update_light` but have no panel controls yet. They
   are the obvious next thing to move onto the `TileParams` pattern — a light is
   an occupant rather than a tile, so it wants a schema of its own shape.
-- **No file dialog.** `--world=` on the command line, or edit the shipped one.
+- **No file dialog.** `--world=` on the command line, the launcher, or edit the
+  shipped one.
 - **Starting hands have no panel control** (`EditorDoc.set_starting_hands` exists).
 - Nested pre-placed folds, as above.

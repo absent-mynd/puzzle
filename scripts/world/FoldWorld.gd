@@ -74,7 +74,18 @@ extends Node2D
 
 enum Mode { WORLD, SUBSPACE }
 
-const WORLD_PATH := "res://worlds/overworld.json"
+## The player has asked to leave this run — Escape.
+##
+## What leaving MEANS is deliberately not decided here: a run launched from the editor
+## goes back to the editor, one launched from the launcher goes back to the launcher,
+## and one launched from a command line has nowhere to go, so nothing is connected and
+## Escape does nothing. `Shell` is what listens. See `docs/features/SHELL.md`.
+signal left
+
+## The world this scene plays when nothing says otherwise. See `WorldData.SHIPPED_WORLD`,
+## which is where the path itself lives — the game, the editor and the launcher all
+## mean the same file by it.
+const WORLD_PATH := WorldData.SHIPPED_WORLD
 const CS := WorldCore.CELL
 ## The screen effect that says the world is being held. See the shader's own header.
 const HELD_SHADER_PATH := "res://assets/shaders/held.gdshader"
@@ -154,6 +165,31 @@ const TOSS_LIFT := 110.0
 ## 60 kernel tests that had nothing to do with the change. See
 ## `worlds/fixtures/README.md`.
 var world_override := ""
+
+## The world to run as a document already in MEMORY rather than a file on disk. Set
+## for a playtest: the editor hands over the world you are looking at, unsaved edits
+## and all, so trying a change does not mean committing it to the file first.
+##
+## Wins over `world_override` and `--world=`, and is CLONED at every setup — a run
+## binds lights, loose hands and anchors into what it is given, and what it was given
+## is a document the editor is still holding. That clone is also why `R` is exact:
+## it re-derives from the authored document rather than from what the last few
+## minutes of play did to it.
+var data_override: WorldData = null
+
+## Where this run drops the player in: `{"region": String, "cell": Vector2i}`, or `{}`
+## for wherever the world itself says. The cell is optional — naming only a region
+## starts you at that region's authored spawn.
+##
+## It becomes that region's spawn for the whole run rather than just the first frame,
+## so `R` and falling out of the world both bring you back to it. A playtest you have
+## to walk back across two regions to resume is a playtest you run once.
+var spawn_override := {}
+
+## One line of chrome about how to leave, shown top-right: "Esc — back to the editor".
+## Set by whoever opened this run, because where back IS is not a fact the world holds
+## — see `left`.
+var session_hint := ""
 
 ## The authored world (regions, doors, pre-placed folds).
 var world_data: WorldData
@@ -488,11 +524,8 @@ func _setup_all() -> void:
 	# A hand in flight is a hand mid-event. A reset ends the event.
 	hand_field.clear()
 
-	var world_path := world_override if not world_override.is_empty() \
-		else WorldData.selected_path(WORLD_PATH)
-	world_data = WorldData.load_from(world_path)
+	world_data = _source_world()
 	if world_data == null:
-		push_error("FoldWorld: could not load %s" % world_path)
 		return
 	hands = world_data.starting_hand_slots()
 
@@ -573,11 +606,69 @@ func _setup_all() -> void:
 		d["bp"] = (Vector2(d["cell"]) + Vector2(0.5, 0.5)) * CS
 		doors[id] = d
 
-	_load_region(world_data.start_region)
+	_load_region(_start_region())
 	context.clear()
 	_apply_context()
+	_apply_spawn_override()
 	player.teleport(_spawn, false)
 	_cut_camera()
+
+
+## The authored world this run is of, built fresh every time — including on `R`.
+##
+## Three doors, tried from the most specific: a document handed over in memory (a
+## playtest), a path this instance was pinned to (a test fixture), and then the
+## `--world=` flag or the shipped world. See `data_override` for why the document is
+## cloned rather than used.
+func _source_world() -> WorldData:
+	if data_override != null:
+		return data_override.clone()
+	var path := world_override if not world_override.is_empty() \
+		else WorldData.selected_path(WORLD_PATH)
+	var loaded := WorldData.load_from(path)
+	if loaded == null:
+		push_error("FoldWorld: could not load %s" % path)
+	return loaded
+
+
+## Which region this run starts in: the one the spawn override names, else the world's.
+func _start_region() -> String:
+	var rid := String(spawn_override.get("region", ""))
+	if rid.is_empty():
+		return world_data.start_region
+	if not regions.has(rid):
+		push_error("FoldWorld: no region called %s to start in" % rid)
+		return world_data.start_region
+	return rid
+
+
+## Move the starting region's spawn onto the cell the override names.
+##
+## Resolved through the CURRENT pieces rather than used as a world point: a cell in a
+## region with a pre-placed fold in it has been carried somewhere by that fold, and
+## dropping the player at its base coordinates would put them where that part of the
+## sheet used to be. A cell the fold took away entirely resolves nowhere, and the
+## region's own spawn is the honest answer — a strip is not a place you can start in.
+##
+## Nothing is asked about what is IN the cell. Spawning inside a wall is a thing you
+## can do by clicking on one, and the depenetration in the frame below pushes you back
+## out of it — refusing would make "play from here" a tool that argues with you.
+func _apply_spawn_override() -> void:
+	if not spawn_override.has("cell"):
+		return
+	if region_id != String(spawn_override.get("region", "")):
+		return
+	var cell: Vector2i = spawn_override["cell"]
+	var tile := base.tile_at(cell)
+	if tile == null:
+		push_error("FoldWorld: cell %s is outside region %s" % [cell, region_id])
+		return
+	var at = BaseFrame.world_point_from_base(current_pieces, tile.base_id, cell_center(cell))
+	if at == null:
+		_show_flash("That cell is folded away — started at the region's spawn.")
+		return
+	_spawn = at
+	regions[region_id]["spawn"] = at
 
 
 func _take_fold_id() -> int:
@@ -981,6 +1072,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.physical_keycode == KEY_R:
 		if event.pressed:
 			_reset()
+		return
+	# Leaving is not a world event and takes no notice of what the world is doing: mid
+	# fold, mid placement, mid fall, Escape gets you out. A run you cannot abandon
+	# while it is animating is a run you have to wait out to fix the thing you saw.
+	if event.physical_keycode == KEY_ESCAPE:
+		if event.pressed:
+			left.emit()
 		return
 	if placing() and event.pressed and AIM_STEPS.has(event.physical_keycode):
 		move_aim(AIM_STEPS[event.physical_keycode])
@@ -3109,6 +3207,9 @@ func _build_hud() -> void:
 	hud.name = "Hud"
 	add_child(hud)
 	hud.build()
+	# Read once, at build: like `world_override`, it is set before the node enters the
+	# tree, by whoever opened the run.
+	hud.set_session_hint(session_hint)
 
 
 func _update_status() -> void:

@@ -167,6 +167,16 @@ func _build_file(col: VBoxContainer) -> void:
 	_button(row, "Reload", func(): editor.reload())
 	_button(row, "Frame all", func(): editor.frame_all())
 
+	# Its own row, and first among the things you press often: this is the button the
+	# whole panel exists to get you back to.
+	var play := HBoxContainer.new()
+	col.add_child(play)
+	var from_start := _button(play, "▶ Play (F5)", func(): editor.playtest())
+	from_start.tooltip_text = "play this world from its start, unsaved edits and all"
+	var from_here := _button(play, "▶ from cursor (F6)",
+		func(): editor.playtest(editor.cursor_spawn()))
+	from_here.tooltip_text = "play from the cell under the cursor"
+
 
 func _build_tools(col: VBoxContainer) -> void:
 	_heading(col, "Tools")
@@ -608,9 +618,17 @@ func refresh() -> void:
 
 	_refresh_tile(doc)
 	_refresh_issues(doc)
+	# Ordered by how much of it you need to be told: what the tool does, then how to
+	# play what you are looking at, then the navigation everybody knows by the second
+	# session. The line is long enough to be cut off on a narrow window, so what gets
+	# cut has to be the part that matters least.
+	var play := "F5 play · F6 play from cursor"
+	if not editor.session_hint.is_empty():
+		play += " · " + editor.session_hint
 	var navigation := "wheel zoom · middle/space-drag pan · drag a title bar to move a canvas" \
 		+ " · drag a corner to resize · ctrl+z undo · ctrl+s save · home frame all"
-	_hint.text = "%s  ·  %s" % [String(WorldEditor.TOOL_HINT.get(editor.tool, "")), navigation]
+	_hint.text = "%s  ·  %s  ·  %s" \
+		% [String(WorldEditor.TOOL_HINT.get(editor.tool, "")), play, navigation]
 
 
 ## Rebuild the tile form only when its SHAPE changes — a different tile, a

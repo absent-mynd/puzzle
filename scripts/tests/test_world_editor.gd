@@ -525,3 +525,104 @@ func test_the_editor_never_leaves_the_shipped_world_broken():
 	ed._release(_pos("north", Vector2i(10, 6)))
 	ed.doc.set_spawn("north", Vector2(2.5, 5.5))
 	assert_eq(ed.doc.error_count(), 0, "the edited world would still load")
+
+
+# ---------------------------------------------------------------------------
+# Playing what you are editing
+# ---------------------------------------------------------------------------
+# The editor only ever ASKS. What opens a run is `Shell` (see `test_shell.gd`);
+# what a run does with the answer is `test_playtest.gd`. Split three ways because
+# each of them is true on its own — the editor run from `run_editor.sh` with nothing
+# listening still works, it just has nobody to play for it.
+
+func test_f5_asks_to_play_the_document_rather_than_the_file():
+	ed.doc.paint("west", Vector2i(4, 4), "#")
+	ed.doc.end_gesture()
+	watch_signals(ed)
+	ed._key(_press_key(KEY_F5))
+	assert_signal_emitted(ed, "play_requested", "F5 asks for a run")
+	var sent: Array = get_signal_parameters(ed, "play_requested")
+	assert_eq(sent[0], ed.doc.world,
+		"and what it hands over is the live document — unsaved edits are the ones you "
+		+ "want to try, and saving to try one is how you lose the version you liked")
+	assert_eq(sent[1], {}, "starting where the world says, since nothing said otherwise")
+
+
+func test_f6_plays_from_the_cell_under_the_cursor():
+	ed.hover_region = "east"
+	ed.hover_cell = Vector2i(6, 3)
+	watch_signals(ed)
+	ed._key(_press_key(KEY_F6))
+	assert_eq(get_signal_parameters(ed, "play_requested")[1],
+		{"region": "east", "cell": Vector2i(6, 3)},
+		"the edit you are making is rarely at the spawn, and walking there is the "
+		+ "whole cost this removes")
+
+
+func test_playing_from_the_cursor_off_the_board_falls_back_to_the_selection():
+	ed.hover_region = ""
+	ed.select_region("east")
+	assert_eq(ed.cursor_spawn(), {"region": "east"},
+		"the answer to \"play from here\" is never \"no\"")
+
+
+func test_the_editor_opens_on_the_card_it_was_sent_to():
+	var other = load(SCENE).instantiate()
+	other.open_region = "east"
+	add_child_autofree(other)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	assert_eq(other.selected_region, "east",
+		"a world select that took you to a region lands you looking at it")
+
+
+# ---------------------------------------------------------------------------
+# Leaving
+# ---------------------------------------------------------------------------
+
+func test_escape_leaves_a_world_with_nothing_unsaved_in_it():
+	watch_signals(ed)
+	ed._key(_press_key(KEY_ESCAPE))
+	assert_signal_emitted(ed, "left", "nothing to lose, so nothing to ask about")
+
+
+func test_unsaved_work_refuses_the_first_escape_and_believes_the_second():
+	ed.doc.paint("west", Vector2i(4, 4), "#")
+	ed.doc.end_gesture()
+	watch_signals(ed)
+	ed._key(_press_key(KEY_ESCAPE))
+	assert_signal_not_emitted(ed, "left", "an unsaved world gets one refusal")
+	ed._key(_press_key(KEY_ESCAPE))
+	assert_signal_emitted(ed, "left", "and is then believed — Ctrl+S was in the message")
+
+
+func test_the_refusal_expires_the_moment_you_do_anything_else():
+	# Otherwise "Esc, paint for ten minutes, Esc" throws the ten minutes away.
+	ed.doc.paint("west", Vector2i(4, 4), "#")
+	ed.doc.end_gesture()
+	watch_signals(ed)
+	ed._key(_press_key(KEY_ESCAPE))
+	ed._key(_press_key(KEY_B))
+	ed._key(_press_key(KEY_ESCAPE))
+	assert_signal_not_emitted(ed, "left", "the two presses have to be consecutive")
+
+
+func test_escape_finishes_what_it_is_doing_before_it_leaves():
+	# Escape already meant "cancel this" inside the editor, and that reading wins:
+	# the key that gets you out of a half-armed gesture must not get you out of the
+	# editor on the same press.
+	ed.set_tool(ed.Tool.TILE)
+	ed.select_tile("west", _a_trigger())
+	ed.begin_pick("anchors", 0)
+	watch_signals(ed)
+	ed._key(_press_key(KEY_ESCAPE))
+	assert_true(ed.picking.is_empty(), "the pick was cancelled")
+	assert_signal_not_emitted(ed, "left", "and the editor stayed open")
+
+
+func _press_key(code: int) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.physical_keycode = code
+	event.pressed = true
+	return event

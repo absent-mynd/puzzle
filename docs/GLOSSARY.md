@@ -54,6 +54,10 @@ in the tree, it is a leftover — fix it.
 | A tile that bursts when you step on it | **burst plate** | pop tile, popper, burst trap | The *plate* is the tile; what it fires is a **burst**, the same word as your own because it is the same sphere at a reach the plate chose. `TileTypes.TRIGGER_BURST`, `FoldWorld._fire_burst_plate`. |
 | The character you drive | **player** | blob, avatar | `PlayerBody` is its physics body, `PlayerVisual` its drawing. *Blob* survives only where it is not the character: a 47-tile *blob set* is a tiling term, a *binary blob* is a file. |
 | Memoizing a computed value | **cache** | — | The only surviving use of the word: `_tile_cache`, `drop_tile_cache`. Never a hand. |
+| A run of the game launched from the editor | **playtest** | test run, preview, play mode | It runs the DOCUMENT rather than the file — the whole distinction the word carries. `WorldEditor.playtest`, `FoldWorld.data_override`. |
+| One of the app's whole scenes — the launcher, the editor, a run | **screen** | view, page, mode | `Shell` stacks them, and one at a time is in the tree. Not *mode*: a mode is a state a thing is in, and these are different things. |
+| The scene listing what is in `worlds/` | **the launcher** | level select, main menu, title screen | It selects a WORLD (a file) and, inside one, a region. It is not a campaign and there is no title screen. `Launcher`. |
+| Leaving a screen for whatever opened it | **back** | exit, return, quit | Quitting is what *back* does at the bottom of the stack, where there is nothing under you. |
 
 ### Two names that are allowed to differ
 
@@ -121,6 +125,7 @@ Grep for these; each is a leftover.
 | interiors | **inner folds** | |
 | level | **space**, **region**, or **depth** | Whichever it meant. See below. |
 | world level, at region level | **in a region** | |
+| level select | **the launcher** | There are no levels to select. It lists worlds, and a world's regions. |
 | overworld | **the region** | The *filename* `worlds/overworld.json` is not renamed; it is a path, not a term. |
 | blob | **the player** | |
 
@@ -137,6 +142,10 @@ better words:
    name the place: "in a region", "inside a fold".
 4. **A severity** — the editor's validation issues. Now `severity`, which is what
    every other tool in the world calls it.
+
+A fifth reading arrived with the launcher and was retired on sight: **a thing you
+pick off a menu**. What that menu lists is *worlds* — files in `worlds/` — and,
+within one, *regions*. See [features/SHELL.md](features/SHELL.md).
 
 *Level design* survives as a phrase about authoring, because it is about how a space
 is composed and no other phrase means it. It is the one place the word is allowed.
