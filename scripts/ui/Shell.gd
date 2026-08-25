@@ -113,21 +113,46 @@ func _wire(screen: Node) -> void:
 		screen.connect("edit_requested", _on_edit_requested)
 
 
+# Every one of these arrives from inside a screen's own input handler — Escape in a
+# run, F5 in the editor — which means the engine is part-way through walking the tree
+# to deliver that very event. Taking a screen out of the tree from inside that walk
+# crashes it, so the tree surgery is DEFERRED to after the frame's input is done.
+#
+# The screen to open is still built here, immediately, because `back_hint()` is a
+# question about the stack as it stands right now; only the swap waits.
+
 ## Leaving the BOTTOM of the stack is quitting: it is the screen the app opened with,
 ## and there is nothing underneath it to go back to. Which is why `--edit` boots into
 ## the editor rather than pushing one — Esc out of the world you came here to edit
 ## should close the app, not drop you into a launcher you never asked for.
 func _on_left() -> void:
-	if not close_top():
-		get_tree().quit()
+	_leave.call_deferred()
+
+
+func _leave() -> void:
+	if close_top():
+		return
+	if not can_quit():
+		return
+	get_tree().quit()
+
+
+## Can leaving the bottom screen end the app?
+##
+## Not in a browser. There is no window to close there, and `get_tree().quit()` only
+## stops the canvas — leaving a page that looks exactly like a game that has hung,
+## which is a far worse outcome than a key that does nothing. So on the web the first
+## screen simply cannot be left, and the launcher does not offer to.
+static func can_quit() -> bool:
+	return not OS.has_feature("web")
 
 
 func _on_play_requested(source, at: Dictionary) -> void:
-	open(play_screen(source, at, back_hint()))
+	open.call_deferred(play_screen(source, at, back_hint()))
 
 
 func _on_edit_requested(path: String, region: String) -> void:
-	open(edit_screen(path, region, back_hint()))
+	open.call_deferred(edit_screen(path, region, back_hint()))
 
 
 # ---------------------------------------------------------------------------

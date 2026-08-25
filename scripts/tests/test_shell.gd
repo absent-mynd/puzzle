@@ -41,6 +41,17 @@ func before_each() -> void:
 	add_child_autofree(shell)
 
 
+## Let a requested swap actually happen.
+##
+## Asking for one is synchronous; DOING it is deferred, because the ask arrives from
+## inside the tree walk that is still delivering the key that made it (see
+## `Shell._on_left`). So a test that emits a request and asserts on the next line is
+## asserting about a frame the swap has not reached yet.
+func _swapped() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
 # ---------------------------------------------------------------------------
 # Booting
 # ---------------------------------------------------------------------------
@@ -111,7 +122,7 @@ func test_a_screen_asking_to_leave_pops_it():
 	var screen := FakeScreen.new()
 	shell.open(screen)
 	screen.left.emit()
-	await get_tree().process_frame
+	await _swapped()
 	assert_eq(shell.depth(), 1, "saying `left` is how a screen gets closed")
 
 
@@ -123,6 +134,7 @@ func test_a_play_request_with_a_path_opens_a_run_of_that_file():
 	var screen := FakeScreen.new()
 	shell.open(screen)
 	screen.play_requested.emit(FIXTURE, {})
+	await _swapped()
 	assert_eq(shell.depth(), 3, "a run opened on top")
 	assert_eq(shell.top().world_override, FIXTURE, "of the world that was named")
 	assert_null(shell.top().data_override, "read from disk, since a path is all there was")
@@ -133,6 +145,7 @@ func test_a_play_request_with_a_document_opens_a_run_of_what_is_in_memory():
 	var screen := FakeScreen.new()
 	shell.open(screen)
 	screen.play_requested.emit(doc, {"region": "west"})
+	await _swapped()
 	assert_eq(shell.top().data_override, doc, "the run plays the document it was handed")
 	assert_eq(shell.top().spawn_override, {"region": "west"}, "starting where it was told")
 
@@ -141,6 +154,7 @@ func test_an_edit_request_opens_the_editor_on_the_region_it_names():
 	var screen := FakeScreen.new()
 	shell.open(screen)
 	screen.edit_requested.emit(FIXTURE, "west")
+	await _swapped()
 	assert_true(shell.top() is WorldEditor, "the editor opened")
 	assert_eq(shell.top().world_override, FIXTURE, "on the world that was named")
 	assert_eq(shell.top().open_region, "west", "looking at the region that was named")
@@ -174,12 +188,13 @@ func test_playtesting_from_the_editor_and_coming_back():
 	var view := [editor.cam.position, editor.cam.zoom]
 
 	editor.playtest({"region": "west"})
+	await _swapped()
 	assert_eq(shell.depth(), 3, "F5 put a run of the game on top")
 	assert_eq(shell.top().world_data.world_id, editor.doc.world.world_id,
 		"and it is playing the world that was being edited")
 
 	shell.top().left.emit()
-	await get_tree().process_frame     # the run leaving is a queued free
+	await _swapped()
 	assert_eq(shell.top(), editor, "Escape came back to the editor that launched it")
 	assert_true(editor.doc.dirty, "with the unsaved edit still unsaved")
 	assert_eq(editor.doc.can_undo(), history, "and the undo history still behind it")
@@ -188,3 +203,42 @@ func test_playtesting_from_the_editor_and_coming_back():
 	assert_eq(editor.tool, editor.Tool.LIGHT, "the tool you had in your hand still armed")
 	assert_eq([editor.cam.position, editor.cam.zoom], view, "and the view exactly where you left it")
 	assert_true(editor.cam.is_current(), "with its camera driving the screen again")
+
+
+# ---------------------------------------------------------------------------
+# Through the real input path
+# ---------------------------------------------------------------------------
+# Everything above drives the stack by calling it. These push a key into the
+# VIEWPORT and let the engine deliver it, which is a different thing and the only
+# way to catch what it caught: a screen swapped out from inside the tree walk that
+# is still delivering the key that asked for the swap takes the engine down with it.
+#
+# Any new way of leaving or opening a screen wants a test down here rather than up
+# there. Calling the handler yourself proves the logic and nothing about the frame
+# it really runs in.
+
+func _pushed(code: int) -> void:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.physical_keycode = code
+	event.pressed = true
+	get_viewport().push_input(event)
+	# Two: one for the deferred swap to run, one for the frame it lands in.
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+func test_escape_really_leaves_a_run():
+	shell.open(Shell.play_screen(FIXTURE, {}, "Esc — back to the worlds"))
+	await get_tree().process_frame
+	assert_eq(shell.depth(), 2, "a run is on top")
+	await _pushed(KEY_ESCAPE)
+	assert_eq(shell.depth(), 1, "and Escape got out of it")
+
+
+func test_f5_really_opens_a_run_from_the_editor():
+	shell.open(Shell.edit_screen(FIXTURE, "", ""))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await _pushed(KEY_F5)
+	assert_eq(shell.depth(), 3, "F5 pressed for real puts a run on top of the editor")

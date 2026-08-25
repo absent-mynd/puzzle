@@ -69,12 +69,25 @@ func _enter_tree() -> void:
 	scan()
 	if _world_list != null:
 		_fill()
+		_take_focus()
 
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build()
 	_fill()
+	_take_focus()
+
+
+## Put the keyboard on the world list.
+##
+## Without this the screen opens with NOTHING focused, and Godot's focus-driven
+## navigation has nowhere to start from — so the arrow keys this screen advertises do
+## nothing at all until you click something. Deferred because on the way back from
+## another screen this runs as the launcher re-enters the tree, before its children
+## have.
+func _take_focus() -> void:
+	_world_list.grab_focus.call_deferred()
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +246,7 @@ func _build() -> void:
 	col.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "%s — pick a world to play or edit" % WORLDS_DIR
+	subtitle.text = "%s · pick a world to play or edit" % WORLDS_DIR
 	subtitle.add_theme_font_size_override("font_size", 12)
 	subtitle.add_theme_color_override("font_color", C_DIM)
 	col.add_child(subtitle)
@@ -286,13 +299,16 @@ func _build() -> void:
 	_edit_button = Button.new()
 	_edit_button.pressed.connect(edit)
 	buttons.add_child(_edit_button)
-	var quit := Button.new()
-	quit.text = "Quit"
-	quit.pressed.connect(func(): left.emit())
-	buttons.add_child(quit)
+	if OS.has_feature("web") == false:
+		var quit := Button.new()
+		quit.text = "Quit"
+		quit.pressed.connect(func(): left.emit())
+		buttons.add_child(quit)
 
 	var hint := Label.new()
-	hint.text = "⏎ play · E edit · ↑↓ choose · Esc quit" \
+	# Quit is only offered where quitting means something — see `Shell.can_quit`.
+	hint.text = "Enter play · E edit · arrows choose" \
+		+ (" · Esc quit" if OS.has_feature("web") == false else "") \
 		+ "   ·   the editor plays what you are editing with F5, and F6 from the cursor"
 	hint.add_theme_font_size_override("font_size", 11)
 	hint.add_theme_color_override("font_color", C_DIM)
@@ -301,6 +317,12 @@ func _build() -> void:
 
 ## A list that does not eat letters. `allow_search` turns typing into a jump-to-item,
 ## which would swallow `E` — the one key this screen most needs to hear.
+##
+## Note for anything added to this screen: the text here is ASCII plus `·`, because
+## the default theme font falls back to a SYSTEM font for anything it lacks, and what
+## the system has is not the same on every machine. Arrows, the play triangle and the
+## return symbol all rendered here and came out as empty boxes elsewhere. If a glyph
+## is not in Latin-1, spell the word.
 func _list(width: int) -> ItemList:
 	var list := ItemList.new()
 	list.allow_search = false
@@ -330,7 +352,7 @@ func _fill() -> void:
 	for id in regions_here():
 		var rid := String(id)
 		var i := _region_list.add_item(
-			"%s%s" % [rid, "   ← the world starts here" if rid == chosen.get("start", "") else ""])
+			"%s%s" % [rid, "   · the world starts here" if rid == chosen.get("start", "") else ""])
 		_region_list.set_item_metadata(i, rid)
 		if rid == chosen.get("start", ""):
 			_region_list.set_item_custom_fg_color(i, C_OK)
@@ -341,8 +363,8 @@ func _fill() -> void:
 		else String(chosen.get("start", ""))
 	_play_button.disabled = chosen.is_empty()
 	_edit_button.disabled = chosen.is_empty()
-	_play_button.text = "▶ Play  (⏎)" if target.is_empty() else "▶ Play %s  (⏎)" % target
-	_edit_button.text = "✎ Edit  (E)"
+	_play_button.text = "Play  (Enter)" if target.is_empty() else "Play %s  (Enter)" % target
+	_edit_button.text = "Edit  (E)"
 
 
 func _summary_text(world: Dictionary) -> String:

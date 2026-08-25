@@ -154,7 +154,7 @@ func _draw_header(doc: EditorDoc, id: String, rect: Rect2, selected: bool) -> vo
 	draw_rect(bar, C_HEADER_SEL if selected else C_HEADER)
 	draw_rect(bar, C_SELECTED if selected else C_CARD_EDGE, false, _px(BORDER_PX))
 	var size := doc.size_of(id)
-	var star := "★ " if doc.world.start_region == id else ""
+	var star := "• " if doc.world.start_region == id else ""
 	_label(bar.position + Vector2(_px(6), _px(HEADER_PX * 0.74)),
 		"%s%s   %d×%d" % [star, id, size.x, size.y], C_TEXT)
 
