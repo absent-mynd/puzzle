@@ -3165,7 +3165,7 @@ func _check_goal() -> void:
 			break
 	if touching and not _on_goal:
 		AudioManager.play_sfx(Sounds.GOAL)
-		_show_flash("★ GOAL reached! ★")
+		_show_flash("* GOAL reached! *")
 	_on_goal = touching
 
 
@@ -3227,7 +3227,7 @@ func _update_status() -> void:
 	# not moving — and a world that is not moving looks the same as a world you are
 	# not moving in.
 	if placing():
-		stock += "   ⏸ PLACING (time stopped)"
+		stock += "   || PLACING (time stopped)"
 	if context.is_empty():
 		hud.set_status("Region: %s   Folds: %d   Mode: WORLD\n%s"
 			% [region_id, folds.size(), stock])

@@ -57,9 +57,9 @@ const TOOL_HINT := {
 	Tool.RECT: "drag a rectangle to fill · right-drag to clear it",
 	Tool.PICK: "click a tile to load it into the brush",
 	Tool.SPAWN: "click to move this region's spawn point",
-	Tool.DOOR: "click to place a door · drag door→door to connect · right-click to remove",
-	Tool.FOLD: "click to place an anchor · drag anchor→anchor to make a pre-placed fold · right-click to remove",
-	Tool.ANCHOR: "click to bolt an anchor into the world · drag anchor→anchor to declare a pair · right-click to remove",
+	Tool.DOOR: "click to place a door · drag door to door to connect · right-click to remove",
+	Tool.FOLD: "click to place an anchor · drag anchor to anchor to make a pre-placed fold · right-click to remove",
+	Tool.ANCHOR: "click to bolt an anchor into the world · drag anchor to anchor to declare a pair · right-click to remove",
 	Tool.LIGHT: "click to place a light · right-click to remove",
 	Tool.HAND: "click to leave a hand on the ground · right-click to remove",
 	Tool.TILE: "click a tile to edit what it DOES · right-click to clear its settings",
@@ -645,7 +645,7 @@ func _finish_door_link(at: Vector2) -> void:
 	if target == "" or target == from:
 		return
 	if doc.link_doors(from, target):
-		toast("%s ↔ %s" % [from, target], EditorBoard.C_OK)
+		toast("%s <-> %s" % [from, target], EditorBoard.C_OK)
 
 
 func _finish_fold_link(at: Vector2) -> void:
@@ -658,7 +658,7 @@ func _finish_fold_link(at: Vector2) -> void:
 	if target == from or not doc.has_anchor(id, target):
 		return
 	if doc.connect_anchors(id, from, target) >= 0:
-		toast("pre-placed fold %s → %s" % [from, target], EditorBoard.C_OK)
+		toast("pre-placed fold %s -> %s" % [from, target], EditorBoard.C_OK)
 
 
 # ---------------------------------------------------------------------------
@@ -778,7 +778,7 @@ func _finish_pick(id: String, at: Vector2) -> void:
 	cells[index] = cell
 	if doc.set_tile_param(id, target["cell"], key, cells):
 		doc.end_gesture()
-		toast("%s %d → %s" % [key, index + 1, cell], EditorBoard.C_OK)
+		toast("%s %d -> %s" % [key, index + 1, cell], EditorBoard.C_OK)
 	refresh()
 
 

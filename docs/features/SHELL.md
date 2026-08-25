@@ -105,6 +105,12 @@ Leaving the *bottom* screen quits, because there is nothing under it. Which is w
 `--edit` boots straight into the editor rather than pushing one on top of a launcher
 you never asked for.
 
+**Except in a browser**, where quitting means nothing: there is no window to close,
+and `get_tree().quit()` only stops the canvas — leaving a page that looks exactly
+like a game that has hung, which is worse than a key that does nothing. So on the web
+the first screen cannot be left, and the launcher does not offer to
+(`Shell.can_quit`).
+
 ### Unsaved work gets one refusal
 
 Escape in the editor with a dirty document toasts *"unsaved changes — Esc again to
@@ -199,3 +205,28 @@ editor wrote while you were away is current when you land on it.
   one, and `--world=` opens it.
 - **A run cannot open anything**, so the stack is never deeper than three. Nothing
   depends on that; it is simply all there is to open.
+
+---
+
+## Two things that only bite somewhere else
+
+Both of these looked perfect on the machine they were written on and were wrong in
+the **web export**, which is what the hosted build is. Worth knowing before adding
+anything to these screens.
+
+**Every displayed character must be one the font can draw.** Godot's default theme
+font is a subset of Open Sans, and on a desktop it quietly falls back to a *system*
+font for what the subset lacks — of which a browser has none. So `▶`, `⏎`, `↑↓`, `★`
+and `⏸` all rendered here and came out as empty boxes there. ASCII plus `·`, `—`,
+`•` and `×` is the safe set; anything else, spell the word.
+`scripts/tests/test_font_coverage.gd` is the gate, and it reads the font rather than
+a list, so it stays true if the theme font ever changes.
+
+**A screen may not be swapped from inside the input walk that asked for it.** Escape
+in a run and `F5` in the editor both arrive in a screen's own input handler, while
+the engine is part-way through walking the tree to deliver that event; taking the
+screen out of the tree from in there takes the engine down with it. `Shell` defers
+the swap by a frame for exactly this reason. **Test a new way of leaving or opening
+by pushing the key into the viewport**, not by calling the handler — see
+`test_shell.gd` §"Through the real input path". Calling it yourself proves the logic
+and nothing about the frame it really runs in.

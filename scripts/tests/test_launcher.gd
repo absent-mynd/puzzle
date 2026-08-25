@@ -181,3 +181,45 @@ func test_a_region_that_stopped_existing_is_forgotten():
 	launcher.scan()
 	assert_eq(launcher.selected_region, "",
 		"a region the world no longer has means start where the world says")
+
+
+# ---------------------------------------------------------------------------
+# The keyboard
+# ---------------------------------------------------------------------------
+# Driven through the VIEWPORT rather than by calling the handler, because the thing
+# being asserted is that the key ARRIVES. Half of these keys are the list's own, and
+# a list with no focus is a list that hears nothing.
+
+func _push(code: int) -> void:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.physical_keycode = code
+	event.pressed = true
+	get_viewport().push_input(event)
+	await get_tree().process_frame
+
+
+func test_the_world_list_has_the_keyboard_from_the_start():
+	await get_tree().process_frame
+	assert_true(launcher.find_children("*", "ItemList", true, false)[0].has_focus(),
+		"nothing focused means the arrow keys this screen advertises do nothing at all")
+
+
+func test_the_arrow_keys_really_choose_a_world():
+	await get_tree().process_frame
+	var first: int = launcher.selected
+	await _push(KEY_DOWN)
+	assert_ne(launcher.selected, first, "down moved to the next world")
+	await _push(KEY_UP)
+	assert_eq(launcher.selected, first, "and up came back")
+
+
+func test_enter_really_plays_and_e_really_edits():
+	await get_tree().process_frame
+	watch_signals(launcher)
+	await _push(KEY_ENTER)
+	assert_signal_emitted(launcher, "play_requested",
+		"Enter reaches the screen past the list that has the keyboard")
+	await _push(KEY_E)
+	assert_signal_emitted(launcher, "edit_requested",
+		"and so does E — which is why the list may not have `allow_search`")

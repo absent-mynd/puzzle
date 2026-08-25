@@ -7,7 +7,7 @@ folding as a **finite carried resource** — rendered as pixel art with fold-awa
 dynamic lighting, framed by a camera that zooms and leads with the moment. The
 world is **authored in an editor** rather than by hand-editing JSON, and the editor
 and the game are now **one app**: `F5` plays what you are editing.
-**Tests:** 956 passing / 956, 37 scripts, ~25s. (`./run_tests.sh` prints the real
+**Tests:** 962 passing / 962, 38 scripts, ~25s. (`./run_tests.sh` prints the real
 numbers; this line is a snapshot and the runner is the authority.)
 
 ---
@@ -144,6 +144,12 @@ Roughly in priority order — nothing here is committed to yet:
 
 ## Known issues
 
+- **Nothing displayed may use a glyph the theme font lacks.** It falls back to a
+  system font on a desktop and has none in the **web export**, so arrows, `★` and `⏸`
+  rendered locally and were empty boxes on the hosted build.
+  `scripts/tests/test_font_coverage.gd` is the gate; see
+  [docs/features/SHELL.md](docs/features/SHELL.md) §"Two things that only bite
+  somewhere else".
 - The `topdown-archive` tag is **local only** — the remote refused the tag push
   (session credentials are scoped to the working branch). Use `git checkout 8bf8193`.
 - The pause menu and settings screen are complete and wired but **unreachable** —

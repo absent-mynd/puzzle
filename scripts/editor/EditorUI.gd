@@ -171,9 +171,9 @@ func _build_file(col: VBoxContainer) -> void:
 	# whole panel exists to get you back to.
 	var play := HBoxContainer.new()
 	col.add_child(play)
-	var from_start := _button(play, "▶ Play (F5)", func(): editor.playtest())
+	var from_start := _button(play, "Play (F5)", func(): editor.playtest())
 	from_start.tooltip_text = "play this world from its start, unsaved edits and all"
-	var from_here := _button(play, "▶ from cursor (F6)",
+	var from_here := _button(play, "Play from cursor (F6)",
 		func(): editor.playtest(editor.cursor_spawn()))
 	from_here.tooltip_text = "play from the cell under the cursor"
 
@@ -679,7 +679,7 @@ func _refresh_issues(doc: EditorDoc) -> void:
 		var where := "" if issue["region"] == "" else "%s: " % issue["region"]
 		lines.append("[color=%s]%s[/color] %s%s" % [
 			C_BAD.to_html(false) if bad else C_WARN.to_html(false),
-			"✕" if bad else "!", where, issue["message"]])
+			"×" if bad else "!", where, issue["message"]])
 	_issues.text = "\n".join(lines)
 
 
