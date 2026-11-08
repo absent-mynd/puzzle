@@ -196,7 +196,7 @@ editor wrote while you were away is current when you land on it.
 
 - **The pause menu is still unreachable.** `Esc` leaves the run; nothing opens
   `scenes/ui/PauseMenu.tscn`, so the volume sliders are still only settable by hand
-  (`STATUS.md`). Wiring it is a decision about what `Esc` should mean in a *finished*
+  (ticket 0015 in `queue/`). Wiring it is a decision about what `Esc` should mean in a *finished*
   game, and this is a developer's loop.
 - **Nothing is remembered between sessions.** Which world you were on survives while
   the launcher is alive — it is suspended, not rebuilt — and is forgotten when the

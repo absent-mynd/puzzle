@@ -1,0 +1,265 @@
+<title>Space Folding Queue</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!-- Template for ./tools/queue.py html. The script replaces the data marker below
+     with the board; everything else is static. The page is a VIEWER: git is the record. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+/* Layout: one column, inbox first; a ticket opens as its own review page (#t-0007). */
+:root {
+  --bg: #f3f5f6; --surface: #ffffff; --ink: #18232b; --muted: #5b6b75; --line: #d8dfe3;
+  --accent: #127a72; --accent-soft: #dcefed; --owner: #a35c00; --owner-soft: #fbecd6;
+  --warn: #b3261e; --warn-soft: #fbe2df; --done: #4f6b58;
+  --display: "Pixelify Sans", "IBM Plex Mono", ui-monospace, monospace;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10171c; --surface: #172128; --ink: #e3eaee; --muted: #93a4ae; --line: #2a3841;
+  --accent: #4cc2b6; --accent-soft: #163a38; --owner: #f0a94a; --owner-soft: #3a2a14;
+  --warn: #ff8a80; --warn-soft: #3d1c1a; --done: #8fb59a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #10171c; --surface: #172128; --ink: #e3eaee; --muted: #93a4ae; --line: #2a3841;
+  --accent: #4cc2b6; --accent-soft: #163a38; --owner: #f0a94a; --owner-soft: #3a2a14;
+  --warn: #ff8a80; --warn-soft: #3d1c1a; --done: #8fb59a; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+.wrap { max-width: 860px; margin: 0 auto; padding-block: 24px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 24px; }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font: 600 26px/1.1 var(--display); margin: 0; letter-spacing: .01em; }
+h1 .seam { color: var(--accent); }
+.stamp { font: 12px var(--mono); color: var(--muted); }
+nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+nav.tabs a { padding: 8px 12px; text-decoration: none; color: var(--muted); font-weight: 500;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; }
+nav.tabs a[aria-current="page"] { color: var(--ink); border-color: var(--accent); }
+.count { font: 12px var(--mono); background: var(--owner-soft); color: var(--owner); padding: 1px 6px; border-radius: 3px; margin-left: 4px; }
+
+.lede { margin: 0; color: var(--muted); max-width: 65ch; }
+.list { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.row { display: grid; grid-template-columns: 2.2em 1fr auto; gap: 4px 12px; padding: 14px 16px;
+  text-decoration: none; color: inherit; border-top: 1px solid var(--line); align-items: start; }
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--accent-soft); }
+.row .n { font: 600 18px/1.3 var(--display); color: var(--muted); font-variant-numeric: tabular-nums; }
+.row .main { min-width: 0; display: grid; gap: 4px; }
+.row .t { font-weight: 600; }
+.row .q { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+.row .meta { font: 12px var(--mono); color: var(--muted); text-align: right; white-space: nowrap; }
+.empty { padding: 32px 16px; text-align: center; color: var(--muted); }
+
+.pill { display: inline-block; font: 500 11px/1.6 var(--mono); text-transform: uppercase; letter-spacing: .06em;
+  padding: 0 7px; border-radius: 3px; border: 1px solid currentColor; vertical-align: 1px; }
+.pill.owner { color: var(--owner); background: var(--owner-soft); border-color: transparent; }
+.pill.agent { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.pill.idle { color: var(--muted); }
+.pill.loop { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+section.group h2 { font: 600 15px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 8px;
+  display: flex; gap: 8px; align-items: baseline; }
+section.group h2 small { font: 12px var(--mono); color: var(--muted); text-transform: none; letter-spacing: 0; }
+.groups { display: grid; gap: 24px; }
+
+.ticket { display: grid; gap: 20px; }
+.ticket .back { font-size: 14px; }
+.ticket h2.title { font: 600 24px/1.2 var(--body); margin: 0; text-wrap: balance; }
+.ticket .idline { font: 13px var(--mono); color: var(--muted); }
+.callout { border: 1px solid var(--owner); background: var(--owner-soft); border-radius: 6px; padding: 14px 16px; }
+.callout.agent { border-color: var(--accent); background: var(--accent-soft); }
+.callout h3 { margin: 0 0 6px; font: 600 12px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--owner); }
+.callout.agent h3 { color: var(--accent); }
+.md { min-width: 0; overflow-wrap: anywhere; }
+.md h2 { font: 600 17px var(--body); margin: 1.6em 0 .4em; padding-top: .8em; border-top: 1px dashed var(--line); }
+.md h2:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+.md p, .md ul, .md ol { max-width: 68ch; }
+.md code { font: .9em var(--mono); background: var(--accent-soft); padding: 0 4px; border-radius: 3px; }
+.md pre { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; overflow-x: auto; }
+.md pre code { background: none; padding: 0; }
+.md table { border-collapse: collapse; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+.md .log li { font: 13px var(--mono); color: var(--muted); }
+.body-card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; }
+
+.verdict { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; display: grid; gap: 12px; }
+.verdict h3 { margin: 0; font: 600 15px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+.verbs { display: flex; flex-wrap: wrap; gap: 6px; }
+.verbs button { font: 500 13px var(--mono); padding: 6px 12px; border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+.verbs button[aria-pressed="true"] { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+textarea { width: 100%; box-sizing: border-box; min-height: 64px; font: 14px var(--body); padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); resize: vertical; }
+.cmd { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.cmd code { flex: 1 1 300px; min-width: 0; font: 13px var(--mono); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 4px; padding: 8px 10px; overflow-x: auto; white-space: pre; user-select: all; }
+.cmd button { font: 600 13px var(--body); padding: 8px 14px; border-radius: 4px; border: 0; background: var(--ink); color: var(--bg); cursor: pointer; }
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+.err { color: var(--warn); font-size: 13px; min-height: 1em; margin: 0; }
+@media (max-width: 520px) {
+  .row { grid-template-columns: 1.8em 1fr; }
+  .row .meta { grid-column: 2; text-align: left; }
+}
+@media (prefers-reduced-motion: no-preference) { .row { transition: background .12s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Space Folding <span class="seam">/</span> Queue</h1>
+    <span class="stamp" id="stamp"></span>
+  </header>
+  <nav class="tabs" aria-label="Views">
+    <a href="#inbox" id="tab-inbox">Your inbox <span class="count" id="inbox-count"></span></a>
+    <a href="#board" id="tab-board">Board</a>
+  </nav>
+  <main id="view"></main>
+</div>
+
+<script>
+const DATA = /*__QUEUE_DATA__*/null || { built: "", commit: "", tickets: [], verdicts: {} };
+const OWNER = new Set(["ruling", "review"]);
+const AGENT = new Set(["new", "ready", "building", "verify"]);
+const CLOSED = new Set(["done", "dropped"]);
+const ORDER = ["ruling", "review", "verify", "building", "ready", "new", "blocked", "parked"];
+const WHAT = {
+  new: "Agent is researching", ruling: "Waiting on your decision", ready: "Cleared to build",
+  building: "Agent is building", review: "Built, waiting on your review", verify: "Merged, agent is verifying",
+  blocked: "Waiting on another ticket", parked: "Deferred by you"
+};
+const byId = Object.fromEntries(DATA.tickets.map(t => [t.id, t]));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const who = s => OWNER.has(s) ? "owner" : AGENT.has(s) ? "agent" : "idle";
+const pill = s => `<span class="pill ${who(s)}">${esc(s)}</span>`;
+
+function md(src) {
+  if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(src));
+  return `<pre>${esc(src)}</pre>`;
+}
+function sections(body) {
+  const out = {}; let name = "_";
+  for (const line of body.split("\n")) {
+    const m = line.match(/^## (.+?)\s*$/);
+    if (m) { name = m[1]; out[name] = []; continue; }
+    (out[name] ||= []).push(line);
+  }
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.join("\n").trim()]));
+}
+
+function row(t, n) {
+  const loop = t.looping ? ` <span class="pill loop">looping</span>` : "";
+  const meta = OWNER.has(t.state) ? `${t.days}d waiting · asked ${t.asks}×` : `P${t.priority} · ${esc(t.kind)}`;
+  return `<a class="row" href="#t-${t.id}">
+    <span class="n">${n}</span>
+    <span class="main"><span class="t">${esc(t.title)}</span>
+      <span class="chips">${pill(t.state)}${loop}<span class="stamp">${t.id} · P${t.priority} · ${esc(t.kind)}</span></span>
+      ${t.question ? `<span class="q">${esc(t.question)}</span>` : ""}</span>
+    <span class="meta">${meta}</span></a>`;
+}
+
+function viewInbox() {
+  const items = DATA.tickets.filter(t => t.inbox >= 0).sort((a, b) => a.inbox - b.inbox);
+  return `<div class="groups">
+    <p class="lede">Take one, read it, rule, close it. Ruling puts the ticket back in the queue with your verdict on the card, so there is nothing left to hold in your head.</p>
+    <div class="list">${items.length ? items.map((t, i) => row(t, i + 1)).join("")
+      : `<div class="empty">Nothing waits on you. The agent has the board.</div>`}</div></div>`;
+}
+
+function viewBoard() {
+  const open = DATA.tickets.filter(t => !CLOSED.has(t.state));
+  const closed = DATA.tickets.filter(t => CLOSED.has(t.state));
+  const groups = ORDER.map(s => {
+    const g = open.filter(t => t.state === s).sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
+    if (!g.length) return "";
+    return `<section class="group"><h2>${esc(s)} <small>${g.length} · ${esc(WHAT[s])}</small></h2>
+      <div class="list">${g.map(t => row(t, "P" + t.priority)).join("")}</div></section>`;
+  }).join("");
+  const done = closed.length ? `<section class="group"><h2>closed <small>${closed.length}</small></h2>
+      <div class="list">${closed.map(t => row(t, "·")).join("")}</div></section>` : "";
+  return `<div class="groups">${groups || `<div class="empty">The queue is empty.</div>`}${done}</div>`;
+}
+
+function viewTicket(t) {
+  const s = sections(t.body);
+  const owner = OWNER.has(t.state);
+  const key = t.state === "review" ? "What was built" : t.state === "ruling" ? "Decision needed" : null;
+  const callout = key && s[key] ? `<div class="callout"><h3>${t.state === "review" ? "Review this" : "Decide this"}</h3>
+    <div class="md">${md(s[key])}</div></div>` : `<div class="callout agent"><h3>${esc(WHAT[t.state] || t.state)}</h3>
+    <div>${t.state === "blocked" && byId[t.blocked_by] ? `Waits on <a href="#t-${t.blocked_by}">${t.blocked_by} · ${esc(byId[t.blocked_by].title)}</a>.` : "Nothing for you to do here unless you want to change course."}</div></div>`;
+  const rest = Object.entries(s).filter(([k]) => k !== key && k !== "_")
+    .map(([k, v]) => `<h2>${esc(k)}</h2><div class="${k === "Log" ? "log" : ""}">${md(v)}</div>`).join("");
+  const links = [t.branch && `branch <code>${esc(t.branch)}</code>`, t.pr && `<a href="${esc(t.pr)}" target="_blank" rel="noopener">pull request</a>`,
+                 `<code>${esc(t.file)}</code>`].filter(Boolean).join(" · ");
+  const verbs = Object.entries(DATA.verdicts).filter(([, v]) => v.from.includes(t.state)).map(([k]) => k);
+  return `<article class="ticket">
+    <a class="back" href="#${owner ? "inbox" : "board"}">← ${owner ? "Inbox" : "Board"}</a>
+    <div style="display:grid;gap:8px">
+      <div class="chips">${pill(t.state)}${t.looping ? `<span class="pill loop">looping: rule, park or drop</span>` : ""}
+        <span class="idline">${t.id} · P${t.priority} · ${esc(t.kind)} · updated ${esc(t.updated)}${owner ? ` · ${t.days}d waiting · asked ${t.asks}×` : ""}</span></div>
+      <h2 class="title">${esc(t.title)}</h2>
+      <div class="idline">${links}</div>
+    </div>
+    ${callout}
+    ${rest ? `<div class="body-card md">${rest}</div>` : ""}
+    ${verbs.length ? `<section class="verdict" aria-labelledby="vh">
+      <h3 id="vh">Your verdict</h3>
+      <div class="verbs" role="group" aria-label="Verdict">${verbs.map(v => `<button type="button" data-verb="${v}" aria-pressed="false">${v}</button>`).join("")}</div>
+      <label class="hint" for="note-${t.id}">Note (required for answer and rework; empty build means take the recommendation)</label>
+      <textarea id="note-${t.id}" placeholder="Optional for most verdicts"></textarea>
+      <div class="cmd"><code id="cmd">Pick a verdict</code><button type="button" id="copy">Copy</button></div>
+      <p class="err" id="err" aria-live="polite"></p>
+      <p class="hint">Run it in the repo, or paste it to the agent. This page only reads the queue; the ruling is real once it is committed.</p>
+    </section>` : ""}
+  </article>`;
+}
+
+function wireVerdict(t) {
+  const box = document.querySelector(".verdict"); if (!box) return;
+  const note = box.querySelector("textarea"), cmd = box.querySelector("#cmd"), err = box.querySelector("#err");
+  let verb = "";
+  const quote = s => "'" + s.replace(/'/g, "'\\''") + "'";
+  const update = () => {
+    if (!verb) { cmd.textContent = "Pick a verdict"; return; }
+    const n = note.value.trim();
+    cmd.textContent = `./tools/queue.py rule ${t.id} ${verb}${n ? " " + quote(n) : ""}`;
+    err.textContent = DATA.verdicts[verb].note && !n ? `"${verb}" needs a note: it is the instruction to the agent.` : "";
+  };
+  box.querySelectorAll("[data-verb]").forEach(b => b.addEventListener("click", () => {
+    verb = b.dataset.verb;
+    box.querySelectorAll("[data-verb]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    update();
+  }));
+  note.addEventListener("input", update);
+  box.querySelector("#copy").addEventListener("click", () => {
+    if (!verb) { err.textContent = "Pick a verdict first."; return; }
+    const done = () => { err.textContent = "Copied."; };
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents(cmd);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r); err.textContent = "Selected; copy it with your keyboard."; };
+    try { navigator.clipboard.writeText(cmd.textContent).then(done, fallback); } catch { fallback(); }
+  });
+}
+
+function render() {
+  const h = location.hash.slice(1);
+  const view = document.getElementById("view");
+  const tab = h === "board" || (h.startsWith("t-") && !OWNER.has(byId[h.slice(2)]?.state)) ? "board" : "inbox";
+  document.getElementById("tab-inbox").toggleAttribute("aria-current", false);
+  document.getElementById("tab-board").toggleAttribute("aria-current", false);
+  document.getElementById("tab-" + tab).setAttribute("aria-current", "page");
+  if (h.startsWith("t-") && byId[h.slice(2)]) { view.innerHTML = viewTicket(byId[h.slice(2)]); wireVerdict(byId[h.slice(2)]); }
+  else view.innerHTML = h === "board" ? viewBoard() : viewInbox();
+  window.scrollTo(0, 0);
+}
+
+document.getElementById("stamp").textContent = `built ${DATA.built}${DATA.commit ? " from " + DATA.commit : ""} · ${DATA.tickets.filter(t => !CLOSED.has(t.state)).length} open`;
+const n = DATA.tickets.filter(t => t.inbox >= 0).length;
+document.getElementById("inbox-count").textContent = n || "";
+document.getElementById("inbox-count").hidden = !n;
+addEventListener("hashchange", render);
+render();
+</script>

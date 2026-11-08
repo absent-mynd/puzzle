@@ -1,6 +1,6 @@
 # Project Status — Space Folding
 
-**Last Updated:** 2026-08-15
+**Last Updated:** 2026-11-08
 **Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
 vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
 folding as a **finite carried resource** — rendered as pixel art with fold-aware
@@ -98,51 +98,24 @@ For the reasoning behind the *shape* of the code rather than its history, see
 
 ## Next up
 
-Roughly in priority order — nothing here is committed to yet:
+**The queue is the authority on what is next:** every planned piece of work is a
+ticket in [queue/](queue/README.md), and what waits on a decision is the owner's
+inbox.
 
-1. **Playtest the spans, and re-cut west around them.** Plain 4 / swift 3 / patient 6
-   cells are first guesses, and they are now the hardest constraint in the game: two
-   plain hands reach eight cells and nothing folds wider. West was authored when a
-   fold could span the region, so its beats need a pass — beat 1 works (the pit lost
-   a column to make it), beat 4 does not (see Known issues). The question to answer by
-   feel is whether spans should be SHORTER, with long reach as a hand you find.
-2. **Playtest the hand economy.** Two slots, and fuses of 0.65 / 1.6 / 3.2 seconds,
-   are first guesses. Does scarcity make the world read as *considered*, or merely
-   fussy? Tuning is a playtesting job, not an editing one.
-3. **The camera, now that a pair is bounded.** The lens holds the player and any
-   ARMED pair, which is finite by construction — but a lone anchor is deliberately
-   not framed, and how a frame full of span circles reads is untested by play.
-4. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
-   and drop-in path are done, so this is now an art job, not an engineering one.
-5. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
-   now placed (east's right wing); `Occupants` and `UNANCHORABLE_*` still are not.
-   Placing them is also how their design gets pressure-tested.
-6. **Settle fold extent.** Infinite-crease is the biggest open question in the
-   direction (see `AGENTS.md` §"Open design questions"). Barrier-scoped folds are
-   the leading candidate; spans bound a strip's width, not its length.
-7. **Save / checkpoints.** Undo is gone by design; respawn currently sends you to the
-   region spawn. Real save points are the replacement — and they are now also what
-   the loose hands you have moved need to outlive a session, and the answer to
-   stranding yourself with no hands and no reachable seam.
-8. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
-9. **Finish the `Space` migration.** `FoldWorld` still carries twelve
-   getter/setter properties forwarding to `space.x`, so the current space can be
-   read two ways. Moving the call sites over and deleting them is mechanical.
-10. **Three gaps in the editor** (`./run_editor.sh` — see
-    `docs/features/WORLD_EDITOR.md`): a world anchor's arming rule is tool state
-    rather than per-anchor, a light's colour/radius/flicker are not yet on the
-    `TileParams` pattern, and nested pre-placed folds are designed but deferred —
-    the format reserves `folds[].in` and the loader ignores it.
-11. **Playtest the playtest loop.** `F5`/`F6` and the launcher are new and have had no
-    authoring session run through them. The question to answer by use is whether
-    "play from the cursor" wants to remember where you last played from, and whether
-    a run should be able to hand a cell BACK to the editor ("open the card I died
-    on"). Both are cheap; neither is worth guessing at. See
-    `docs/features/SHELL.md` §"Known gaps".
+```bash
+./tools/queue.py board     # everything open, by state
+./tools/queue.py inbox     # what waits on the owner
+```
+
+A priority list used to live here; it moved into tickets so that each item has one
+home and a state.
 
 ---
 
 ## Known issues
+
+Standing caveats only. Anything with work attached is a ticket in
+[queue/](queue/README.md).
 
 - **Nothing displayed may use a glyph the theme font lacks.** It falls back to a
   system font on a desktop and has none in the **web export**, so arrows, `★` and `⏸`
@@ -152,38 +125,6 @@ Roughly in priority order — nothing here is committed to yet:
   somewhere else".
 - The `topdown-archive` tag is **local only** — the remote refused the tag push
   (session credentials are scoped to the working branch). Use `git checkout 8bf8193`.
-- The pause menu and settings screen are complete and wired but **unreachable** —
-  nothing opens them, so the volume sliders cannot be used in-game. Volumes are
-  read from `user://settings.json` at startup, so they are settable by hand. `Esc` is
-  now taken: it leaves the run for whatever opened it. What `Esc` should mean in a
-  FINISHED game is the decision that has not been made — see
-  [docs/features/SHELL.md](docs/features/SHELL.md) §"Known gaps".
-- Audio is not positional: a fold across the room sounds like one at your feet.
-- The shipped sounds are generated placeholders (`tools/gen_audio.py`), not art.
-- Unanchorable tiles (`_`, `X`), burst plates (`B`) and occupants are covered by tests
-  but not placed in the shipped world yet — they are in the testbed. Pins and triggers
-  are placed — see east's right wing. What a burst plate does to west's authored beats
-  (it can open a fold you were meant to walk around) is a playtesting question, which
-  is why one has not been dropped into them.
-- **West's beat 4 is unreachable as authored.** Biting the corner off the sealed
-  chamber needs a diagonal of nearly eleven cells; two plain hands reach eight, and the
-  patient hand that would cover it is sealed inside the chamber. Beat 1 was fixed by
-  narrowing the pit a column; this one wants a design pass rather than an edit, which
-  is why it is recorded instead of guessed at.
-- **The editor cannot set a world anchor's arming rule.** The `W` tool places, pairs,
-  removes and draws them, and `validate()` reports the ones the game would refuse in
-  silence — but every anchor it places takes the tool's current setting, so a channel
-  name still has to be typed into the JSON.
-- **You can strand yourself.** Spend your last hands on a fold, walk somewhere its
-  seam cannot be reached from, and `R` is the only way back. `R` is survivable by
-  design — it drops every fold and respawns the authored loose hands — but it still
-  costs your position, your fold configuration, and any hand you had dropped
-  somewhere deliberately. Save points are the real fix.
-- Loose hands are runtime-only state (`FoldWorld.hand_pickups`) — the first thing that
-  is not `(base, folds)`. `R` rebuilds them from the authored world and nothing carries
-  them across a session; a save system is what they need next.
-- The tilesheet is generated in code, so the world looks systematic rather than
-  authored. The layout is fixed and a drawn sheet drops in without code changes.
 - The pin/trigger wing lives in **east**, not west, and is reached through a door.
   West's four authored beats depend on its exact geometry and infinite creases make
   a pin a global veto on every fold whose strip spans it, so nothing was placed there

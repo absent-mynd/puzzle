@@ -119,6 +119,7 @@ understand how the pieces meet. Its header comment is the map.
 | **The sound vocabulary + the mix** (one file per sound) | `scripts/systems/Sounds.gd` |
 | Audio buses, SFX/music playback, volume persistence | `scripts/systems/AudioManager.gd` (autoload) |
 | Generating the shipped audio assets | `tools/gen_audio.py` |
+| The work queue: tickets, the owner inbox, the board viewer | `tools/queue.py` (+ `queue_viewer.html`, `test_queue.py`); rules in `queue/README.md` |
 | **The screen stack**: what is running, what it suspended to run it, and how a run or an editor is built | `scripts/ui/Shell.gd` |
 | **The world select**: what is in `worlds/`, and playing or editing one | `scripts/ui/Launcher.gd` |
 | In-world pause: resume / respawn / settings / quit (**not yet reachable**) | `scripts/ui/PauseMenu.gd` |

@@ -122,7 +122,8 @@ ever had. **Move it down; do not relax the rule.**
 | Why it is shaped this way, and what was rejected | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | What a thing is called | [docs/GLOSSARY.md](docs/GLOSSARY.md) |
 | How to run, test and debug | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
-| What is done, broken, and next | [STATUS.md](STATUS.md) |
+| What is done, and standing caveats | [STATUS.md](STATUS.md) |
+| What is next, and what waits on the owner | [queue/README.md](queue/README.md) — `./tools/queue.py inbox` |
 | Controls and the design beats | [scripts/world/README.md](scripts/world/README.md) |
 | How something behaves | its `scripts/tests/test_*.gd` |
 | What changed and why | `git log` |
@@ -495,7 +496,9 @@ Work on `claude/*` feature branches; PRs merge into `main`.
 
 ## The five things that matter most
 
-1. **Read `STATUS.md`** — what is done and what is next.
+1. **Read `STATUS.md`** for what is done, and **`./tools/queue.py next`** for what
+   is yours to pick up. Work arrives as tickets in `queue/`; you research and build,
+   the owner decides and merges. See [queue/README.md](queue/README.md).
 2. **State is `(base, folds)`; everything else is derived** — including the hand
    ledger. Re-derive, don't mutate.
 3. **`BaseFrame` is how anything survives a fold.** Not crease math.

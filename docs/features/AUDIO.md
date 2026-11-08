@@ -109,7 +109,7 @@ above the music section.
 **Volumes persist** in `user://settings.json`, shared with `Settings.gd` — each side
 owns its own keys and both read-modify-write, so neither clobbers the other's. They
 are read at startup, which is what makes the settings screen's unreachability
-survivable (see `STATUS.md` §"Known issues").
+survivable (see ticket 0015 in `queue/`).
 
 ---
 

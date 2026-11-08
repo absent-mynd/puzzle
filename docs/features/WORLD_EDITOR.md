@@ -94,7 +94,7 @@ because distance is not what will decide it.
 
 What the tool does not yet do is set the arming rule per anchor — every one it places
 takes the tool's current setting (`WorldEditor.anchor_arms`), and a channel name still
-has to be typed into the JSON. That is the gap `STATUS.md` records.
+has to be typed into the JSON. That is ticket 0011 in `queue/`.
 
 ### The palette is derived, not listed
 

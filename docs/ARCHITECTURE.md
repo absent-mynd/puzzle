@@ -346,7 +346,7 @@ scene-driven `test_fold_world.gd` is what catches integration regressions.
 
 This is the list. **Do not close one of these silently in a refactor** — each is a
 position being held, not an oversight. (Gaps in the current build, as opposed to
-positions, are `STATUS.md` §"Known issues".)
+positions, are tickets in `queue/`.)
 
 - **Fold extent is infinite-crease** — see Decision 3. A fold here guts a structure
   over there. It is the argument for barrier-scoped folds, and it is kept unresolved

@@ -567,7 +567,7 @@ pinned and resolve again when you return.
    anchors has to be pinned mid-jump. **This one is out of reach of two plain
    hands** — the diagonal is nearly eleven cells and they reach eight — so it now
    wants the patient hand, which is the one thing sealed inside. That circularity
-   is real and unplaytested: see `STATUS.md` §"Known issues". (Note the fold stays active: unfold it
+   is real and unplaytested: see ticket 0005 in `queue/`. (Note the fold stays active: unfold it
    from inside and you've sealed yourself in.) This is the beat where the
    economy bites: being in there means **leaving that fold standing**, so both
    your hands are in its seam the whole time you are inside — and the patient
@@ -745,8 +745,8 @@ do not want yet.
 The positions being deliberately held — infinite fold extent, region-only triggers,
 newest-fold-only unfold animation, unlit seams — are
 [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) §"What is deliberately still
-open". What is merely missing or broken today is [STATUS.md](../../STATUS.md)
-§"Known issues".
+open". What is merely missing or broken today is a ticket in
+[queue/](../../queue/README.md).
 
 ## Files
 
