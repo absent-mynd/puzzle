@@ -103,7 +103,10 @@ func test_unanchorable_merge_ranks():
 
 
 func test_blocks_anchor_false_for_existing_types():
-	for t in [NULL, EMPTY, WALL, WATER, GOAL]:
+	# Water is NOT in this list any more: it is the one medium a hand slips in, which is
+	# the other half of being the one medium a body swims in. See
+	# `test_world_mechanics.gd` §"Water".
+	for t in [NULL, EMPTY, WALL, GOAL]:
 		assert_false(TileTypes.blocks_anchor(t), "existing type %d should not block anchors" % t)
 
 

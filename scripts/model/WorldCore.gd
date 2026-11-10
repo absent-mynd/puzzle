@@ -27,7 +27,7 @@ const CHARS := {
 	"X": TileTypes.UNANCHORABLE_WALL,
 	"T": TileTypes.TRIGGER_FOLD,
 	"B": TileTypes.TRIGGER_BURST,
-	"H": TileTypes.TRIGGER_HOLD,
+	"H": TileTypes.TRIGGER_WEIGHT,
 }
 
 

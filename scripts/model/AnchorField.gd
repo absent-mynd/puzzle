@@ -72,13 +72,13 @@ var anchors: Array = []
 ## ever stepped on" is history and history cannot be derived.
 var live_channels: Dictionary = {}
 
-## Channels being HELD live right now, by a weight on a plate (`Weights`). Not history
+## Channels being WEIGHTED live right now, by something resting on a plate (`Weights`). Not history
 ## at all: the world overwrites these every frame from where the body and the hands
 ## are, so this is a cache of a derivation and never the authority on it.
 ##
 ## Kept apart from `live_channels` so that letting go of a plate cannot un-latch a
 ## channel a trip plate latched under the same name, and vice versa.
-var held_channels: Dictionary = {}
+var weighted_channels: Dictionary = {}
 
 ## pair key (Vector2i of the two ids, lower first) -> {"left": float, "total": float}.
 var _fuses: Dictionary = {}
@@ -98,7 +98,7 @@ func clear() -> void:
 	anchors.clear()
 	_fuses.clear()
 	live_channels.clear()
-	held_channels.clear()
+	weighted_channels.clear()
 	_next_id = 0
 
 
@@ -156,27 +156,27 @@ func unlatch(channel: String) -> void:
 	live_channels.erase(channel)
 
 
-## Say whether a channel is being held, this frame. See `held_channels`.
-func hold_channel(channel: String, down: bool) -> void:
+## Say whether a channel has a plate down, this frame. See `weighted_channels`.
+func weigh_channel(channel: String, down: bool) -> void:
 	if channel == "":
 		return
 	if down:
-		held_channels[channel] = true
+		weighted_channels[channel] = true
 	else:
-		held_channels.erase(channel)
+		weighted_channels.erase(channel)
 
 
-## Is a channel live — latched, or being held?
+## Is a channel live — latched, or weighted?
 func is_live(channel: String) -> bool:
-	return live_channels.has(channel) or held_channels.has(channel)
+	return live_channels.has(channel) or weighted_channels.has(channel)
 
 
 ## Every live channel, as the set `Anchor.armable` reads.
 func live_set() -> Dictionary:
-	if held_channels.is_empty():
+	if weighted_channels.is_empty():
 		return live_channels
 	var out := live_channels.duplicate()
-	out.merge(held_channels)
+	out.merge(weighted_channels)
 	return out
 
 

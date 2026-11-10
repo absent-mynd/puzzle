@@ -22,6 +22,12 @@ extends GutTest
 ## say no. If a room is edited and either reading changes its mind, this is the file
 ## that says so.
 ##
+## The rooms are solved in ONE test, door to door, because that is the claim — the
+## world can be finished — and because a room's solution depends on what you carried
+## into it. The tests after it are the wrong turns: each takes one room and shows that
+## the obvious other thing to try does not work, which is what makes the room a puzzle
+## rather than a corridor.
+##
 ## What this does not prove: that there is no OTHER fold which also works. A cleverer
 ## solution than the intended one is a thing a player is allowed to find.
 
@@ -31,6 +37,26 @@ const CS := 64.0
 const DT := 1.0 / 60.0
 
 var world
+
+## One probe per reading, re-sampled only when the geometry it describes has been
+## rebuilt. `rebuild()` hands the space a fresh piece list, so the list's identity is
+## the stamp.
+var _probes: Dictionary = {}
+var _probed_pieces = null
+
+
+func _probe(strict: bool):
+	if not is_same(_probed_pieces, world.current_pieces):
+		_probes.clear()
+		_probed_pieces = world.current_pieces
+	if not _probes.has(strict):
+		_probes[strict] = Probe.new(world, strict)
+	return _probes[strict]
+
+
+func before_each() -> void:
+	_probes.clear()
+	_probed_pieces = null
 
 
 func _open(region := "") -> void:
@@ -69,7 +95,7 @@ func _now(base_cell: Vector2i) -> Vector2i:
 
 ## Walk, jump, drop or swim to `to` — if the strict model says the body can.
 func _walk(to: Vector2i, what := "") -> void:
-	var probe = Probe.new(world, true)
+	var probe = _probe(true)
 	var from: Vector2i = world.player_cell()
 	var ok: bool = probe.can_reach(from, to)
 	assert_true(ok, "%s: the body can get from %s to %s" % [what, from, to])
@@ -80,7 +106,7 @@ func _walk(to: Vector2i, what := "") -> void:
 
 ## Is `to` out of reach of the body, however well it is played?
 func _unreachable(to: Vector2i, what := "") -> void:
-	var probe = Probe.new(world, false)
+	var probe = _probe(false)
 	var from: Vector2i = world.player_cell()
 	var got: bool = probe.can_reach(from, to)
 	assert_false(got, "%s: %s cannot be reached from %s without folding" % [what, to, from])
@@ -97,7 +123,7 @@ func _pin(cell: Vector2i, what := "") -> void:
 
 ## Pin a hand in a cell that takes a jump straight up to reach.
 func _pin_jumping(cell: Vector2i, what := "") -> void:
-	var probe = Probe.new(world, true)
+	var probe = _probe(true)
 	assert_true(probe.can_pin_from(world.player_cell(), cell, world.ARM_REACH),
 		"%s: %s can be pinned from a jump at %s" % [what, cell, world.player_cell()])
 	assert_true(world.place_hand(cell), "%s: a hand goes down at %s" % [what, cell])
@@ -122,12 +148,14 @@ func _sigil(base_cell: Vector2i, what: String) -> void:
 	assert_eq(world.sigils_count(), before + 1, "%s: the sigil is collected" % what)
 
 
-## Let the real physics run: the body falls, the world wraps it. For the two places a
-## solution depends on something only gravity can show.
-func _fall(seconds: float) -> void:
-	var steps := int(seconds * 60.0)
-	for _i in range(steps):
+## Let the real physics run until the body has landed in `row`, or time runs out. For
+## the two places a solution depends on something only gravity can show: the body
+## falls, and the world wraps it.
+func _fall_to_row(row: int, seconds := 2.0) -> void:
+	for _i in range(int(seconds * 60.0)):
 		await get_tree().physics_frame
+		if world.player.is_on_floor() and world.player_cell().y == row:
+			return
 
 
 # ---------------------------------------------------------------------------
@@ -155,12 +183,6 @@ func _solve_threshold() -> void:
 	assert_eq(world.folds.size(), 0, "threshold: the fold comes apart")
 	assert_eq(world.hands_held(), 2, "...both hands come home")
 	assert_eq(world.player_cell(), Vector2i(12, 7), "...and you are standing four cells up")
-
-
-func test_threshold() -> void:
-	_open("threshold")
-	_solve_threshold()
-	_walk(Vector2i(26, 7), "along the ledge to the door")
 
 
 # ---------------------------------------------------------------------------
@@ -195,12 +217,6 @@ func _solve_span() -> void:
 		CS * 0.5), "...with the world's hand back where it was held out")
 
 	_sigil(Vector2i(13, 7), "span")
-
-
-func test_span() -> void:
-	_open("span")
-	_solve_span()
-	_walk(Vector2i(36, 11), "down the stair, over the nailed pillar, to the door")
 
 
 func test_span_is_nailed_against_lifting_the_shelf() -> void:
@@ -243,12 +259,6 @@ func _solve_cistern() -> void:
 	assert_eq(world.player_cell(), Vector2i(18, 5), "...leaving you on the cliff")
 
 	_sigil(Vector2i(21, 5), "cistern")
-
-
-func test_cistern() -> void:
-	_open("cistern")
-	_solve_cistern()
-	_walk(Vector2i(26, 5), "to the door")
 
 
 func test_cistern_water_will_not_take_the_hand() -> void:
@@ -310,12 +320,6 @@ func _solve_press() -> void:
 	assert_eq(world.hands_loose(), 1)
 
 
-func test_press() -> void:
-	_open("press")
-	_solve_press()
-	_walk(Vector2i(44, 11), "to the door")
-
-
 func test_press_wants_the_long_hand_at_the_pit() -> void:
 	# The naive order — the hand you just picked up goes down next — leaves the plain
 	# one for the pit, and plain plus plain does not reach.
@@ -375,11 +379,6 @@ func _solve_annex() -> void:
 	_unreachable(Vector2i(12, 11), "the way back out of the chamber")
 
 
-func test_annex() -> void:
-	_open("annex")
-	_solve_annex()
-
-
 func test_annex_riding_the_fold_gets_you_nothing() -> void:
 	# The same two anchors with you standing clear: the chamber is folded away, sigil
 	# and all, and what is left is a wall.
@@ -432,7 +431,7 @@ func _solve_vault() -> void:
 	# bottom of the strip is its top, and the top is the attic.
 	var hole: Vector2i = hall + Vector2i(2, 0)
 	world.player.teleport(world.cell_center(hole) + Vector2(CS * 0.5, 0), false)
-	await _fall(2.0)
+	await _fall_to_row(hall.y - 6)
 	assert_eq(world.mode, world.Mode.SUBSPACE, "vault: still inside the fold")
 	assert_eq(world.player_cell().y, hall.y - 6,
 		"vault: you fell through the floor and landed in the attic")
@@ -445,19 +444,12 @@ func _solve_vault() -> void:
 	# Out through the hatch, down to the hall, and surface where your hand is.
 	world.player.teleport(world.cell_center(Vector2i(hall.x - 4, hall.y - 6))
 		+ Vector2(CS * 0.5, 0), false)
-	await _fall(2.0)
+	await _fall_to_row(hall.y)
 	assert_eq(world.player_cell().y, hall.y, "vault: the hatch drops you back into the hall")
 	_put(hall)
 	world.hold_action()
 	assert_eq(world.mode, world.Mode.WORLD, "vault: the fold opens")
 	assert_eq(world.hands_held(), 1, "...and gives back the hand it held")
-
-
-func test_annex_then_vault() -> void:
-	_open("annex")
-	_solve_annex()
-	_annex_to_vault()
-	await _solve_vault()
 
 
 func test_the_vault_gate_is_shut_without_the_keystone() -> void:

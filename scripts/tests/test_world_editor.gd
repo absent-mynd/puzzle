@@ -18,8 +18,16 @@ const CS := 64.0
 var ed
 
 
+## The suite's own world, not the shipped one — see worlds/fixtures/README.md. These
+## tests click on particular cells of particular cards, which is a statement about the
+## editor and should not be one about whichever world is shipping: re-cutting the
+## shipped world once failed thirty of them without touching the editor at all.
+const FIXTURE := "res://worlds/fixtures/kernel.json"
+
+
 func before_each() -> void:
 	ed = load(SCENE).instantiate()
+	ed.world_override = FIXTURE
 	add_child_autofree(ed)
 
 
@@ -32,10 +40,19 @@ func _pos(id: String, cell: Vector2i) -> Vector2:
 # Opening
 # ---------------------------------------------------------------------------
 
-func test_the_editor_opens_the_shipped_world():
+func test_the_editor_opens_the_world_it_was_pointed_at():
 	assert_not_null(ed.doc, "a document was loaded")
 	assert_true(ed.doc.has_region("west"), "with the world's regions in it")
-	assert_eq(ed.doc.path, ed.WORLD_PATH, "and it knows where to write back")
+	assert_eq(ed.doc.path, FIXTURE, "and it knows where to write back")
+
+
+func test_left_alone_the_editor_opens_the_shipped_world():
+	var plain = load(SCENE).instantiate()
+	add_child_autofree(plain)
+	assert_not_null(plain.doc, "a document was loaded")
+	assert_eq(plain.doc.path, plain.WORLD_PATH, "the world the game ships")
+	assert_true(plain.doc.has_region(plain.doc.world.start_region),
+		"with the region the world starts in")
 
 
 func test_opening_does_not_mark_the_world_dirty():
@@ -568,6 +585,7 @@ func test_playing_from_the_cursor_off_the_board_falls_back_to_the_selection():
 
 func test_the_editor_opens_on_the_card_it_was_sent_to():
 	var other = load(SCENE).instantiate()
+	other.world_override = FIXTURE
 	other.open_region = "east"
 	add_child_autofree(other)
 	await get_tree().process_frame

@@ -856,6 +856,9 @@ func test_the_shipped_world_opens_cleanly_in_the_editor():
 	var doc := EditorDoc.load_from("res://worlds/overworld.json")
 	assert_not_null(doc, "the shipped world loads")
 	assert_eq(doc.error_count(), 0, "with nothing that would stop it booting")
-	assert_true(doc.has_region("west") and doc.has_region("east"), "both regions are there")
-	assert_eq(doc.size_of("west"), Vector2i(44, 18), "west is the shape the file says")
-	assert_eq(doc.folds_of("east").size(), 1, "east's shipped pre-fold is visible to the editor")
+	var wd := WorldData.load_from("res://worlds/overworld.json")
+	for id in wd.regions:
+		assert_true(doc.has_region(id), "region %s is there" % id)
+		assert_eq(doc.size_of(id), wd.region_size(id), "%s is the shape the file says" % id)
+		assert_eq(doc.folds_of(id).size(), wd.fold_pairs(id).size(),
+			"%s's pre-placed folds are visible to the editor" % id)

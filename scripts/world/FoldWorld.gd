@@ -246,13 +246,13 @@ var sigils_found: Dictionary = {}
 ## How many sigils the world holds, counted off its base grids at setup.
 var sigils_total := 0
 
-## Every channel some weight plate somewhere holds: channel -> true. A fold tagged with
-## one of these stands only while the channel is held (`_tick_plates`); a fold tagged
+## Every channel some weight plate somewhere drives: channel -> true. A fold tagged with
+## one of these stands only while a plate of it is down (`_tick_plates`); a fold tagged
 ## with any OTHER channel was made by a trip plate and stands until you take it apart.
-var _hold_channels: Dictionary = {}
+var _plate_channels: Dictionary = {}
 ## The base ids of the plates currently pressed in this region, for the overlay.
 var _plates_down: Array = []
-## Seconds until a held fold that could not let go is asked again. The refusal is
+## Seconds until a fold the world could not let go of is asked again. The refusal is
 ## usually geometric (a newer fold across its seam, nowhere for you to land) and the
 ## answer costs a replay to compute, so it is asked a few times a second rather than
 ## sixty.
@@ -562,7 +562,7 @@ func _setup_all() -> void:
 	# Each region is its own sheet: a BaseGrid plus its persistent fold state.
 	sigils_found = {}
 	sigils_total = 0
-	_hold_channels = {}
+	_plate_channels = {}
 	_plates_down = []
 	_entry_door = {}
 	for id in world_data.regions:
@@ -572,7 +572,7 @@ func _setup_all() -> void:
 			if tile.type == TileTypes.GOAL:
 				sigils_total += 1
 		for channel in regions[id]["plates"]:
-			_hold_channels[channel] = true
+			_plate_channels[channel] = true
 
 		# Authored loose hands bind exactly as lights do — a hand on the ground has no
 		# world position either, only a base identity the configuration is asked about.
@@ -1399,7 +1399,7 @@ func place_hand(cell: Vector2i) -> bool:
 	hands[from_slot] = null
 	AudioManager.play_sfx(Sounds.HAND_PLACE)
 	var anchor := Anchor.make(piece.base_id, center - piece.src_offset, region_id, kind)
-	# A hand set down on a weight plate is PRESSING, not gripping: it holds the plate
+	# A hand set down on a weight plate is PRESSING, not gripping: it weighs the plate
 	# and reaches for nothing. Said with the field that already exists for it — an
 	# anchor that arms on nothing — so the pairing rule never hears about plates, and
 	# a hand you spend on a door cannot be dragged into a fold by the next one you pin.
@@ -2446,7 +2446,7 @@ func unfold_space_fold(fold: Fold, quiet := false) -> bool:
 ## (ARCHITECTURE Decision 11): two anchors returned in range of each other refold on the
 ## next fuse, forever. That needs both ends to be armable the moment they land. A bolt
 ## that arms on a latch lands on a channel this very function has just dropped; a bolt
-## that arms on a HELD channel does refold, and should — the weight is still on the
+## that arms on a WEIGHTED channel does refold, and should — the weight is still on the
 ## plate, and "the spring is still wound" is the honest reading; a proximity bolt lands
 ## alone, because the hand that was its partner went back to a slot and not into the
 ## sheet. The one arrangement left is two proximity bolts authored within reach of
@@ -3162,7 +3162,7 @@ func _check_triggers() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Weight plates: a channel held live by what is resting on it
+# Weight plates: a channel kept live by what is resting on it
 # ---------------------------------------------------------------------------
 
 ## The base tiles of THIS region that have something resting on them: your body, a hand
@@ -3185,23 +3185,38 @@ func _occupied_here() -> Dictionary:
 	return out
 
 
-## Bring the world into line with what is being held down.
+## Bring the world into line with which plates are down.
 ##
 ## Two halves, and neither stores anything:
 ##
-##   - **Which channels are held** is recomputed from where the body and the hands are
+##   - **Which channels are weighted** is recomputed from where the body and the hands are
 ##     and handed to the anchor field, where the world's own anchors arm on it. So
 ##     pressing a plate does not MAKE a fold — it makes a pair armable, and the ordinary
 ##     fuse does the rest, exactly as it does for a trip plate and for you.
 ##   - **A fold whose channel has let go comes apart.** Not by a second mechanism: it is
-##     `unfold_space_fold`, the same call a burst makes, asked quietly. If it cannot go
-##     yet — a newer fold lies across its seam, or there is nowhere for you to land — it
-##     stays, and is asked again. That is not an edge case to apologise for: it is how
-##     you WEDGE the world's fold open with one of your own.
+##     `unfold_space_fold`, the same call a burst makes, asked quietly.
+##
+## **The world only lets go of the NEWEST fold in a space.** A plate's fold with anything
+## made after it still standing stays where it is until that comes out. Two reasons, and
+## the second is the one that decided it:
+##
+##   - It is how you WEDGE the world's fold open with one of your own: fold anything at
+##     all after it, and the weight can come off the plate. That is not an edge case to
+##     apologise for; it is the same sentence as "a door folded shut is a door you
+##     jammed", said about a door the world folded.
+##   - A fold's creases are coordinates in the configuration it was laid into. Take an
+##     OLDER fold out from under a newer one and the newer one stays put while the sheet
+##     slides beneath it — so it is now hiding different ground. When a player does that
+##     with a burst they chose to; a plate doing it because a hand came off somewhere
+##     would rearrange the room behind their back.
+##
+## So the rule a burst obeys (blocked only by a fold that CROSSES the seam, ARCHITECTURE
+## Decision 6) is deliberately wider than the one the world obeys here. If it still
+## cannot go — nowhere for you to land — it is asked again, quietly.
 ##
 ## Only this region's plates are read, because only here can a weight change. A channel
-## held in another region keeps the answer it had when you left, which is correct — the
-## hand you left on that plate is still on it — and is why a plate in one room can hold
+## weighted in another region keeps the answer it had when you left, which is correct — the
+## hand you left on that plate is still on it — and is why a plate in one room can keep
 ## a fold in another.
 func _tick_plates(delta: float) -> void:
 	var plates: Dictionary = regions[region_id]["plates"]
@@ -3209,40 +3224,49 @@ func _tick_plates(delta: float) -> void:
 		_plates_down = []
 	else:
 		var occupied := _occupied_here()
-		var states := Weights.held(plates, occupied)
+		var states := Weights.channel_states(plates, occupied)
 		for channel in states:
 			var down: bool = states[channel]
-			if down and not field.held_channels.has(channel):
+			if down and not field.weighted_channels.has(channel):
 				AudioManager.play_sfx(Sounds.TRIGGER)
-			field.hold_channel(channel, down)
+			field.weigh_channel(channel, down)
 		_plates_down = Weights.plates_down(plates, occupied)
-	if _hold_channels.is_empty():
+	if _plate_channels.is_empty():
 		return
 
 	_release_wait = maxf(_release_wait - delta, 0.0)
 	if _release_wait > 0.0:
 		return
-	# The fold you are standing INSIDE, if the world was holding it: it opens around you,
-	# which is the exit by its other name.
-	if host_fold != null and _let_go_of(host_fold):
-		if not try_exit(true):
+	var here: Array = space_folds()
+	if not here.is_empty():
+		# One a frame at most: a fold in flight owns it (AGENTS.md §3).
+		if _let_go_of(here.back()) and not unfold_space_fold(here.back(), true):
 			_release_wait = RELEASE_RETRY
 		return
-	for fold in space_folds():
-		if not _let_go_of(fold):
-			continue
-		if not unfold_space_fold(fold, true):
+	# Nothing standing in here. If the fold you are standing INSIDE is one the world was
+	# holding — and nothing newer stands outside it either — it opens around you, which
+	# is the exit by its other name.
+	if host_fold != null and _let_go_of(host_fold) and _outer_list().back() == host_fold:
+		if not try_exit(true):
 			_release_wait = RELEASE_RETRY
-		return                      # one a frame: a fold in flight owns it (AGENTS.md §3)
 
 
-## How often a held fold that could not let go is asked again, in seconds.
+## The fold list the fold you are INSIDE belongs to: the region's, or the next fold
+## out's inner list. Read straight off storage — no derivation — because all it is asked
+## is which fold is newest.
+func _outer_list() -> Array:
+	if context.size() <= 1:
+		return folds
+	return _ensure_inner_folds(context[context.size() - 2].fold_id)
+
+
+## How often a fold the world could not let go of is asked again, in seconds.
 const RELEASE_RETRY := 0.2
 
 
-## Is this a fold the world was holding, whose hold has gone?
+## Is this a fold a weight plate was keeping, whose weight has come off?
 func _let_go_of(fold: Fold) -> bool:
-	return fold.channel != "" and _hold_channels.has(fold.channel) \
+	return fold.channel != "" and _plate_channels.has(fold.channel) \
 		and not field.is_live(fold.channel)
 
 
@@ -3595,7 +3619,7 @@ func _reset_region() -> void:
 			hand_balls.remove_at(i)
 	for channel in _region_channels(id):
 		field.unlatch(channel)
-		field.hold_channel(channel, false)
+		field.weigh_channel(channel, false)
 
 	# The run's own idea of where this region starts (a playtest's "from this cell")
 	# outlives the rebuild; everything else about the region is the authored one.

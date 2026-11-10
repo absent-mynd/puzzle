@@ -2,11 +2,19 @@
 ##
 ## The authored world format: regions of ASCII terrain, doors between them, pre-placed
 ## folds per region. Covers the round trip, the accessors the world boots from, and the
-## shipped `worlds/overworld.json`.
+## shipped `worlds/overworld.json` — as a FILE: that it loads, builds, and is internally
+## consistent. Whether it can be PLAYED is `test_overworld_solutions.gd`.
 
 extends GutTest
 
 const WORLD_PATH := "res://worlds/overworld.json"
+## The frozen world the kernel suites are pinned to (see worlds/fixtures/README.md).
+## The pin-and-plate section below asserts against concrete geometry — a pillar at this
+## column, a wall that plate opens — and that is a statement about the ENGINE, so it is
+## made of the suite's own world rather than of whichever one is shipping. It used to
+## read the shipped world, and re-cutting that world failed every test in the section
+## without one of them being about the change.
+const FIXTURE_PATH := "res://worlds/fixtures/kernel.json"
 
 
 func _sample() -> WorldData:
@@ -135,7 +143,7 @@ func test_shipped_world_loads():
 	var wd := WorldData.load_from(WORLD_PATH)
 	assert_not_null(wd, "worlds/overworld.json parses")
 	assert_true(wd.has_region(wd.start_region), "the start region exists")
-	assert_eq(wd.regions.size(), 2, "two regions ship")
+	assert_gt(wd.regions.size(), 1, "a world is more than one room")
 
 
 func test_shipped_world_starts_you_with_a_full_pair():
@@ -196,12 +204,16 @@ func test_hands_of_hands_out_copies():
 	# Same reasoning as lights: binding writes into a pickup, and the authored world
 	# must stay the authored world so a reset re-binds from scratch.
 	var wd := WorldData.load_from(WORLD_PATH)
-	var first: Array = wd.hands_of("west")
-	if first.is_empty():
-		return
+	var with_hands := ""
+	for id in wd.regions:
+		if not wd.hands_of(id).is_empty():
+			with_hands = id
+			break
+	assert_ne(with_hands, "", "the shipped world lays a hand out somewhere")
+	var first: Array = wd.hands_of(with_hands)
 	first[0].kind = HandTypes.PATIENT
 	first[0].base_id = 999
-	var second: Array = wd.hands_of("west")
+	var second: Array = wd.hands_of(with_hands)
 	assert_ne(second[0].base_id, 999, "the authored pickup was not written through")
 
 
@@ -225,12 +237,12 @@ func test_shipped_doors_reference_real_tiles():
 
 
 # ---------------------------------------------------------------------------
-# The shipped world's pin / trigger wing (east, base x >= 20)
+# The pin / trigger wing (the fixture's east, base x >= 20)
 # ---------------------------------------------------------------------------
 
 ## East with its pre-placed folds applied, as the world boots it.
 func _east() -> Dictionary:
-	var wd := WorldData.load_from(WORLD_PATH)
+	var wd := WorldData.load_from(FIXTURE_PATH)
 	var base := wd.build_base("east")
 	var pieces: Array = FoldReplay.identity_pieces(base)
 	var folds: Array[Fold] = []
@@ -253,8 +265,8 @@ func _plane_centre(e: Dictionary, cell: Vector2i):
 		e["pieces"], tile.base_id, (Vector2(cell) + Vector2(0.5, 0.5)) * cs)
 
 
-func test_shipped_world_places_pins_and_a_trigger():
-	var base := WorldData.load_from(WORLD_PATH).build_base("east")
+func test_fixture_world_places_pins_and_a_trigger():
+	var base := WorldData.load_from(FIXTURE_PATH).build_base("east")
 	var pins := 0
 	var triggers := 0
 	for t in base.tiles:
@@ -262,12 +274,12 @@ func test_shipped_world_places_pins_and_a_trigger():
 			pins += 1
 		elif t.type == TileTypes.TRIGGER_FOLD:
 			triggers += 1
-	assert_gt(pins, 0, "the shipped world places at least one pin")
-	assert_gt(triggers, 0, "the shipped world places at least one fold trigger")
+	assert_gt(pins, 0, "the fixture places at least one pin")
+	assert_gt(triggers, 0, "the fixture places at least one fold trigger")
 
 
-func test_shipped_trigger_is_fully_specified():
-	var base := WorldData.load_from(WORLD_PATH).build_base("east")
+func test_fixture_trigger_is_fully_specified():
+	var base := WorldData.load_from(FIXTURE_PATH).build_base("east")
 	for t in base.tiles:
 		if t.type != TileTypes.TRIGGER_FOLD:
 			continue
@@ -281,7 +293,7 @@ func test_shipped_trigger_is_fully_specified():
 				"trigger anchor %s is a real tile" % cell)
 
 
-func test_shipped_pins_survive_the_preplaced_fold():
+func test_fixture_pins_survive_the_preplaced_fold():
 	# A pin inside a pre-folded strip would be excised, contradicting what a pin is.
 	var e := _east()
 	for t in (e["base"] as BaseGrid).tiles:
@@ -291,7 +303,7 @@ func test_shipped_pins_survive_the_preplaced_fold():
 			"pin at %s is not folded away by the shipped pre-fold" % t.grid_position)
 
 
-func test_shipped_pin_refuses_a_fold_spanning_it():
+func test_fixture_pin_refuses_a_fold_spanning_it():
 	var e := _east()
 	var base: BaseGrid = e["base"]
 	var cs: float = e["wd"].cell_size
@@ -311,7 +323,7 @@ func test_shipped_pin_refuses_a_fold_spanning_it():
 		"a fold clear of the pillar still commits")
 
 
-func test_shipped_trigger_opens_the_wall():
+func test_fixture_trigger_opens_the_wall():
 	var e := _east()
 	var cs: float = e["wd"].cell_size
 	var base: BaseGrid = e["base"]
@@ -334,7 +346,7 @@ func test_shipped_trigger_opens_the_wall():
 	assert_false(still_there, "the triggered fold excised the wall")
 
 
-func test_shipped_trigger_leaves_the_pin_and_the_reward_alone():
+func test_fixture_trigger_leaves_the_pin_and_the_reward_alone():
 	var e := _east()
 	var base: BaseGrid = e["base"]
 	var survivors := {}
@@ -346,7 +358,7 @@ func test_shipped_trigger_leaves_the_pin_and_the_reward_alone():
 		"and so does the reward behind the wall")
 
 
-func test_shipped_trigger_carries_the_player():
+func test_fixture_trigger_carries_the_player():
 	# A plate's fold may pinch you now — there is one fold path and it swallows whoever
 	# is in the strip. This one must not: the plate is on a flap, so standing on it when
 	# the fuse runs out rides you rather than taking you in.
@@ -385,8 +397,11 @@ func _plate_pieces(e: Dictionary, plate_cell: Vector2i) -> Array:
 	return FoldReplay.apply_one_fold(e["pieces"], f, cs)
 
 
-func test_shipped_preplaced_folds_are_applicable():
-	var wd := WorldData.load_from(WORLD_PATH)
+func test_fixture_preplaced_folds_are_applicable():
+	# A pre-placed fold that excises nothing is a fold the loader applies and nobody
+	# can see. Asked of the fixture, which is where the suite keeps one; the shipped
+	# world is free to ship unfolded, and currently does.
+	var wd := WorldData.load_from(FIXTURE_PATH)
 	var applied := 0
 	for id in wd.regions:
 		var base := wd.build_base(id)
@@ -398,7 +413,7 @@ func test_shipped_preplaced_folds_are_applicable():
 				"pre-placed fold in %s actually excises content" % id)
 			pieces = FoldReplay.apply_one_fold(pieces, f, wd.cell_size)
 			applied += 1
-	assert_gt(applied, 0, "the shipped world uses at least one pre-placed fold")
+	assert_gt(applied, 0, "the fixture uses at least one pre-placed fold")
 
 
 # ---------------------------------------------------------------------------
@@ -503,7 +518,7 @@ func test_regions_without_lights_are_fine():
 	assert_eq(_sample().lights_of("nope").size(), 0, "and a missing region yields none")
 
 
-func test_shipped_world_places_lights_in_both_regions():
+func test_shipped_world_lights_every_region():
 	var wd := WorldData.load_from(WORLD_PATH)
 	for id in wd.regions:
 		var lights: Array = wd.lights_of(id)
@@ -515,10 +530,10 @@ func test_shipped_world_places_lights_in_both_regions():
 			assert_gt(light.radius_cells, 0.0, "light %s has a radius" % light.id)
 
 
-func test_shipped_east_hides_a_lamp_inside_its_preplaced_fold():
+func test_fixture_east_hides_a_lamp_inside_its_preplaced_fold():
 	# The teaching case: east ships folded, and the lamp inside that fold is not
 	# in the region at all until you get in there.
-	var wd := WorldData.load_from(WORLD_PATH)
+	var wd := WorldData.load_from(FIXTURE_PATH)
 	var base := wd.build_base("east")
 	var pieces: Array = FoldReplay.identity_pieces(base)
 	for pair in wd.fold_pairs("east"):

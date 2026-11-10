@@ -49,7 +49,7 @@ const K_UFLOOR := 7
 const K_UWALL := 8
 const K_LAMP := 9           ## the glyph drawn at a light source
 const K_BURST := 10         ## the plate that fires a burst when you step on it
-const K_HOLD := 11          ## the plate that holds a channel while something rests on it
+const K_WEIGHT := 11          ## the plate that holds a channel while something rests on it
 const KINDS := 12
 
 # --- Palette -----------------------------------------------------------------
@@ -79,7 +79,7 @@ const _PALETTE := {
 	K_BURST: [Color(0.35, 0.88, 0.82), Color(0.16, 0.45, 0.44), Color(0.72, 0.98, 0.94)],
 	# A plain hand's own orange. A weight plate is a place a hand can be, and the one
 	# colour on screen that already means "hand" is the cheapest way to say so.
-	K_HOLD: [Color(0.96, 0.60, 0.34), Color(0.56, 0.30, 0.14), Color(1.00, 0.84, 0.62)],
+	K_WEIGHT: [Color(0.96, 0.60, 0.34), Color(0.56, 0.30, 0.14), Color(1.00, 0.84, 0.62)],
 }
 
 ## type -> kind, for types that do not depend on their surroundings.
@@ -90,7 +90,7 @@ const _KIND_OF_TYPE := {
 	TileTypes.GOAL: K_GOAL,
 	TileTypes.TRIGGER_FOLD: K_TRIGGER,
 	TileTypes.TRIGGER_BURST: K_BURST,
-	TileTypes.TRIGGER_HOLD: K_HOLD,
+	TileTypes.TRIGGER_WEIGHT: K_WEIGHT,
 	TileTypes.PIN: K_PIN,
 	TileTypes.UNANCHORABLE_FLOOR: K_UFLOOR,
 	TileTypes.UNANCHORABLE_WALL: K_UWALL,
@@ -223,7 +223,7 @@ static func _paint(img: Image, kind: int, v: int, o: Vector2i) -> void:
 			_paint_lamp(img, o, v)
 		K_BURST:
 			_paint_burst_plate(img, o, v)
-		K_HOLD:
+		K_WEIGHT:
 			_paint_weight_plate(img, o, v)
 
 
@@ -377,7 +377,7 @@ static func _paint_burst_plate(img: Image, o: Vector2i, v: int) -> void:
 ## because they are one: a burst plate lets go, a weight plate holds.
 static func _paint_weight_plate(img: Image, o: Vector2i, v: int) -> void:
 	_paint_paper(img, o, v)
-	var pal: Array = _PALETTE[K_HOLD]
+	var pal: Array = _PALETTE[K_WEIGHT]
 	for y in range(12, TILE_PX):
 		for x in range(1, TILE_PX - 1):
 			var c: Color = pal[0]

@@ -44,12 +44,12 @@ const UNANCHORABLE_WALL := 7
 ## at a reach the plate carries in its own `data`. It is the world's half of the
 ## one-key verb: the tile does the pulling-back, and it can reach further than an arm.
 const TRIGGER_BURST := 8
-## A WEIGHT PLATE holds a CHANNEL live for as long as something is resting on it — you,
+## A WEIGHT PLATE keeps a CHANNEL live for as long as something is resting on it — you,
 ## or one of your hands. It is the other tense of a trigger: `TRIGGER_FOLD` is an event
 ## (you stepped here once), this is a state (something is here now). The world's own
-## anchors arm on the channel, the fold they make stands while the channel is held, and
-## it lets go the moment the weight comes off. See `Weights`.
-const TRIGGER_HOLD := 9
+## anchors arm on the channel, the fold they make stands while the plate is down, and
+## it lets go when the weight comes off. See `Weights`.
+const TRIGGER_WEIGHT := 9
 
 ## type -> definition. Keep merge_rank strictly ordered: null(5) > goal(4) >
 ## wall(3) > water(2) > empty(1). FoldedState never produces null pieces, so its
@@ -61,8 +61,8 @@ const TRIGGER_HOLD := 9
 ## (and the world pins the pair it names). Kept as a string, not a Callable,
 ## so the registry stays a pure const data table.
 ##
-## `on_weight` is the same idea in the other tense: the reaction a tile HOLDS for as
-## long as something rests on it (""=none). "hold" for a weight plate. An event and a
+## `on_weight` is the same idea in the other tense: the reaction a tile KEEPS UP for as
+## long as something rests on it (""=none). "channel" for a weight plate: it keeps one live. An event and a
 ## state are different questions — one is asked on the frame you arrive, the other every
 ## frame — so they are different columns rather than two values of one.
 ##
@@ -108,10 +108,10 @@ const _REGISTRY := {
 			{"key": "radius", "type": "float", "default": 1.3, "label": "burst radius",
 			 "hint": "how far the burst reaches, IN CELLS. 1.3 is your own reach, so a default plate pops exactly what you could have popped standing on it; wider is the point of a plate — it opens seams you cannot get next to. Zero or less is an inert plate."},
 		]},
-	TRIGGER_HOLD: {"name": "weight plate", "walkable": true, "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "on_weight": "hold",
+	TRIGGER_WEIGHT: {"name": "weight plate", "walkable": true, "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "on_weight": "channel",
 		"params": [
 			{"key": "channel", "type": "string", "default": "", "required": true, "label": "channel",
-			 "hint": "the channel this plate holds live while something rests on it — you, or a hand. Anchors the world has bolted in arm on a channel by name (`arms`), and the fold they make stands only while the channel is held."},
+			 "hint": "the channel this plate keeps live while something rests on it — you, or a hand. Anchors the world has bolted in arm on a channel by name (`arms`), and the fold they make stands only while a plate of that channel is down."},
 		]},
 	PIN:          {"name": "pin",     "walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": "", "params": []},
 	UNANCHORABLE_FLOOR: {"name": "unanchorable floor", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "params": []},
@@ -177,13 +177,13 @@ static func on_enter_kind(type: int) -> String:
 
 
 
-## Name of the reaction a tile of this type holds while something rests on it ("" = none).
+## Name of the reaction a tile of this type keeps up while something rests on it ("" = none).
 static func on_weight_kind(type: int) -> String:
 	return get_def(type).get("on_weight", "")
 
 
 ## Does a hand set down here become a WEIGHT rather than an anchor? True exactly when
-## the tile has something to hold: the hand is pressing, not gripping, so it reaches for
+## the tile has something to press: the hand is pressing, not gripping, so it reaches for
 ## no partner (`FoldWorld.place_hand`).
 static func is_weighable(type: int) -> bool:
 	return on_weight_kind(type) != ""

@@ -56,15 +56,30 @@ var _h := 0
 var _solid := PackedByteArray()
 ## 1 where a half cell is water.
 var _water := PackedByteArray()
+## Per BLOCK position, worked out once per sampling so the search is table lookups:
+## 1 where the body's block fits; 1 where it rests (stands or swims); and the row a
+## block dropped there comes to rest in, or -1 if it leaves the sheet.
+var _fit := PackedByteArray()
+var _rest := PackedByteArray()
+var _fall_to := PackedInt32Array()
 ## rise (half cells, may be negative) -> farthest run (half cells) for this reading.
 var _run: Dictionary = {}
 var max_rise := 4
 
 
+## The run table for each reading, built once: it is a function of `PlayerBody`'s
+## constants and nothing about the world.
+static var _tables: Dictionary = {}
+
+
 func _init(world_, strict_ := true) -> void:
 	world = world_
 	strict = strict_
-	_build_run_table()
+	if not _tables.has(strict):
+		_build_run_table()
+		_tables[strict] = {"run": _run, "max_rise": max_rise}
+	_run = _tables[strict]["run"]
+	max_rise = int(_tables[strict]["max_rise"])
 	resample()
 
 
@@ -140,6 +155,40 @@ func resample() -> void:
 				_solid[hy * _w + hx] = 1
 			elif TileTypes.is_swim(piece.type):
 				_water[hy * _w + hx] = 1
+	_build_tables()
+
+
+## Fold the half-cell samples into per-block answers. Bottom-up, because where a block
+## falls to is where the block below it falls to unless it is already resting.
+func _build_tables() -> void:
+	_fit = PackedByteArray()
+	_fit.resize(_w * _h)
+	_rest = PackedByteArray()
+	_rest.resize(_w * _h)
+	_fall_to = PackedInt32Array()
+	_fall_to.resize(_w * _h)
+	for hy in range(_h - 1, -1, -1):
+		for hx in range(_w):
+			var i := hy * _w + hx
+			var fits := not (_is_solid(hx, hy) or _is_solid(hx + 1, hy)
+				or _is_solid(hx, hy + 1) or _is_solid(hx + 1, hy + 1))
+			_fit[i] = 1 if fits else 0
+			var rests := false
+			if fits:
+				var left := _is_solid(hx, hy + 2)
+				var right := _is_solid(hx + 1, hy + 2)
+				rests = ((left and right) if strict else (left or right)) \
+					or _is_water(hx, hy + 1) or _is_water(hx + 1, hy + 1) \
+					or _is_water(hx, hy) or _is_water(hx + 1, hy)
+			_rest[i] = 1 if rests else 0
+			if not fits:
+				_fall_to[i] = -1
+			elif rests:
+				_fall_to[i] = hy
+			elif hy + 1 >= _h:
+				_fall_to[i] = -1
+			else:
+				_fall_to[i] = _fall_to[(hy + 1) * _w + hx]
 
 
 func _is_solid(hx: int, hy: int) -> bool:
@@ -156,8 +205,9 @@ func _is_water(hx: int, hy: int) -> bool:
 
 ## Can the body's 2x2 block sit with its top-left half cell at (hx, hy)?
 func _fits(hx: int, hy: int) -> bool:
-	return not (_is_solid(hx, hy) or _is_solid(hx + 1, hy)
-		or _is_solid(hx, hy + 1) or _is_solid(hx + 1, hy + 1))
+	if hx < 0 or hy < 0 or hx >= _w or hy >= _h:
+		return false
+	return _fit[hy * _w + hx] == 1
 
 
 func _swimming(hx: int, hy: int) -> bool:
@@ -165,28 +215,17 @@ func _swimming(hx: int, hy: int) -> bool:
 		or _is_water(hx, hy) or _is_water(hx + 1, hy)
 
 
-func _standing(hx: int, hy: int) -> bool:
-	var left := _is_solid(hx, hy + 2)
-	var right := _is_solid(hx + 1, hy + 2)
-	return (left and right) if strict else (left or right)
-
-
 func _rests(hx: int, hy: int) -> bool:
-	return _standing(hx, hy) or _swimming(hx, hy)
+	if hx < 0 or hy < 0 or hx >= _w or hy >= _h:
+		return false
+	return _rest[hy * _w + hx] == 1
 
 
 ## Fall from (hx, hy) to the first place the block rests. -1 if it leaves the sheet.
 func _land(hx: int, hy: int) -> int:
-	var y := hy
-	while y < _h:
-		if not _fits(hx, y):
-			return -1               # fell into something: not a place to be
-		if _rests(hx, y):
-			return y
-		if not _fits(hx, y + 1):
-			return -1
-		y += 1
-	return -1
+	if hx < 0 or hy < 0 or hx >= _w or hy >= _h:
+		return -1
+	return _fall_to[hy * _w + hx]
 
 
 # ---------------------------------------------------------------------------

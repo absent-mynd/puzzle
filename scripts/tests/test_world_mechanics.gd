@@ -1,7 +1,7 @@
 extends GutTest
 
 ## The mechanics that make the hand economy reach past folding: weight plates and the
-## channels they hold, the world's bolts coming back when its folds come apart, water,
+## channels they keep live, the world's bolts coming back when its folds come apart, water,
 ## sigils, and the room reset.
 ##
 ## Scene-driven like `test_fold_world.gd`, and pinned to a fixture of its own for the
@@ -79,13 +79,13 @@ func _hold_gate_with_body() -> void:
 # ---------------------------------------------------------------------------
 
 func test_a_weight_plate_is_a_registered_walkable_tile_with_a_channel() -> void:
-	var t := TileTypes.TRIGGER_HOLD
+	var t := TileTypes.TRIGGER_WEIGHT
 	assert_true(TileTypes.is_registered(t), "the weight plate is in the registry")
 	assert_true(TileTypes.is_walkable(t), "...you can stand in it")
 	assert_true(TileTypes.is_weighable(t), "...and it is the one tile a weight does something to")
 	assert_eq(TileTypes.on_enter_kind(t), "", "it is a state, not an event: nothing fires on entering")
 	assert_eq(WorldCore.CHARS.get("H"), t, "authored as H")
-	assert_false(TileParams.is_complete(t, {}), "a plate with no channel holds nothing, and says so")
+	assert_false(TileParams.is_complete(t, {}), "a plate with no channel drives nothing, and says so")
 	assert_true(TileParams.is_complete(t, {"channel": "gate"}), "...a channel is all it needs")
 
 
@@ -108,13 +108,13 @@ func test_weights_reads_plates_and_what_is_on_them() -> void:
 	assert_eq((plates["a"] as Array).size(), 2)
 	var left: int = base.tile_at(Vector2i(0, 0)).base_id
 	var mid: int = base.tile_at(Vector2i(1, 0)).base_id
-	assert_false(Weights.held(plates, {})["a"], "nothing on either: not held")
-	assert_false(Weights.held(plates, {mid: true})["a"], "standing BETWEEN them holds nothing")
-	assert_true(Weights.held(plates, {left: true})["a"], "either plate holds the channel")
+	assert_false(Weights.channel_states(plates, {})["a"], "nothing on either: not down")
+	assert_false(Weights.channel_states(plates, {mid: true})["a"], "standing BETWEEN them weighs nothing")
+	assert_true(Weights.channel_states(plates, {left: true})["a"], "either plate keeps the channel live")
 	assert_eq(Weights.plates_down(plates, {left: true}), [left], "...and only that one is down")
 
 
-func test_a_plate_with_no_channel_holds_nothing() -> void:
+func test_a_plate_with_no_channel_drives_nothing() -> void:
 	var base := WorldCore.parse_map(["H", "#"], CS, {})
 	assert_true(Weights.plates_by_channel(base).is_empty())
 
@@ -124,16 +124,16 @@ func test_a_plate_with_no_channel_holds_nothing() -> void:
 # ---------------------------------------------------------------------------
 
 func test_standing_on_a_plate_arms_the_worlds_pair_and_the_fuse_folds_it() -> void:
-	assert_eq(world.armed_pairs().size(), 0, "nothing is armed before anything is held")
+	assert_eq(world.armed_pairs().size(), 0, "nothing is armed before anything is weighed down")
 	_stand(Vector2i(5, 9))
 	_frame()
-	assert_true(world.field.is_live("gate"), "your weight holds the channel")
+	assert_true(world.field.is_live("gate"), "your weight keeps the channel live")
 	assert_eq(world.armed_pairs().size(), 1, "...and the world's pair arms on it")
 	assert_eq(world.folds.size(), 0, "pressing a plate does not fold; it lights a fuse")
 
 	world._tick_fuse(1.0)
 	assert_eq(world.folds.size(), 1, "the ordinary fuse makes the fold")
-	assert_eq(world.folds[0].channel, "gate", "...tagged with the channel holding it")
+	assert_eq(world.folds[0].channel, "gate", "...tagged with the channel keeping it")
 	assert_eq(world.folds[0].held_hands.size(), 0, "the world paid for it, so it holds none of yours")
 	assert_eq(world.hands_total(), _start_total, "conservation")
 
@@ -152,17 +152,17 @@ func test_stepping_off_lets_the_fold_go_and_the_bolts_come_back() -> void:
 	assert_eq(world.armed_pairs().size(), 0, "...and wait, unarmed, for the next weight")
 
 
-func test_a_held_fold_can_be_made_again_and_again() -> void:
+func test_a_plates_fold_can_be_made_again_and_again() -> void:
 	for _round in range(3):
 		_hold_gate_with_body()
-		assert_not_null(_gate_fold(), "held: folded")
+		assert_not_null(_gate_fold(), "down: folded")
 		_stand(_now(Vector2i(3, 9)))
 		_frame()
-		assert_null(_gate_fold(), "released: open")
+		assert_null(_gate_fold(), "up: open")
 	assert_eq(world.hands_total(), _start_total, "none of which cost or made a hand")
 
 
-func test_a_hand_on_the_plate_holds_it_and_reaches_for_nothing() -> void:
+func test_a_hand_on_the_plate_weighs_it_and_reaches_for_nothing() -> void:
 	_stand(Vector2i(4, 9))
 	assert_true(world.place_hand(Vector2i(5, 9)), "a hand goes down on the plate")
 	var weight: Anchor = world.field.anchors.back()
@@ -220,13 +220,13 @@ func test_taking_the_hand_back_lets_the_fold_go() -> void:
 	assert_null(_gate_fold(), "...and with nothing on the plate the fold lets go")
 
 
-func test_a_hand_lying_loose_on_the_plate_holds_it_too() -> void:
+func test_a_hand_lying_loose_on_the_plate_weighs_it_too() -> void:
 	# A hand is a weight whether it is pinned or merely lying there.
 	var plate := (Vector2(5, 9) + Vector2(0.5, 0.5)) * CS
 	world._land_ball({"kind": HandTypes.PLAIN, "pos": plate + Vector2(0, 20), "region": "lab"})
 	_stand(Vector2i(20, 9))
 	_frame()
-	assert_true(world.field.is_live("gate"), "a loose hand on the plate holds the channel")
+	assert_true(world.field.is_live("gate"), "a loose hand on the plate keeps the channel live")
 	assert_eq(world.plates_down_here().size(), 1, "...and the plate is drawn down")
 
 
@@ -239,7 +239,7 @@ func test_a_hand_in_flight_over_the_plate_does_not_press_it() -> void:
 	assert_false(world.field.is_live("gate"), "falling past a plate is not resting on it")
 
 
-func test_bursting_a_held_fold_opens_it_only_for_a_fuse() -> void:
+func test_bursting_a_plates_fold_opens_it_only_for_a_fuse() -> void:
 	# The weight is still on the plate, so the world still wants the fold: taking it
 	# apart by hand buys you one fuse of open space, not a different room.
 	_stand(Vector2i(4, 9))
@@ -248,25 +248,26 @@ func test_bursting_a_held_fold_opens_it_only_for_a_fuse() -> void:
 	world._tick_fuse(1.0)
 	assert_not_null(_gate_fold())
 
-	assert_true(world.unfold_space_fold(_gate_fold()), "a held fold can be taken apart")
+	assert_true(world.unfold_space_fold(_gate_fold()), "a plate's fold can be taken apart")
 	assert_null(_gate_fold(), "...and is, for a moment")
 	_frame()
-	assert_eq(world.armed_pairs().size(), 1, "but its bolts are back and the channel is still held")
+	assert_eq(world.armed_pairs().size(), 1, "but its bolts are back and the plate is still down")
 	world._tick_fuse(1.0)
 	assert_not_null(_gate_fold(), "so it folds itself again")
 
 
-func test_a_fold_of_your_own_across_its_seam_wedges_a_held_fold_open() -> void:
+func test_a_fold_of_your_own_made_after_it_wedges_a_plates_fold_open() -> void:
 	_hold_gate_with_body()
 	var gate = _gate_fold()
 	assert_not_null(gate)
-	# A vertical pair: creases run ACROSS the gate's seam, so the strip crosses it.
-	assert_true(world.do_fold(Vector2i(20, 2), Vector2i(20, 4)), "a fold of your own, high up")
+	# Any fold at all, so long as it is NEWER. This one is nowhere near the gate and
+	# crosses nothing of it: the world lets go newest-first, and this is in the way.
+	assert_true(world.do_fold(Vector2i(30, 2), Vector2i(34, 2)), "a fold of your own, afterwards")
 
 	_stand(_now(Vector2i(3, 9)))
 	_frame(30)
 	assert_false(world.field.is_live("gate"), "nothing is on the plate")
-	assert_not_null(_gate_fold(), "...and the fold stands anyway: yours is holding it shut")
+	assert_not_null(_gate_fold(), "...and the fold stands anyway: yours is on top of it")
 	assert_eq(world.hud.flash_text().find("Blocked"), -1,
 		"a fold the WORLD cannot let go of is not a refusal anyone asked for")
 
@@ -329,7 +330,7 @@ func test_a_trip_plate_with_only_a_channel_latches_the_worlds_pair() -> void:
 	assert_eq(world.folds.size(), 1, "step on it again and it does")
 
 
-func test_a_plate_in_one_room_holds_a_fold_in_another() -> void:
+func test_a_plate_in_one_room_keeps_a_fold_in_another() -> void:
 	_stand(Vector2i(39, 9))
 	assert_true(world.place_hand(Vector2i(40, 9)), "a hand left on the far plate")
 	_frame()
@@ -341,7 +342,7 @@ func test_a_plate_in_one_room_holds_a_fold_in_another() -> void:
 	assert_true(world.field.is_live("far"), "the hand is still on that plate, a room away")
 	assert_eq(world.armed_pairs().size(), 1, "...and this room's pair arms on it")
 	world._tick_fuse(1.0)
-	assert_eq(world.folds.size(), 1, "the fold stands here, held from there")
+	assert_eq(world.folds.size(), 1, "the fold stands here, kept from there")
 	assert_eq(world.hands_total(), _start_total)
 
 
@@ -434,7 +435,7 @@ func test_a_room_reset_hands_back_what_you_spent_in_the_room() -> void:
 	assert_eq(world.hands_held(), 2, "and both hands are back in your slots")
 	assert_eq(world.hands_pending(), 0)
 	assert_eq(world.hands_total(), _start_total, "nothing was made and nothing was lost")
-	assert_false(world.field.is_live("gate"), "nothing is holding anything")
+	assert_false(world.field.is_live("gate"), "no plate is down")
 	assert_eq(_bolts_here(), 5, "every bolt the room was authored with is standing")
 
 
@@ -492,3 +493,81 @@ func test_the_world_reset_is_the_other_key() -> void:
 	world._reset()
 	assert_eq(world.sigils_count(), 0, "the whole world, sigils and all")
 	assert_eq(world.hands_total(), _start_total)
+
+
+# ---------------------------------------------------------------------------
+# The swim, for real
+# ---------------------------------------------------------------------------
+# Everything above asks the model. This runs the body: real physics frames, a real
+# key held down, a real pool.
+
+func _press(keycode: int, down: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = keycode
+	ev.pressed = down
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+
+
+func after_each() -> void:
+	_press(KEY_SPACE, false)
+
+
+func test_holding_the_jump_key_carries_the_body_up_through_water() -> void:
+	world._traverse("LAB_POOL")
+	var floor_y := (11.0 + 0.5) * CS
+	world.player.teleport(Vector2(7.5 * CS, floor_y), false)
+	_press(KEY_SPACE, true)
+	for _i in range(240):
+		await get_tree().physics_frame
+		if world.player.global_position.y < 6.5 * CS:
+			break
+	assert_lt(world.player.global_position.y, 6.5 * CS,
+		"five cells of water climbed without touching a floor")
+	_press(KEY_SPACE, false)
+
+
+func test_left_alone_in_water_the_body_sinks_slowly_and_stops_on_the_bottom() -> void:
+	world._traverse("LAB_POOL")
+	world.player.teleport(Vector2(7.5 * CS, 6.5 * CS), false)
+	var fastest := 0.0
+	for _i in range(60):
+		await get_tree().physics_frame
+		fastest = maxf(fastest, world.player.velocity.y)
+	assert_true(world.player.in_water, "still in the pool a second later")
+	assert_almost_eq(fastest, PlayerBody.SWIM_SINK, 5.0, "sinking at the swim's own pace")
+	assert_gt(world.player.global_position.y, 6.5 * CS, "...and it is a sink, not a hover")
+
+
+# ---------------------------------------------------------------------------
+# Which hand
+# ---------------------------------------------------------------------------
+
+func test_swapping_changes_which_hand_goes_down_next() -> void:
+	world.hands = [HandTypes.PLAIN, HandTypes.PATIENT]
+	assert_eq(world.next_hand_type(), HandTypes.PLAIN)
+	assert_true(world.swap_hands(), "two different hands trade places")
+	assert_eq(world.next_hand_type(), HandTypes.PATIENT, "the other one is next")
+	assert_eq(world.hands_held(), 2, "nothing moved in the ledger")
+
+
+func test_swapping_two_alike_or_none_is_nothing() -> void:
+	assert_false(world.swap_hands(), "two plain hands: nothing to choose between")
+	world.hands = [null, null]
+	assert_false(world.swap_hands(), "no hands: nothing to swap")
+
+
+func test_swapping_with_one_hand_moves_it_to_the_front() -> void:
+	world.hands = [null, HandTypes.SWIFT]
+	assert_true(world.swap_hands())
+	assert_eq(world.hands, [HandTypes.SWIFT, null])
+	assert_eq(world.next_hand_type(), HandTypes.SWIFT, "it is still the hand you would place")
+
+
+func test_a_raised_hand_can_be_swapped_for_the_other() -> void:
+	world.hands = [HandTypes.PLAIN, HandTypes.PATIENT]
+	assert_true(world.begin_aim(Vector2i(1, 0)))
+	world.swap_hands()
+	world.finish_aim()
+	var down: Anchor = world.field.anchors.back()
+	assert_eq(down.hand, HandTypes.PATIENT, "the hand that went down is the one you swapped to")

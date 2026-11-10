@@ -76,11 +76,11 @@ func test_play_asks_for_the_selected_world_by_path():
 
 func test_picking_a_region_starts_the_run_there():
 	launcher.select(_index_of("overworld"))
-	launcher.select_region("east")
+	launcher.select_region("span")
 	watch_signals(launcher)
 	launcher.play()
 	assert_eq(get_signal_parameters(launcher, "play_requested"),
-		["res://worlds/overworld.json", {"region": "east"}],
+		["res://worlds/overworld.json", {"region": "span"}],
 		"a region is the nearest thing this game has to picking a level")
 
 
@@ -88,7 +88,7 @@ func test_no_cell_is_asked_for():
 	# The editor picks cells, because that is where you can see them. A launcher is
 	# not standing anywhere, so a region's own spawn is as specific as it can honestly be.
 	launcher.select(_index_of("overworld"))
-	launcher.select_region("east")
+	launcher.select_region("span")
 	watch_signals(launcher)
 	launcher.play()
 	var at: Dictionary = get_signal_parameters(launcher, "play_requested")[1]
@@ -97,15 +97,15 @@ func test_no_cell_is_asked_for():
 
 func test_choosing_the_same_region_again_clears_it():
 	launcher.select(_index_of("overworld"))
-	launcher.select_region("east")
-	launcher.select_region("east")
+	launcher.select_region("span")
+	launcher.select_region("span")
 	assert_eq(launcher.selected_region, "",
 		"which is the way back to starting where the world says")
 
 
 func test_changing_world_forgets_the_region():
 	launcher.select(_index_of("overworld"))
-	launcher.select_region("east")
+	launcher.select_region("span")
 	launcher.select(_index_of("testbed"))
 	assert_eq(launcher.selected_region, "",
 		"a region of the world you left means nothing in the one you picked")
@@ -113,11 +113,11 @@ func test_changing_world_forgets_the_region():
 
 func test_edit_asks_for_the_world_and_the_region_being_looked_at():
 	launcher.select(_index_of("overworld"))
-	launcher.select_region("east")
+	launcher.select_region("span")
 	watch_signals(launcher)
 	launcher.edit()
 	assert_eq(get_signal_parameters(launcher, "edit_requested"),
-		["res://worlds/overworld.json", "east"],
+		["res://worlds/overworld.json", "span"],
 		"picking a region and pressing edit lands you on its card")
 
 
@@ -168,11 +168,11 @@ func test_coming_back_keeps_what_you_had_chosen():
 	# you just had. Kept by path and by name rather than by position, so a world file
 	# appearing in the directory cannot quietly move the selection.
 	launcher.select(_index_of("overworld"))
-	launcher.select_region("east")
+	launcher.select_region("span")
 	launcher.scan()
 	assert_eq(String(launcher.selected_world()["path"]), "res://worlds/overworld.json",
 		"the world you were on")
-	assert_eq(launcher.selected_region, "east", "and the region you were going to start in")
+	assert_eq(launcher.selected_region, "span", "and the region you were going to start in")
 
 
 func test_a_region_that_stopped_existing_is_forgotten():
