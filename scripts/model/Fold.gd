@@ -37,6 +37,18 @@ class_name Fold extends Resource
 ## one of each, not two anonymous ones.
 @export var held_hands: Array[int] = []
 
+## The WORLD'S anchors this fold consumed (`Anchor`, bolted), kept so that taking the
+## fold apart can put them back where they stood.
+##
+## The mirror of `held_hands`, and the same rule: a fold gives back what made it. Your
+## hands go back to you; the world's bolts go back into the world. Without this a
+## bolted anchor was single-use — fold with it once, unfold, and the socket the world
+## held out for you was gone for the rest of the session.
+##
+## Not exported and not typed, because an `Anchor` is a live object of the anchor
+## field rather than a value: the fold is only looking after it.
+var bolts: Array = []
+
 @export var anchor_a: Vector2i = Vector2i.ZERO   # ordered: lexicographic min (y,x)
 @export var anchor_b: Vector2i = Vector2i.ZERO
 

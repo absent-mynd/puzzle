@@ -236,6 +236,33 @@ var _spawn: Vector2:
 ## apart. Lives outside `regions` so a region rebuild cannot silently drop them.
 var hand_pickups: Dictionary = {}
 
+## Sigils found so far: region id -> {base id: true}. A goal tile is a SIGIL — a thing
+## you collect by reaching it, once — and the count of them is the shape of a world.
+##
+## Runtime state like `hand_pickups`, and for the same reason it cannot be derived:
+## "you have been here" is history. It survives a room reset (which undoes
+## configuration, not knowledge) and is cleared by a world reset.
+var sigils_found: Dictionary = {}
+## How many sigils the world holds, counted off its base grids at setup.
+var sigils_total := 0
+
+## Every channel some weight plate somewhere holds: channel -> true. A fold tagged with
+## one of these stands only while the channel is held (`_tick_plates`); a fold tagged
+## with any OTHER channel was made by a trip plate and stands until you take it apart.
+var _hold_channels: Dictionary = {}
+## The base ids of the plates currently pressed in this region, for the overlay.
+var _plates_down: Array = []
+## Seconds until a held fold that could not let go is asked again. The refusal is
+## usually geometric (a newer fold across its seam, nowhere for you to land) and the
+## answer costs a replay to compute, so it is asked a few times a second rather than
+## sixty.
+var _release_wait := 0.0
+
+## The door you last came into each region through: region id -> door id. Where a
+## fall, or a room reset, puts you back — the way in, not the region's authored spawn,
+## because a room entered from its far side should not hand you back to its near one.
+var _entry_door: Dictionary = {}
+
 var next_fold_id := 0
 ## Base tile the player last fired a trigger check against — triggers are edge-fired
 ## on entering a tile, not re-fired every frame you stand on it.
@@ -344,6 +371,9 @@ var goal_polys: Array:
 	get: return space.goal_polys
 	set(v): space.goal_polys = v
 var _on_goal := false
+## The goal pieces of the current space, kept from the rebuild so the sigil check does
+## not walk the whole piece list every frame.
+var _goal_pieces: Array = []
 
 ## How this space repeats. Flat in a region, a cylinder inside a fold, a torus
 ## inside two crossing ones. The single source of truth for the wrap — copies,
@@ -529,24 +559,20 @@ func _setup_all() -> void:
 		return
 	hands = world_data.starting_hand_slots()
 
-	# Each region is its own sheet: a BaseGrid plus its persistent fold state. A region's
-	# authored folds are applied here, before the player spawns — a pre-placed fold ships
-	# the region already folded, with content sealed inside that unfolding (or a door
-	# whose far side resolves in there) reveals.
+	# Each region is its own sheet: a BaseGrid plus its persistent fold state.
+	sigils_found = {}
+	sigils_total = 0
+	_hold_channels = {}
+	_plates_down = []
+	_entry_door = {}
 	for id in world_data.regions:
-		var rbase := world_data.build_base(id)
-		var rfolds: Array[Fold] = []
-		var rsegs: Dictionary = {}
-		var pieces: Array = FoldReplay.identity_pieces(rbase)
-		for pair in world_data.fold_pairs(id):
-			var f := Fold.create(_take_fold_id(), pair[0], pair[1], CS)
-			# One clip pass, both halves — see FoldReplay.fold_and_capture.
-			var cut := FoldReplay.fold_and_capture(pieces, f, CS)
-			rsegs[f.fold_id] = WorldCore.seam_segment(f, cut["dropped"], CS)
-			rfolds.append(f)
-			pieces = cut["pieces"]
-		regions[id] = {"base": rbase, "folds": rfolds, "seam_segs": rsegs,
-			"inner_folds": {}, "spawn": world_data.spawn_px(id)}
+		var pieces := _build_region(id)
+		var rbase: BaseGrid = regions[id]["base"]
+		for tile in rbase.tiles:
+			if tile.type == TileTypes.GOAL:
+				sigils_total += 1
+		for channel in regions[id]["plates"]:
+			_hold_channels[channel] = true
 
 		# Authored loose hands bind exactly as lights do — a hand on the ground has no
 		# world position either, only a base identity the configuration is asked about.
@@ -557,6 +583,10 @@ func _setup_all() -> void:
 		# fold taking its ground away, "resting" has to mean the same thing for an
 		# authored loose hand as for one that fell there: otherwise the first fold anywhere
 		# near one drops it, because it was never really on the ground to begin with.
+		#
+		# Here and not in `_build_region`, because a room reset rebuilds the region and
+		# must NOT rebuild these: an authored hand you carried off is a hand that exists
+		# somewhere else now, and putting another one down would mint one.
 		var region_hands: Array = []
 		for pickup in world_data.hands_of(id):
 			if pickup.bind(rbase):
@@ -565,31 +595,6 @@ func _setup_all() -> void:
 			else:
 				push_error("FoldWorld: hand pickup in %s sits outside the region" % id)
 		hand_pickups[id] = region_hands
-
-		# Anchors the world has driven into its own sheet. They bind exactly as lights
-		# and loose hands do — a base identity, no world position — and from here on
-		# they are anchors like any other: they ride folds, they pair, and the ones
-		# that reach each other light a fuse. What they are not is HANDS
-		# (`Anchor.BOLTED`), so a burst does not answer for them and the ledger does
-		# not count them.
-		var region_anchors: Array = []
-		for anchor in world_data.anchors_of(id):
-			if anchor.bind(rbase):
-				region_anchors.append(field.add(anchor))
-			else:
-				push_error("FoldWorld: anchor in %s sits outside region %s" % [id, id])
-		Anchor.link_pairs(region_anchors)
-
-		# Lights bind to base tiles exactly as doors do: from here on a light has
-		# no world position, only a base identity that the current configuration
-		# is asked about (see LightSource).
-		var bound: Array = []
-		for light in world_data.lights_of(id):
-			if light.bind(rbase):
-				bound.append(light)
-			else:
-				push_error("FoldWorld: light %s sits outside region %s" % [light.id, id])
-		region_lights[id] = bound
 
 	# Doors are warp POINTS at base-tile centers: they ride folds with their tile, so a
 	# door's current location is resolved from its base identity, never stored.
@@ -612,6 +617,59 @@ func _setup_all() -> void:
 	_apply_spawn_override()
 	player.teleport(_spawn, false)
 	_cut_camera()
+
+
+## Build one region from the authored world: its grid, its pre-placed folds, the
+## anchors the world bolted into it, its lights and its weight plates. Returns the
+## region's piece list with the pre-placed folds applied.
+##
+## Everything here is a function of the AUTHORED world and nothing else, which is what
+## lets a room reset call it again (`_reset_region`): the region comes back exactly as
+## it shipped, and the hands that were spent in it are handed back by the caller.
+func _build_region(id: String) -> Array:
+	# A region's authored folds are applied here, before the player spawns — a
+	# pre-placed fold ships the region already folded, with content sealed inside that
+	# unfolding (or a door whose far side resolves in there) reveals.
+	var rbase := world_data.build_base(id)
+	var rfolds: Array[Fold] = []
+	var rsegs: Dictionary = {}
+	var pieces: Array = FoldReplay.identity_pieces(rbase)
+	for pair in world_data.fold_pairs(id):
+		var f := Fold.create(_take_fold_id(), pair[0], pair[1], CS)
+		# One clip pass, both halves — see FoldReplay.fold_and_capture.
+		var cut := FoldReplay.fold_and_capture(pieces, f, CS)
+		rsegs[f.fold_id] = WorldCore.seam_segment(f, cut["dropped"], CS)
+		rfolds.append(f)
+		pieces = cut["pieces"]
+	regions[id] = {"base": rbase, "folds": rfolds, "seam_segs": rsegs,
+		"inner_folds": {}, "spawn": world_data.spawn_px(id),
+		"plates": Weights.plates_by_channel(rbase)}
+
+	# Anchors the world has driven into its own sheet. They bind exactly as lights
+	# and loose hands do — a base identity, no world position — and from here on
+	# they are anchors like any other: they ride folds, they pair, and the ones
+	# that reach each other light a fuse. What they are not is HANDS
+	# (`Anchor.BOLTED`), so a burst does not answer for them and the ledger does
+	# not count them.
+	var region_anchors: Array = []
+	for anchor in world_data.anchors_of(id):
+		if anchor.bind(rbase):
+			region_anchors.append(field.add(anchor))
+		else:
+			push_error("FoldWorld: anchor in %s sits outside region %s" % [id, id])
+	Anchor.link_pairs(region_anchors)
+
+	# Lights bind to base tiles exactly as doors do: from here on a light has
+	# no world position, only a base identity that the current configuration
+	# is asked about (see LightSource).
+	var bound: Array = []
+	for light in world_data.lights_of(id):
+		if light.bind(rbase):
+			bound.append(light)
+		else:
+			push_error("FoldWorld: light %s sits outside region %s" % [light.id, id])
+	region_lights[id] = bound
+	return pieces
 
 
 ## The authored world this run is of, built fresh every time — including on `R`.
@@ -735,6 +793,10 @@ func rebuild() -> void:
 	pieces_by_pos = BaseFrame.index_by_pos(current_pieces)
 	wall_polys = WorldCore.solid_polys_of(current_pieces)
 	goal_polys = WorldCore.polys_of_type(current_pieces, TileTypes.GOAL)
+	_goal_pieces = []
+	for piece in current_pieces:
+		if piece.type == TileTypes.GOAL:
+			_goal_pieces.append(piece)
 	_build_terrain()
 	_build_colliders()
 	_refresh_lights()
@@ -1071,7 +1133,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.physical_keycode == KEY_R:
 		if event.pressed:
-			_reset()
+			# The room, or with Shift the whole world. The small one is the bare key
+			# because it is the one you want a dozen times an hour.
+			if event.shift_pressed:
+				_reset()
+			else:
+				_reset_region()
 		return
 	# Leaving is not a world event and takes no notice of what the world is doing: mid
 	# fold, mid placement, mid fall, Escape gets you out. A run you cannot abandon
@@ -1079,6 +1146,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.physical_keycode == KEY_ESCAPE:
 		if event.pressed:
 			left.emit()
+		return
+	if event.physical_keycode == KEY_Q:
+		if event.pressed:
+			swap_hands()
 		return
 	if placing() and event.pressed and AIM_STEPS.has(event.physical_keycode):
 		move_aim(AIM_STEPS[event.physical_keycode])
@@ -1327,7 +1398,14 @@ func place_hand(cell: Vector2i) -> bool:
 	var kind := int(hands[from_slot])
 	hands[from_slot] = null
 	AudioManager.play_sfx(Sounds.HAND_PLACE)
-	field.add(Anchor.make(piece.base_id, center - piece.src_offset, region_id, kind))
+	var anchor := Anchor.make(piece.base_id, center - piece.src_offset, region_id, kind)
+	# A hand set down on a weight plate is PRESSING, not gripping: it holds the plate
+	# and reaches for nothing. Said with the field that already exists for it — an
+	# anchor that arms on nothing — so the pairing rule never hears about plates, and
+	# a hand you spend on a door cannot be dragged into a fold by the next one you pin.
+	if TileTypes.is_weighable(piece.type):
+		anchor.arms = Anchor.NEVER
+	field.add(anchor)
 	return true
 
 
@@ -1340,6 +1418,11 @@ func place_hand(cell: Vector2i) -> bool:
 func aim_partners(at: Vector2, kind: int) -> Array:
 	var out: Array = []
 	if kind < 0:
+		return out
+	# A hand going down on a weight plate reaches for nothing (see `place_hand`), and
+	# the preview is asked the way the placement will be.
+	var under = BaseFrame.piece_containing(pieces_by_pos, at, CS)
+	if under != null and TileTypes.is_weighable(under.type):
 		return out
 	var reach := HandTypes.span(kind) * CS
 	for anchor in field.anchors:
@@ -1690,10 +1773,16 @@ func fire_pair(pair: Dictionary) -> void:
 	# nothing back, which is what authored folds have always done — now for a reason
 	# rather than by being a different kind of thing.
 	var pinned: Array[int] = []
+	# ...and what it LOOKS AFTER is the rest: the world's own bolts, which go back where
+	# they stood when the fold comes apart. A trip plate's conjured pair is the
+	# exception — the plate makes a fresh one each time it is stepped on.
+	var bolts: Array = []
 	for anchor in [a, b]:
 		if (anchor as Anchor).is_hand():
 			pinned.append((anchor as Anchor).hand)
-	if do_fold(ca, cb, pinned, _channel_of(pair)):
+		elif not (anchor as Anchor).transient:
+			bolts.append(anchor)
+	if do_fold(ca, cb, pinned, _channel_of(pair), bolts):
 		# The fold is holding the SAME hands that were pinned — they went from your
 		# slots to the anchors to the fold without ever being duplicated. The anchors
 		# are spent, so they leave the field and every pair they were in goes with them.
@@ -1751,6 +1840,30 @@ func hands_pending() -> int:
 
 func can_place_hand() -> bool:
 	return HandStock.has_hand(hands)
+
+
+## Change which hand goes down next, by swapping the two slots.
+##
+## A kind is a fuse and a span (`HandTypes`), and a hand on a weight plate is neither —
+## any hand is as heavy as any other. So the moment a world has both a plate and a fold
+## in it, WHICH hand goes where is the decision, and it was the one decision about a
+## hand the player could not make: the next one down was whichever slot came first.
+## Getting the other meant pinning the first somewhere, pinning the second, and
+## bursting the first back — a juggle standing in for a choice.
+##
+## Works with a hand raised, and that is when it matters most: the cursor is already
+## showing you the reach of the one you are about to spend. Nothing moves in the
+## ledger; two slots trade contents.
+func swap_hands() -> bool:
+	if animating() or HandStock.held_count(hands) == 0:
+		return false
+	if hands.size() < 2 or hands[0] == hands[1]:
+		return false
+	var first = hands[0]
+	hands[0] = hands[1]
+	hands[1] = first
+	AudioManager.play_sfx(Sounds.UI_MOVE)
+	return true
 
 
 ## The kind of hand the next tap would put down, or -1 if you have none. Drives the
@@ -1884,8 +1997,10 @@ func _hands_for_fold(pinned) -> Array[int]:
 ##     many folds deep that already is. Folding yourself deeper used to be
 ##     refused here; there is no longer anything to refuse, because there is no
 ##     longer a second code path to be missing.
-func do_fold(a1: Vector2i, a2: Vector2i, pinned = null, channel := "") -> bool:
+func do_fold(a1: Vector2i, a2: Vector2i, pinned = null, channel := "",
+		bolts: Array = []) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS, channel)
+	fold.bolts = bolts
 	var pre: Array = current_pieces
 	# ONE clip pass for both halves. The flaps become the new piece list and the
 	# strip between them becomes the subspace; `CollisionCore.fold_polygons` produces
@@ -2229,7 +2344,11 @@ func _take_back(fold: Fold) -> void:
 
 ## Unfold a fold of the CURRENT space. Its inner folds (if any) splice
 ## into this space at its index — they were made in exactly this frame.
-func unfold_space_fold(fold: Fold) -> void:
+##
+## `quiet` is for a fold the WORLD is letting go of (`_tick_plates`): a refusal there is
+## not something the player asked for, so it says nothing and is simply asked again.
+## Returns whether the fold came out.
+func unfold_space_fold(fold: Fold, quiet := false) -> bool:
 	var list: Array = space_folds()
 	var idx := list.find(fold)
 	if idx < 0:
@@ -2237,15 +2356,18 @@ func unfold_space_fold(fold: Fold) -> void:
 		# by a fold in the space outside, which this space has no way to reach into. It
 		# used to fail silently here, and a marker you can press F at that answers
 		# nothing is worse than one that says no.
-		_deny("Blocked — this seam is held from outside the fold.")
-		return
+		if not quiet:
+			_deny("Blocked — this seam is held from outside the fold.")
+		return false
 	if not can_unfold_fold(fold):
-		_deny("Blocked — a newer fold crosses this seam.")
-		return
+		if not quiet:
+			_deny("Blocked — a newer fold crosses this seam.")
+		return false
 	var sp_base: Array = space_base
 	if _inner_glue_blocker(fold, sp_base, list, idx) != null:
-		_deny("Blocked — a fold inside it crosses its seam.")
-		return
+		if not quiet:
+			_deny("Blocked — a fold inside it crosses its seam.")
+		return false
 
 	var kids: Array = inner_folds.get(fold.fold_id, [])
 	list.remove_at(idx)
@@ -2272,8 +2394,9 @@ func unfold_space_fold(fold: Fold) -> void:
 		list.insert(idx, fold)
 		if not kids.is_empty():
 			inner_folds[fold.fold_id] = kids
-		_deny("Unfold blocked — nowhere for you to land.")
-		return
+		if not quiet:
+			_deny("Unfold blocked — nowhere for you to land.")
+		return false
 
 	var was_newest := idx == list.size() - kids.size()
 	var regained: int = fold.held_hands.size()
@@ -2301,11 +2424,40 @@ func unfold_space_fold(fold: Fold) -> void:
 		_wake_unsupported_hands()
 		if regained > 0:
 			_show_flash("Released — %d hands." % regained)
+	# The fold has left the list, so the world's half of the bargain can go back now
+	# rather than in the finalize: the bolts are occupants, and where they stand is
+	# asked of whatever geometry is current when someone looks.
+	_give_back_to_world(fold)
 	if was_newest and kids.is_empty():
 		_play_transition(new_pieces, fold, false, true,
 			player.global_position, landed, finalize)
 	else:
 		finalize.call()
+	return true
+
+
+## A fold has come apart: the WORLD gets back what it put in, as you get back yours.
+##
+## Its bolts return to the tiles they were driven into (`Fold.bolts`), and a latch a
+## trip plate set is dropped — taking a plate's fold apart puts the plate back to
+## not-yet-stepped-on, with its anchors standing ready for the next time.
+##
+## Why this cannot run away, which is the reason bolts used NOT to come back
+## (ARCHITECTURE Decision 11): two anchors returned in range of each other refold on the
+## next fuse, forever. That needs both ends to be armable the moment they land. A bolt
+## that arms on a latch lands on a channel this very function has just dropped; a bolt
+## that arms on a HELD channel does refold, and should — the weight is still on the
+## plate, and "the spring is still wound" is the honest reading; a proximity bolt lands
+## alone, because the hand that was its partner went back to a slot and not into the
+## sheet. The one arrangement left is two proximity bolts authored within reach of
+## each other, which folds itself at boot and goes on wanting to: a pre-placed fold
+## that heals, and a choice the author made.
+func _give_back_to_world(fold: Fold) -> void:
+	for anchor in fold.bolts:
+		field.restore(anchor)
+	fold.bolts = []
+	if fold.channel != "":
+		field.unlatch(fold.channel)
 
 
 ## Inner fold crossing the glue that locks the exit, or null.
@@ -2327,27 +2479,29 @@ func exit_blocker() -> Fold:
 ## Exit = unfold the entered fold from inside. Inner folds splice into the
 ## parent space at its index; the strip (and you, and any pinned anchors)
 ## land exactly where the subspace showed them.
-func try_exit() -> void:
+func try_exit(quiet := false) -> bool:
 	if mode != Mode.SUBSPACE or animating():
-		return
+		return false
 	if exit_blocker() != null:
-		_deny("Blocked — an inner fold crosses the outer seam.")
-		return
+		if not quiet:
+			_deny("Blocked — an inner fold crosses the outer seam.")
+		return false
 	var outer := host_fold
 	var parent_path := context.slice(0, context.size() - 1)
 	var plvl := _compute_space(parent_path)
 	var plist: Array = plvl["space_folds"]
 	var idx := plist.find(outer)
 	if idx < 0:
-		return
+		return false
 	# The parent's newer folds can cross this fold's seam (door-entered
 	# mid-list folds): same blocking rule as everywhere.
 	var seg: PackedVector2Array = seam_segs.get(outer.fold_id, PackedVector2Array())
 	if seg.size() >= 2:
 		for j in range(idx + 1, plist.size()):
 			if WorldCore.segment_intersects_strip(seg[0], seg[1], plist[j]):
-				_deny("Blocked — a newer fold outside crosses this seam.")
-				return
+				if not quiet:
+					_deny("Blocked — a newer fold outside crosses this seam.")
+				return false
 
 	var kids: Array = space_folds()
 	plist.remove_at(idx)
@@ -2370,6 +2524,7 @@ func try_exit() -> void:
 		landed = Vector2(dest)
 
 	context = parent_path
+	_give_back_to_world(outer)
 	# Coming out. The mirror of `PINCH`, and the pair is deliberate: going in
 	# and coming out are one gesture heard from its two sides. `_apply_context`
 	# swaps the music back in the finalize below.
@@ -2406,6 +2561,7 @@ func try_exit() -> void:
 			parent_lattice.offsets(reach, MAX_WRAP_COPIES))
 	else:
 		finalize.call()
+	return true
 
 
 # ---------------------------------------------------------------------------
@@ -2489,6 +2645,7 @@ func _traverse(id: String) -> void:
 	var rid: String = doors[pair_id]["region"]
 	if rid != region_id:
 		_load_region(rid)
+	_entry_door[rid] = pair_id
 	context.clear()
 	for f in res["path"]:
 		context.append(f)
@@ -2711,6 +2868,11 @@ func _build_overlay_view() -> OverlayView:
 			v.hands_down.append({"at": null, "kind": anchor.hand, "fuse": -1.0,
 				"span": 0.0, "bolted": not anchor.is_hand()})
 			continue
+		# A span is drawn only where it is the rule. An anchor that pairs by DECLARATION
+		# ignores distance, and one that arms on nothing (a hand weighing a plate)
+		# reaches for nothing — a circle round either would be a promise about a
+		# partner that distance has no say in.
+		var reaches: bool = anchor.arms == Anchor.PROXIMITY and anchor.partner < 0
 		v.hands_down.append({
 			"at": points[anchor.id],
 			"kind": anchor.hand,
@@ -2718,12 +2880,17 @@ func _build_overlay_view() -> OverlayView:
 			# Drawn faintly around every placed hand, because putting one down is a
 			# PLAN now: what it will reach has to be visible before the thing it
 			# reaches is there. See `WorldOverlay._draw_placed_hands`.
-			"span": anchor.span(v.cell_size),
+			"span": anchor.span(v.cell_size) if reaches else 0.0,
 			"bolted": not anchor.is_hand(),
 		})
 	for pair in pairs:
 		v.pairs.append({"a": points[(pair["a"] as Anchor).id],
 			"b": points[(pair["b"] as Anchor).id]})
+	# What the world WILL fold, and what is holding it: the declared pairs standing
+	# here whether or not anything has armed them, and the plates that are down.
+	v.declared = declared_pairs_here(points)
+	v.plates_down = plates_down_here()
+	v.sigils_found = found_sigil_polys()
 
 	for entry in loose_hand_points():
 		var pickup: HandPickup = entry["pickup"]
@@ -2880,9 +3047,12 @@ func _physics_process(delta: float) -> void:
 
 	_wrap_body()
 	if lattice.is_flat() and player.global_position.y > (base.grid_size.y + 6) * CS:
-		player.teleport(_spawn, false)
+		player.teleport(_respawn_point(), false)
 		AudioManager.play_sfx(Sounds.RESPAWN)
 		_show_flash("You fell out of the world — respawned.")
+	# What the body is IN, told to the body: it knows how to swim, not what water is.
+	var under = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
+	player.in_water = under != null and TileTypes.is_swim(under.type)
 	_tick_fuse(delta)
 	# A fuse that just fired has started a fold TRANSITION, and the rest of this
 	# frame belongs to it. Everything below reads the player's position and the
@@ -2902,6 +3072,10 @@ func _physics_process(delta: float) -> void:
 	# A burst plate can start an unfold TRANSITION, so the same guard follows it as
 	# follows the fuse: everything below reads a position and a piece list that are
 	# halfway between two states while one is in flight.
+	if animating():
+		return
+	# ...and so can a weight plate, by letting a fold go. Same guard, same reason.
+	_tick_plates(delta)
 	if animating():
 		return
 	_check_doors()
@@ -2987,6 +3161,118 @@ func _check_triggers() -> void:
 			_fire_burst_plate(tile, here)
 
 
+# ---------------------------------------------------------------------------
+# Weight plates: a channel held live by what is resting on it
+# ---------------------------------------------------------------------------
+
+## The base tiles of THIS region that have something resting on them: your body, a hand
+## you pinned, a hand lying loose. A set of base ids — see `Weights` for why weight is
+## asked as identity rather than as geometry.
+##
+## A hand in FLIGHT is not resting on anything, and is deliberately absent: a hand
+## falling past a plate does not press it, and one that lands on it does the moment
+## `_land_ball` turns it back into an occupant.
+func _occupied_here() -> Dictionary:
+	var out: Dictionary = {}
+	var under = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
+	if under != null:
+		out[under.base_id] = true
+	for anchor in field.anchors:
+		if (anchor as Anchor).region == region_id:
+			out[(anchor as Anchor).base_id] = true
+	for pickup in loose_hands:
+		out[(pickup as HandPickup).base_id] = true
+	return out
+
+
+## Bring the world into line with what is being held down.
+##
+## Two halves, and neither stores anything:
+##
+##   - **Which channels are held** is recomputed from where the body and the hands are
+##     and handed to the anchor field, where the world's own anchors arm on it. So
+##     pressing a plate does not MAKE a fold — it makes a pair armable, and the ordinary
+##     fuse does the rest, exactly as it does for a trip plate and for you.
+##   - **A fold whose channel has let go comes apart.** Not by a second mechanism: it is
+##     `unfold_space_fold`, the same call a burst makes, asked quietly. If it cannot go
+##     yet — a newer fold lies across its seam, or there is nowhere for you to land — it
+##     stays, and is asked again. That is not an edge case to apologise for: it is how
+##     you WEDGE the world's fold open with one of your own.
+##
+## Only this region's plates are read, because only here can a weight change. A channel
+## held in another region keeps the answer it had when you left, which is correct — the
+## hand you left on that plate is still on it — and is why a plate in one room can hold
+## a fold in another.
+func _tick_plates(delta: float) -> void:
+	var plates: Dictionary = regions[region_id]["plates"]
+	if plates.is_empty():
+		_plates_down = []
+	else:
+		var occupied := _occupied_here()
+		var states := Weights.held(plates, occupied)
+		for channel in states:
+			var down: bool = states[channel]
+			if down and not field.held_channels.has(channel):
+				AudioManager.play_sfx(Sounds.TRIGGER)
+			field.hold_channel(channel, down)
+		_plates_down = Weights.plates_down(plates, occupied)
+	if _hold_channels.is_empty():
+		return
+
+	_release_wait = maxf(_release_wait - delta, 0.0)
+	if _release_wait > 0.0:
+		return
+	# The fold you are standing INSIDE, if the world was holding it: it opens around you,
+	# which is the exit by its other name.
+	if host_fold != null and _let_go_of(host_fold):
+		if not try_exit(true):
+			_release_wait = RELEASE_RETRY
+		return
+	for fold in space_folds():
+		if not _let_go_of(fold):
+			continue
+		if not unfold_space_fold(fold, true):
+			_release_wait = RELEASE_RETRY
+		return                      # one a frame: a fold in flight owns it (AGENTS.md §3)
+
+
+## How often a held fold that could not let go is asked again, in seconds.
+const RELEASE_RETRY := 0.2
+
+
+## Is this a fold the world was holding, whose hold has gone?
+func _let_go_of(fold: Fold) -> bool:
+	return fold.channel != "" and _hold_channels.has(fold.channel) \
+		and not field.is_live(fold.channel)
+
+
+## Where the pressed plates of this region are in the CURRENT space, for the overlay.
+func plates_down_here() -> Array:
+	var out: Array = []
+	for bid in _plates_down:
+		var tile := base.tile_by_id(int(bid))
+		if tile == null:
+			continue
+		var wp = BaseFrame.world_point_from_base(current_pieces, tile.base_id,
+			cell_center(tile.grid_position))
+		if wp != null:
+			out.append(Vector2(wp))
+	return out
+
+
+## Declared pairs of the world's anchors standing in this space, as point pairs — armed
+## or not. What a plate WILL fold, drawn before you press it.
+func declared_pairs_here(points: Dictionary) -> Array:
+	var out: Array = []
+	for anchor in field.anchors:
+		var a: Anchor = anchor
+		if a.partner < 0 or a.partner < a.id:
+			continue                # undeclared, or already drawn from the other end
+		if points.has(a.id) and points.has(a.partner):
+			out.append({"a": points[a.id], "b": points[a.partner]})
+	return out
+
+
 ## A BURST PLATE: stepping on one fires a burst (§"HOLD") centred on the plate, at the
 ## reach the tile was authored with. The player's own gesture with two things taken
 ## away — you do not choose when, and you do not choose where.
@@ -3057,7 +3343,16 @@ func _fire_fold_trigger(tile: BaseTile) -> void:
 				return              # its fold is already standing
 	var cells: Array = tile.data.get("anchors", [])
 	if cells.size() < HandStock.HANDS_PER_FOLD:
-		return                      # half-configured plate: nothing to pin
+		# No pair of its own. A plate with only a channel LATCHES it, for anchors the
+		# world already has standing in the sheet — which is the form to prefer when
+		# authoring, because the player can see those before stepping on anything. A
+		# plate with neither is half-configured and does nothing.
+		if channel == "" or field.is_live(channel):
+			return
+		field.light_channel(channel)
+		AudioManager.play_sfx(Sounds.TRIGGER)
+		_show_flash("The ground answers.")
+		return
 	if not _plant_pair(cells, channel):
 		return
 	AudioManager.play_sfx(Sounds.TRIGGER)
@@ -3082,6 +3377,7 @@ func _plant_pair(cells: Array, channel: String) -> bool:
 		anchor.cell = cell
 		anchor.region = region_id
 		anchor.bond = Anchor.BOLTED
+		anchor.transient = true     # the plate conjures a fresh pair each time
 		anchor.arms = channel if channel != "" else Anchor.PROXIMITY
 		if not anchor.bind(base):
 			return false
@@ -3157,16 +3453,64 @@ func hand_ball_points() -> Array:
 	return hand_field.points_in(space)
 
 
+## Sigils: a goal tile is collected by reaching it, once.
+##
+## Reaching is the body TOUCHING the tile, not standing centred in it — the generous
+## reading, because the puzzle was getting there and the last pixel of it is not one.
+## What is collected is the base tile, so a sigil cut in two by a crease is still one
+## sigil, and one folded away is simply not here to be touched.
 func _check_goal() -> void:
 	var touching := false
-	for poly in goal_polys:
-		if WorldCore.circle_overlaps_polygon(player.global_position, PlayerBody.RADIUS, poly):
-			touching = true
-			break
-	if touching and not _on_goal:
+	var found: Dictionary = sigils_found.get(region_id, {})
+	for piece in _goal_pieces:
+		if not WorldCore.circle_overlaps_polygon(
+				player.global_position, PlayerBody.RADIUS, piece.polygon):
+			continue
+		touching = true
+		if found.has(piece.base_id):
+			continue
+		found[piece.base_id] = true
+		sigils_found[region_id] = found
 		AudioManager.play_sfx(Sounds.GOAL)
-		_show_flash("* GOAL reached! *")
+		var n := sigils_count()
+		_show_flash("Every sigil found — %d of %d." % [n, sigils_total]
+			if n >= sigils_total else "Sigil — %d of %d." % [n, sigils_total])
 	_on_goal = touching
+
+
+## How many sigils have been found, everywhere.
+func sigils_count() -> int:
+	var n := 0
+	for id in sigils_found:
+		n += (sigils_found[id] as Dictionary).size()
+	return n
+
+
+## The polygons of the sigils in this space that have ALREADY been found, for the
+## overlay to dim. The tile's art is a base-space fact and cannot know; this can.
+func found_sigil_polys() -> Array:
+	var out: Array = []
+	var found: Dictionary = sigils_found.get(region_id, {})
+	if found.is_empty():
+		return out
+	for piece in _goal_pieces:
+		if found.has(piece.base_id):
+			out.append(piece.polygon)
+	return out
+
+
+## Where a fall puts you back: the door you came into this region through, if it is
+## still somewhere you can stand, else the region's own spawn.
+func _respawn_point() -> Vector2:
+	var id := String(_entry_door.get(region_id, ""))
+	if id != "" and doors.has(id) and context.is_empty():
+		var wp = door_point_here(id)
+		if wp != null and not WorldCore.circle_overlaps_solids(
+				Vector2(wp), PlayerBody.RADIUS, wall_polys):
+			# Arriving ON a door is not walking into it.
+			_door_latch[id] = true
+			return Vector2(wp)
+	return _spawn
 
 
 ## Put everything back — the world AND your hands.
@@ -3178,6 +3522,16 @@ func _check_goal() -> void:
 ## leaving loose hands spent would strand you at fewer hands than you started with, which
 ## is the opposite of what an escape hatch is for.
 func _reset() -> void:
+	_drop_the_moment()
+	context.clear()
+	_setup_all()
+	AudioManager.play_sfx(Sounds.RESET)
+	_show_flash("The world is reset.")
+
+
+## End whatever was mid-flight — a fold animating, a burst charging, a hand raised — so
+## that what comes next starts from a world that is standing still.
+func _drop_the_moment() -> void:
 	if not _anim.is_empty():
 		var layer: Node2D = _anim["layer"]
 		layer.queue_free()
@@ -3192,10 +3546,88 @@ func _reset() -> void:
 	_aim = null
 	player.frozen = false
 	_burst_flash_left = 0.0
+	_trigger_latch = -1
+	_release_wait = 0.0
+
+
+## Put THIS ROOM back the way it shipped, and hand you back what you spent in it.
+##
+## The answer to stranding yourself that does not need a save file, because it does not
+## need a snapshot: a region is a function of the authored world (`_build_region`), so
+## putting it back is building it again. What is NOT a function of the authored world is
+## where your hands are — so every hand of yours that was in this room's sheet (pinned,
+## held by a fold, in the air) is gathered up first and given back to you afterwards.
+##
+## Three things it deliberately leaves alone, and each is conservation or knowledge:
+##
+##   - **Loose hands stay where they lie.** An authored hand you already carried off
+##     exists somewhere else now; putting another down would mint one. `hands_total()`
+##     is the same number on both sides of this call, and a test holds it there.
+##   - **Other rooms are untouched.** A fold you left standing next door is still
+##     standing, still holding the hands it holds.
+##   - **Sigils stay found.** A reset undoes configuration. It does not undo having
+##     been somewhere.
+##
+## You wake at the door you came in by. `Shift+R` is the other one — the whole world,
+## hands and sigils and all (`_reset`).
+func _reset_region() -> void:
+	if world_data == null or not regions.has(region_id):
+		return
+	_drop_the_moment()
+	var id := region_id
+	var r: Dictionary = regions[id]
+
+	var returning: Array = []
+	var lists: Array = [r["folds"]]
+	lists.append_array((r["inner_folds"] as Dictionary).values())
+	for list in lists:
+		for fold in list:
+			returning.append_array(fold.held_hands)
+	for anchor in field.anchors.duplicate():
+		if (anchor as Anchor).region != id:
+			continue
+		if (anchor as Anchor).is_hand():
+			returning.append((anchor as Anchor).hand)
+		field.remove(anchor)
+	for i in range(hand_balls.size() - 1, -1, -1):
+		if String(hand_balls[i]["region"]) == id:
+			returning.append(int(hand_balls[i]["kind"]))
+			hand_balls.remove_at(i)
+	for channel in _region_channels(id):
+		field.unlatch(channel)
+		field.hold_channel(channel, false)
+
+	# The run's own idea of where this region starts (a playtest's "from this cell")
+	# outlives the rebuild; everything else about the region is the authored one.
+	var spawn_was: Vector2 = r["spawn"]
+	_build_region(id)
+	regions[id]["spawn"] = spawn_was
+	_load_region(id)
 	context.clear()
-	_setup_all()
+	_apply_context()
+	player.teleport(_respawn_point(), false)
+	# After the rebuild and the move, for the reason `_take_back` waits: a hand that
+	# does not fit in a slot is DROPPED, at your feet, in the geometry that is current.
+	for kind in returning:
+		_give_hand(int(kind))
+	_wake_unsupported_hands()
+	_cut_camera()
 	AudioManager.play_sfx(Sounds.RESET)
-	_show_flash("Reset.")
+	_show_flash("The room is reset.")
+
+
+## Every channel a region names — on its plates and on its bolted anchors.
+func _region_channels(id: String) -> Array:
+	var out: Dictionary = {}
+	for tile in (regions[id]["base"] as BaseGrid).tiles:
+		var channel := str(tile.data.get("channel", ""))
+		if channel != "":
+			out[channel] = true
+	for anchor in world_data.regions[id].get("anchors", []):
+		var arms: String = (anchor as Anchor).arms
+		if arms != Anchor.PROXIMITY and arms != Anchor.NEVER:
+			out[arms] = true
+	return out.keys()
 
 
 # ---------------------------------------------------------------------------
@@ -3226,6 +3658,8 @@ func _update_status() -> void:
 	# The one state the world itself cannot show, because the way it shows it is by
 	# not moving — and a world that is not moving looks the same as a world you are
 	# not moving in.
+	if sigils_total > 0:
+		stock += "   Sigils: %d/%d" % [sigils_count(), sigils_total]
 	if placing():
 		stock += "   || PLACING (time stopped)"
 	if context.is_empty():

@@ -72,6 +72,16 @@ var bond := LOOSE
 var partner := -1
 
 
+## Conjured by a trip plate for the one fold it fires, and not put back when that fold
+## comes apart. Everything else the world bolts in RETURNS — see `Fold.bolts`.
+##
+## The difference is where the anchor lives when nothing is happening. An authored one
+## stands in the sheet, visible, before and after its fold; a trip plate's pair exists
+## only between the step and the fold, and the plate conjures a fresh pair the next time
+## it is stepped on.
+var transient := false
+
+
 ## The authored cell, for one the world places. Runtime anchors bind directly from
 ## the piece under the cursor and never look at this.
 var cell: Vector2i = Vector2i.ZERO

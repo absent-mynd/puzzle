@@ -195,6 +195,9 @@ func paint() -> void:
 	if not _view.flat:
 		_draw_glue()
 		_draw_exit_anchor()
+	_draw_sigils()
+	_draw_plates()
+	_draw_declared()
 	_draw_seam_markers()
 	_draw_doors()
 	_draw_loose_hands()
@@ -203,6 +206,33 @@ func paint() -> void:
 	_draw_placed_hands()
 	_draw_preview()
 	_draw_burst()
+
+
+## A sigil that has been found, dimmed where it stands. The tile's art is a base-space
+## fact and looks the same forever; this is the one thing about a sigil that is not.
+func _draw_sigils() -> void:
+	for poly in _view.sigils_found:
+		if (poly as PackedVector2Array).size() >= 3:
+			draw_colored_polygon(poly, Color(0.05, 0.05, 0.09, 0.66))
+
+
+## A weight plate that is DOWN: a bright bar along its foot. The tile says "this is a
+## plate"; this says "and something is on it", which is the half that changes.
+func _draw_plates() -> void:
+	var cs := _view.cell_size
+	for at in _view.plates_down:
+		var foot := Vector2(at) + Vector2(-cs * 0.5 + HAIR, cs * 0.5 - HAIR * 3.0)
+		draw_rect(Rect2(foot, Vector2(cs - HAIR * 2.0, HAIR * 2.0)), Color("ffe9a8"))
+
+
+## The world's declared pairs, tied by a faint broken line — what a plate WILL fold,
+## visible before anything has armed it. Fainter than everything else here on purpose:
+## it is a standing fact about the room, not a thing that is happening. When the pair
+## arms, the preview strip is drawn over it and says the rest.
+func _draw_declared() -> void:
+	for pair in _view.declared:
+		draw_dashed_line(Vector2(pair["a"]), Vector2(pair["b"]),
+			Color(1, 1, 1, 0.20), HAIR, HAIR * 3.0)
 
 
 ## A fuse, as a 0..1 throb. Frequency ramps with how far through that pair is, so it

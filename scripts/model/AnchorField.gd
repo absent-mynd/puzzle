@@ -67,9 +67,18 @@ const SPAN_EPSILON := 0.01
 ## Anchors standing in the world, in the order they were placed.
 var anchors: Array = []
 
-## Channels something has switched on. A plate makes one live; an anchor waiting on it
-## arms the moment it is.
+## Channels something has LATCHED on. A trip plate latches one, and it stays live until
+## the fold it made is taken apart again (`unlatch`). Stored, because "was this plate
+## ever stepped on" is history and history cannot be derived.
 var live_channels: Dictionary = {}
+
+## Channels being HELD live right now, by a weight on a plate (`Weights`). Not history
+## at all: the world overwrites these every frame from where the body and the hands
+## are, so this is a cache of a derivation and never the authority on it.
+##
+## Kept apart from `live_channels` so that letting go of a plate cannot un-latch a
+## channel a trip plate latched under the same name, and vice versa.
+var held_channels: Dictionary = {}
 
 ## pair key (Vector2i of the two ids, lower first) -> {"left": float, "total": float}.
 var _fuses: Dictionary = {}
@@ -89,6 +98,7 @@ func clear() -> void:
 	anchors.clear()
 	_fuses.clear()
 	live_channels.clear()
+	held_channels.clear()
 	_next_id = 0
 
 
@@ -97,6 +107,20 @@ func add(anchor: Anchor) -> Anchor:
 	anchor.id = _next_id
 	_next_id += 1
 	anchors.append(anchor)
+	return anchor
+
+
+## Put back an anchor that was taken out, as itself: same object, SAME id.
+##
+## What a world-made fold does with its bolts when it comes apart. The id is kept
+## because a declared pair names its partner by id, and two bolts that came back as
+## strangers would never fold again. Ids are handed out once and never reused, so the
+## one coming back cannot collide with anything placed since.
+func restore(anchor: Anchor) -> Anchor:
+	if anchor.id < 0:
+		return add(anchor)
+	if not anchors.has(anchor):
+		anchors.append(anchor)
 	return anchor
 
 
@@ -124,6 +148,36 @@ func hands_out() -> int:
 func light_channel(channel: String) -> void:
 	if channel != "":
 		live_channels[channel] = true
+
+
+## Drop a latch. What taking a trip plate's fold apart does: the plate is back to
+## not-yet-stepped-on, and its anchors wait for it again.
+func unlatch(channel: String) -> void:
+	live_channels.erase(channel)
+
+
+## Say whether a channel is being held, this frame. See `held_channels`.
+func hold_channel(channel: String, down: bool) -> void:
+	if channel == "":
+		return
+	if down:
+		held_channels[channel] = true
+	else:
+		held_channels.erase(channel)
+
+
+## Is a channel live — latched, or being held?
+func is_live(channel: String) -> bool:
+	return live_channels.has(channel) or held_channels.has(channel)
+
+
+## Every live channel, as the set `Anchor.armable` reads.
+func live_set() -> Dictionary:
+	if held_channels.is_empty():
+		return live_channels
+	var out := live_channels.duplicate()
+	out.merge(held_channels)
+	return out
 
 
 # ---------------------------------------------------------------------------
@@ -166,13 +220,14 @@ func pairs_from(space: Space, points: Dictionary) -> Array:
 	var out: Array = []
 	var cs: float = space.base.cell_size if space.base != null else WorldCore.CELL
 	var lat: FoldLattice = space.lattice
+	var live := live_set()
 	for i in range(anchors.size()):
 		var a: Anchor = anchors[i]
-		if not points.has(a.id) or not a.armable(live_channels):
+		if not points.has(a.id) or not a.armable(live):
 			continue
 		for j in range(i + 1, anchors.size()):
 			var b: Anchor = anchors[j]
-			if not points.has(b.id) or not b.armable(live_channels):
+			if not points.has(b.id) or not b.armable(live):
 				continue
 			var gap: float = lat.distance(points[a.id], points[b.id])
 			if not _may_pair(a, b, gap, cs):

@@ -69,6 +69,18 @@ var hands_down: Array = []
 ## Only pairs with both halves in this frame; half a pair has no strip to draw.
 var pairs: Array = []
 
+## Pairs the WORLD has declared, standing in this space, as `{"a": Vector2, "b": Vector2}`
+## — armed or not. A faint tie between two bolts says "these fold together" before
+## anything has made them, which is what lets a plate be a decision rather than a
+## surprise: you can see what it will do to the room from the far side of it.
+var declared: Array = []
+
+## Centres of the weight plates that are being held down right now.
+var plates_down: Array = []
+
+## Polygons of the sigils in this space that have already been found, to be dimmed.
+var sigils_found: Array = []
+
 ## Hands lying in the world, and hands still in the air. Same shape and the same
 ## glyph, because they are the same object — one of them is just still moving.
 var loose: Array = []

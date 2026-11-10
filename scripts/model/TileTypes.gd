@@ -44,6 +44,12 @@ const UNANCHORABLE_WALL := 7
 ## at a reach the plate carries in its own `data`. It is the world's half of the
 ## one-key verb: the tile does the pulling-back, and it can reach further than an arm.
 const TRIGGER_BURST := 8
+## A WEIGHT PLATE holds a CHANNEL live for as long as something is resting on it — you,
+## or one of your hands. It is the other tense of a trigger: `TRIGGER_FOLD` is an event
+## (you stepped here once), this is a state (something is here now). The world's own
+## anchors arm on the channel, the fold they make stands while the channel is held, and
+## it lets go the moment the weight comes off. See `Weights`.
+const TRIGGER_HOLD := 9
 
 ## type -> definition. Keep merge_rank strictly ordered: null(5) > goal(4) >
 ## wall(3) > water(2) > empty(1). FoldedState never produces null pieces, so its
@@ -54,6 +60,16 @@ const TRIGGER_BURST := 8
 ## the tile's per-instance `data`; `FoldWorld._check_triggers` dispatches on the name
 ## (and the world pins the pair it names). Kept as a string, not a Callable,
 ## so the registry stays a pure const data table.
+##
+## `on_weight` is the same idea in the other tense: the reaction a tile HOLDS for as
+## long as something rests on it (""=none). "hold" for a weight plate. An event and a
+## state are different questions — one is asked on the frame you arrive, the other every
+## frame — so they are different columns rather than two values of one.
+##
+## `swim` marks a medium the body floats in rather than falls through. Water is the
+## only one, and it is the mirror of air: in air your hands hold and your body falls;
+## in water your body rises and your hands slip (`blocks_anchor`). The two flags are
+## set together on purpose — see `scripts/world/README.md` §"Water".
 ##
 ## `name` is what a human calls this tile — the label the world editor's palette
 ## shows. It lives here rather than in the editor because a new tile type must
@@ -78,7 +94,7 @@ const _REGISTRY := {
 	NULL:  {"name": "void",    "walkable": false, "merge_rank": 5, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
 	EMPTY: {"name": "air",     "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
 	WALL:  {"name": "wall",    "walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
-	WATER: {"name": "water",   "walkable": true,  "merge_rank": 2, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
+	WATER: {"name": "water",   "walkable": true,  "merge_rank": 2, "blocks_fold": false, "blocks_anchor": true,  "on_enter": "", "swim": true, "params": []},
 	GOAL:  {"name": "goal",    "walkable": true,  "merge_rank": 4, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "params": []},
 	TRIGGER_FOLD: {"name": "trigger", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "fold",
 		"params": [
@@ -91,6 +107,11 @@ const _REGISTRY := {
 		"params": [
 			{"key": "radius", "type": "float", "default": 1.3, "label": "burst radius",
 			 "hint": "how far the burst reaches, IN CELLS. 1.3 is your own reach, so a default plate pops exactly what you could have popped standing on it; wider is the point of a plate — it opens seams you cannot get next to. Zero or less is an inert plate."},
+		]},
+	TRIGGER_HOLD: {"name": "weight plate", "walkable": true, "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "", "on_weight": "hold",
+		"params": [
+			{"key": "channel", "type": "string", "default": "", "required": true, "label": "channel",
+			 "hint": "the channel this plate holds live while something rests on it — you, or a hand. Anchors the world has bolted in arm on a channel by name (`arms`), and the fold they make stands only while the channel is held."},
 		]},
 	PIN:          {"name": "pin",     "walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": "", "params": []},
 	UNANCHORABLE_FLOOR: {"name": "unanchorable floor", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "params": []},
@@ -154,6 +175,23 @@ static func blocks_anchor(type: int) -> bool:
 static func on_enter_kind(type: int) -> String:
 	return get_def(type).get("on_enter", "")
 
+
+
+## Name of the reaction a tile of this type holds while something rests on it ("" = none).
+static func on_weight_kind(type: int) -> String:
+	return get_def(type).get("on_weight", "")
+
+
+## Does a hand set down here become a WEIGHT rather than an anchor? True exactly when
+## the tile has something to hold: the hand is pressing, not gripping, so it reaches for
+## no partner (`FoldWorld.place_hand`).
+static func is_weighable(type: int) -> bool:
+	return on_weight_kind(type) != ""
+
+
+## Is this a medium the body swims in rather than falls through?
+static func is_swim(type: int) -> bool:
+	return bool(get_def(type).get("swim", false))
 
 
 ## Resolve a stack of co-surface piece types to the dominant one. Returns EMPTY for

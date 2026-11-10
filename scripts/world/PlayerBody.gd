@@ -44,6 +44,20 @@ const APEX_SPEED := 200.0
 ## more of those frames without raising the arc much (about 6 units, which is why
 ## the three-cell wall is still a wall).
 const APEX_GRAVITY := 0.7
+## --- Water ---
+## Water is the mirror of air: in air your hands hold and your body falls, in water your
+## body rises and your hands slip (`TileTypes`: `swim` and `blocks_anchor` are set
+## together). So these three numbers are the whole of what a flooded room gives you —
+## free vertical movement — and what it takes away is not here at all.
+##
+## How fast you settle when you do nothing. Slow enough to read as floating, fast
+## enough that a deep pool has a bottom you reach by waiting.
+const SWIM_SINK := 110.0
+## How fast holding the jump key carries you up. About four cells a second: quicker
+## than sinking, slower than a jump, so swimming up a shaft is a ride rather than a hop.
+const SWIM_RISE := 250.0
+## How hard the water takes speed off you — a dive stops within a couple of cells.
+const SWIM_DRAG := 4200.0
 const COYOTE_TIME := 0.09
 const JUMP_BUFFER := 0.11
 const RADIUS := 20.0
@@ -152,6 +166,11 @@ var frozen := false
 ## moving thing left, and the frame you choose in should be the frame you resume into.
 var camera_held := false
 
+## The body's centre is in a medium it swims in. Written each physics frame by
+## `FoldWorld`, from the piece the body is in — the same arrangement as `frozen`: the
+## body knows how to swim, not what water is or where folds have put it.
+var in_water := false
+
 ## How far through a burst the fold key is: 0 idle, 1 LOADED and waiting
 ## for you to let go. Written each frame by `FoldWorld._process`.
 ##
@@ -235,7 +254,9 @@ func _physics_process(delta: float) -> void:
 		accel = RUN_DECEL if is_on_floor() else AIR_DECEL
 	velocity.x = move_toward(velocity.x, dir * RUN_SPEED, accel * delta)
 
-	_coyote = COYOTE_TIME if is_on_floor() else maxf(_coyote - delta, 0.0)
+	# Water is something to push off, wherever in it you are: a fresh press is a stroke,
+	# and at the surface a stroke is a jump out.
+	_coyote = COYOTE_TIME if (is_on_floor() or in_water) else maxf(_coyote - delta, 0.0)
 	# Space only: W/Up are reserved for POINTING (anchor placement direction).
 	var jump_pressed := take_jump_press()
 	if not _jump_held:
@@ -250,6 +271,8 @@ func _physics_process(delta: float) -> void:
 		# The launch, not the key: a buffered press that never finds coyote time
 		# makes no sound, and one that finds it a few frames later sounds then.
 		AudioManager.play_sfx(Sounds.JUMP)
+	elif in_water:
+		velocity.y = swim_step(velocity.y, _jump_held, delta)
 	else:
 		velocity.y = step_fall(velocity.y, _sustaining, delta)
 	if velocity.y >= 0.0:
@@ -318,6 +341,20 @@ static func gravity_scale(vy: float, sustaining: bool) -> float:
 ## real arc — see `jump_height_for_hold`.
 static func step_fall(vy: float, sustaining: bool, delta: float) -> float:
 	return minf(vy + GRAVITY * gravity_scale(vy, sustaining) * delta, MAX_FALL)
+
+
+## One frame of vertical motion IN WATER: you settle toward a slow sink, or toward a
+## steady rise while the jump key is held. Pure, like `step_fall`, so the swim is
+## something a test can ask about.
+##
+## Two branches because water only ever takes speed away. Moving down or too slowly up,
+## it drags you to the target; already moving up FASTER than a swim would carry you — a
+## stroke, a push off the bottom — weight takes that back and the water adds nothing.
+static func swim_step(vy: float, rising: bool, delta: float) -> float:
+	var target := -SWIM_RISE if rising else SWIM_SINK
+	if vy > target:
+		return move_toward(vy, target, SWIM_DRAG * delta)
+	return minf(vy + GRAVITY * delta, target)
 
 
 ## How high a jump rises, in world units, if the key is held for `hold` seconds —

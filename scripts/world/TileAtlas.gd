@@ -49,7 +49,8 @@ const K_UFLOOR := 7
 const K_UWALL := 8
 const K_LAMP := 9           ## the glyph drawn at a light source
 const K_BURST := 10         ## the plate that fires a burst when you step on it
-const KINDS := 11
+const K_HOLD := 11          ## the plate that holds a channel while something rests on it
+const KINDS := 12
 
 # --- Palette -----------------------------------------------------------------
 # Hues carry over from the flat-colour build so the world reads the same; the
@@ -76,6 +77,9 @@ const _PALETTE := {
 	# diamonds, the glue lines, the charge worn on the body. A plate is that promise
 	# lying on the floor, so it is not given a hue of its own.
 	K_BURST: [Color(0.35, 0.88, 0.82), Color(0.16, 0.45, 0.44), Color(0.72, 0.98, 0.94)],
+	# A plain hand's own orange. A weight plate is a place a hand can be, and the one
+	# colour on screen that already means "hand" is the cheapest way to say so.
+	K_HOLD: [Color(0.96, 0.60, 0.34), Color(0.56, 0.30, 0.14), Color(1.00, 0.84, 0.62)],
 }
 
 ## type -> kind, for types that do not depend on their surroundings.
@@ -86,6 +90,7 @@ const _KIND_OF_TYPE := {
 	TileTypes.GOAL: K_GOAL,
 	TileTypes.TRIGGER_FOLD: K_TRIGGER,
 	TileTypes.TRIGGER_BURST: K_BURST,
+	TileTypes.TRIGGER_HOLD: K_HOLD,
 	TileTypes.PIN: K_PIN,
 	TileTypes.UNANCHORABLE_FLOOR: K_UFLOOR,
 	TileTypes.UNANCHORABLE_WALL: K_UWALL,
@@ -218,6 +223,8 @@ static func _paint(img: Image, kind: int, v: int, o: Vector2i) -> void:
 			_paint_lamp(img, o, v)
 		K_BURST:
 			_paint_burst_plate(img, o, v)
+		K_HOLD:
+			_paint_weight_plate(img, o, v)
 
 
 ## The sheet itself: near-black with a faint lattice, so folded-away space
@@ -364,6 +371,31 @@ static func _paint_burst_plate(img: Image, o: Vector2i, v: int) -> void:
 		img.set_pixel(o.x + 12 - k, o.y + y, c)
 
 
+## A weight plate: the burst plate's mirror. Same plate on the floor, and where the
+## burst plate's chevron stands on it pointing UP — something leaves here — this one
+## hangs over it pointing DOWN: something has to rest here. The two read as a pair
+## because they are one: a burst plate lets go, a weight plate holds.
+static func _paint_weight_plate(img: Image, o: Vector2i, v: int) -> void:
+	_paint_paper(img, o, v)
+	var pal: Array = _PALETTE[K_HOLD]
+	for y in range(12, TILE_PX):
+		for x in range(1, TILE_PX - 1):
+			var c: Color = pal[0]
+			if y == 12:
+				c = pal[2]
+			elif y >= TILE_PX - 2:
+				c = pal[1]
+			if (x == 3 or x == 12) and y == 14:
+				c = pal[1]        # rivets, as on the other plates
+			img.set_pixel(o.x + x, o.y + y, c)
+	var lift := v % 2
+	for k in range(5):
+		var y := 6 + k - lift
+		var c: Color = pal[2] if k >= 2 else pal[0]
+		img.set_pixel(o.x + 3 + k, o.y + y, c)
+		img.set_pixel(o.x + 12 - k, o.y + y, c)
+
+
 static func _paint_pin(img: Image, o: Vector2i, v: int) -> void:
 	var pal: Array = _PALETTE[K_PIN]
 	for y in range(TILE_PX):
@@ -381,17 +413,24 @@ static func _paint_pin(img: Image, o: Vector2i, v: int) -> void:
 			img.set_pixel(o.x + rx, o.y + ry + (v % 2), pal[2])
 
 
+## Air a hand will not hold in. It is AIR — you walk and fall through it exactly as
+## through paper — so it is drawn as paper, with a sparse drift of dark flecks through
+## the whole cell: enough that a region of it reads as a different kind of space, and
+## nothing that reads as a surface.
+##
+## It used to be a hatched slab along the foot of the cell. That was right for one
+## tile used as a doormat and wrong for the thing a designer actually needs it for,
+## which is a VOLUME — the air over a pit, a shaft you may not pin your way up — where
+## a slab per cell stacked into what looked like a ladder of ledges you could stand on.
 static func _paint_hatched_floor(img: Image, o: Vector2i, v: int) -> void:
 	_paint_paper(img, o, v)
 	var pal: Array = _PALETTE[K_UFLOOR]
-	for y in range(10, TILE_PX):
+	for y in range(TILE_PX):
 		for x in range(TILE_PX):
-			var c: Color = pal[0]
-			if (x + y + v) % 4 == 0:
-				c = pal[2]
-			elif y == 10:
-				c = pal[1]
-			img.set_pixel(o.x + x, o.y + y, c)
+			if (x + y * 3 + v * 5) % 8 == 0:
+				img.set_pixel(o.x + x, o.y + y, pal[0])
+			elif (x * 3 + y + v) % 16 == 5:
+				img.set_pixel(o.x + x, o.y + y, pal[1])
 
 
 static func _paint_hatched_wall(img: Image, o: Vector2i, v: int) -> void:

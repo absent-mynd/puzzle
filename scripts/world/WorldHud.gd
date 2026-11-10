@@ -37,7 +37,8 @@ const DEPTH_TINT_RATE := 0.7
 ## when you let go, and the body turning teal is the tell that it is loaded.
 const HELP_TEXT := \
 	"A/D/W/S move & aim   Space tap/hold: jump   " \
-	+ "F tap: raise a hand — move it, tap to pin · hold+release: pull back   R reset"
+	+ "F tap: raise a hand — move it, tap to pin · hold+release: pull back   " \
+	+ "Q swap hands   R reset room · Shift+R world"
 
 var _bg: ColorRect
 var _status: Label
