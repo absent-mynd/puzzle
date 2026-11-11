@@ -454,9 +454,10 @@ positions, are `STATUS.md` §"Known issues".)
   through it like air. Whether it should float is a question about how much of the
   hand economy a flooded room is allowed to take away, and it wants a room that
   needs the answer.
-- **A weight plate lets go at once.** Arming takes a fuse; releasing takes none.
-  Whether a door should give a beat of warning before it closes is feel, and
-  untested by play.
+- **A weight plate lets go almost at once.** Arming takes a fuse; releasing takes a
+  fifth of a second, and that is a grace for a hop rather than a warning
+  (`FoldWorld.PLATE_GRACE`). Whether a door should give a real beat before it closes
+  is feel, and untested by play.
 - **What rests on a plate is you and your hands, and nothing else,** because nothing
   else exists. `Occupants` would be a third thing, and a crate is the obvious one.
 - **Lights do not cast shadows,** and the seam is not lit or blended specially.

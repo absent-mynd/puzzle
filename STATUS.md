@@ -30,7 +30,7 @@ What exists and works today:
 | **Nesting: folding yourself in, and in again** | ✅ Playable, any depth, ⚙️ untuned |
 | Regions + doors (recursive partner resolution) | ✅ Playable |
 | Tile registry (pins, unanchorable air, water, plates) | ✅ Wired, tested, **in the world** |
-| **Weight plates** (`H`) — a channel live while you or a hand rest there; the world's fold stands while it is down | ✅ Playable, **in the world**, ⚙️ untuned (it lets go at once) |
+| **Weight plates** (`H`) — a channel live while you or a hand rest there; the world's fold stands while it is down | ✅ Playable, **in the world**, ⚙️ untuned (it lets go a fifth of a second after the weight does) |
 | **Sockets** — a bolted anchor on proximity; one hand completes it, and it comes back when the fold does | ✅ Playable, **in the world** |
 | **Water** — swim in it, cannot pin in it | ✅ Playable, **in the world**, ⚙️ swim feel is a first guess |
 | **Sigils** — goal tiles found once and counted | ✅ In the world; ❌ not saved across sessions |
@@ -113,8 +113,8 @@ Roughly in priority order — nothing here is committed to yet:
    someone who has never pinned a hand. Start there: it is the room that teaches
    the verb.
 2. **Tune by feel what was set by arithmetic.** Spans (plain 4 / swift 3 / patient
-   6), fuses, the swim (`PlayerBody.SWIM_*`), and whether a weight plate should let
-   go at once or after a beat. The rooms are cut against the spans, so
+   6), fuses, the swim (`PlayerBody.SWIM_*`), and how long a weight plate waits before
+   it lets go (`FoldWorld.PLATE_GRACE`). The rooms are cut against the spans, so
    `test_overworld_solutions` moves with them.
 3. **A way back.** The annex's chamber is one-way: once you surface inside it, the
    rooms before it are behind a wall no fold of yours opens. A second socket on the

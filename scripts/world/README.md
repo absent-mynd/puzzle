@@ -301,6 +301,8 @@ no use if the door is where you were going. Set a hand on it and walk away.
   the same — a hand on a plate is a hand not in a fold.
 - **Pinned or lying loose, a hand is as heavy.** One that fell there counts. One
   falling past does not.
+- **A plate forgives a hop.** You weigh one by being in its cell, and a hop leaves by
+  the top of it; the plate does not notice. A real jump, or a step off, it does.
 - **You can see what a plate will do before you press it.** The pair it drives is
   standing in the sheet already, bolted, tied by a faint broken line.
 - **Taking the fold apart by hand buys you one fuse.** The weight is still on the

@@ -252,6 +252,9 @@ var sigils_total := 0
 var _plate_channels: Dictionary = {}
 ## The base ids of the plates currently pressed in this region, for the overlay.
 var _plates_down: Array = []
+## Seconds each channel has gone with nothing on any of its plates, while it is still
+## being counted as weighted — see `PLATE_GRACE`. Empty almost always.
+var _plate_lift: Dictionary = {}
 ## Seconds until a fold the world could not let go of is asked again. The refusal is
 ## usually geometric (a newer fold across its seam, nowhere for you to land) and the
 ## answer costs a replay to compute, so it is asked a few times a second rather than
@@ -564,6 +567,7 @@ func _setup_all() -> void:
 	sigils_total = 0
 	_plate_channels = {}
 	_plates_down = []
+	_plate_lift = {}
 	_entry_door = {}
 	for id in world_data.regions:
 		var pieces := _build_region(id)
@@ -2644,6 +2648,7 @@ func _traverse(id: String) -> void:
 	AudioManager.play_sfx(Sounds.PINCH if into_fold else Sounds.DOOR)
 	var rid: String = doors[pair_id]["region"]
 	if rid != region_id:
+		_settle_plates_on_leaving()
 		_load_region(rid)
 	_entry_door[rid] = pair_id
 	context.clear()
@@ -3172,9 +3177,10 @@ func _check_triggers() -> void:
 ## A hand in FLIGHT is not resting on anything, and is deliberately absent: a hand
 ## falling past a plate does not press it, and one that lands on it does the moment
 ## `_land_ball` turns it back into an occupant.
-func _occupied_here() -> Dictionary:
+func _occupied_here(with_body := true) -> Dictionary:
 	var out: Dictionary = {}
-	var under = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
+	var under = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS) \
+		if with_body else null
 	if under != null:
 		out[under.base_id] = true
 	for anchor in field.anchors:
@@ -3226,10 +3232,19 @@ func _tick_plates(delta: float) -> void:
 		var occupied := _occupied_here()
 		var states := Weights.channel_states(plates, occupied)
 		for channel in states:
-			var down: bool = states[channel]
-			if down and not field.weighted_channels.has(channel):
-				AudioManager.play_sfx(Sounds.TRIGGER)
-			field.weigh_channel(channel, down)
+			if states[channel]:
+				if not field.weighted_channels.has(channel):
+					AudioManager.play_sfx(Sounds.TRIGGER)
+				field.weigh_channel(channel, true)
+				_plate_lift.erase(channel)
+			elif field.weighted_channels.has(channel):
+				# Up, but only just. See `PLATE_GRACE`.
+				var lifted: float = float(_plate_lift.get(channel, 0.0)) + delta
+				if lifted >= PLATE_GRACE:
+					field.weigh_channel(channel, false)
+					_plate_lift.erase(channel)
+				else:
+					_plate_lift[channel] = lifted
 		_plates_down = Weights.plates_down(plates, occupied)
 	if _plate_channels.is_empty():
 		return
@@ -3258,6 +3273,38 @@ func _outer_list() -> Array:
 	if context.size() <= 1:
 		return folds
 	return _ensure_inner_folds(context[context.size() - 2].fold_id)
+
+
+## How long a plate may be bare before its channel stops counting as weighted.
+##
+## Whether a plate is down is derived and has no memory; this is the one place time is
+## let in, and it is here for the body alone. You weigh a plate by being in its cell,
+## and a hop takes you out of the top of that cell for a few frames — without this, a
+## hop on a plate sprang the world's fold and froze you in mid-air to watch it go, then
+## lit the fuse to fold it back. A plate should not notice a hop. Short enough that
+## stepping off still reads as the cause of what happens next; a real jump clears it
+## several times over.
+##
+## It is a countdown per channel and nothing else, the same bargain as the fuse: time
+## cannot be derived, so time is the only thing kept.
+const PLATE_GRACE := 0.2
+
+
+## Leaving a room: its plates settle NOW, on what is actually resting there.
+##
+## The grace above is ticked by this room's frame, and you are about to stop running
+## it — so a channel caught mid-grace would stay weighted for as long as you were away,
+## on nothing. Your body is going with you; the hands you left are not. Asked without
+## the body and without the grace, the answer is the one that stays true while you are
+## gone, which is what a plate in one room keeping a fold in another depends on.
+func _settle_plates_on_leaving() -> void:
+	var plates: Dictionary = regions[region_id]["plates"]
+	if plates.is_empty():
+		return
+	var states := Weights.channel_states(plates, _occupied_here(false))
+	for channel in states:
+		field.weigh_channel(channel, states[channel])
+		_plate_lift.erase(channel)
 
 
 ## How often a fold the world could not let go of is asked again, in seconds.
@@ -3620,6 +3667,7 @@ func _reset_region() -> void:
 	for channel in _region_channels(id):
 		field.unlatch(channel)
 		field.weigh_channel(channel, false)
+		_plate_lift.erase(channel)
 
 	# The run's own idea of where this region starts (a playtest's "from this cell")
 	# outlives the rebuild; everything else about the region is the authored one.

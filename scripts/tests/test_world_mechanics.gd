@@ -51,6 +51,12 @@ func _frame(n := 1) -> void:
 		world._physics_process(DT)
 
 
+## Long enough for a plate that has come up to be believed. A plate forgives a hop
+## (`FoldWorld.PLATE_GRACE`), so "I stepped off" is only true a moment after you did.
+func _wait_out_the_grace() -> void:
+	_frame(int(ceil(world.PLATE_GRACE / DT)) + 2)
+
+
 func _bolts_here() -> int:
 	var n := 0
 	for anchor in world.field.anchors:
@@ -144,7 +150,7 @@ func test_stepping_off_lets_the_fold_go_and_the_bolts_come_back() -> void:
 	var bolts_while_folded := _bolts_here()
 
 	_stand(_now(Vector2i(3, 9)))
-	_frame()
+	_wait_out_the_grace()
 	assert_false(world.field.is_live("gate"), "no weight, no channel")
 	assert_null(_gate_fold(), "...and the fold lets go by itself")
 	assert_eq(_bolts_here(), bolts_while_folded + 2,
@@ -157,7 +163,7 @@ func test_a_plates_fold_can_be_made_again_and_again() -> void:
 		_hold_gate_with_body()
 		assert_not_null(_gate_fold(), "down: folded")
 		_stand(_now(Vector2i(3, 9)))
-		_frame()
+		_wait_out_the_grace()
 		assert_null(_gate_fold(), "up: open")
 	assert_eq(world.hands_total(), _start_total, "none of which cost or made a hand")
 
@@ -216,8 +222,43 @@ func test_taking_the_hand_back_lets_the_fold_go() -> void:
 	world.hold_action()             # a burst, standing next to the plate
 	assert_eq(world.hands_held(), 2, "the hand comes home")
 	_stand(Vector2i(3, 9))
-	_frame()
+	_wait_out_the_grace()
 	assert_null(_gate_fold(), "...and with nothing on the plate the fold lets go")
+
+
+func test_a_hop_on_the_plate_does_not_spring_the_fold() -> void:
+	# You weigh a plate by being in its cell, and a hop leaves by the top of it. The
+	# world's fold must not notice.
+	_hold_gate_with_body()
+	var plate: Vector2i = _now(Vector2i(5, 9))
+	world.player.teleport((Vector2(plate) + Vector2(0.5, -0.6)) * CS, false)
+	_frame(6)                       # a tenth of a second in the air above it
+	assert_not_null(_gate_fold(), "a hop is not stepping off")
+	_stand(plate)
+	_frame(30)
+	assert_not_null(_gate_fold(), "...and landing back on it starts nothing over")
+	assert_eq(world.armed_pairs().size(), 0, "no fuse was lit by any of that")
+
+
+func test_a_real_jump_off_the_plate_lets_it_go() -> void:
+	_hold_gate_with_body()
+	var plate: Vector2i = _now(Vector2i(5, 9))
+	world.player.teleport((Vector2(plate) + Vector2(0.5, -1.5)) * CS, false)
+	_wait_out_the_grace()
+	assert_null(_gate_fold(), "longer than a hop, and the plate believes you have gone")
+
+
+func test_leaving_the_room_settles_its_plates_on_what_is_really_there() -> void:
+	# Stand on the far plate and walk straight through the door beside it. The grace
+	# must not follow you out: nothing is on that plate, and a room away is exactly
+	# where a stale "down" would never be corrected.
+	_stand(Vector2i(40, 9))
+	_frame()
+	assert_true(world.field.is_live("far"), "your weight has it down")
+	world._traverse("LAB_POOL")
+	assert_false(world.field.is_live("far"), "you took your weight with you")
+	_frame(30)
+	assert_eq(world.armed_pairs().size(), 0, "...so nothing arms in the next room")
 
 
 func test_a_hand_lying_loose_on_the_plate_weighs_it_too() -> void:
