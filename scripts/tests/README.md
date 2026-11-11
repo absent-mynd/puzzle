@@ -23,7 +23,7 @@ One `test_<subject>.gd` per subject, matching the source file it covers — so `
 answers "what is covered" and there is no hand-maintained index here to fall behind
 the directory. (There was one. It listed half the scripts.)
 
-Two are different, and both deliberately:
+Four are different, and all deliberately:
 
 `test_fold_world.gd` is the important one. It instantiates the real world scene and
 drives the actual beats — riding a flap, being pinched into a fold, folding inside a
@@ -36,6 +36,17 @@ so it asserts what the player would **hear** rather than what the code asked for
 exists because the previous audio system rotted in exactly the gap it fills:
 `AudioManager` was tested, complete and correct, and nothing in the game called it.
 A test of the engine alone cannot tell you that.
+
+`test_world_mechanics.gd` is the same kind of test as `test_fold_world.gd`, for what
+a hand can do besides fold: weight plates, the world's bolts coming back, water,
+sigils, the room reset. It has a fixture of its own (`worlds/fixtures/mechanics.json`).
+
+`test_overworld_solutions.gd` **plays the shipped world**, door to door, and then
+takes each room's obvious wrong turn and shows that it does not work. It moves the
+body only where `support/world_probe.gd` — a coarse model of walking, jumping and
+swimming, read off `PlayerBody`'s own constants — says it can go, so a path it
+takes is one a player can take. If you edit a room, this is what tells you whether
+it can still be done, and whether it can now be walked around.
 
 ## Conventions
 

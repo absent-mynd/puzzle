@@ -263,6 +263,13 @@ The panel splits the report the same way everywhere:
 The error count rides at the top of the panel, not only at the bottom of a list
 you would have to scroll for.
 
+One warning is asked of the whole world rather than of a region: **a channel with
+only one end.** A plate whose channel no anchor arms on goes down and folds
+nothing; an anchor arming on a channel no plate drives stands in the sheet forever.
+Both fail in silence at runtime, and a channel is a name typed in two places, so
+this is the only time either is ever said (`EditorDoc._channel_issues`). It is
+world-wide because a channel is: a plate in one region may keep a fold in another.
+
 ---
 
 ## Nested pre-placed folds

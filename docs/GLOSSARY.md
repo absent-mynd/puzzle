@@ -23,7 +23,7 @@ in the tree, it is a leftover — fix it.
 |---|---|---|---|
 | The resource you carry, pin and spend | **hand** | anchor, peg | A hand is an *object*: you hold two, and the game never creates or destroys one. `HandTypes`, `HandStock`, `HandPickup`. |
 | A hand pinned to a cell | **anchor** | pin, marker | Not a synonym for *hand* — it is the *role* a hand takes while it is down. `Fold.anchor_a/anchor_b` are positions, and they outlive the fold's hands. |
-| A hand lying in the world | **loose hand** | cache, drop | One object (`HandPickup`) for the ones a world authored and the ones a burst pops out; say **authored** or **dropped** when the difference matters (only the authored ones respawn on `R`). |
+| A hand lying in the world | **loose hand** | cache, drop | One object (`HandPickup`) for the ones a world authored and the ones a burst pops out; say **authored** or **dropped** when the difference matters (only the authored ones come back on a world reset; a room reset mints nothing). |
 | Two anchors close enough to fold together | **pair** | link, bond, match | Derived, not recorded: `AnchorField.pairs_in` asks it of where they are, every frame. |
 | A pair whose fuse is running | **armed** | primed | The countdown is a *fuse*, and a fuse is armed. Every pair that exists is armed, so *armed pair* and *pair* name the same thing from two sides. |
 | How far an anchor reaches for a partner | **span** | reach, radius, grasp | `HandTypes.span`, in cells, per kind. A pair folds when `gap <= span(a) + span(b)`. |
@@ -51,6 +51,16 @@ in the tree, it is a leftover — fix it.
 | Where a subspace's edges are identified | **glue** / glue line | wrap line, boundary | Walking through it puts you in the next copy. |
 | The two outer halves a fold slides inward | **flap** | side, half, wing | Already consistent; recorded so it stays that way. |
 | Holding the fold key | **burst** | release burst, retrieve, pull-back | One word for the untargeted release. |
+| A tile that keeps a channel live while something rests on it | **weight plate** | pressure plate, hold plate, switch | `TileTypes.TRIGGER_WEIGHT`, `H`. The state where a trip plate is the event. Not *hold*: **held** is taken (the stopped world), and so is `held_hands`. |
+| A tile that latches a channel when you step on it | **trip plate** | trigger, fold plate, pressure plate | `TileTypes.TRIGGER_FOLD`, `T`. The code still says *trigger*; the prose says *trip* when the point is that it is an event and a weight plate is not. |
+| A weight plate with something resting on it | **down** | pressed, held, active | "The plate is down." What `Weights` computes, every frame. |
+| A named signal a plate drives and the world's anchors arm on | **channel** | wire, signal, link | **Live** when it is latched (a trip plate, stored) or **weighted** (a weight plate that is down, derived). `AnchorField.is_live`. |
+| A hand set down on a weight plate | **weight** | anchor | It arms on nothing, so it is not looking for a partner. It is still a hand, and a burst in reach still takes it back. |
+| A bolted anchor that arms on proximity | **socket** | the world's hand, half-fold, free anchor | Half a fold held out: one hand of yours completes it. Not *the world's hand* — the world has anchors, not hands, and a bolt is never counted by the ledger. |
+| Keeping a plate's fold standing with a newer fold of your own | **wedge** | jam, block | The world lets go newest-first, so anything made after it holds it. *Jam* is what you do to a door by folding over it. |
+| A goal tile, as a thing you find | **sigil** | goal, star, collectible, pickup | `TileTypes.GOAL` is the tile's type and `G` its character; a sigil is what it is to the player — found once, counted. |
+| The medium you swim in and cannot pin in | **water** | — | Recorded because it used to mean nothing: the tile was walkable air. `TileTypes.is_swim`, and `blocks_anchor` with it. |
+| Putting the room you are in back the way it shipped | **room reset** (`R`) | restart, respawn, undo | Rebuilds one region and refunds the hands spent in it. **World reset** (`Shift+R`) is the other. *Respawn* is what a fall does: it moves you and changes nothing. |
 | A tile that bursts when you step on it | **burst plate** | pop tile, popper, burst trap | The *plate* is the tile; what it fires is a **burst**, the same word as your own because it is the same sphere at a reach the plate chose. `TileTypes.TRIGGER_BURST`, `FoldWorld._fire_burst_plate`. |
 | The character you drive | **player** | blob, avatar | `PlayerBody` is its physics body, `PlayerVisual` its drawing. *Blob* survives only where it is not the character: a 47-tile *blob set* is a tiling term, a *binary blob* is a file. |
 | Memoizing a computed value | **cache** | — | The only surviving use of the word: `_tile_cache`, `drop_tile_cache`. Never a hand. |
@@ -113,6 +123,8 @@ Grep for these; each is a leftover.
 | anchor cache, hand cache, a pickup | **loose hand** | The type is still `HandPickup` — see above. |
 | unpaired anchor (in the game) | **an anchor** | Every anchor is unpaired until something comes within its span; there is no list to be in. The EDITOR still has unpaired anchors — a fold it has not finished authoring. |
 | trigger cascade, fold cascade | **a plate lighting a channel** | `TriggerResolver` is gone; a plate pins a bolted pair and the ordinary fuse does the rest. |
+| pressure plate | **trip plate** or **weight plate** | Whichever it meant: one is an event, the other a state. |
+| goal (as a thing the player does) | **sigil** | "Reach the goal" → "find the sigil". The tile type keeps its name. |
 | release burst | **burst** | The burst *is* the release. |
 | pop tile, pop plate | **burst plate** | *Pop* is what a burst does to one hand; the sphere is a **burst**, whoever fires it. |
 | excision band, excision strip | **excised strip** | |

@@ -8,7 +8,7 @@
 		"plain"
 	],
 	"metadata": {
-		"note": "Six rooms in a line, one sigil in each. threshold: a vertical fold, and riding the unfold up. span: a pit closed with ONE hand and the world's, then taken apart from the far side. cistern: water you can climb and cannot pin in. press: weight plates, three hands, and which goes where. annex: a sealed chamber entered through the inside of a fold. vault: the same idea turned on its side, with one hand, because the other is holding the door from the annex. scripts/tests/test_overworld_solutions.gd plays every room and is the authority on whether they can be done."
+		"note": "Six rooms in a line, one sigil in each. threshold: a vertical fold, and riding the unfold up. span: a pit closed with one hand and a socket, then taken apart from the far side. cistern: water you can climb and cannot pin in. press: weight plates, three hands, and which goes where. annex: a sealed chamber entered through the inside of a fold. vault: the same idea turned on its side, with one hand, because the other is on the keystone back in the annex. What each room is for is in scripts/world/README.md; scripts/tests/test_overworld_solutions.gd plays every one and is the authority on whether they can be done."
 	},
 	"regions": {
 		"threshold": {

@@ -23,6 +23,16 @@ when the suite was written, so those coordinates keep meaning what the tests
 think they mean. It changes only when someone deliberately changes what the
 tests expect — never because a world was edited.
 
+`mechanics.json` is the second one, built for `test_world_mechanics.gd`: a lab with
+weight plates, a trip plate that only latches, a socket and the bolted pairs they
+drive, and a pool. It was never a shipped world; it is a bench.
+
+The tool tests read `kernel.json` too (`test_world_editor.gd`, and the pin-and-plate
+half of `test_world_data.gd`). They click on particular cells of particular cards,
+which is a statement about the editor — and it stayed one about the shipped world
+until that world was re-cut, at which point they all failed for a reason that had
+nothing to do with the editor.
+
 ## How a test uses one
 
 `FoldWorld.world_override` wins over both `WORLD_PATH` and the `--world=` flag.
@@ -39,9 +49,9 @@ add_child_autofree(world)
 Tests that validate the **shipped** worlds — every authored hand stands on
 ground, every door has a partner, the spawn is solid. Those must read
 `worlds/overworld.json` and `worlds/testbed.json` directly, because checking the
-real content is the entire point. They live in `test_world_data.gd`,
-`test_testbed_world.gd` and friends, and they are how a broken world gets
-caught.
+real content is the entire point. They live in `test_shipped_worlds.gd`,
+`test_overworld_solutions.gd`, `test_testbed_world.gd` and friends, and they are
+how a broken world gets caught.
 
 The split is the point: **fixtures prove the engine works, the shipped worlds
 prove the game is playable.** Neither test should be able to fail for the other's

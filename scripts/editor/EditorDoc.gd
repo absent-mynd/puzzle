@@ -990,6 +990,8 @@ func validate() -> Array:
 			if not EditorTools.in_bounds(pickup.cell, size):
 				out.append({"severity": "error", "region": id, "message": "loose hand is outside the region"})
 
+	out.append_array(_channel_issues())
+
 	for door_id in world.doors:
 		var d: Dictionary = world.doors[door_id]
 		var rid := String(d["region"])
@@ -1010,6 +1012,57 @@ func validate() -> Array:
 		elif String(world.doors[pair]["pair"]) != door_id:
 			out.append({"severity": "error", "region": rid,
 				"message": "door %s -> %s is one-way" % [door_id, pair]})
+	return out
+
+
+## Channels with only one end: a plate nothing listens to, an anchor nothing drives.
+##
+## A channel is a name shared between a plate and the anchors that arm on it, and a
+## name is exactly the kind of thing that is typed twice and spelled once. Both
+## halves fail in SILENCE at runtime — the plate goes down and nothing folds, or the
+## pair stands in the sheet forever — so this is the only place either is ever said.
+##
+## Asked of the whole world rather than of one region, because a channel is: a plate
+## in one room may keep a fold in another (`FoldWorld._tick_plates`).
+func _channel_issues() -> Array:
+	var out: Array = []
+	var driven: Dictionary = {}      # channel -> true: some plate makes it live
+	var heard: Dictionary = {}       # channel -> true: some anchor arms on it
+	var plates: Array = []           # {"region", "cell", "type", "channel", "own_pair"}
+	for id in world.regions:
+		var stored_all: Dictionary = world.regions[id].get("tile_data", {})
+		for key in stored_all:
+			var cell := TileParams.cell_of_key(String(key))
+			if not EditorTools.in_bounds(cell, size_of(id)):
+				continue
+			var type := type_at(id, cell)
+			if TileTypes.on_enter_kind(type) != "fold" and not TileTypes.is_weighable(type):
+				continue
+			var data: Dictionary = stored_all[key]
+			var channel := str(data.get("channel", ""))
+			if channel == "":
+				continue
+			driven[channel] = true
+			plates.append({"region": id, "cell": cell, "type": type, "channel": channel,
+				"own_pair": TileParams.spec_of(type, "anchors").size() > 0
+					and TileParams.is_complete(type, data, size_of(id))})
+		for anchor in world.regions[id].get("anchors", []):
+			if anchor.arms != Anchor.PROXIMITY and anchor.arms != Anchor.NEVER:
+				heard[anchor.arms] = true
+	for plate in plates:
+		if plate["own_pair"] or heard.has(plate["channel"]):
+			continue
+		out.append({"severity": "warn", "region": plate["region"],
+			"message": "%s at %s drives channel \"%s\", and no anchor anywhere arms on it" %
+				[TileTypes.type_name(plate["type"]), plate["cell"], plate["channel"]]})
+	for id in world.regions:
+		for anchor in world.regions[id].get("anchors", []):
+			if anchor.arms == Anchor.PROXIMITY or anchor.arms == Anchor.NEVER:
+				continue
+			if not driven.has(anchor.arms):
+				out.append({"severity": "warn", "region": id,
+					"message": "world anchor at %s arms on \"%s\", which no plate drives" %
+						[anchor.cell, anchor.arms]})
 	return out
 
 

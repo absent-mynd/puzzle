@@ -33,8 +33,14 @@ const TRIGGER_FOLD := 4
 ## A PIN (F5) is a fold-proof obstacle: it cannot be stood on and no fold may excise
 ## or cut it, so the space it holds can never be folded away — you must route around.
 const PIN := 5
-## An UNANCHORABLE_FLOOR tile is walkable but cannot be used as a fold anchor.
-## Useful for decorative or structural floor areas that should never be a fold point.
+## An UNANCHORABLE_FLOOR tile is AIR a hand will not hold in: you walk and fall through
+## it exactly as through empty space, and a fold pinned in it is refused at the fuse.
+##
+## The constant says "floor" because that is what it was first used for — a doormat
+## that could not be a fold point. What a designer actually needs it for is a VOLUME:
+## the air over a pit a player would otherwise leap into to pin from, a shaft that
+## must not be pinned up. It is named for that everywhere a person reads it (`name`,
+## the tileset); the identifier stays because it is in every world file's history.
 const UNANCHORABLE_FLOOR := 6
 ## An UNANCHORABLE_WALL tile is not walkable (like a wall) and also cannot be used
 ## as a fold anchor. Useful for walls that must never become fold reference points.
@@ -114,7 +120,7 @@ const _REGISTRY := {
 			 "hint": "the channel this plate keeps live while something rests on it — you, or a hand. Anchors the world has bolted in arm on a channel by name (`arms`), and the fold they make stands only while a plate of that channel is down."},
 		]},
 	PIN:          {"name": "pin",     "walkable": false, "merge_rank": 6, "blocks_fold": true,  "blocks_anchor": false, "on_enter": "", "params": []},
-	UNANCHORABLE_FLOOR: {"name": "unanchorable floor", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "params": []},
+	UNANCHORABLE_FLOOR: {"name": "unanchorable air", "walkable": true,  "merge_rank": 1, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "params": []},
 	UNANCHORABLE_WALL:  {"name": "unanchorable wall",  "walkable": false, "merge_rank": 3, "blocks_fold": false, "blocks_anchor": true, "on_enter": "", "params": []},
 }
 
@@ -138,7 +144,7 @@ static func all_types() -> Array:
 	return _REGISTRY.keys()
 
 
-## The human name of a tile type ("wall", "unanchorable floor").
+## The human name of a tile type ("wall", "unanchorable air").
 static func type_name(type: int) -> String:
 	return get_def(type)["name"]
 

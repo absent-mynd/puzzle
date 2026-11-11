@@ -57,7 +57,8 @@ A run fails if any of these is true:
 | A test asserted nothing at all | `tools/gut_strict_exit.gd` |
 | A test script never loaded (parse error) | `tools/gut_strict_exit.gd` |
 | The kernel referenced the view | `scripts/tests/test_layering.gd` |
-| A shipped world is unplayable | `scripts/tests/test_shipped_worlds.gd` |
+| A shipped world is malformed | `scripts/tests/test_shipped_worlds.gd` |
+| The shipped world cannot be finished — or can be walked around | `scripts/tests/test_overworld_solutions.gd` |
 | Something in `scripts/world/` animates off the wall clock | `scripts/tests/test_world_clock.gd` |
 
 The middle three exist because GUT derives its exit code from the assertion-failure
@@ -82,16 +83,29 @@ This matters more than it sounds, and getting it wrong once cost 60 test failure
 that had nothing to do with the change that caused them.
 
 - **Kernel and integration tests** (`test_fold_world`, `test_nested_folds`,
-  `test_world_audio`) pin themselves to `worlds/fixtures/kernel.json` via
-  `FoldWorld.world_override`. They assert against concrete geometry — a pit here, a
-  wall there — so they must not inherit whichever world happens to be shipping.
-- **Content tests** (`test_shipped_worlds`, `test_world_data`,
-  `test_testbed_world`) read the real worlds, because checking the real content is
-  the entire point.
+  `test_world_audio`, `test_world_mechanics`) pin themselves to a world in
+  `worlds/fixtures/` via `FoldWorld.world_override`. They assert against concrete
+  geometry — a pit here, a wall there — so they must not inherit whichever world
+  happens to be shipping.
+- **Tool tests** (`test_world_editor`, and the pin-and-plate half of
+  `test_world_data`) do the same through `WorldEditor.world_override`. Clicking on
+  cell (4,4) of the card called `west` is a statement about the editor; it was a
+  statement about the shipped world too until that world was re-cut and thirty of
+  them failed.
+- **Content tests** (`test_shipped_worlds`, `test_overworld_solutions`,
+  `test_testbed_world`, the rest of `test_world_data`) read the real worlds, because
+  checking the real content is the entire point.
 
 See [`worlds/fixtures/README.md`](../worlds/fixtures/README.md). The rule:
 **fixtures prove the engine works, shipped worlds prove the game is playable.**
 Neither test should be able to fail for the other's reason.
+
+**If you edit a shipped room, run `./run_tests.sh overworld_solutions`.** It plays
+every room through the real scene and moves the body only where a model of the
+jump says it can go, in two readings: a strict one for paths a solution depends on
+and a generous one for paths that must not exist. A room that can no longer be
+done fails the first; a room that can now be walked around fails the second. Both
+have happened to this project's worlds, and neither was noticed by reading the map.
 
 Express invariants as **deltas**, not constants. `assert_eq(_total(), 5)` is a
 statement about one space's contents; `assert_eq(_total(), _start_total)` is the

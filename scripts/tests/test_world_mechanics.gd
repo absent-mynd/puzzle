@@ -287,7 +287,7 @@ func test_a_socket_is_still_there_after_its_fold_comes_apart() -> void:
 		_stand(Vector2i(19, 9))
 		assert_true(world.place_hand(Vector2i(20, 9)))
 		_frame()
-		assert_eq(world.armed_pairs().size(), 1, "one hand of yours and the world's patient one")
+		assert_eq(world.armed_pairs().size(), 1, "one hand of yours and the patient socket")
 		world._tick_fuse(5.0)
 		assert_eq(world.folds.size(), 1)
 		assert_eq(world.folds[0].held_hands.size(), 1, "the fold holds the ONE hand you spent")

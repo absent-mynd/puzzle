@@ -32,6 +32,12 @@ stands there indefinitely; how far it reaches for a partner is its kind's `span`
 hands placed around the world are a plan you lay out, and a fold happens where the
 plan closes.
 
+**Folding is not the only thing a hand is for.** A hand set on a **weight plate**
+keeps one of the WORLD'S folds standing instead, and it is the same hand out of the
+same two slots. Everything the world does, it does by folding, and everything that
+makes it fold is either your body or one of your hands being somewhere. See
+§"The hand economy" and [scripts/world/README.md](scripts/world/README.md).
+
 ---
 
 ## ⚠️ Read this first: the 2026-08-04 consolidation
@@ -46,7 +52,9 @@ The pre-consolidation tree is `git checkout 8bf8193`.
 **Consequences worth knowing:**
 
 - **There is no undo.** A continuous physics world has no discrete move to reverse.
-  Unfold is the in-world inverse of fold; respawn handles mistakes. Do not
+  Unfold is the in-world inverse of fold; a **room reset** handles mistakes — `R`
+  rebuilds the room you are in from the authored world and hands back the hands you
+  spent in it, which needs no snapshot (`FoldWorld._reset_region`). Do not
   reintroduce a step log without a design conversation. (The world EDITOR has undo,
   and that is not a contradiction: it edits a file, not play state.)
 - **There is no level campaign.** One world, many regions — `worlds/overworld.json`,
@@ -165,6 +173,8 @@ were rejected and why:
 | Transport by `BaseFrame`, not crease arithmetic | Decision 2 |
 | `TileTypes` is the only authority on what a tile does | Decision 5 |
 | Which anchors are a pair is DERIVED; only the fuse is stored | Decision 11 |
+| A fold gives back what made it: hands to you, bolts to the world | Decision 11 |
+| Whether a plate is down is DERIVED; only a latch is stored | Decision 12 |
 | Unfold blocking is one rule at every depth | Decision 6 |
 | Never compare floats with `==`; use `GeometryCore.EPSILON` | Decision 8 |
 | The kernel never sees the world — enforced by `test_layering.gd` | Decision 9 |
@@ -213,7 +223,8 @@ is not enough to check `animating()` at the top: the fuse fires from inside the
 frame, and the checks below it used to run anyway — which let a door fire while the
 player still stood where the fold had not yet moved them from. **If you add anything
 to that tail, ask whether it can start a transition; if it can, the same guard has
-to follow it.**
+to follow it.** Three things there can, today: the fuse, a burst plate, and a weight
+plate letting its fold go.
 
 ### 4. One space is on screen, and `FoldLattice` says how it repeats
 
@@ -317,7 +328,7 @@ Two consequences worth keeping:
 | Where a hand can be | How it gets there | How it comes back |
 |---|---|---|
 | One of your two slots | the world's `starting_hands`; walking over a loose hand | — |
-| Pinned as an anchor | tap F to raise it, walk the cursor, tap F to pin (leaves the slot at the pin, not the raise) | a burst in reach |
+| Pinned as an anchor — or as a **weight**, if the cell is a weight plate | tap F to raise it, walk the cursor, tap F to pin (leaves the slot at the pin, not the raise) | a burst in reach |
 | Held by a standing fold | the fuse of a pair going off | a burst at its seam |
 | Lying on the ground | authored; overflow from a burst; a fold that failed at the fuse | walk over it |
 
@@ -385,7 +396,19 @@ what you must not quietly change:
   arm, guaranteed to be refused. This is the only thing besides "is there sheet here"
   that placement asks, and it is a question about the SPOT, not about the fold.
 - **A kind changes its fuse and its span, and nothing else.** A third behaviour is a
-  design change; do it in `HandTypes` and nowhere else.
+  design change; do it in `HandTypes` and nowhere else. Which hand goes down next is
+  the player's to choose (`swap_hands`), because a kind you cannot choose to spend is
+  a kind that does not matter.
+- **A hand on a weight plate is a WEIGHT.** It arms on nothing (`Anchor.NEVER`), so it
+  never pairs, never draws a span, and never drags the next hand you pin into a fold
+  with it. It is still one of your hands: counted where anchors are counted, popped
+  by a burst in reach. Do not teach the pairing rule about plates — the placement
+  says it once, with the field that already means it.
+- **A fold gives back what made it.** Your hands to you; the world's bolts to the
+  world, where they stood (`Fold.bolts`). That is what makes a **socket** — a bolted
+  anchor arming on proximity — something you can use twice. Why it cannot refold
+  forever is in `FoldWorld._give_back_to_world`, and is the reason to read before
+  changing what comes back.
 - **`ARM_REACH` and `span` are different distances.** Your arm is how far you can PIN
   (a square of nine cells). A span is how far the anchor then reaches for a PARTNER.
   Both were called reach once; that is why one of them is not now.
@@ -393,7 +416,14 @@ what you must not quietly change:
   that with a recall key without a design conversation. A **burst plate**
   (`TileTypes.TRIGGER_BURST`) is not that key: it fires the same burst at a reach the
   WORLD authored, from a tile you have to walk onto. What is player-aimed is still
-  exactly your own arm.
+  exactly your own arm. The room reset is not that key either: it gives up the
+  room's whole configuration to get your hands back, which is the price a recall
+  would not charge.
+- **The world lets go newest-first.** A plate's fold comes apart by itself only when
+  nothing made after it still stands in its space (`FoldWorld._tick_plates`). A
+  burst obeys the narrower rule — blocked only by a fold that CROSSES the seam —
+  because a player may choose to pull an older fold out from under a newer one, and
+  a plate must not do it behind their back.
 - **The floating hands are style.** Nothing reads their drawn positions back; do not
   make them load-bearing without saying so.
 

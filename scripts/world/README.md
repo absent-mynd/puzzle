@@ -48,13 +48,15 @@ one sealed inside a fold). See [docs/features/TESTBED_WORLD.md](../../docs/featu
 | Input | Action |
 |---|---|
 | A/D or ←/→ | move (also sets your facing) |
-| Space | jump — **tap for a hop, hold for full height** |
+| Space | jump — **tap for a hop, hold for full height**. In water: hold to rise, let go to sink |
 | hold W/↑ or S/↓ | point up / down (otherwise you point where you face) |
 | **tap F** | **raise a hand** — time stops and it becomes a cursor on the cell you point at |
 | A/D/W/S while raised | walk the cursor over the nine cells within arm's reach |
 | **tap F again** | pin it there and start the clock again — the second one lights the fuse |
 | **hold F, then let go** | **burst**: everything of yours within about a tile and a third comes loose at once. With a hand raised it cancels the placement too |
-| R | reset |
+| Q | swap which hand goes down next (works with one raised) |
+| R | reset **this room** — it goes back the way it shipped and you get back what you spent in it |
+| Shift+R | reset the whole world |
 | Esc | leave this run, back to whatever opened it (the editor, the launcher). On its own, nothing |
 
 One key, two directions. **Tapping puts a hand down; holding bursts them loose.**
@@ -140,8 +142,7 @@ burst fires around you, and the clock starts again exactly as it would have.
 The reach is deliberately still one cell (`FoldWorld.ARM_REACH`), and that
 number is load bearing rather than a taste: a shell one tile thick keeps you out
 of what it encloses **precisely because** every cell inside it is two away from
-every cell outside. Raise it and the sealed chamber (beat 4 below) stops being
-sealed.
+every cell outside. Raise it and a wall one tile thick stops sealing anything.
 
 A tap at a cell with nothing in it — off the edge of the sheet — is refused and
 **leaves the hand up**, so the cheapest mistake in the game costs a nudge rather
@@ -175,7 +176,7 @@ Two smaller things, both about the frames you actually make decisions in:
 
 - **The apex is lighter.** Near the top of a jump gravity drops to 0.7, which buys
   more of the frames where you are barely moving vertically and entirely occupied
-  with where to land — and where the sealed chamber wants a mid-air anchor pinned.
+  with where to land — and where the first room wants its high anchor pinned.
   It costs about 6 units of height, which is why the three-cell wall is still a wall.
 - **Letting go in mid-air does not stop you dead.** Air deceleration is much gentler
   than ground deceleration, so a jump keeps the run that launched it. Steering the
@@ -213,7 +214,7 @@ anything can reach it**, so it simply waits where it is until you go back for it
 with a burst, or by putting a new one within its span.
 
 An armed pair **outside the region you are in pauses**. Leave a fold ticking in
-west, walk to east, and it waits; come back and it resumes. Leaving one armed
+one room, walk to the next, and it waits; come back and it resumes. Leaving one armed
 behind you is a thing you can choose to do.
 
 ### The burst
@@ -281,8 +282,97 @@ Two consequences worth knowing:
   swallowed by a fold still works in there — and one whose reach covers the glue
   is a way out.
 
-Plates are placed in the **testbed** (`--world=testbed`), not in the shipped
-world: what a plate does to the authored beats is a playtesting question.
+The shipped world has one, at the end of `press`, with a reach that covers the
+room: it hands back every hand you spent getting there, all at once.
+
+### Weight plates — the world folding for as long as something rests there
+
+A **weight plate** (`H`, in a plain hand's orange) keeps a channel live for exactly
+as long as something is resting on it. The world's own anchors arm on that channel,
+their fuse folds them like any other pair, and **the fold stands while the plate is
+down and lets go when the weight comes off.**
+
+What can rest on one is the short list of things in this world: **you, and your
+hands.** Stand on it and the door is open for as long as you stand there, which is
+no use if the door is where you were going. Set a hand on it and walk away.
+
+- **A hand on a plate is a weight, not an anchor.** It reaches for nothing: no span
+  ring, no pair, however close your next hand lands. It is one of your two hands all
+  the same — a hand on a plate is a hand not in a fold.
+- **Pinned or lying loose, a hand is as heavy.** One that fell there counts. One
+  falling past does not.
+- **You can see what a plate will do before you press it.** The pair it drives is
+  standing in the sheet already, bolted, tied by a faint broken line.
+- **Taking the fold apart by hand buys you one fuse.** The weight is still on the
+  plate, so the bolts come back armed and it folds itself again.
+- **The world lets go newest-first.** If you have made a fold of your own since, the
+  plate's fold stays standing under it even with the weight gone, until yours comes
+  out. That is how you wedge a door: at the price of the two hands in your fold
+  instead of the one on the plate.
+- **A plate in one room can keep a fold in another.** The hand you left is still on
+  it wherever you are. The last room is entered that way.
+
+A trip plate (`T`) is the same thing in the other tense: an event rather than a
+state. It latches its channel when you step on it, and taking its fold apart puts
+it back to not-yet-stepped-on.
+
+### Sockets — half a fold the world holds out
+
+An anchor the world bolted into the sheet (drawn with a pale ring) is not yours: a
+burst does not answer for it and it is not a hand. One that arms on **proximity** is
+a **socket** — pin ONE hand of your own inside its reach and the two fold together.
+
+- The fold holds the one hand you spent, and gives that one back.
+- **The socket goes back where it stood when the fold comes apart**, so it is there
+  the next time. A fold gives back what made it: your hands to you, the world's
+  bolts to the world.
+- Its kind is its reach and its half of the fuse, exactly as a hand's is. A patient
+  socket will meet a plain hand ten cells away.
+
+Sockets are how you fold somewhere you cannot stand — the far rim of a pit, the
+inside of a sealed room — and how a fold costs one hand instead of two.
+
+## Water
+
+**Water is the mirror of air.** In air your hands hold and your body falls; in water
+your body rises and your hands slip.
+
+- **You swim.** Hold Space to rise, let go to sink slowly; a fresh press is a stroke,
+  and at the surface a stroke is a jump out. A waterfall is a way up.
+- **A hand will not hold in it.** You can set one down — placement only ever asks
+  that there be sheet — but when the fuse comes the fold finds nothing to grip, and
+  the hand drops. Pin the air beside the water, or the floor beneath it.
+- **Water is sheet like anything else.** It rides flaps, folds away, and is found
+  again inside the fold. Bringing the water to where you need to climb is a fold.
+
+So a flooded room is rich in movement and poor in folds, and a dry one is the
+reverse. Neither number changed anything about folding: `TileTypes` says water is a
+medium you `swim` in and one that `blocks_anchor`, and both follow from that.
+
+## Sigils
+
+A goal tile is a **sigil**: reach it and it is found, once, and the status line
+counts them. Touching is enough. A sigil folded away is not there to be touched —
+which is the whole of two of the rooms.
+
+Sigils survive a room reset and not a world reset. A reset undoes configuration; it
+does not undo having been somewhere.
+
+## Resetting a room
+
+`R` puts **the room you are in** back the way it shipped and hands you back every
+hand you had spent in it — pinned, on a plate, held by a fold, still in the air. You
+wake at the door you came in by (which is also where a fall puts you).
+
+Nothing is restored from a snapshot, because nothing was saved: a room is a function
+of the authored world, so putting it back is building it again, and the only thing
+that is not a function of the authored world is where your hands are. So:
+
+- **Loose hands stay where they lie.** A hand you carried off exists somewhere else
+  now, and putting another one down would mint one.
+- **Other rooms are untouched.** A fold you left standing next door still stands.
+
+`Shift+R` is the other one: the whole world, hands and sigils and all.
 
 ## Hands
 
@@ -363,8 +453,15 @@ the same thing said twice, since two spans added is twice their mean. A long han
 does some of a short partner's reaching for it. That is what makes mixing a decision.
 
 **How far a pair can span is a hard limit on what you can fold.** Two plain hands
-reach eight cells and no further, which is exactly the width of the pit in beat 1 —
-you can only just make the game's first fold, and that is the lesson.
+reach eight cells and no further. The pit in the `press` room is one cell wider than
+that on purpose: it takes the patient hand, and which of your hands you kept for it
+is the room.
+
+**Which hand goes down next is yours to choose: `Q` swaps them.** A kind is a fuse
+and a span, and a hand weighing a plate is using neither — so the moment a room has
+both a plate and a fold in it, WHICH hand goes where is the decision. It works with a
+hand already raised, which is when you can see the reach of the one you are about to
+spend.
 
 ### Hands on the ground
 
@@ -380,6 +477,10 @@ the way past, it is the second half of a fold you have already started:
 > place a hand → walk to a loose one → take a different kind → place that → the
 > fold you finish is not the fold you would have made with the pair you set out
 > with.
+
+That is also how you come to have **more than two hands in the world**. The slots
+never grow, but every hand standing somewhere — in a fold, on a plate — has emptied
+one, and a loose hand will fill it. Three hands is three things held at once.
 
 Walk over one with both hands full and it stays where it is, waiting. Like a
 door or a lamp, a loose hand is an **occupant of the sheet**: it stores a base
@@ -514,17 +615,15 @@ otherwise the tileset would be resampled and the pixel art would go soft. See
 
 ## Regions & doors
 
-The world is now **two regions** (west and east), each its own sheet with its
-own persistent fold state. **Doors are warp points** (green rings) at
-base-tile centers — they ride folds with their tile, and walking into one
-warps you to its partner, wherever that partner currently *is*:
+The world is **six regions** in a line, each its own sheet with its own
+persistent fold state — a region is a room, and a fold in one cuts nothing in
+another. **Doors are warp points** (green rings) at base-tile centers — they
+ride folds with their tile, and walking into one warps you to its partner,
+wherever that partner currently *is*:
 
 - Partner in normal space → you arrive there (camera snaps, region loads).
-- Partner **folded away** → you arrive INSIDE that fold's subspace. The east
-  region ships pre-folded: the door near the west spawn leads straight into
-  a fold you've never seen open (there's a goal in there too). The far-right
-  west door leads to east's normal space, where the shipped fold's seam
-  diamond is visible — unfolding it from outside is the other way in.
+- Partner **folded away** → you arrive INSIDE that fold's subspace. (The annex's
+  chamber door does this if you go back through it with the chamber folded.)
 - Partner's tile **split exactly through its center** → the door is dormant
   (no glyph, traversal refused) until the halves rejoin.
 - Landing blocked (something folded over the door) → traversal refused: you
@@ -535,95 +634,102 @@ persist for the next visit. The glue anchor (white diamond) remains the
 unfolding exit. Pending anchors are inert outside their region but stay
 pinned and resolve again when you return.
 
-## What to try (the beats)
+## The world, room by room
 
-1. **Ride a fold.** Cross the pit by folding it away: F-F on one rim, then
-   F-F on the other (raise, then pin). It is eight cells rim to rim and two plain
-   hands reach exactly eight, so watch the two dotted circles: they touch, and not
-   by much. The pair starts pulsing and folds itself —
-   so where you are standing when it goes off is a decision, not a keypress. You
-   ride your flap; the seam diamond marks the meeting line. Walk over it, hold F
-   until you turn teal and let go, and you ride the unfold back — and get both
-   hands back, because you no longer need the pit closed. Also try a
-   *vertical* fold (same column): fold the sky down / the floor up to climb —
-   this is the gravity-specific verb.
-2. **Get folded in.** Stand *inside* the red preview strip and commit the fold:
-   instead of blocking, the fold swallows you. You're inside the excised strip,
-   rendered repeating across the glue lines (cyan) — **and so are you.** Every
-   visible copy of the strip shows you at the same place in it,
-   because they are all the same strip: the strip is a cylinder and you are one
-   point on it. Walking "through" a glue line slides body and camera together
-   by exactly one period, so the frame does not change and the crossing is
-   invisible — there is no seam to cross, only a lap to finish.
-3. **Dive-traverse.** While inside, walk somewhere else along the strip, then
-   release a held F on the white glue diamond. The fold springs open and you emerge
-   **where you walked to** — fold, dive, surface: movement through the inside
-   of a fold.
-4. **Break the sealed chamber.** With arm's-length anchors, sealed means
-   sealed — no straight fold can excise its shell, because one anchor would
-   have to be pinned from inside. Diagonal folds are the crack in that logic:
-   a fold pinned from two *outside* positions at different heights can lay a
-   slanted strip across the chamber's corner and bite it off. One of the two
-   anchors has to be pinned mid-jump. **This one is out of reach of two plain
-   hands** — the diagonal is nearly eleven cells and they reach eight — so it now
-   wants the patient hand, which is the one thing sealed inside. That circularity
-   is real and unplaytested: see `STATUS.md` §"Known issues". (Note the fold stays active: unfold it
-   from inside and you've sealed yourself in.) This is the beat where the
-   economy bites: being in there means **leaving that fold standing**, so both
-   your hands are in its seam the whole time you are inside — and the patient
-   hand by the goal is the only one you will have in there.
-5. **Finish a fold with a hand you did not set out with.** Put one hand down, then
-   walk to a loose hand with the slot it freed: the pillar top has a **swift** hand, the
-   sealed chamber a **patient** one. The pair you finish with fuses at the mean of
-   the two, so the same two cells fold at a different pace depending on what you
-   went and fetched. This is what the colours are for.
-6. **Meet a fold you cannot make, and one you don't have to.** Through door W2,
-   in the east region — see the next section.
-7. **Find a hand inside a fold.** Through door W1: you arrive inside east's
-   shipped pre-fold, and there is a loose hand in there with the goal. Folded-away
-   space is real space, and it holds real things.
-8. **Fold yourself in twice, across the grain.** Get pinched into the pit fold
-   (beat 2), then — standing in the strip — fold *across* it: a vertical anchor
-   pair, so the new creases run the other way. It swallows you again. You are two
-   folds deep, and the space you are in has no ends: walk any direction far enough
-   and you come back to yourself. The status line calls it a **torus**, because
-   that is what the two folds together made, and nothing authored it. Then walk
-   somewhere and surface twice — you come out where you walked to, as always.
+Six rooms in a line, one sigil in each. Every room is one idea, and each idea is
+either a new place a hand can be useful or a new consequence of the sheet moving —
+there is nothing in the world that is not one of those two.
 
-## The pin & plate wing (east)
+`scripts/tests/test_overworld_solutions.gd` **plays all six, door to door**, and is
+the authority on how each is done and on what does not work. What is here is what
+each room is *for*.
 
-Past door **W2** you arrive in the east region near door E2. Walking right from
-there is a short teaching run for the two behavioural tile types:
+1. **`threshold` — a fold is a lift.** A ledge four cells up, and nothing to climb.
+   The first fold is a *vertical* one because both of its anchors can be pinned from
+   one spot: one beside you, one at the top of a jump (raising a hand stops the
+   clock, so the top of a jump is a place you can stand and think). The rows between
+   them go, the ledge comes down to a step, and you walk onto it. Then stand on the
+   seam and let go: **the unfold carries you up.** Unfolding is not only undoing.
+   *Where you pinned is where you can unpin* — put the pair on the ledge's own end and
+   the seam is under your feet when you want it.
 
-- **The pinned pillar** (red, base x21). A `PIN` cannot be stood on **and no fold may
-  excise or cut it** — try to fold across it and the commit is refused
-  ("Something in that span refuses to fold."). It is two tiles tall, so the way past
-  is to *jump it*: the thing that blocks your fold is also your stepping stone. This
-  is the tile that says **route around, do not erase**.
-- **The pressure plate** (pink, base x25) and the wall it opens (base x27). The wall
-  is three tiles tall — above jump height — so folding is the only way through, and
-  you do not do the folding: stepping on the plate fires a `TRIGGER_FOLD` that
-  excises the wall's strip. The reward sits behind it.
+2. **`span` — fold, cross, take it apart behind you.** A pit eight wide and a
+   **socket** on its far rim. One hand of yours on the near rim closes it; you keep
+   the other. But the stair and the shelf with the sigil hang *in the pit's own
+   columns* — a crease is a whole line, so closing the pit folds them away with it.
+   Cross, turn round, and burst the seam from the far side: the pit opens behind you,
+   the stair comes back, and you are on the side it climbs from. The pillar past it
+   is **nailed** (`P`): jump it, and notice that the lift from the first room is
+   refused here, because its rows run through the nails. A nail says *route around,
+   do not erase*, and it says it to every fold whose strip would take it.
 
-Two details worth noticing, because both fall out of the model rather than being
-special-cased:
+3. **`cistern` — water climbs, air holds.** A waterfall you can swim up, a cliff you
+   cannot, and eight cells of spray between them where no hand will hold. The fold
+   that brings them together is pinned *from the water*, in the air beside it, at the
+   height of the cliff's lip where a socket is waiting — and because it was pinned up
+   there, it comes apart from up there, and leaves you on top with your hand back. A
+   hand set in the water itself slips out at the fuse; that is the room teaching the
+   rule before it asks you to use it.
 
-- The plate's fold **rides you and door E2 with it** — the whole A-side flap moves,
-  so when you walk back the door is one cell right of where you left it.
-- The plate's fold **refuses to cut the pillar**. A trigger is not a back door around
-  a pin: a plate pins bolted anchors and the ordinary fuse folds them, so it meets
-  the same refusal a pair of yours would.
+4. **`press` — three things to hold and two hands.** Two gates, each kept open by a
+   **weight plate**, and a pit past them. A hand on the first plate is a hand you
+   leave behind; the slot it emptied takes the long hand lying past the gate. Now
+   the question is the room: any hand is a weight, but only the patient one reaches
+   across that pit, and the next hand down is the one you just picked up. `Q`. Past
+   the sigil a **burst plate** with a reach the size of the room lets everything go
+   at once — three hands for two slots, so one lands at your feet, and which two you
+   walk out with is yours to arrange.
 
-The triggered fold is persistent world state like any other: leave the region and
-come back and the wall is still open.
+5. **`annex` — the far end is behind you.** A chamber sealed on every side, with a
+   sigil, a door and a socket inside it. No fold opens it: pair a hand with the
+   socket and stand clear, and the chamber is simply folded away, sigil and all. So
+   stand *in* the strip and be folded in with it. Inside a fold the wall is still a
+   wall — but the strip's two ends are one line, and the end behind you is the inside
+   of the chamber. Step back through the glue, take the sigil, and surface where you
+   walked to: inside a sealed room, in flat space, with your hand back.
 
-## Why the west region has no pins
+6. **`vault` — the same idea turned on its side, one-handed.** The chamber's door
+   leads to a gate that opens only while the **keystone** — a weight plate back in
+   the chamber — is down. So one hand stays behind, and a plate in one room keeps a
+   fold in another. With the hand you have left: an attic sealed above a hall, a
+   socket in it, and a hole in the hall's floor that in flat space is a fall out of
+   the world. Pin the floor under your feet, under the socket, and be folded in. In
+   there the bottom of the strip is its top — **the hole in the floor is the attic's
+   skylight.** Gravity does the rest, and it is the one room where it has to.
 
-Fold extent is infinite-crease, which makes a pin a **global veto on a
-strip of folds** — a pin anywhere in a column forbids every horizontal fold spanning
-it, at any height. West carries the four authored beats and its geometry is load
-bearing for all of them, so pins went in east, where there is room to be wrong.
-Placing them in west is a playtesting job, not an editing one.
+### What a room is made of
+
+Worth knowing before editing one, because it is not obvious until a puzzle leaks:
+
+- **A vertical fold is free and universal.** Anyone standing on a floor can take up
+  to three rows out of the whole room and ride the result. So a ledge three or four
+  up is not an obstacle on its own; what makes it one is a **nail** in those rows,
+  or air a hand will not hold in.
+- **A horizontal fold needs a far side.** You cannot pin beyond a pit you cannot
+  cross. That is what a socket is for, and why most of the world's horizontal folds
+  cost one hand.
+- **A leap is a place to pin from.** A hand can go down in mid-air, and a player
+  will throw themselves into a pit to do it. Where that would skip a room, the air
+  over the pit is `_` — air you fall through and cannot pin in.
+- **Everything in a strip's columns goes with it.** This is the whole of `span` and
+  `annex`, and it is the first thing to check when a fold solves a room too easily:
+  what else was in its way?
+- **Jumps are measured, not guessed.** `WorldProbe` (in `scripts/tests/support/`)
+  reads the jump off `PlayerBody`'s own constants. Keep gaps a player must clear to
+  three cells and gaps they must not to six; in between is a jump the model cannot
+  call and a player should not have to.
+
+### What the shipped world does not ask of you
+
+All of this works, is tested, and is in the **testbed** (`./run.sh testbed`) rather
+than in the six rooms:
+
+- **Diagonal creases.** Pin at two heights and the strip is slanted. `plain` has the
+  sealed chamber only a slanted fold bites into.
+- **Folding yourself in twice.** Across the grain you get a torus — see §"Folding
+  yourself deeper", and `mash_c`, which is the room for it.
+- **Trip plates** (`T`) and **pre-placed folds**. `triggers` and `prefold`.
+- **The swift hand.** Nothing here is in a hurry.
 
 ## Sound
 
@@ -722,16 +828,6 @@ Lighting is evaluated **per art pixel**: the shaded point and the light position
 are both snapped to the pixel grid, the accumulated intensity is quantized into
 steps, and the step edges are ordered-dithered — so light arrives in chunky
 rings rather than as a smooth glow. Ambient is generous on purpose.
-
-Where the shipped lights are, and what each is for:
-
-| Light | Region | Shows you |
-|---|---|---|
-| `w_spawn` | west | the ordinary case — and it rides the flap when you fold the pit |
-| `w_pit` | west | fold the pit shut and it leaves the world with the pit; get pinched in and it is in there with you |
-| `w_chamber` | west | the sealed chamber glows through its own shell — there is something in there |
-| `e_vault` | east | inside east's pre-placed fold: invisible from the region, and the only thing lighting the vault when you arrive through door W1 |
-| `e_reward` | east | over the reward the pressure plate opens |
 
 Authoring is a `lights` array per region; `LightSource` declares the fields and
 their defaults.

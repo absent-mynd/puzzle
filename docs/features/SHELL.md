@@ -46,8 +46,9 @@ idea and for the same reason.
 Off the board, `F6` falls back to the selected canvas's own spawn, and then to the
 world's start. **The answer to "play from here" is never "no".**
 
-Where you drop in stays the region's spawn for the whole run, so `R` and falling out
-of the world both bring you back to it rather than to the world's start.
+Where you drop in stays the region's spawn for the whole run, so a reset and a fall
+out of the world both bring you back to it rather than to the world's start — until
+you go through a door, after which both put you at the door you came in by.
 
 ### Two things it does not ask about
 
@@ -75,8 +76,9 @@ something, so a change you tried and did not like is still a change you can `Ctr
 and `worlds/overworld.json` changes only when you press `Ctrl+S`. The run **clones**
 what it is given (`FoldWorld.data_override`) — a run binds lights, loose hands and
 anchors into the world it is playing, and the editor is still holding the original.
-That clone is also what makes `R` exact: it re-derives from the document rather than
-from what the last two minutes of play did to it.
+That clone is also what makes a reset exact — the room's with `R`, the world's with
+`Shift+R`: both re-derive from the document rather than from what the last two
+minutes of play did to it.
 
 The launcher hands over a **path** instead, because it has no world in memory. That
 one difference is the entire distance between the two ways of starting a run, and

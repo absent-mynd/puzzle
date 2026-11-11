@@ -196,7 +196,7 @@ func _solve_span() -> void:
 	_walk(Vector2i(10, 11), "to the near rim")
 	_pin(Vector2i(11, 11), "one hand, on the rim")
 	_frames()
-	assert_eq(world.armed_pairs().size(), 1, "span: your hand and the world's are a pair")
+	assert_eq(world.armed_pairs().size(), 1, "span: your hand and the socket are a pair")
 	_fuse()
 	assert_eq(world.folds.size(), 1, "span: the pit closes")
 	assert_eq(world.folds[0].held_hands.size(), 1, "...on ONE hand of yours")
@@ -214,7 +214,7 @@ func _solve_span() -> void:
 	assert_eq(world.hands_held(), 2)
 	assert_eq(world.player_cell(), Vector2i(21, 11), "...and leaves you on the far rim")
 	assert_not_null(world.field.at_point(world.space, world.cell_center(Vector2i(20, 11)),
-		CS * 0.5), "...with the world's hand back where it was held out")
+		CS * 0.5), "...with the socket back where it was held out")
 
 	_sigil(Vector2i(13, 7), "span")
 
@@ -245,7 +245,7 @@ func _solve_cistern() -> void:
 	_walk(Vector2i(9, 5), "up the waterfall")
 	_pin(Vector2i(10, 5), "a hand in the air beside the water")
 	_frames()
-	assert_eq(world.armed_pairs().size(), 1, "cistern: it reaches the world's hand at the lip")
+	assert_eq(world.armed_pairs().size(), 1, "cistern: it reaches the socket at the lip")
 	_fuse()
 	assert_eq(world.folds.size(), 1, "cistern: the dry gap folds away")
 	assert_true(world.player.in_water or TileTypes.is_swim(
@@ -348,7 +348,7 @@ func _solve_annex() -> void:
 	_walk(Vector2i(12, 11), "to the chamber wall")
 	_pin(Vector2i(11, 11), "a hand BEHIND you")
 	_frames()
-	assert_eq(world.armed_pairs().size(), 1, "annex: it reaches the hand sealed in the chamber")
+	assert_eq(world.armed_pairs().size(), 1, "annex: it reaches the socket sealed in the chamber")
 	_walk(Vector2i(13, 11), "into the strip, against the wall")
 	_fuse()
 	assert_eq(world.mode, world.Mode.SUBSPACE, "annex: standing in the strip, you are folded in")
@@ -417,7 +417,7 @@ func _solve_vault() -> void:
 	assert_eq(world.folds.size(), 1, "vault: the gate folds")
 	_unreachable(_now(Vector2i(19, 5)), "vault")
 
-	# One hand, on the floor under your feet, below the world's hand in the attic.
+	# One hand, on the floor under your feet, below the socket in the attic.
 	_walk(_now(Vector2i(20, 11)), "into the hall, under the attic")
 	_pin(_now(Vector2i(20, 12)), "the floor under your feet")
 	var hall: Vector2i = world.player_cell()

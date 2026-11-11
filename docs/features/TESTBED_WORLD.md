@@ -43,7 +43,7 @@ so region loading gets entered from more than one direction.
 | `water` | `~` — walkable, so it is air you can see |
 | `pins` | `P` — one pin vetoes every fold whose *strip* spans it, at every height |
 | `unanchor` | `_` and `X` — space and wall you cannot pin to |
-| `triggers` | `T` — every outcome a fold plate has — and `B`, the plate that bursts |
+| `triggers` | `T` — every outcome a trip plate has — `B`, the plate that bursts, and `H`, the plate that weighs |
 | `prefold` | regions that ship already folded, in every orientation |
 | `lamps` | lights: colour, radius, energy, flicker, offset, and the light budget |
 | `hands` | loose hands, in every place a hand can be |
@@ -88,13 +88,13 @@ only a diagonal crease can bite into.
 
 ### `water` — `~`
 
-Water is **walkable**, which means it is not solid: it is air you can see.
-So the region is mostly about what that does. A pool on the floor, a
-full-height column you can stand anywhere in, a ceiling of it held up by
-nothing, a pocket of it sealed inside walls — and a stretch of water used **as
-the floor**, which you fall straight through and out of the world. There is a
-water/wall checkerboard for watching rank 3 beat rank 2 wherever a fold makes
-the two share a cell.
+Water is the mirror of air: you **swim** in it and a hand will not **hold** in
+it. So the region is mostly about what that does. A pool on the floor, a
+full-height column to climb, a ceiling of it held up by nothing, a pocket of it
+sealed inside walls — and a stretch of water used **as the floor**, which you
+sink through slowly rather than stand on, and can swim back up out of. There is
+a water/wall checkerboard for watching rank 3 beat rank 2 wherever a fold makes
+the two share a cell. Pin a pair in any of it and watch the fuse refuse.
 
 ### `pins` — `P`
 
@@ -142,6 +142,13 @@ belongs where the reacting tiles are:
 
 A plate has no channel and nothing to spend, so both fire every time you enter
 them — walk off and back on and they go again.
+
+And one **weight plate** (`H`) at `6,16`, on channel `held`, with the swift pair
+it drives bolted in beside it at `8,16` and `10,16` — visible, and tied, before
+anything is on the plate. Stand on it and two columns fold away for as long as
+you stand there; step off and they come back. Pin a hand to it instead and walk
+away. It is the smallest arrangement that shows the whole of what a weight plate
+is: a state where the plates above it are events.
 
 ### `prefold` — regions that ship folded
 
@@ -203,7 +210,7 @@ folding across the grain to get the torus.
 
 ### `kitchen` — the everything room
 
-34×16. Every authoring character in one row (`~ P _ X G T B`, with walls and air
+34×16. Every authoring character in one row (`~ P _ X G T B H`, with walls and air
 around them), a trigger and the wall it opens with a burst plate beside it that
 takes that same fold back out, all three hand kinds, three lamps, a goal, a
 pre-folded vault carrying a door and a lamp inside it, and seven doors —

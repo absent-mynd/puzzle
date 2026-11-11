@@ -784,6 +784,60 @@ func test_tile_data_on_a_type_that_takes_none_is_a_warning():
 		"but it is dead weight and worth saying: %s" % [_messages(doc, "warn")])
 
 
+func _plate_doc() -> EditorDoc:
+	var doc := _doc()
+	doc.paint("west", Vector2i(2, 3), "H")
+	doc.set_tile_param("west", Vector2i(2, 3), "channel", "gate")
+	doc.end_gesture()
+	return doc
+
+
+func _bolt(doc: EditorDoc, cell: Vector2i, arms: String) -> void:
+	var anchor := Anchor.from_dict({"cell": {"x": cell.x, "y": cell.y}, "arms": arms})
+	anchor.region = "west"
+	var region: Dictionary = doc.world.regions["west"]
+	if not region.has("anchors"):
+		region["anchors"] = []
+	(region["anchors"] as Array).append(anchor)
+
+
+func test_a_weight_plate_nothing_listens_to_is_a_warning():
+	var doc := _plate_doc()
+	assert_eq(doc.error_count(), 0, "it loads")
+	assert_true(_has(_messages(doc, "warn"), "no anchor anywhere arms on it"),
+		"but a plate that goes down and folds nothing is worth saying: %s"
+			% [_messages(doc, "warn")])
+
+	_bolt(doc, Vector2i(5, 3), "gate")
+	assert_false(_has(_messages(doc, "warn"), "no anchor anywhere arms on it"),
+		"an anchor arming on the channel is all it wanted")
+
+
+func test_an_anchor_arming_on_a_channel_nothing_drives_is_a_warning():
+	var doc := _doc()
+	_bolt(doc, Vector2i(5, 3), "nobody")
+	assert_true(_has(_messages(doc, "warn"), "which no plate drives"),
+		"a pair that can never fire is a mark on the world for nothing: %s"
+			% [_messages(doc, "warn")])
+
+
+func test_a_channel_is_heard_across_regions():
+	# A plate in one room may keep a fold in another, so the check is world-wide.
+	var doc := _plate_doc()
+	doc.add_region("east", Vector2i(6, 4))
+	var anchor := Anchor.from_dict({"cell": {"x": 1, "y": 1}, "arms": "gate"})
+	anchor.region = "east"
+	doc.world.regions["east"]["anchors"] = [anchor]
+	assert_false(_has(_messages(doc, "warn"), "no anchor anywhere arms on it"))
+	assert_false(_has(_messages(doc, "warn"), "which no plate drives"))
+
+
+func test_the_shipped_world_has_nothing_to_warn_about():
+	# The debug world is full of deliberate warnings. The one that ships has none.
+	var doc := EditorDoc.load_from("res://worlds/overworld.json")
+	assert_eq(doc.validate(), [], "nothing wrong and nothing merely suspicious")
+
+
 func test_a_missing_start_region_is_an_error():
 	var doc := _doc()
 	doc.world.start_region = "nowhere"

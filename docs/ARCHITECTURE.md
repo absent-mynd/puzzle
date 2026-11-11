@@ -3,7 +3,7 @@
 **Purpose:** *why* the code is shaped the way it is. For *where* things live, see
 [REFERENCE.md](REFERENCE.md). For onboarding, see [AGENTS.md](../AGENTS.md).
 
-**Last Updated:** 2026-08-13
+**Last Updated:** 2026-11-10
 
 > **History note.** This document was rewritten during the 2026-08-04 consolidation.
 > The decisions it used to record — the hybrid grid-polygon cell system, the
@@ -191,8 +191,18 @@ replay buffer.
 
 **What replaces it:** unfold is already the in-world inverse of fold, and it is a
 *mechanic* rather than a correction — walking to a seam and undoing your own fold is
-part of the traversal vocabulary. For actual mistakes, respawn. Save points are the
-open work item.
+part of the traversal vocabulary. For actual mistakes, **reset the room**.
+
+**A room reset is a rebuild and a refund, not a snapshot.** A region is a function of
+the authored world, so putting one back is building it again
+(`FoldWorld._build_region`); the one thing that is not a function of the authored
+world is where your hands are, so the hands that were in the room's sheet are
+gathered first and handed back after. Nothing was saved to restore from, which is
+why there is nothing to go stale. It is deliberately not total — loose hands stay
+where they lie (re-authoring them would mint one), other rooms are untouched, and
+sigils stay found — and `test_world_mechanics` holds `hands_total()` equal across
+it. Save points remain open work, but they are no longer what stands between a
+stranded player and the game.
 
 **What this cost:** triggered folds used to be undoable for free (dropping the
 authored step re-derived the prefix without the cascade). They are now applied
@@ -312,9 +322,19 @@ non-increasing while the player does nothing, so at most `floor(N/2)` folds can 
 from N anchors — hand conservation bounds it. `TriggerResolver.MAX_CASCADE` was a
 backstop against a loop this model cannot have, and it went with the resolver.
 
-**That proof has a load-bearing precondition: unfolding must return HANDS, never
-anchors.** Put the anchors back and a fold whose ends are still within span refolds on
-the next frame, forever. What was a design preference is now a correctness constraint.
+**That proof has a load-bearing precondition: unfolding must never hand back a pair
+that is still armable.** Put two anchors back within reach of each other and they
+refold on the next fuse, forever.
+
+It used to be stated more bluntly — *unfolding returns HANDS, never anchors* — and
+the cost of the blunt version was that a bolted anchor was single-use: fold with the
+socket the world held out, unfold, and it was gone for the session. So now **a fold
+gives back what made it**: your hands to your slots, the world's bolts to the tiles
+they were driven into (`Fold.bolts`). The precondition still holds, case by case,
+and the cases are written where the code is (`FoldWorld._give_back_to_world`): your
+half of a socket's pair went to a slot rather than into the sheet; a latch is dropped
+with its fold; and a pair on a *weighted* channel does refold, once, because the
+weight is still on the plate and that is what the plate means.
 
 **What the span rule costs.** A fold's gap is now bounded by the two spans that made
 it, so the widest fold in the game is a fixed number of cells. That is a real
@@ -322,6 +342,50 @@ constraint on level design — west's pit had to lose a column to stay crossable
 is also what lets the camera frame an armed pair without a heuristic. It does NOT
 resolve the infinite-crease question (Decision 3): a crease is still a full line, and
 what is bounded is the strip's width.
+
+---
+
+## Decision 12: Whether a plate is down is derived; only a latch is stored
+
+**A weight plate keeps a channel live while something rests on it, and "something
+rests on it" is asked fresh every frame, in base terms.**
+
+An anchor, a loose hand and the piece under the player each carry a base id, and so
+does a plate, so the question is an identity comparison with no geometry in it
+(`Weights`). That is what makes it survive folds for nothing: fold a plate away with
+a hand on it and the hand is still on it.
+
+It is the hand-ledger rule again (AGENTS.md §2). A stored "this plate is down" flag
+would be a second copy of where a hand is, and the first fold that carried the hand
+off without telling the flag would leave a door open on nothing.
+
+**What has to stay stored, as with the fuse, is history.** A trip plate's channel is
+*latched*: "was this ever stepped on" cannot be derived. The two live in separate
+sets on `AnchorField` so that lifting a weight cannot drop a latch of the same name.
+
+**The world's only actuator is the fold.** A plate does not open a gate tile; it
+makes a pair of the world's own anchors armable, and the ordinary fuse folds them.
+The alternative — a gate whose solidity depends on a channel — was the obvious one
+and was not built: it needs walkability to depend on state (which `TileTypes`, the
+one authority on what a tile does, has no way to say), and it would give the world
+a second way to change shape that obeys none of the rules the first one does. With
+one actuator, everything already true of a fold is true of a door: it has a fuse
+you can see coming, it may take you in with it, a pin vetoes it, it can be wedged,
+and its seam is somewhere.
+
+**The world lets go newest-first, which is narrower than Decision 6.** A burst may
+take any fold whose seam nothing newer crosses. A plate's fold comes apart by itself
+only when nothing newer stands in its space at all. The reason is a property of the
+kernel worth knowing in its own right: a fold's creases are coordinates in the
+configuration it was laid into, so removing an OLDER fold leaves every newer one
+where it was while the sheet slides beneath it — they are now hiding different
+ground. A player who bursts an old seam chose that. A plate doing it because a hand
+came off somewhere would rearrange the room behind their back.
+
+**What this bought the design:** a second place for a hand to be useful that costs
+exactly what the first one does. A hand on a plate is a hand not in a fold, so
+"how many things can I hold at once" is one budget — which is the only reason a room
+with two plates and a pit is a puzzle rather than a corridor.
 
 ---
 
@@ -352,7 +416,11 @@ positions, are `STATUS.md` §"Known issues".)
   over there. It is the argument for barrier-scoped folds, and it is kept unresolved
   so it can be *felt* before it is designed away. Spans (Decision 11) bound the strip's
   WIDTH and change nothing about its length; if anything they make barrier-scoping
-  cheaper to add, not unnecessary.
+  cheaper to add, not unnecessary. The six-room world is one data point: a region is
+  a room, so a crease already stops at the room's edge, and two of the rooms
+  (`span`, `annex`) are *about* a strip taking whatever else stood in its columns.
+  That is an argument for the crease being a whole line inside a room. It says
+  nothing yet about a region big enough to hold two unrelated things.
 - **How deep nesting stays legible** is untested by play. It works to arbitrary depth
   and the tint deepens with each layer, but three folds in is a claim about the game,
   not just about the code.
@@ -372,14 +440,25 @@ positions, are `STATUS.md` §"Known issues".)
 - **Unfold animation** plays only for newest-fold unfolds in a region; the reverse
   transform is exact only there, so mid-stack unfolds are instant.
 - **How big a span should be** is a calibration, not a position. Plain 4 cells, swift
-  3, patient 6 are first guesses sized so that two plain hands exactly cross west's
-  pit — a fold you can only just make being the clearest way to teach what a span is.
-  Whether a world wants that number smaller (folds as local stitches, long reach as a
-  found upgrade) is a playtesting question, and the shipped beats move with it.
-- **What a bolted anchor is freed by** — nothing, today. A burst does not answer for
-  one, and no other key does either. A channel that releases as well as arms is the
-  obvious next move if a world wants to hand the player something back; it is not
-  built because "authored folds pay out" was answered no.
+  3, patient 6 are first guesses. The shipped rooms are cut against them — `press`'s
+  pit is one cell more than two plain hands reach, so that it takes the patient one —
+  and `test_overworld_solutions` is what says so if a span moves. Whether a world
+  wants the numbers smaller (folds as local stitches, long reach as a found upgrade)
+  is a playtesting question.
+- **Taking an older fold out from under a newer one slides the newer one.** See
+  Decision 12. It is why the world lets go newest-first, and it is left alone for
+  the player's own bursts because Decision 6 chose expressiveness over a stack.
+  Whether a burst should carry the newer folds' creases back with the sheet — so
+  that what they hide does not change — is a kernel question nobody has asked yet.
+- **Water does nothing to a hand that is not being pinned.** A loose hand sinks
+  through it like air. Whether it should float is a question about how much of the
+  hand economy a flooded room is allowed to take away, and it wants a room that
+  needs the answer.
+- **A weight plate lets go at once.** Arming takes a fuse; releasing takes none.
+  Whether a door should give a beat of warning before it closes is feel, and
+  untested by play.
+- **What rests on a plate is you and your hands, and nothing else,** because nothing
+  else exists. `Occupants` would be a third thing, and a crate is the obvious one.
 - **Lights do not cast shadows,** and the seam is not lit or blended specially.
   Occluders would have to be re-derived per fold and would want to soften the seam,
   which is the one thing the art is currently committed to keeping hard.

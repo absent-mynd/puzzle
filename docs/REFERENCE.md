@@ -33,18 +33,19 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | Pure world logic: ASCII map parsing, side-of-fold for a free point, strip capture, seam/glue segments, carrying a point or line through a later fold, circle-vs-polygon depenetration, anchor reach & fold eligibility, camera framing + lookahead | `WorldCore.gd` |
 | Immutable base grid: `BaseTile` per position, grid metrics, `from_types()` constructor, unit squares | `BaseGrid.gd` |
 | One base tile: stable `base_id`, `grid_position`, `type`, per-instance `data` | `BaseTile.gd` |
-| One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel`, `held_hands` | `Fold.gd` |
+| One fold: anchors, crease points/normal, `shift_a/b` in grid and px, `channel`, `held_hands`, and the world's `bolts` it will put back | `Fold.gd` |
 | **The derivation engine.** `derive()`, `derive_pieces()`, `apply_one_fold()` — replays a fold list over the base grid | `FoldReplay.gd` |
 | A derived piece: `base_id`, `type`, `polygon`, `plane_pos`, **`src_offset`** | `FoldedPiece.gd` |
 | Queryable derived state: per-position stacks, `dominant_type_at`, `pieces_of_base` | `FoldedState.gd` |
 | **Base ↔ derived point transport.** `transport()`, `world_point_from_base()`, `resolve_base_point()`, `piece_at()` | `BaseFrame.gd` |
-| **The tile registry.** walkable / merge_rank / blocks_fold / blocks_anchor / on_enter / grant | `TileTypes.gd` |
+| **The tile registry.** walkable / merge_rank / blocks_fold / blocks_anchor / on_enter / on_weight / swim | `TileTypes.gd` |
+| **Which weight plates are down**, and so which channels they keep live. Asked in base ids, every frame, nothing stored | `Weights.gd` |
 | **The hand registry.** One entry per kind: colour, fuse, authoring key. `fuse_for()` mixes a pair | `HandTypes.gd` |
 | A hand lying in the world: base identity + point in tile, `dropped_at()`, `resolve_all()`. One object for authored loose hands and hands a burst popped out | `HandPickup.gd` |
 | **The hand ledger.** `SLOTS`, `free_slots()`, `first_empty()`, `held_in()`, `total()` — conservation across slots / pinned / folds / ground, nothing stored | `HandStock.gd` |
 | Entities that ride base tiles: split-on-unfold latents, carried geometry, footprints | `Occupants.gd` |
 | One anchor: a base identity, the kind of hand in it, what arms it and whether a burst may take it back | `Anchor.gd` |
-| **Which two anchors are about to fold together**, and their fuses. The pairing rule, derived per frame | `AnchorField.gd` |
+| **Which two anchors are about to fold together**, and their fuses. The pairing rule, derived per frame — and which channels are live: latched (stored) or weighted (handed in) | `AnchorField.gd` |
 | Authored world: regions (ASCII rows), doors, pre-placed folds, lights, `starting_hands`; JSON round trip | `WorldData.gd` |
 | A light as an occupant: base identity + point in tile, resolved per configuration | `LightSource.gd` |
 
@@ -62,11 +63,11 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 
 | Concern | File |
 |---|---|
-| **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/burst verb, the placement cursor and its stopped clock, the hand ledger, the auto-commit fuse, loose hands, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
+| **Everything that makes it a game**: regions, the context stack (subspaces), doors, the one-key tap/burst verb, the placement cursor and its stopped clock, the hand ledger, the auto-commit fuse, loose hands, weight plates and what the world gets back, sigils, the room reset, fold/unfold flow, animation, camera, HUD | `FoldWorld.gd` |
 | **The window-resolution overlay**: background, controls line, status readout, the centre flash and its lifetime. Told what to say; holds no reference back | `WorldHud.gd` |
 | **What the camera should be showing**: the lead, the lens, and the render-target size that stands in for zoom. Takes the world's facts as a context dictionary | `WorldCamera.gd` |
 | **Hands in the air**: the flight, the wrap, the turn-back at a strip's end. Emits `landed` / `lost`; a hand at rest is an occupant and belongs to `FoldWorld` | `HandField.gd` |
-| Player physics body: coyote time, jump buffer, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing, all held still by `camera_held`); wears the loading burst as a colour (`charge_color`) | `PlayerBody.gd` |
+| Player physics body: coyote time, jump buffer, the swim, squash; owns the pixel-snapped camera (follow + zoom + lookahead easing, all held still by `camera_held`); wears the loading burst as a colour (`charge_color`) | `PlayerBody.gd` |
 | Anchors, fold preview strip, the placement cursor and its reach, seam lines and their diamonds, glue lines, the fuse pulse, loose hands, the burst ring | `WorldOverlay.gd` |
 | The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |
 | **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping, and `hairline_runs` — a one-pixel line stepped into pixels rather than drawn as a quad | `PixelArt.gd` |
@@ -92,6 +93,15 @@ understand how the pieces meet. Its header comment is the map.
 | …a tile react to being stood on? | `FoldWorld._check_triggers()` — dispatches on `TileTypes.on_enter_kind` |
 | …a fold trigger fire? | `FoldWorld._fire_fold_trigger()` → `_plant_pair` → the ordinary fuse |
 | …a burst plate fire? | `FoldWorld._fire_burst_plate()` → `FoldWorld._burst()` — the same one your release fires |
+| …a weight plate keep a fold standing? | `FoldWorld._tick_plates()` → `Weights.channel_states` → `AnchorField.weigh_channel`; the fold itself is the ordinary fuse |
+| …a plate's fold let go? | `FoldWorld._tick_plates()` → `unfold_space_fold(fold, true)` — newest-first, quietly |
+| …the world get its bolts back? | `FoldWorld._give_back_to_world()` — and why that cannot refold forever |
+| …a hand become a weight? | `FoldWorld.place_hand()` — `Anchor.NEVER` on a tile `TileTypes.is_weighable` |
+| …the body know it is in water? | `FoldWorld._physics_process` sets `PlayerBody.in_water`; the swim is `PlayerBody.swim_step` |
+| …a sigil get found? | `FoldWorld._check_goal()` — and `found_sigil_polys()` for the dimming |
+| …`R` put a room back? | `FoldWorld._reset_region()` → `_build_region()` — a rebuild and a refund, no snapshot |
+| …a fall know where to put you? | `FoldWorld._respawn_point()` — the door you came in by |
+| …I know a shipped room can be done? | `scripts/tests/test_overworld_solutions.gd`, on `scripts/tests/support/world_probe.gd` |
 | …a tile get its art? | `FoldWorld._make_tile()` → `TileAtlas.uv_for` |
 | …the editor play the world it is editing? | `WorldEditor.playtest()` → `Shell._on_play_requested` → `FoldWorld.data_override` |
 | …a playtest drop you where you were looking? | `FoldWorld._apply_spawn_override()` |
@@ -166,7 +176,9 @@ The suite is the behavioral spec. Naming maps one-to-one onto subjects:
 and so on. The exception is `test_fold_world.gd`, which is **scene-driven** — it
 instantiates the real world scene and drives the actual beats (riding, pinching,
 subspace folds, door traversal). If you change `FoldWorld`, that is the file that
-will catch you.
+will catch you. `test_world_mechanics.gd` is its sibling for plates, sockets, water,
+sigils and the room reset, and `test_overworld_solutions.gd` plays the shipped world
+from its first room to its last.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for how to run tests (including the sandbox
 `HOME` invocation).

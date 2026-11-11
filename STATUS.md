@@ -1,14 +1,14 @@
 # Project Status — Space Folding
 
-**Last Updated:** 2026-08-15
-**Current Phase:** Consolidated onto the gravity metroidvania direction. Playable
-vertical slice: two regions, doors, real subspaces, fold/unfold with animation,
-folding as a **finite carried resource** — rendered as pixel art with fold-aware
-dynamic lighting, framed by a camera that zooms and leads with the moment. The
-world is **authored in an editor** rather than by hand-editing JSON, and the editor
-and the game are now **one app**: `F5` plays what you are editing.
-**Tests:** 962 passing / 962, 38 scripts, ~25s. (`./run_tests.sh` prints the real
-numbers; this line is a snapshot and the runner is the authority.)
+**Last Updated:** 2026-11-10
+**Current Phase:** Consolidated onto the gravity metroidvania direction. A designed
+world of **six rooms, each one idea, played door to door by the test suite**: real
+subspaces, fold/unfold with animation, folding as a **finite carried resource** that
+now has a second use (a hand on a weight plate keeps one of the world's folds
+standing) — rendered as pixel art with fold-aware dynamic lighting, framed by a
+camera that zooms and leads with the moment. The world is **authored in an editor**,
+and the editor and the game are **one app**: `F5` plays what you are editing.
+**Tests:** `./run_tests.sh` prints the count and the time, and is the authority on both.
 
 ---
 
@@ -29,34 +29,40 @@ What exists and works today:
 | Subspaces (the inside of a fold as a real place) | ✅ Playable |
 | **Nesting: folding yourself in, and in again** | ✅ Playable, any depth, ⚙️ untuned |
 | Regions + doors (recursive partner resolution) | ✅ Playable |
-| Tile registry (pins, unanchorable, water, triggers) | ✅ Wired, tested, **in the world** |
+| Tile registry (pins, unanchorable air, water, plates) | ✅ Wired, tested, **in the world** |
+| **Weight plates** (`H`) — a channel live while you or a hand rest there; the world's fold stands while it is down | ✅ Playable, **in the world**, ⚙️ untuned (it lets go at once) |
+| **Sockets** — a bolted anchor on proximity; one hand completes it, and it comes back when the fold does | ✅ Playable, **in the world** |
+| **Water** — swim in it, cannot pin in it | ✅ Playable, **in the world**, ⚙️ swim feel is a first guess |
+| **Sigils** — goal tiles found once and counted | ✅ In the world; ❌ not saved across sessions |
+| **Room reset** (`R`) — rebuild the room, refund the hands; `Shift+R` for the world | ✅ Playable |
+| **Hand swap** (`Q`) — choose which hand goes down next | ✅ Playable, ⚙️ untested by feel |
 | Fold-on-enter triggers — a plate pins a bolted pair, the fuse folds it | ✅ **At any depth**, in the world |
-| **Burst plates** (`B`) — a tile that fires your burst at a radius it chooses | ✅ Wired at every depth, tested; placed in the testbed, not in the shipped world |
+| **Burst plates** (`B`) — a tile that fires your burst at a radius it chooses | ✅ Wired at every depth, tested, **in the world** (the end of `press`) |
 | Hands: two slots, typed, conserved (`HandStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | **Anchors as one system** (`Anchor`/`AnchorField`) — yours, the world's, a plate's | ✅ In the world |
 | **Proximity pairing** — a pair is two anchors within their spans, derived per frame | ✅ Playable, ⚙️ untuned |
 | Spans per hand kind (plain 4 / swift 3 / patient 6 cells) | ✅ Wired, ⚙️ **first guess** |
 | Authored anchors (`regions[].anchors`) — bolted, channel- or proximity-armed | ✅ Format, loader, editor tool (`W`), testbed |
-| Loose hands (`HandPickup`) — authored + dropped, one object | ✅ Three placed, ⚙️ untuned |
+| Loose hands (`HandPickup`) — authored + dropped, one object | ✅ One placed (the patient hand in `press`), ⚙️ untuned |
 | One-key verb (tap = raise a hand, tap = pin it, hold-and-release = burst) | ✅ Playable |
 | **Placement cursor** — time stops between the two taps; nine cells of reach; dithered held-world look | ✅ Playable, ⚙️ untuned |
 | Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
 | Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
-| World authoring (`worlds/overworld.json`) | ⚙️ Format done; one hand-authored world |
+| **The shipped world** (`worlds/overworld.json`) | ✅ Six rooms, one sigil each; every room solved and every wrong turn refused by `test_overworld_solutions`; ⚙️ **never played by a person** |
 | **Testbed world** (`worlds/testbed.json`, `--world=testbed`) | ✅ 14 regions of one-of-everything, for poking at mechanics |
 | **World editor** — paint, canvases, doors, folds, per-tile params | ✅ Usable (`./run_editor.sh`) |
 | **One app** (`Shell`) — launcher, editor and a run of the game as three screens | ✅ Usable (`./run.sh`) |
 | **Playtest from the editor** — `F5`, `F6` from the cursor, on the UNSAVED document; `Esc` back to the editor untouched | ✅ Usable |
 | **Launcher** — the worlds in `worlds/`, played or edited, and a run started in any region | ✅ Usable, ⚙️ developer-facing |
-| Unanchorable tiles (`_`, `X`) | ⚙️ Wired and tested; placed in the testbed, not in the shipped world |
+| Unanchorable tiles (`_`, `X`) | ✅ `_` is in the world, as the air over two pits and the spray in `cistern`; `X` is in the testbed only |
 | Pixel-art render pass (low-res target, 16px tileset, UVs) | ✅ In the world |
 | **One wrap for the whole view** (`FoldLattice` / `WrapCanvas`) | ✅ In the world |
 | **Batched sheet** — two canvas items, not one per piece | ✅ In the world |
-| Dynamic lights as fold-aware occupants | ✅ In the world, 5 placed |
+| Dynamic lights as fold-aware occupants | ✅ In the world, every room lit |
 | Hand-drawn tilesheet | ⚙️ Layout + drop-in path done; sheet is generated in code |
 | Audio | ✅ Whole fold vocabulary wired; 21 SFX + 2 music beds ship (generated placeholders) |
-| Save / progression | ❌ Not started |
+| Save / progression | ❌ Not started — sigils and fold state live for one session |
 | Entities (items, enemies, save points) | ❌ Not started |
 
 ---
@@ -100,45 +106,46 @@ For the reasoning behind the *shape* of the code rather than its history, see
 
 Roughly in priority order — nothing here is committed to yet:
 
-1. **Playtest the spans, and re-cut west around them.** Plain 4 / swift 3 / patient 6
-   cells are first guesses, and they are now the hardest constraint in the game: two
-   plain hands reach eight cells and nothing folds wider. West was authored when a
-   fold could span the region, so its beats need a pass — beat 1 works (the pit lost
-   a column to make it), beat 4 does not (see Known issues). The question to answer by
-   feel is whether spans should be SHORTER, with long reach as a hand you find.
-2. **Playtest the hand economy.** Two slots, and fuses of 0.65 / 1.6 / 3.2 seconds,
-   are first guesses. Does scarcity make the world read as *considered*, or merely
-   fussy? Tuning is a playtesting job, not an editing one.
-3. **The camera, now that a pair is bounded.** The lens holds the player and any
+1. **Play the six rooms.** Every one of them is proved possible and proved
+   unwalkable by a model, and none has been played by a person. The model says a
+   room CAN be done; it has no opinion on whether the idea lands, whether the wrong
+   turns are tempting or merely annoying, or how the `threshold` lift reads to
+   someone who has never pinned a hand. Start there: it is the room that teaches
+   the verb.
+2. **Tune by feel what was set by arithmetic.** Spans (plain 4 / swift 3 / patient
+   6), fuses, the swim (`PlayerBody.SWIM_*`), and whether a weight plate should let
+   go at once or after a beat. The rooms are cut against the spans, so
+   `test_overworld_solutions` moves with them.
+3. **A way back.** The annex's chamber is one-way: once you surface inside it, the
+   rooms before it are behind a wall no fold of yours opens. A second socket on the
+   west side would make it a valve you can work from both ends, and the fuse race
+   between a plain and a patient socket is the obvious way to say which one answers.
+4. **Rooms for what the world does not ask.** Diagonal creases, folding in twice
+   (the torus), trip plates, pre-placed folds and the swift hand all work and are
+   only in the testbed. Each wants a room where it is the only way.
+5. **The camera, now that a pair is bounded.** The lens holds the player and any
    ARMED pair, which is finite by construction — but a lone anchor is deliberately
-   not framed, and how a frame full of span circles reads is untested by play.
-4. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
-   and drop-in path are done, so this is now an art job, not an engineering one.
-5. **Finish putting the ported systems in the world.** `PIN` and `TRIGGER_FOLD` are
-   now placed (east's right wing); `Occupants` and `UNANCHORABLE_*` still are not.
-   Placing them is also how their design gets pressure-tested.
-6. **Settle fold extent.** Infinite-crease is the biggest open question in the
-   direction (see `AGENTS.md` §"Open design questions"). Barrier-scoped folds are
-   the leading candidate; spans bound a strip's width, not its length.
-7. **Save / checkpoints.** Undo is gone by design; respawn currently sends you to the
-   region spawn. Real save points are the replacement — and they are now also what
-   the loose hands you have moved need to outlive a session, and the answer to
-   stranding yourself with no hands and no reachable seam.
-8. **Entities.** `Occupants` is the model; nothing renders or moves one yet.
-9. **Finish the `Space` migration.** `FoldWorld` still carries twelve
-   getter/setter properties forwarding to `space.x`, so the current space can be
-   read two ways. Moving the call sites over and deleting them is mechanical.
-10. **Three gaps in the editor** (`./run_editor.sh` — see
+   not framed, and how a frame full of span circles reads is untested by play. The
+   vault's attic is seven rows above its hall and sits at the top edge of the frame
+   until you look up.
+6. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
+   and drop-in path are done, so this is an art job, not an engineering one.
+7. **Settle fold extent.** See ARCHITECTURE §"What is deliberately still open". The
+   six rooms are an argument for a crease being a whole line *inside a room*.
+8. **Save / checkpoints.** A room reset now answers stranding, so what a save is
+   FOR has narrowed to what should outlive a session: sigils, fold state, and where
+   your hands are.
+9. **Entities.** `Occupants` is the model; nothing renders or moves one yet. A crate
+   is the obvious third thing that could rest on a weight plate.
+10. **Finish the `Space` migration.** `FoldWorld` still carries twelve
+    getter/setter properties forwarding to `space.x`, so the current space can be
+    read two ways. Moving the call sites over and deleting them is mechanical.
+11. **Gaps in the editor** (`./run_editor.sh` — see
     `docs/features/WORLD_EDITOR.md`): a world anchor's arming rule is tool state
-    rather than per-anchor, a light's colour/radius/flicker are not yet on the
-    `TileParams` pattern, and nested pre-placed folds are designed but deferred —
-    the format reserves `folds[].in` and the loader ignores it.
-11. **Playtest the playtest loop.** `F5`/`F6` and the launcher are new and have had no
-    authoring session run through them. The question to answer by use is whether
-    "play from the cursor" wants to remember where you last played from, and whether
-    a run should be able to hand a cell BACK to the editor ("open the card I died
-    on"). Both are cheap; neither is worth guessing at. See
-    `docs/features/SHELL.md` §"Known gaps".
+    rather than per-anchor — which matters more now that weight plates lean on
+    channels — a light's colour/radius/flicker are not yet on the `TileParams`
+    pattern, and nested pre-placed folds are designed but deferred.
+12. **Playtest the playtest loop.** See `docs/features/SHELL.md` §"Known gaps".
 
 ---
 
@@ -160,34 +167,38 @@ Roughly in priority order — nothing here is committed to yet:
   [docs/features/SHELL.md](docs/features/SHELL.md) §"Known gaps".
 - Audio is not positional: a fold across the room sounds like one at your feet.
 - The shipped sounds are generated placeholders (`tools/gen_audio.py`), not art.
-- Unanchorable tiles (`_`, `X`), burst plates (`B`) and occupants are covered by tests
-  but not placed in the shipped world yet — they are in the testbed. Pins and triggers
-  are placed — see east's right wing. What a burst plate does to west's authored beats
-  (it can open a fold you were meant to walk around) is a playtesting question, which
-  is why one has not been dropped into them.
-- **West's beat 4 is unreachable as authored.** Biting the corner off the sealed
-  chamber needs a diagonal of nearly eleven cells; two plain hands reach eight, and the
-  patient hand that would cover it is sealed inside the chamber. Beat 1 was fixed by
-  narrowing the pit a column; this one wants a design pass rather than an edit, which
-  is why it is recorded instead of guessed at.
+- **The shipped world has been solved by the suite and played by nobody.** See
+  "Next up" 1. A room the model calls possible may still be one a person cannot read.
+- **The annex is one-way.** Surface inside its chamber and the first four rooms are
+  out of reach for the rest of the run; so is the plain hand you left in `press`.
+  Nothing after it needs either, which is why it shipped, and it is still a door
+  that only opens one way in a genre that is about going back.
+- **There are solutions the suite does not know about.** It proves the intended one
+  works and that walking does not. It cannot prove no OTHER fold does — a diagonal
+  with a socket moves the sheet up as well as along, and nobody has enumerated those.
+  Where a cheap one was found it was closed (`_` over the pits, the nails in `span`,
+  the spray in `cistern`); the rest are a player's to find.
+- **Taking an older fold out from under a newer one slides the newer one** — its
+  creases stay where they were while the sheet moves beneath them. A burst can do
+  this; a weight plate will not (it lets go newest-first, for this reason). See
+  ARCHITECTURE Decision 12.
+- Trip plates (`T`), pre-placed folds, `X`, diagonal creases, the torus, the swift
+  hand and occupants are covered by tests and the testbed, and are not in the six
+  rooms.
 - **The editor cannot set a world anchor's arming rule.** The `W` tool places, pairs,
   removes and draws them, and `validate()` reports the ones the game would refuse in
   silence — but every anchor it places takes the tool's current setting, so a channel
   name still has to be typed into the JSON.
-- **You can strand yourself.** Spend your last hands on a fold, walk somewhere its
-  seam cannot be reached from, and `R` is the only way back. `R` is survivable by
-  design — it drops every fold and respawns the authored loose hands — but it still
-  costs your position, your fold configuration, and any hand you had dropped
-  somewhere deliberately. Save points are the real fix.
-- Loose hands are runtime-only state (`FoldWorld.hand_pickups`) — the first thing that
-  is not `(base, folds)`. `R` rebuilds them from the authored world and nothing carries
-  them across a session; a save system is what they need next.
+- **You can strand yourself**, and `R` is the way back: it puts the room you are in
+  back the way it shipped and returns the hands you spent in it. It costs that room's
+  configuration and your place in it, and nothing else — other rooms, loose hands and
+  sigils are untouched. What it cannot reach is a hand left in a room you can no
+  longer get to; `Shift+R` resets the world.
+- Loose hands and found sigils are runtime-only state (`FoldWorld.hand_pickups`,
+  `sigils_found`) — the things that are not `(base, folds)`. Nothing carries them
+  across a session; a save system is what they need next.
 - The tilesheet is generated in code, so the world looks systematic rather than
   authored. The layout is fixed and a drawn sheet drops in without code changes.
-- The pin/trigger wing lives in **east**, not west, and is reached through a door.
-  West's four authored beats depend on its exact geometry and infinite creases make
-  a pin a global veto on every fold whose strip spans it, so nothing was placed there
-  without playtesting. See the note in `scripts/world/README.md`.
 
 ---
 

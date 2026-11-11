@@ -19,7 +19,7 @@ It must match the layout exactly:
 |---|---|
 | Tile size | 16×16 px (`PixelArt.TILE_PX`) |
 | Width | `VARIANTS × 16` = **64 px** |
-| Height | `KINDS × 16` = **176 px** |
+| Height | `KINDS × 16` — one row per `K_*` constant below |
 | Format | RGBA, no premultiplied alpha |
 
 Rows, top to bottom — the `K_*` constants in `scripts/world/TileAtlas.gd`:
@@ -33,9 +33,11 @@ Rows, top to bottom — the `K_*` constants in `scripts/world/TileAtlas.gd`:
 | 4 | `K_GOAL` | walkable: paint the motif over paper |
 | 5 | `K_TRIGGER` | pressure plate — the motif belongs at the **bottom** of the cell, since the player stands on the tile below |
 | 6 | `K_PIN` | fold-proof: it should read as a solid fact |
-| 7 | `K_UFLOOR` | unanchorable floor (walkable) |
+| 7 | `K_UFLOOR` | air a hand will not hold in (walkable). It fills VOLUMES — the air over a pit — so paint it as air: a texture through the whole cell, nothing that reads as a surface |
 | 8 | `K_UWALL` | unanchorable wall (solid) |
 | 9 | `K_LAMP` | the glyph drawn at a light source; transparent ground |
+| 10 | `K_BURST` | burst plate — a floor plate in the "openable" teal, with something leaving it |
+| 11 | `K_WEIGHT` | weight plate — the burst plate's mirror, in a plain hand's orange: something has to rest here |
 
 ## Two rules the art has to respect
 
