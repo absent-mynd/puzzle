@@ -1,4 +1,4 @@
-extends GutTest
+extends "res://scripts/tests/support/world_test.gd"
 
 ## Every room of the shipped world, played.
 ##
@@ -17,6 +17,9 @@ extends GutTest
 ##     is a path a player can take without a perfect input.
 ##   - **A hand only goes where an arm can put it** (`_pin`, `_pin_jumping`).
 ##
+## The verbs it is written in (`_stand`, `_now`, `_fuse`, `_frames`) are
+## `support/world_test.gd`'s, shared with every suite that drives the scene.
+##
 ## And before each room's key move, the GENEROUS reading — the one that over-states
 ## the jump — is asked whether the sigil can be had without folding at all. It must
 ## say no. If a room is edited and either reading changes its mind, this is the file
@@ -31,12 +34,7 @@ extends GutTest
 ## What this does not prove: that there is no OTHER fold which also works. A cleverer
 ## solution than the intended one is a thing a player is allowed to find.
 
-const SCENE := "res://scenes/world/World.tscn"
 const Probe := preload("res://scripts/tests/support/world_probe.gd")
-const CS := 64.0
-const DT := 1.0 / 60.0
-
-var world
 
 ## One probe per reading, re-sampled only when the geometry it describes has been
 ## rebuilt. `rebuild()` hands the space a fresh piece list, so the list's identity is
@@ -60,40 +58,12 @@ func before_each() -> void:
 
 
 func _open(region := "", cell = null) -> void:
-	world = load(SCENE).instantiate()
-	world.world_override = WorldData.SHIPPED_WORLD
-	if region != "":
-		world.spawn_override = {"region": region}
-		if cell != null:
-			world.spawn_override["cell"] = cell
-	add_child_autofree(world)
-	world.anim_enabled = false
+	_open_world(WorldData.SHIPPED_WORLD, region, cell)
 
 
 # ---------------------------------------------------------------------------
 # Driving the body honestly
 # ---------------------------------------------------------------------------
-
-func _frames(n := 1) -> void:
-	for _i in range(n):
-		world._physics_process(DT)
-
-
-func _put(cell: Vector2i) -> void:
-	world.player.teleport((Vector2(cell) + Vector2(0.5, 0.5)) * CS + Vector2(0, 12), false)
-
-
-## Where a BASE cell of this region is now, as a cell. Folds slide the sheet, so every
-## place this file names after a fold is named by the tile, not by where it started.
-func _now(base_cell: Vector2i) -> Vector2i:
-	var tile = world.base.tile_at(base_cell)
-	var wp = BaseFrame.world_point_from_base(world.current_pieces, tile.base_id,
-		world.cell_center(base_cell))
-	assert_not_null(wp, "base cell %s is in this space" % base_cell)
-	if wp == null:
-		return base_cell
-	return Vector2i((Vector2(wp) / CS).floor())
-
 
 ## Walk, jump, drop or swim to `to` — if the strict model says the body can.
 func _walk(to: Vector2i, what := "") -> void:
@@ -103,7 +73,7 @@ func _walk(to: Vector2i, what := "") -> void:
 	assert_true(ok, "%s: the body can get from %s to %s" % [what, from, to])
 	if not ok:
 		print(probe.dump({from: "@", to: "$"}))
-	_put(to)
+	_stand(to)
 
 
 ## Is `to` out of reach of the body, however well it is played?
@@ -131,11 +101,6 @@ func _pin_jumping(cell: Vector2i, what := "") -> void:
 	assert_true(world.place_hand(cell), "%s: a hand goes down at %s" % [what, cell])
 
 
-func _fuse() -> void:
-	_frames()
-	world._tick_fuse(10.0)
-
-
 func _through(door: String) -> void:
 	var at = world.door_point_here(door)
 	assert_not_null(at, "door %s is in this space" % door)
@@ -153,11 +118,9 @@ func _sigil(base_cell: Vector2i, what: String) -> void:
 ## Let the real physics run until the body has landed in `row`, or time runs out. For
 ## the two places a solution depends on something only gravity can show: the body
 ## falls, and the world wraps it.
-func _fall_to_row(row: int, seconds := 2.0) -> void:
-	for _i in range(int(seconds * 60.0)):
-		await get_tree().physics_frame
-		if world.player.is_on_floor() and world.player_cell().y == row:
-			return
+func _fall_to_row(row: int) -> void:
+	await _until(func() -> bool:
+		return world.player.is_on_floor() and world.player_cell().y == row, 120)
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +192,7 @@ func test_span_is_nailed_against_lifting_the_shelf() -> void:
 	_walk(Vector2i(10, 11))
 	_pin(Vector2i(10, 11))
 	_pin_jumping(Vector2i(10, 8))
-	_put(Vector2i(8, 11))
+	_stand(Vector2i(8, 11))
 	_fuse()
 	assert_eq(world.folds.size(), 0, "a fold through the nailed rows is refused")
 	assert_eq(world.hands_held(), 0, "...the hands drop where they were pinned")
@@ -335,8 +298,8 @@ func _solve_press() -> void:
 	# the second stays open on the hand you could not carry. Nobody wrote that rule; it
 	# is "a hand is a weight" and "nothing is refused for want of room" meeting.
 	assert_eq(world.folds.size(), 1, "press: one gate lets go")
-	assert_eq(world.folds[0].channel, "weir", "...and the other is still weighed down")
-	assert_true(world.field.is_live("weir"))
+	assert_eq(world.folds[0].channel, "gate_two", "...and the other is still weighed down")
+	assert_true(world.field.is_live("gate_two"))
 
 
 func test_press_wants_the_long_hand_at_the_pit() -> void:
@@ -385,12 +348,12 @@ func _solve_annex() -> void:
 	assert_eq(world.player_cell(), Vector2i(21, 11), "annex: which is the chamber's east end")
 
 	var before: int = world.sigils_count()
-	_put(Vector2i(19, 11))
+	_stand(Vector2i(19, 11))
 	_frames()
 	assert_eq(world.sigils_count(), before + 1, "annex: the sigil is collected inside the fold")
 
 	# Surface where you walked to: inside the sealed chamber, in flat space.
-	_put(Vector2i(20, 11))
+	_stand(Vector2i(20, 11))
 	world.hold_action()
 	assert_eq(world.mode, world.Mode.WORLD, "annex: the fold opens")
 	assert_eq(world.hands_held(), 2, "...your hand comes back")
@@ -459,7 +422,7 @@ func _solve_vault() -> void:
 		"vault: you fell through the floor and landed in the attic")
 
 	var before: int = world.sigils_count()
-	_put(Vector2i(hall.x - 1, hall.y - 6))
+	_stand(Vector2i(hall.x - 1, hall.y - 6))
 	_frames()
 	assert_eq(world.sigils_count(), before + 1, "vault: the last sigil")
 
@@ -468,7 +431,7 @@ func _solve_vault() -> void:
 		+ Vector2(CS * 0.5, 0), false)
 	await _fall_to_row(hall.y)
 	assert_eq(world.player_cell().y, hall.y, "vault: the hatch drops you back into the hall")
-	_put(hall)
+	_stand(hall)
 	world.hold_action()
 	assert_eq(world.mode, world.Mode.WORLD, "vault: the fold opens")
 	assert_eq(world.hands_held(), 1, "...and gives back the hand it held")
@@ -613,7 +576,7 @@ func test_a_chute_only_goes_down() -> void:
 	# You arrive in a booth with a hole in its floor. The booths either side are behind
 	# walls, so a room you have finished is not a way into the ones you have not.
 	_open()
-	_put(Vector2i(5, 9))
+	_stand(Vector2i(5, 9))
 	for other_x in [2, 8, 11, 14]:
 		_unreachable(Vector2i(other_x, 9), "the next booth along")
 	_walk(Vector2i(6, 19), "down the chute to the hall")

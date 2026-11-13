@@ -308,12 +308,6 @@ func touches(reached: Dictionary, cell: Vector2i) -> bool:
 	return false
 
 
-## Is `cell` somewhere the body can simply BE — standing or swimming, without moving?
-func can_stand(cell: Vector2i) -> bool:
-	var b := _block_of(cell)
-	return _fits(b.x, b.y) and _rests(b.x, b.y)
-
-
 ## Could a hand be pinned in `cell` from somewhere in a reachable set — standing, or at
 ## any height of a jump straight up from a place the body rests? Arm's reach is the
 ## nine cells around the body's own (`WorldCore.within_arm_reach`).

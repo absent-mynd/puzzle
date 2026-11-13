@@ -1,4 +1,4 @@
-extends GutTest
+extends "res://scripts/tests/support/world_test.gd"
 
 ## The shipped world, played on the keys.
 ##
@@ -27,11 +27,9 @@ extends GutTest
 ## with `physics_ticks_per_second` scaled to match), so the simulation is the one a
 ## player gets and the wait is not.
 
-const SCENE := "res://scenes/world/World.tscn"
-const CS := 64.0
+## How many times faster than a player's clock these run.
 const SPEED := 4
 
-var world
 var _ticks := 60
 
 
@@ -41,78 +39,19 @@ func before_each() -> void:
 	Engine.time_scale = float(SPEED)
 
 
-func _open(region: String) -> void:
-	world = load(SCENE).instantiate()
-	world.world_override = WorldData.SHIPPED_WORLD
-	world.spawn_override = {"region": region}
-	add_child_autofree(world)
-
-
-## Where a BASE cell of this region is now, as a cell.
-func _now(base_cell: Vector2i) -> Vector2i:
-	var tile = world.base.tile_at(base_cell)
-	var wp = BaseFrame.world_point_from_base(world.current_pieces, tile.base_id,
-		world.cell_center(base_cell))
-	assert_not_null(wp, "base cell %s is in this space" % base_cell)
-	return Vector2i((Vector2(wp) / CS).floor()) if wp != null else base_cell
-
-
-## Hold the fold key until the burst is loaded, then let go.
-func _burst() -> void:
-	_send(KEY_F, true)
-	for _i in range(600):
-		await get_tree().process_frame
-		if world.hold_loaded():
-			break
-	assert_true(world.hold_loaded(), "holding loads the burst")
-	_send(KEY_F, false)
-
-
 func after_each() -> void:
-	for code in [KEY_A, KEY_D, KEY_W, KEY_S, KEY_SPACE]:
-		_hold(code, false)
+	_release_keys()
 	Engine.time_scale = 1.0
 	Engine.physics_ticks_per_second = _ticks
 
 
-## A movement key, as state the body polls.
-func _hold(code: int, down: bool) -> void:
-	var ev := InputEventKey.new()
-	ev.physical_keycode = code
-	ev.pressed = down
-	Input.parse_input_event(ev)
-	Input.flush_buffered_events()
-
-
-## A key the WORLD listens for, delivered the way the engine delivers it.
-func _send(code: int, down: bool) -> void:
-	var ev := InputEventKey.new()
-	ev.physical_keycode = code
-	ev.pressed = down
-	world._unhandled_input(ev)
-
-
-func _tap(code: int) -> void:
-	_send(code, true)
-	_send(code, false)
-
-
-func _steps(n: int) -> void:
-	for _i in range(n):
-		await get_tree().physics_frame
-
-
-## Run the world until `done` says so. Returns whether it did, within `limit` steps.
-func _until(done: Callable, limit := 900) -> bool:
-	for _i in range(limit):
-		if done.call():
-			return true
-		await get_tree().physics_frame
-	return done.call()
+func _open(region: String) -> void:
+	_open_world(WorldData.SHIPPED_WORLD, region)
 
 
 func test_threshold_played_on_the_keys() -> void:
 	_open("threshold")
+	world.anim_enabled = true       # the fold and the unfold play, as they do for a player
 	await _steps(20)
 	assert_true(world.player.is_on_floor(), "you start standing")
 
@@ -193,13 +132,11 @@ func test_threshold_played_on_the_keys() -> void:
 
 func test_cistern_the_swim_out_onto_the_cliff() -> void:
 	_open("cistern")
-	world.anim_enabled = false
 	await _steps(5)
 	# The fold, set up directly: a hand in the air beside the water, at the lip's height.
 	world.player.teleport(world.cell_center(Vector2i(9, 5)), false)
 	assert_true(world.place_hand(Vector2i(10, 5)))
-	world._physics_process(1.0 / 60.0)
-	world._tick_fuse(10.0)
+	_fuse()
 	assert_eq(world.folds.size(), 1, "the dry gap is folded away")
 
 	# From down in the waterfall: up past the lip on the jump key, then over.
@@ -226,7 +163,7 @@ func test_cistern_the_swim_out_onto_the_cliff() -> void:
 		return world.player.global_position.x <= (float(lip.x) + 0.75) * CS, 300)
 	_hold(KEY_A, false)
 	await _steps(20)
-	await _burst()
+	await _charge_and_release()
 	assert_true(await _until(func() -> bool: return world.folds.is_empty(), 300),
 		"a burst from the cliff's edge reaches the seam")
 	await _steps(20)
@@ -237,14 +174,12 @@ func test_cistern_the_swim_out_onto_the_cliff() -> void:
 
 func test_annex_the_walk_back_through_the_glue() -> void:
 	_open("annex")
-	world.anim_enabled = false
 	await _steps(5)
 	# Folded in, set up directly: a hand behind you, and you against the chamber wall.
-	world.player.teleport(world.cell_center(Vector2i(12, 11)) + Vector2(0, 12), false)
+	_stand(Vector2i(12, 11))
 	assert_true(world.place_hand(Vector2i(11, 11)))
-	world.player.teleport(world.cell_center(Vector2i(13, 11)) + Vector2(0, 12), false)
-	world._physics_process(1.0 / 60.0)
-	world._tick_fuse(10.0)
+	_stand(Vector2i(13, 11))
+	_fuse()
 	assert_eq(world.mode, world.Mode.SUBSPACE, "standing in the strip, you are folded in")
 	await _steps(5)
 
@@ -265,7 +200,7 @@ func test_annex_the_walk_back_through_the_glue() -> void:
 	_hold(KEY_D, false)
 	await _steps(20)
 	assert_true(world.glue_within_burst(), "the way out is in reach")
-	await _burst()
+	await _charge_and_release()
 	assert_true(await _until(func() -> bool: return world.mode == world.Mode.WORLD, 300),
 		"the fold opens")
 	await _steps(20)

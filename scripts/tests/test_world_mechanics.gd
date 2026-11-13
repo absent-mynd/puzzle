@@ -1,4 +1,4 @@
-extends GutTest
+extends "res://scripts/tests/support/world_test.gd"
 
 ## The mechanics that make the hand economy reach past folding: weight plates and the
 ## channels they keep live, the world's bolts coming back when its folds come apart, water,
@@ -13,48 +13,24 @@ extends GutTest
 ##         a loose swift hand at 27, a door at 38
 ##   pool  y=11 is the walk line. water x 6..9, y 5..11.  far pair at 12 & 15.  G(17)
 
-const SCENE := "res://scenes/world/World.tscn"
 const FIXTURE := "res://worlds/fixtures/mechanics.json"
-const CS := 64.0
-const DT := 1.0 / 60.0
 
-var world
 var _start_total := 0
 
 
 func before_each() -> void:
-	world = load(SCENE).instantiate()
-	world.world_override = FIXTURE
-	add_child_autofree(world)
-	world.anim_enabled = false
+	_open_world(FIXTURE)
 	_start_total = world.hands_total()
 
 
-func _stand(cell: Vector2i) -> void:
-	world.player.teleport((Vector2(cell) + Vector2(0.5, 0.5)) * CS + Vector2(0, 12), false)
-
-
-## Where a BASE cell of the current region is right now. Folds slide the sheet — the
-## plate you just stood on rode its flap along with you — so anything said about "the
-## plate" after a fold has to be said about the tile, not about where it started.
-func _now(base_cell: Vector2i) -> Vector2i:
-	var tile = world.base.tile_at(base_cell)
-	var wp = BaseFrame.world_point_from_base(world.current_pieces, tile.base_id,
-		world.cell_center(base_cell))
-	assert_not_null(wp, "base cell %s is in this space" % base_cell)
-	return Vector2i((Vector2(wp) / CS).floor())
-
-
-## One frame of the world's own logic, as `_physics_process` runs it.
-func _frame(n := 1) -> void:
-	for _i in range(n):
-		world._physics_process(DT)
+func after_each() -> void:
+	_release_keys()
 
 
 ## Long enough for a plate that has come up to be believed. A plate forgives a hop
 ## (`FoldWorld.PLATE_GRACE`), so "I stepped off" is only true a moment after you did.
 func _wait_out_the_grace() -> void:
-	_frame(int(ceil(world.PLATE_GRACE / DT)) + 2)
+	_frames(int(ceil(world.PLATE_GRACE / DT)) + 2)
 
 
 func _bolts_here() -> int:
@@ -75,9 +51,9 @@ func _gate_fold():
 ## Stand on the gate plate until its fold has gone off.
 func _hold_gate_with_body() -> void:
 	_stand(Vector2i(5, 9))
-	_frame()
+	_frames()
 	world._tick_fuse(1.0)
-	_frame()
+	_frames()
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +108,7 @@ func test_a_plate_with_no_channel_drives_nothing() -> void:
 func test_standing_on_a_plate_arms_the_worlds_pair_and_the_fuse_folds_it() -> void:
 	assert_eq(world.armed_pairs().size(), 0, "nothing is armed before anything is weighed down")
 	_stand(Vector2i(5, 9))
-	_frame()
+	_frames()
 	assert_true(world.field.is_live("gate"), "your weight keeps the channel live")
 	assert_eq(world.armed_pairs().size(), 1, "...and the world's pair arms on it")
 	assert_eq(world.folds.size(), 0, "pressing a plate does not fold; it lights a fuse")
@@ -178,7 +154,7 @@ func test_a_hand_on_the_plate_weighs_it_and_reaches_for_nothing() -> void:
 	# ordinary anchor they would be a pair; a weight is not looking for one.
 	_stand(Vector2i(7, 9))
 	assert_true(world.place_hand(Vector2i(8, 9)))
-	_frame()
+	_frames()
 	var pairs: Array = world.armed_pairs()
 	assert_eq(pairs.size(), 1, "exactly one pair is armed")
 	assert_false(pairs[0]["a"].is_hand() or pairs[0]["b"].is_hand(),
@@ -186,7 +162,7 @@ func test_a_hand_on_the_plate_weighs_it_and_reaches_for_nothing() -> void:
 
 	world._tick_fuse(1.0)
 	_stand(Vector2i(20, 9))
-	_frame()
+	_frames()
 	assert_not_null(_gate_fold(), "you walked away and the fold is still standing")
 	assert_eq(world.hands_held(), 0, "which is what the hand on the plate is paying for")
 	assert_eq(world.hands_total(), _start_total, "conservation")
@@ -214,9 +190,9 @@ func test_a_weight_has_no_span_ring_and_previews_no_partner() -> void:
 func test_taking_the_hand_back_lets_the_fold_go() -> void:
 	_stand(Vector2i(4, 9))
 	world.place_hand(Vector2i(5, 9))
-	_frame()
+	_frames()
 	world._tick_fuse(1.0)
-	_frame()
+	_frames()
 	assert_not_null(_gate_fold())
 
 	world.hold_action()             # a burst, standing next to the plate
@@ -232,10 +208,10 @@ func test_a_hop_on_the_plate_does_not_spring_the_fold() -> void:
 	_hold_gate_with_body()
 	var plate: Vector2i = _now(Vector2i(5, 9))
 	world.player.teleport((Vector2(plate) + Vector2(0.5, -0.6)) * CS, false)
-	_frame(6)                       # a tenth of a second in the air above it
+	_frames(6)                       # a tenth of a second in the air above it
 	assert_not_null(_gate_fold(), "a hop is not stepping off")
 	_stand(plate)
-	_frame(30)
+	_frames(30)
 	assert_not_null(_gate_fold(), "...and landing back on it starts nothing over")
 	assert_eq(world.armed_pairs().size(), 0, "no fuse was lit by any of that")
 
@@ -253,11 +229,11 @@ func test_leaving_the_room_settles_its_plates_on_what_is_really_there() -> void:
 	# must not follow you out: nothing is on that plate, and a room away is exactly
 	# where a stale "down" would never be corrected.
 	_stand(Vector2i(40, 9))
-	_frame()
+	_frames()
 	assert_true(world.field.is_live("far"), "your weight has it down")
 	world._traverse("LAB_POOL")
 	assert_false(world.field.is_live("far"), "you took your weight with you")
-	_frame(30)
+	_frames(30)
 	assert_eq(world.armed_pairs().size(), 0, "...so nothing arms in the next room")
 
 
@@ -266,7 +242,7 @@ func test_a_hand_lying_loose_on_the_plate_weighs_it_too() -> void:
 	var plate := (Vector2(5, 9) + Vector2(0.5, 0.5)) * CS
 	world._land_ball({"kind": HandTypes.PLAIN, "pos": plate + Vector2(0, 20), "region": "lab"})
 	_stand(Vector2i(20, 9))
-	_frame()
+	_frames()
 	assert_true(world.field.is_live("gate"), "a loose hand on the plate keeps the channel live")
 	assert_eq(world.plates_down_here().size(), 1, "...and the plate is drawn down")
 
@@ -285,13 +261,13 @@ func test_bursting_a_plates_fold_opens_it_only_for_a_fuse() -> void:
 	# apart by hand buys you one fuse of open space, not a different room.
 	_stand(Vector2i(4, 9))
 	world.place_hand(Vector2i(5, 9))
-	_frame()
+	_frames()
 	world._tick_fuse(1.0)
 	assert_not_null(_gate_fold())
 
 	assert_true(world.unfold_space_fold(_gate_fold()), "a plate's fold can be taken apart")
 	assert_null(_gate_fold(), "...and is, for a moment")
-	_frame()
+	_frames()
 	assert_eq(world.armed_pairs().size(), 1, "but its bolts are back and the plate is still down")
 	world._tick_fuse(1.0)
 	assert_not_null(_gate_fold(), "so it folds itself again")
@@ -306,7 +282,7 @@ func test_a_fold_of_your_own_made_after_it_wedges_a_plates_fold_open() -> void:
 	assert_true(world.do_fold(Vector2i(30, 2), Vector2i(34, 2)), "a fold of your own, afterwards")
 
 	_stand(_now(Vector2i(3, 9)))
-	_frame(30)
+	_frames(30)
 	assert_false(world.field.is_live("gate"), "nothing is on the plate")
 	assert_not_null(_gate_fold(), "...and the fold stands anyway: yours is on top of it")
 	assert_eq(world.hud.flash_text().find("Blocked"), -1,
@@ -314,7 +290,7 @@ func test_a_fold_of_your_own_made_after_it_wedges_a_plates_fold_open() -> void:
 
 	var mine: Fold = world.folds.back()
 	assert_true(world.unfold_space_fold(mine))
-	_frame(30)
+	_frames(30)
 	assert_null(_gate_fold(), "take the wedge out and the spring goes")
 
 
@@ -327,7 +303,7 @@ func test_a_socket_is_still_there_after_its_fold_comes_apart() -> void:
 	for _round in range(2):
 		_stand(Vector2i(19, 9))
 		assert_true(world.place_hand(Vector2i(20, 9)))
-		_frame()
+		_frames()
 		assert_eq(world.armed_pairs().size(), 1, "one hand of yours and the patient socket")
 		world._tick_fuse(5.0)
 		assert_eq(world.folds.size(), 1)
@@ -339,34 +315,34 @@ func test_a_socket_is_still_there_after_its_fold_comes_apart() -> void:
 		var socket = world.field.at_point(world.space, world.cell_center(Vector2i(24, 9)), CS * 0.5)
 		assert_not_null(socket, "the socket comes back to the world")
 		assert_false(socket.is_hand())
-		_frame()
+		_frames()
 		assert_eq(world.armed_pairs().size(), 0, "alone again, it folds with nothing")
 	assert_eq(world.hands_total(), _start_total)
 
 
 func test_a_trip_plate_with_only_a_channel_latches_the_worlds_pair() -> void:
 	_stand(Vector2i(30, 9))
-	_frame()
+	_frames()
 	assert_true(world.field.is_live("latch"), "stepping on it latches the channel")
 	world._tick_fuse(5.0)
 	assert_eq(world.folds.size(), 1)
 	assert_eq(world.folds[0].channel, "latch")
 
 	_stand(Vector2i(27, 9))
-	_frame(30)
+	_frames(30)
 	assert_eq(world.folds.size(), 1, "a latch is not a hold: walking off changes nothing")
 
 	# Taking the fold apart resets the plate, and its bolts wait for the next step.
 	assert_true(world.unfold_space_fold(world.folds[0]))
 	assert_false(world.field.is_live("latch"), "the latch drops with the fold")
-	_frame(30)
+	_frames(30)
 	world._tick_fuse(5.0)
 	assert_eq(world.folds.size(), 0, "...so it does not fold itself again")
 
 	_stand(Vector2i(28, 9))
-	_frame()
+	_frames()
 	_stand(Vector2i(30, 9))
-	_frame()
+	_frames()
 	world._tick_fuse(5.0)
 	assert_eq(world.folds.size(), 1, "step on it again and it does")
 
@@ -374,12 +350,12 @@ func test_a_trip_plate_with_only_a_channel_latches_the_worlds_pair() -> void:
 func test_a_plate_in_one_room_keeps_a_fold_in_another() -> void:
 	_stand(Vector2i(39, 9))
 	assert_true(world.place_hand(Vector2i(40, 9)), "a hand left on the far plate")
-	_frame()
+	_frames()
 	assert_true(world.field.is_live("far"))
 
 	world._traverse("LAB_POOL")
 	assert_eq(world.region_id, "pool")
-	_frame()
+	_frames()
 	assert_true(world.field.is_live("far"), "the hand is still on that plate, a room away")
 	assert_eq(world.armed_pairs().size(), 1, "...and this room's pair arms on it")
 	world._tick_fuse(1.0)
@@ -412,13 +388,13 @@ func test_a_stroke_is_not_dragged_back_by_the_water() -> void:
 
 func test_the_world_tells_the_body_when_it_is_in_water() -> void:
 	world._traverse("LAB_POOL")
-	_frame()
+	_frames()
 	assert_false(world.player.in_water, "on the bank")
 	world.player.teleport((Vector2(7, 8) + Vector2(0.5, 0.5)) * CS, false)
-	_frame()
+	_frames()
 	assert_true(world.player.in_water, "in the pool")
 	world.player.teleport((Vector2(7, 3) + Vector2(0.5, 0.5)) * CS, false)
-	_frame()
+	_frames()
 	assert_false(world.player.in_water, "above it")
 
 
@@ -443,13 +419,13 @@ func test_sigils_are_counted_and_collected_once() -> void:
 	assert_eq(world.sigils_total, 3, "two in the lab, one by the pool")
 	assert_eq(world.sigils_count(), 0)
 	_stand(Vector2i(2, 9))
-	_frame()
+	_frames()
 	assert_eq(world.sigils_count(), 1, "touching one collects it")
 	assert_string_contains(world.hud.flash_text(), "1 of 3")
 	_stand(Vector2i(6, 9))
-	_frame()
+	_frames()
 	_stand(Vector2i(2, 9))
-	_frame()
+	_frames()
 	assert_eq(world.sigils_count(), 1, "walking back onto it collects nothing more")
 	assert_eq(world.found_sigil_polys().size(), 1, "the found one is dimmed where it stands")
 
@@ -462,11 +438,11 @@ func test_a_room_reset_hands_back_what_you_spent_in_the_room() -> void:
 	# One hand in a fold with the socket, one on the gate plate: both slots empty.
 	_stand(Vector2i(19, 9))
 	world.place_hand(Vector2i(20, 9))
-	_frame()
+	_frames()
 	world._tick_fuse(5.0)
 	_stand(_now(Vector2i(4, 9)))
 	world.place_hand(_now(Vector2i(5, 9)))
-	_frame()
+	_frames()
 	world._tick_fuse(5.0)
 	assert_eq(world.hands_held(), 0)
 	assert_eq(world.folds.size(), 2)
@@ -482,13 +458,13 @@ func test_a_room_reset_hands_back_what_you_spent_in_the_room() -> void:
 
 func test_a_room_reset_keeps_what_you_know_and_what_you_carried_off() -> void:
 	_stand(Vector2i(2, 9))
-	_frame()
+	_frames()
 	assert_eq(world.sigils_count(), 1)
 	# Spend a hand, then take the room's loose swift one into the slot it freed.
 	_stand(Vector2i(19, 9))
 	world.place_hand(Vector2i(20, 9))
 	_stand(Vector2i(27, 9))
-	_frame()
+	_frames()
 	assert_eq(world.loose_hands.size(), 0, "the swift hand is yours now")
 
 	world._reset_region()
@@ -501,7 +477,7 @@ func test_a_room_reset_keeps_what_you_know_and_what_you_carried_off() -> void:
 func test_a_room_reset_leaves_other_rooms_alone() -> void:
 	_stand(Vector2i(19, 9))
 	world.place_hand(Vector2i(20, 9))
-	_frame()
+	_frames()
 	world._tick_fuse(5.0)
 	assert_eq(world.folds.size(), 1)
 	world._traverse("LAB_POOL")
@@ -519,18 +495,18 @@ func test_you_wake_at_the_door_you_came_in_by() -> void:
 	world.player.teleport((Vector2(15, 11) + Vector2(0.5, 0.5)) * CS, false)
 	world._reset_region()
 	assert_almost_eq(world.player.global_position.x, door.x, 1.0, "back at the way in")
-	_frame()
+	_frames()
 	assert_eq(world.region_id, "pool", "...and arriving on a door is not walking into it")
 
 	# A fall is the same question.
 	world.player.teleport(Vector2(15.5 * CS, 40 * CS), false)
-	_frame()
+	_frames()
 	assert_almost_eq(world.player.global_position.x, door.x, 1.0, "a fall puts you there too")
 
 
 func test_the_world_reset_is_the_other_key() -> void:
 	_stand(Vector2i(2, 9))
-	_frame()
+	_frames()
 	world._reset()
 	assert_eq(world.sigils_count(), 0, "the whole world, sigils and all")
 	assert_eq(world.hands_total(), _start_total)
@@ -542,30 +518,18 @@ func test_the_world_reset_is_the_other_key() -> void:
 # Everything above asks the model. This runs the body: real physics frames, a real
 # key held down, a real pool.
 
-func _press(keycode: int, down: bool) -> void:
-	var ev := InputEventKey.new()
-	ev.physical_keycode = keycode
-	ev.pressed = down
-	Input.parse_input_event(ev)
-	Input.flush_buffered_events()
-
-
-func after_each() -> void:
-	_press(KEY_SPACE, false)
-
-
 func test_holding_the_jump_key_carries_the_body_up_through_water() -> void:
 	world._traverse("LAB_POOL")
 	var floor_y := (11.0 + 0.5) * CS
 	world.player.teleport(Vector2(7.5 * CS, floor_y), false)
-	_press(KEY_SPACE, true)
+	_hold(KEY_SPACE, true)
 	for _i in range(240):
 		await get_tree().physics_frame
 		if world.player.global_position.y < 6.5 * CS:
 			break
 	assert_lt(world.player.global_position.y, 6.5 * CS,
 		"five cells of water climbed without touching a floor")
-	_press(KEY_SPACE, false)
+	_hold(KEY_SPACE, false)
 
 
 func test_left_alone_in_water_the_body_sinks_slowly_and_stops_on_the_bottom() -> void:

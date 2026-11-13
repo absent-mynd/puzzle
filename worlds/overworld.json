@@ -8,7 +8,7 @@
 		"plain"
 	],
 	"metadata": {
-		"note": "A hub and six rooms, seven sigils. The atrium is the hub: every room is entered from it and hands you back through a chute under its ceiling, and each of its own locks is one room's lesson used once \u2014 the ledge is threshold's lift, the pit is span's socket, the loft wants press's long hand. threshold: a vertical fold, and riding the unfold up. span: a pit closed with one hand and a socket, then taken apart from the far side. cistern: water you can climb and cannot pin in. press: weight plates, three hands, and which goes where. annex: a sealed chamber entered through the inside of a fold. vault: the same idea turned on its side, with one hand, because the other is on the keystone back in the annex. What each is for is in scripts/world/README.md; scripts/tests/test_overworld_solutions.gd plays all of it and is the authority on whether it can be done."
+		"note": "A hub (atrium) and six rooms, seven sigils. What each room is for is in scripts/world/README.md; scripts/tests/test_overworld_solutions.gd plays all of it and is the authority on whether it can be done."
 	},
 	"regions": {
 		"atrium": {
@@ -364,10 +364,10 @@
 			},
 			"tile_data": {
 				"5,11": {
-					"channel": "sluice"
+					"channel": "gate_one"
 				},
 				"19,11": {
-					"channel": "weir"
+					"channel": "gate_two"
 				},
 				"38,11": {
 					"radius": 1.5
@@ -393,7 +393,7 @@
 						"y": 11
 					},
 					"kind": "swift",
-					"arms": "sluice",
+					"arms": "gate_one",
 					"id": "s1",
 					"pair": "s2"
 				},
@@ -403,7 +403,7 @@
 						"y": 11
 					},
 					"kind": "swift",
-					"arms": "sluice",
+					"arms": "gate_one",
 					"id": "s2",
 					"pair": "s1"
 				},
@@ -413,7 +413,7 @@
 						"y": 11
 					},
 					"kind": "swift",
-					"arms": "weir",
+					"arms": "gate_two",
 					"id": "w1",
 					"pair": "w2"
 				},
@@ -423,7 +423,7 @@
 						"y": 11
 					},
 					"kind": "swift",
-					"arms": "weir",
+					"arms": "gate_two",
 					"id": "w2",
 					"pair": "w1"
 				},
