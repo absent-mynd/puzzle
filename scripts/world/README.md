@@ -871,6 +871,38 @@ stays pinned at `PixelArt.CAMERA_ZOOM` forever.
   legible over chunky tiles. So are the overlay's markers — they are drawn
   unlit, because what you navigate by must never dim.
 
+### What gives a room its shape
+
+A tileset that must tile against strangers cannot draw its own edges, so the
+edges are drawn for it — **per art pixel, in the lit shader, from the base grid**:
+
+- **Ink.** What stops you gets a dark **rim** on every face that met open space;
+  what you move through gets a dithered **contact shadow** wherever something
+  solid stood against it. A ledge has an underside and a wall stands on its floor.
+- **Depth.** Rock darkens away from its surface, so a room reads as shapes with
+  faces rather than as a field of brick.
+- **Mood.** A region may name the colour it is lit in (`mood`). The hub has none;
+  every door off it opens somewhere recognisably else. Folding in tints on top.
+
+All three are facts about the tile as AUTHORED, never about what a fold put beside
+it, so a crease cuts them exactly as it cuts the art: a seam is two rims meeting.
+The mechanism and its reasons are in `TileBatch` ("What rides in the vertex
+colour") and the header of `pixel_lit.gdshader`.
+
+And four things that are there so the place is not a diagram:
+
+- **The mat.** Under the sheet is a cutting mat ruled in cells (`Backdrop`). It is
+  the one thing on screen that is not in the space — it does not repeat inside a
+  fold and does not move when the sheet does, so a fold is seen against something
+  that stayed put.
+- **Water moves**, rows sliding against each other.
+- **Dust** drifts in the lamplight (`LightRig`, "Motes").
+- **The body has a face** (`PlayerVisual`): it looks where you face and where you
+  aim, and it blinks.
+
+Every one of those runs on `WorldClock`, so raising a hand stops all of them at
+once — `tools/render_check.gd` looks at the pixels to make sure.
+
 ### Lights
 
 A light is an **occupant of the sheet**, stored the way a door is: a base tile

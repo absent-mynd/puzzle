@@ -418,6 +418,7 @@ var overlay: WorldOverlay
 var light_rig: LightRig
 ## The low-resolution render target everything in the world is drawn into.
 var pixel_view: SubViewport
+var backdrop: Backdrop
 ## The held look, on the rect that composites the render target. Null when the shader
 ## is missing.
 var _held_mat: ShaderMaterial
@@ -447,6 +448,13 @@ func _ready() -> void:
 	light_rig = LightRig.new()
 	light_rig.cell_size = CS
 	light_rig.z_index = 20
+
+	# Under everything: the mat the sheet lies on. Not a wrap canvas — it is the one
+	# thing on screen that is not in the space, so it does not repeat with it.
+	backdrop = Backdrop.new()
+	backdrop.cell_size = CS
+	backdrop.z_index = -10
+	pixel_view.add_child(backdrop)
 
 	# The sheet: batched tiles, and one body carrying the colliders of the copies
 	# the player could reach. Both are rebuilt whenever the space changes.
@@ -848,6 +856,7 @@ func _refresh_lights() -> void:
 	if light_rig == null:
 		return
 	light_rig.set_depth(context.size())
+	light_rig.set_mood(world_data.mood_of(region_id) if world_data != null else Color.WHITE)
 	light_rig.set_lights(lights_here())
 
 
@@ -947,6 +956,7 @@ func _apply_context() -> void:
 
 	# Deeper reads darker and more lavender; the sheet's tint follows in the rig.
 	hud.set_depth(context.size())
+	backdrop.set_depth(context.size())
 	geo.visible = true
 	rebuild()
 	_update_music()

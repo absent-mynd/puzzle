@@ -49,6 +49,11 @@ Rows, top to bottom — the `K_*` constants in `scripts/world/TileAtlas.gd`:
   cut tiles into arbitrary polygons and slide them next to strangers, so a tile
   cannot assume what is beside it. That is why there is a variant column and
   only one edge kind rather than a 47-tile blob set.
+- **Do not paint edges or shadows.** The shader inks a rim onto every face of a
+  solid that met open space, shades the air beside it, and darkens rock away from
+  its surface (`pixel_lit.gdshader`). Paint the material; the shape is drawn for you.
+- **Water is slid sideways a texel at a time**, wrapped within its own tile, so a
+  water tile has to tile horizontally against itself.
 
 Per-tile *variant* is hashed from the stable `base_id`, so a tile keeps its
 variant through every fold, ride and cut.

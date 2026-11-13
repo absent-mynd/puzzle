@@ -132,11 +132,18 @@ func session_hint() -> String:
 	return _session.text
 
 
+## The colour of nothing, at a given depth of fold. Static because two things paint
+## it — this, behind the viewport, and the `Backdrop` inside it — and they have to
+## agree to the pixel or the mat would show as a rectangle.
+static func ground_color(depth: int) -> Color:
+	return BG_BASE.lerp(BG_DEEP, minf(float(maxi(depth, 0)) * DEPTH_TINT_RATE, 1.0))
+
+
 ## How deep in folds the player is, which is all this needs to know to tint the
 ## ground behind the world.
 func set_depth(depth: int) -> void:
 	if _bg != null:
-		_bg.color = BG_BASE.lerp(BG_DEEP, minf(float(depth) * DEPTH_TINT_RATE, 1.0))
+		_bg.color = ground_color(depth)
 
 
 ## Put a message up for `FLASH_TIME`. An empty message is ignored rather than

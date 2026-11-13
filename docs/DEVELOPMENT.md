@@ -60,7 +60,7 @@ A run fails if any of these is true:
 | A shipped world is malformed | `scripts/tests/test_shipped_worlds.gd` |
 | The shipped world cannot be finished — or can be walked around | `scripts/tests/test_overworld_solutions.gd` |
 | The keys a player presses no longer do the first room | `scripts/tests/test_overworld_keys.gd` |
-| Something in `scripts/world/` animates off the wall clock | `scripts/tests/test_world_clock.gd` |
+| Something in `scripts/world/` animates off the wall clock, or a shader reads `TIME` | `scripts/tests/test_world_clock.gd` |
 
 The middle three exist because GUT derives its exit code from the assertion-failure
 count alone, so a test that never reaches an assertion scores zero of everything and
@@ -75,6 +75,14 @@ world — the input charge, the HUD flash, the held-look ease.
 
 If you legitimately want a test that does not assert yet, mark it `pending()` —
 that is tracked separately and does not fail the build.
+
+### The one gate that needs a screen
+
+The suite is headless, so it can read the source for a second clock but cannot see
+a frame. `tools/render_check.gd` can: it raises a hand beside moving water and
+compares two frames half a second apart, byte for byte. Run it after touching a
+shader, a `WrapCanvas`, or anything that animates — its header has the command and
+says what each of its two answers means. It is not in CI, because CI has no display.
 
 ---
 

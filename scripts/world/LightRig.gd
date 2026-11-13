@@ -55,6 +55,8 @@ const TINT_DEPTH_FALLOFF := 0.55
 
 var cell_size := 64.0
 var _depth := 0
+## The room's own colour (`WorldData.mood_of`). WHITE is none.
+var _mood := Vector3.ONE
 
 var _shader: Shader = null
 var _materials: Dictionary = {}
@@ -92,6 +94,12 @@ func _make_material(key: String) -> ShaderMaterial:
 	mat.set_shader_parameter("light_gain", GAIN_BG if background else GAIN_FG)
 	mat.set_shader_parameter("tint", TINT_WORLD)
 	mat.set_shader_parameter("pixel_size", PixelArt.WORLD_PER_PIXEL)
+	# What the shader needs to know about the tileset to ink and animate it.
+	mat.set_shader_parameter("solid", not background)
+	mat.set_shader_parameter("atlas_kinds", float(TileAtlas.KINDS))
+	mat.set_shader_parameter("atlas_variants", float(TileAtlas.VARIANTS))
+	mat.set_shader_parameter("tile_px", float(TileAtlas.TILE_PX))
+	mat.set_shader_parameter("water_kind", float(TileAtlas.K_WATER))
 	return mat
 
 
@@ -125,7 +133,16 @@ func depth() -> int:
 	return _depth
 
 
-## Compound the per-layer shift, with each layer pushing less than the one above.
+## The colour this room is lit in. It shares the tint uniform with the depth shift,
+## and the two MULTIPLY: the mood says which room you are in, the depth says how far
+## into it you are folded, and neither should be able to erase the other.
+func set_mood(mood: Color) -> void:
+	_mood = Vector3(mood.r, mood.g, mood.b)
+	_apply_tint()
+
+
+## Compound the per-layer shift, with each layer pushing less than the one above —
+## then put the room's mood on top of whatever that came to.
 func _apply_tint() -> void:
 	var tint := TINT_WORLD
 	var strength := 1.0
@@ -133,6 +150,7 @@ func _apply_tint() -> void:
 		tint = tint.lerp(Vector3(tint.x * TINT_SUB.x, tint.y * TINT_SUB.y,
 			tint.z * TINT_SUB.z), strength)
 		strength *= TINT_DEPTH_FALLOFF
+	tint *= _mood
 	for key in _materials:
 		(_materials[key] as ShaderMaterial).set_shader_parameter("tint", tint)
 
@@ -152,6 +170,7 @@ func set_lights(lights: Array) -> void:
 			break
 	_rebuild_lamps()
 	_upload()
+	queue_redraw()
 
 
 ## Where the camera is looking. Only the nearest `MAX_LIGHTS` reach the shader,
@@ -166,12 +185,73 @@ func set_focus(point: Vector2) -> void:
 ## a stopped world would be the one thing on screen giving away that the pause is a
 ## pause and not a still frame.
 func _process(_delta: float) -> void:
-	if not _any_flicker:
-		return
 	var now := WorldClock.now()
 	if absf(now - _uploaded_at) < GeometryCore.EPSILON:
 		return
-	_upload()
+	# The water moves on the same clock, so it gets the same reading — and a held
+	# world sends nothing, which is how held water holds still.
+	for key in _materials:
+		(_materials[key] as ShaderMaterial).set_shader_parameter("world_time", now)
+	if _any_flicker:
+		_upload()
+	else:
+		_uploaded_at = now
+	# The dust drifts on the same clock, and is redrawn on the same condition.
+	queue_redraw()
+
+
+# ---------------------------------------------------------------------------
+# Motes: dust in the lamplight
+# ---------------------------------------------------------------------------
+#
+# A few single pixels adrift around each lamp. They are the only thing in a room that
+# moves when you do not, which is what makes a room feel like air rather than like a
+# diagram — and they stop when the world does, which is what makes a stopped world
+# feel held.
+#
+# Stateless: where a mote is is a function of the world's clock and the lamp's id.
+# Nothing is stored, so there is nothing to carry through a wrap, a rebuild or a hold.
+
+## Motes per lamp, how far they wander from it (in cells), and how opaque one gets.
+const MOTES := 4
+const MOTE_REACH := Vector2(1.3, 0.8)
+const MOTE_ALPHA := 0.5
+
+
+func _draw() -> void:
+	var now := WorldClock.now()
+	var size := Vector2(PixelArt.WORLD_PER_PIXEL, PixelArt.WORLD_PER_PIXEL)
+	for entry in _lights:
+		var lamp := mote_seed(entry)
+		var tint := Color(entry["color"]).lerp(Color.WHITE, 0.3)
+		for i in range(MOTES):
+			tint.a = mote_alpha(i, lamp, now)
+			var at: Vector2 = entry["pos"] + mote_offset(i, lamp, now, cell_size)
+			draw_rect(Rect2(PixelArt.snap(at), size), tint)
+
+
+## Which swarm a light record gets. From the lamp's ID, so every copy of a lamp in a
+## repeating space shows the same dust and walking through the glue changes nothing.
+static func mote_seed(entry: Dictionary) -> int:
+	return int(absi(hash(String(entry.get("id", "")))) % 997)
+
+
+## Where mote `index` of swarm `lamp` is at world time `now`, relative to its lamp.
+## Two sines an axis at rates with no common period, so a mote never visibly loops.
+static func mote_offset(index: int, lamp: int, now: float, cell: float) -> Vector2:
+	var k := float(index) * 2.399 + float(lamp) * 1.618
+	var x := 0.7 * sin(now * (0.21 + 0.07 * fposmod(k, 1.0)) + k * 3.1) \
+		+ 0.3 * sin(now * 0.53 + k * 1.3)
+	var y := 0.7 * sin(now * (0.29 + 0.09 * fposmod(k * 1.7, 1.0)) + k * 5.3) \
+		+ 0.3 * sin(now * 0.41 + k * 2.9)
+	return Vector2(x * MOTE_REACH.x, y * MOTE_REACH.y) * cell
+
+
+## How opaque it is: it catches the light and loses it, in three steps and not a fade.
+static func mote_alpha(index: int, lamp: int, now: float) -> float:
+	var k := float(index) * 2.399 + float(lamp) * 1.618
+	var glint := 0.5 + 0.5 * sin(now * 1.3 + k * 7.0)
+	return MOTE_ALPHA * (floor(glint * 3.0) + 1.0) / 4.0
 
 
 func _rebuild_lamps() -> void:

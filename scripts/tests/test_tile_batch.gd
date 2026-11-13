@@ -157,3 +157,129 @@ func test_degenerate_pieces_are_dropped_rather_than_drawn() -> void:
 	batch.rebuild([{"piece": piece, "poly": PackedVector2Array([Vector2.ZERO, Vector2.ONE])}],
 		[Vector2.ZERO])
 	assert_eq(batch.layers().size(), 0, "A sliver with two corners is not a shape")
+
+
+# ---------------------------------------------------------------------------
+# Ink: what rides in the vertex colour
+# ---------------------------------------------------------------------------
+#
+# The lit shader draws a rim on what stops you and a contact shadow on what you move
+# through. It can only do that from what the batch tells it per vertex, and all of it
+# has to be a BASE-space fact — or a tile would be re-inked by whatever a fold happened
+# to put beside it, and the seam would stop being a cut.
+
+func _piece_at(cell: Vector2i, pieces: Array = []):
+	var tile := grid.tile_at(cell)
+	for piece in (pieces if not pieces.is_empty() else _all_pieces()):
+		if piece.base_id == tile.base_id:
+			return piece
+	return null
+
+
+func test_something_solid_is_inked_where_it_meets_open_space() -> void:
+	# (0,1) is wall: air above it, wall to the right and below, the sheet's edge left.
+	assert_eq(batch.ink_mask(_piece_at(Vector2i(0, 1))), TileBatch.UP | TileBatch.LEFT,
+		"a rim where it faces air, and where the sheet itself ends")
+	assert_eq(batch.ink_mask(_piece_at(Vector2i(1, 2))), TileBatch.DOWN,
+		"buried on three sides: only the sheet's edge is a face")
+
+
+func test_air_is_inked_where_something_solid_stands_against_it() -> void:
+	# (2,1) is the notch in the wall: solid left, right and below.
+	assert_eq(batch.ink_mask(_piece_at(Vector2i(2, 1))),
+		TileBatch.RIGHT | TileBatch.DOWN | TileBatch.LEFT,
+		"a shadow from each side something stands on")
+	assert_eq(batch.ink_mask(_piece_at(Vector2i(0, 0))), TileBatch.DOWN,
+		"open air over a floor: the edge of the sheet casts nothing")
+
+
+func test_ink_does_not_change_when_the_sheet_is_folded() -> void:
+	# Fold the notch's column away: the walls either side of it now touch. Their ink
+	# must not notice — what was a face is still drawn as a face, which is why a seam
+	# shows two rims meeting instead of healing over.
+	var before: Dictionary = {}
+	for piece in _all_pieces():
+		before[piece.base_id] = batch.ink_mask(piece)
+	var fold := Fold.create(0, Vector2i(1, 1), Vector2i(3, 1), CS)
+	var folded := FoldReplay.derive_pieces(grid, [fold])
+	assert_lt(folded.size(), _all_pieces().size(), "the fold took something away")
+	for piece in folded:
+		assert_eq(batch.ink_mask(piece), before[piece.base_id],
+			"tile %d is inked as it was authored" % piece.base_id)
+
+
+func test_a_vertex_knows_where_in_its_own_tile_it_sits() -> void:
+	var piece = _piece_at(Vector2i(1, 1))
+	var data := batch.tile_data(piece.polygon, piece)
+	assert_eq(data.size(), piece.polygon.size())
+	var origin := Vector2(1, 1) * CS
+	for i in range(data.size()):
+		var want := (Vector2(piece.polygon[i]) - origin) / CS
+		assert_almost_eq(Vector2(data[i].b, data[i].a), want, Vector2(0.001, 0.001),
+			"a whole tile's corners are the corners of the unit square")
+
+
+func test_a_moved_or_cut_piece_still_reads_its_place_from_the_base() -> void:
+	# The right half of base tile (1,1), carried two cells to the left by a fold. Where
+	# it sits in ITS tile has not changed: the right half, 0.5 to 1.
+	var piece := FoldedPiece.new(grid.tile_at(Vector2i(1, 1)).base_id, TileTypes.WALL)
+	piece.src_offset = Vector2(-2 * CS, 0)
+	var half := PackedVector2Array([
+		Vector2(-0.5, 1) * CS, Vector2(0, 1) * CS, Vector2(0, 2) * CS, Vector2(-0.5, 2) * CS])
+	var data := batch.tile_data(half, piece)
+	var xs: Array = []
+	for c in data:
+		xs.append(snappedf(c.b, 0.01))
+	xs.sort()
+	assert_eq(xs, [0.5, 0.5, 1.0, 1.0], "the half it was cut from, not the half it landed on")
+
+
+func test_rock_knows_how_deep_it_is_buried() -> void:
+	# Depth is what lets a wall's face read against its mass: the surface is drawn as
+	# authored and the rock behind it falls away into the dark.
+	grid = WorldCore.parse_map([
+		"......",
+		"######",
+		"######",
+		"######",
+		"######",
+		"######",
+	], CS)
+	batch.setup(TileAtlas.texture(), null, grid)
+	var depths: Array = []
+	for y in range(6):
+		depths.append(batch.ink_depth(_piece_at(Vector2i(2, y))))
+	assert_eq(depths, [0, 0, 1, 2, TileBatch.MAX_DEPTH, TileBatch.MAX_DEPTH],
+		"air and the surface are 0, each row behind it one more, and then it stops counting")
+	assert_eq(batch.ink_depth(_piece_at(Vector2i(0, 3))), 2,
+		"the edge of the sheet is not open air: rock runs dark into it")
+
+
+func test_depth_travels_with_the_mask() -> void:
+	grid = WorldCore.parse_map(["....", "####", "####", "####"], CS)
+	batch.setup(TileAtlas.texture(), null, grid)
+	var piece = _piece_at(Vector2i(1, 3))
+	for c in batch.tile_data(piece.polygon, piece):
+		assert_almost_eq(c.g, 2.0 / float(TileBatch.MAX_DEPTH), 0.001)
+		assert_almost_eq(c.r, float(TileBatch.DOWN) / 15.0, 0.001)
+
+
+func test_the_vertex_colour_is_data_only_when_something_will_read_it() -> void:
+	# The lit material takes the vertex colour as data and clears it. With no rig
+	# there is no such material, so data in that channel would simply tint the art.
+	batch.rebuild(_frags(_all_pieces()), [Vector2.ZERO])
+	for vis in batch.layers():
+		for c in vis.vertex_colors:
+			assert_eq(c, Color.WHITE, "no reader: the tileset arrives untinted")
+
+	var rig := LightRig.new()
+	add_child_autofree(rig)
+	batch.setup(TileAtlas.texture(), rig, grid)
+	batch.rebuild(_frags(_all_pieces()), [Vector2.ZERO])
+	var carried := false
+	for vis in batch.layers():
+		assert_not_null(vis.material, "with a rig, the sheet is lit")
+		assert_eq(vis.vertex_colors.size(), vis.polygon.size(), "one record per vertex")
+		for c in vis.vertex_colors:
+			carried = carried or c.r > 0.0
+	assert_true(carried, "...and the ink travels with it")

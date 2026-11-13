@@ -546,3 +546,30 @@ func test_fixture_east_hides_a_lamp_inside_its_preplaced_fold():
 			resolved.append(light.id)
 	assert_true(resolved.has("e_reward"), "the lamp over the reward is in the region")
 	assert_false(resolved.has("e_vault"), "the vault's lamp is folded away with the vault")
+
+
+# ---------------------------------------------------------------------------
+# Mood: the colour a room is lit in
+# ---------------------------------------------------------------------------
+
+func test_a_region_without_a_mood_is_untinted():
+	assert_eq(_sample().mood_of("a"), Color.WHITE, "no mood is no tint, not black")
+	assert_eq(_sample().mood_of("nope"), Color.WHITE, "and nor is no region")
+
+
+func test_a_regions_mood_survives_the_file():
+	var wd := _sample()
+	wd.regions["a"]["mood"] = "#ffc890"
+	wd.regions["b"] = {"rows": ["..", "##"], "spawn": Vector2(0.5, 0.5)}
+	var back := WorldData.new()
+	back.from_dict(JSON.parse_string(JSON.stringify(wd.to_dict())))
+	assert_eq(back.mood_of("a"), Color("#ffc890"))
+	assert_eq(back.mood_of("b"), Color.WHITE, "and is per region")
+	assert_false((back.to_dict()["regions"]["b"] as Dictionary).has("mood"),
+		"a region with none does not grow one by being saved")
+
+
+func test_a_mood_that_is_not_a_colour_is_ignored():
+	var wd := _sample()
+	wd.regions["a"]["mood"] = "rather gloomy"
+	assert_eq(wd.mood_of("a"), Color.WHITE)

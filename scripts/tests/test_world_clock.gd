@@ -39,6 +39,12 @@ func test_the_clock_is_shared_rather_than_per_reader() -> void:
 		"The hands' drift clock IS the world clock")
 
 
+const SHADER_DIR := "res://assets/shaders"
+
+## A shader's built-in clock, as a whole word — `world_time` and `TIME_SCALE` are not it.
+var WALL_CLOCK := RegEx.create_from_string("\\bTIME\\b")
+
+
 ## Every .gd file under a directory.
 func _gd_files(dir_path: String) -> Array:
 	var out: Array = []
@@ -80,3 +86,27 @@ func test_nothing_in_the_world_keeps_a_clock_of_its_own() -> void:
 	assert_eq(offenders, ([] as Array[String]),
 		"nothing in the world animates on the wall clock; use WorldClock.now()\n%s"
 			% "\n".join(offenders))
+
+
+func test_no_shader_keeps_a_clock_of_its_own() -> void:
+	# The same rule, one layer down. A shader's built-in `TIME` is the wall clock: it
+	# cannot be stopped, so anything animated on it goes on moving through a hold. A
+	# shader that needs time takes it as a uniform, fed from `WorldClock`.
+	var offenders: Array[String] = []
+	var scanned := 0
+	var dir := DirAccess.open(SHADER_DIR)
+	assert_not_null(dir, "the shader directory is where this test thinks it is")
+	if dir == null:
+		return
+	for name in dir.get_files():
+		if not name.ends_with(".gdshader"):
+			continue
+		scanned += 1
+		var lines := FileAccess.get_file_as_string("%s/%s" % [SHADER_DIR, name]).split("\n")
+		for i in range(lines.size()):
+			var code := String(lines[i]).split("//")[0]
+			if WALL_CLOCK.search(code) != null:
+				offenders.append("%s:%d — %s" % [name, i + 1, code.strip_edges()])
+	assert_gt(scanned, 0, "found shaders to scan")
+	assert_eq(offenders, ([] as Array[String]),
+		"no shader reads TIME; take a uniform fed from WorldClock\n%s" % "\n".join(offenders))

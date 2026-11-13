@@ -72,7 +72,10 @@ The kernel must never reference `scripts/world/`. See `AGENTS.md` §Layers.
 | The hands that float beside the player, and `draw_hand` — the ONE place a hand is drawn | `HandOrbit.gd` |
 | **How big an art pixel is.** `WORLD_PER_PIXEL`, `TILE_PX`, `VIEW_PX`, `target_size`, snapping, and `hairline_runs` — a one-pixel line stepped into pixels rather than drawn as a quad | `PixelArt.gd` |
 | **The tileset.** Kinds, variants, and base-space UVs for cut pieces | `TileAtlas.gd` |
-| Lit materials, per-frame light uniforms, lamp glyphs | `LightRig.gd` |
+| **The sheet, drawn**: every piece of every copy in two canvas items, and the per-vertex facts (neighbour mask, depth, place in the tile) the lit shader inks from | `TileBatch.gd` |
+| Lit materials, per-frame light uniforms, the room's mood and the fold-depth tint, lamp glyphs and their dust | `LightRig.gd` |
+| The mat under the sheet. Not in the space, so not a wrap canvas | `Backdrop.gd` |
+| The body, painted once per copy of the space, and its face | `PlayerVisual.gd` |
 | **What time it is for things in the world.** Stops when the world does; everything that drifts, throbs or flickers reads it | `WorldClock.gd` |
 | Controls and the design beats | `README.md` |
 
@@ -108,6 +111,9 @@ understand how the pieces meet. Its header comment is the map.
 | …Escape get you back to what you came from? | `Shell.close_top()` — the stack IS the return path |
 | …a light know where it is? | `FoldWorld.lights_here()` → `LightSource.position_in` |
 | …lighting stay pixelly? | `assets/shaders/pixel_lit.gdshader` (snap, quantize, dither) |
+| …a wall get its rim, and the air beside it a shadow? | `TileBatch.tile_data()` → the vertex colour → `pixel_lit.gdshader` `ink_at` |
+| …a room get its colour? | `WorldData.mood_of()` → `LightRig.set_mood()`, from `FoldWorld._refresh_lights` |
+| …I check that a held world really is still? | `tools/render_check.gd` (needs a display) |
 | …the camera decide how far to zoom? | `FoldWorld._update_camera()` / `_camera_focus()` → `WorldCore.camera_zoom_for` |
 | …the camera decide where to look ahead? | `FoldWorld._update_camera()` → `WorldCore.camera_lookahead_for` (+ `PlayerBody.motion_fraction` / `look_dir`) |
 | …zoom stay compatible with pixel art? | `PixelArt.target_size` → `FoldWorld._size_pixel_view()` — the target resizes, the lens never moves |
@@ -146,6 +152,7 @@ understand how the pieces meet. Its header comment is the map.
 | The world select | `scenes/ui/Launcher.tscn` |
 | The lighting shader | `assets/shaders/pixel_lit.gdshader` |
 | The held-world screen effect | `assets/shaders/held.gdshader` |
+| The mat under the sheet | `assets/shaders/mat.gdshader` |
 | Tileset layout & how to drop in a drawn one | `assets/sprites/README.md` |
 
 ---

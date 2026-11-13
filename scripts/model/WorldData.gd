@@ -66,6 +66,7 @@ const SHIPPED_WORLD := "res://worlds/overworld.json"
 ##   "lights":    Array[LightSource], lights placed on base cells (see LightSource)
 ##   "hands":     Array[HandPickup], loose hands lying on base cells (see HandPickup)
 ##   "anchors":   Array[Anchor], anchors the WORLD has driven into the sheet (see Anchor)
+##   "mood":      String,         optional "#rrggbb" the room is lit in (see `mood_of`)
 ##   "editor":    Dictionary,     AUTHORING ONLY — see below. The game never reads it.
 ## }
 ##
@@ -112,6 +113,8 @@ func to_dict() -> Dictionary:
 			"anchors": out_anchors,
 			"editor": (r.get("editor", {}) as Dictionary).duplicate(true),
 		}
+		if r.has("mood"):
+			out_regions[id]["mood"] = String(r["mood"])
 	var out_doors: Dictionary = {}
 	for id in doors:
 		var d: Dictionary = doors[id]
@@ -172,6 +175,8 @@ func from_dict(dict: Dictionary) -> void:
 			"anchors": anchors,
 			"editor": (r.get("editor", {}) as Dictionary).duplicate(true),
 		}
+		if r.has("mood"):
+			regions[id]["mood"] = String(r["mood"])
 
 	doors = {}
 	for id in dict.get("doors", {}):
@@ -366,6 +371,22 @@ func lights_of(id: String) -> Array:
 	for light in regions[id].get("lights", []):
 		out.append(light.duplicate_light())
 	return out
+
+
+## The colour a region is lit in: a multiplier on everything the lamps and the ambient
+## put on its sheet, so WHITE is "as drawn". Style and nothing else — no rule reads it
+## — but it is what makes a room recognisable from across a door, and the folded-in
+## tint multiplies it rather than replacing it (`LightRig.set_mood`).
+##
+## Optional, and anything that is not a colour reads as none: a typo in a mood should
+## cost a room its tint, not its light.
+func mood_of(id: String) -> Color:
+	if not regions.has(id):
+		return Color.WHITE
+	var text := String((regions[id] as Dictionary).get("mood", ""))
+	if not Color.html_is_valid(text):
+		return Color.WHITE
+	return Color.html(text)
 
 
 func clone() -> WorldData:

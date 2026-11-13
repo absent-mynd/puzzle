@@ -299,7 +299,8 @@ Two consequences worth keeping:
   were three clocks (two direct `Time.get_ticks_msec()` reads and `LightRig`'s own
   accumulator) and all three kept running through a pause that had stopped everything
   else, which reads as a paused game rather than as held time. **Anything new that
-  animates in the world reads `WorldClock`**, and `test_world_clock` fails the build
+  animates in the world reads `WorldClock`** — a shader takes it as a uniform, never
+  `TIME` — and `test_world_clock` fails the build
   if it reads the wall clock instead. Wall time stays right for what is NOT in the
   world: the input charge, the HUD's flash, and the held-look ease — all three are
   about the pause rather than in it.
@@ -435,6 +436,7 @@ world (unchanged: CELL = 64 world units)
   SubViewport, RESIZED per zoom  ← 1 art pixel = 4 world units = WORLD_PER_PIXEL
         │  320x180 at 1:1          the LENS never moves; the target grows instead
         │
+        ├── Backdrop    the mat under the sheet — NOT in the space, so it never repeats
         ├── TileBatch   the sheet: ALL pieces of ALL copies in two Polygon2Ds
         ├── StaticBody2D  colliders, domain + the copies one step out
         └── WrapCanvas×n  everything that moves, painted once per lattice offset
@@ -450,7 +452,9 @@ world (unchanged: CELL = 64 world units)
   `PixelArt.target_size`. Never set `_cam.zoom` from gameplay code.
 - **Appearance is a base-space fact.** Variant, edge kind and UVs come from the base
   grid, so a tile looks the same however it has been folded. Do not key art off the
-  folded neighbourhood.
+  folded neighbourhood. That includes the INK — the rim, the contact shadow and the
+  rock's depth are read off base neighbours and ride in the vertex colour
+  (`TileBatch`), which is why a seam shows two rims meeting instead of healing over.
 - **The seam is a hard line**, cut exactly as the geometry is. Deliberate — do not
   soften it without a design conversation.
 - **Lighting is style, not a mechanic.** The player and the overlay markers are drawn
@@ -458,8 +462,8 @@ world (unchanged: CELL = 64 world units)
 - **The held look composites the whole world at once**, which is why it lives on the
   rect rather than on anything in the scene. Once arrived it **must not animate**:
   with `held` steady the output is a fixed function of the input, so a held world is
-  one unchanging image — and a render check hashes two frames half a second apart to
-  hold that. The overlay is inside the same target, which is what bounds how far the
+  one unchanging image — and `tools/render_check.gd` compares two frames half a
+  second apart to hold that. The overlay is inside the same target, which is what bounds how far the
   colour drain may go; `scripts/world/README.md` §"What a held world looks like" has
   the reasoning.
 

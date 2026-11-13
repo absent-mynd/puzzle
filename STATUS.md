@@ -37,6 +37,7 @@ What exists and works today:
 | **Room reset** (`R`) — rebuild the room, refund the hands; `Shift+R` for the world | ✅ Playable |
 | **Hand swap** (`Q`) — choose which hand goes down next | ✅ Playable, ⚙️ untested by feel |
 | Trip plates (`T`) — a plate latches a channel, or pins a bolted pair of its own; the fuse folds it | ✅ **At any depth**, **in the world** (the atrium's bridge) |
+| **The look**: ink (rims, contact shadows, rock depth) from the base grid, a mood per room, the mat under the sheet, moving water, lamp dust, a face | ✅ In the world; ⚙️ every number in it is a first guess, and nobody has played under it |
 | **Burst plates** (`B`) — a tile that fires your burst at a radius it chooses | ✅ Wired at every depth, tested, **in the world** (the end of `press`) |
 | Hands: two slots, typed, conserved (`HandStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | **Anchors as one system** (`Anchor`/`AnchorField`) — yours, the world's, a plate's | ✅ In the world |
@@ -189,6 +190,8 @@ Roughly in priority order — nothing here is committed to yet:
   removes and draws them, and `validate()` reports the ones the game would refuse in
   silence — but every anchor it places takes the tool's current setting, so a channel
   name still has to be typed into the JSON.
+- **The editor cannot set a room's mood.** It carries one through a save untouched,
+  but there is no control for it: `mood` is typed into the region in the JSON.
 - **You can strand yourself**, and `R` is the way back: it puts the room you are in
   back the way it shipped and returns the hands you spent in it. It costs that room's
   configuration and your place in it, and nothing else — other rooms, loose hands and
