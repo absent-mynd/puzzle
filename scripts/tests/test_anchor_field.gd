@@ -204,7 +204,7 @@ func test_a_declared_pair_ignores_distance_and_waits_for_its_channel() -> void:
 	a.partner = b.id
 	b.partner = a.id
 	assert_eq(field.pairs_in(sp).size(), 0, "Nothing has switched the channel on")
-	field.light_channel("vault")
+	field.latch_channel("vault")
 	assert_eq(field.pairs_in(sp).size(), 1,
 		"Live: they pair across the whole region, because they were declared, not found")
 

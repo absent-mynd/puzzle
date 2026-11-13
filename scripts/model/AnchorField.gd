@@ -51,9 +51,20 @@ class_name AnchorField extends RefCounted
 ##
 ## Firing consumes two anchors and nothing in here creates one. So the anchor count is
 ## non-increasing while the player does nothing, at most `floor(N/2)` folds can follow
-## from N anchors, and a fixpoint cap has nothing to guard against. That holds only
-## while unfolding returns HANDS rather than anchors — put the anchors back and a fold
-## whose ends are still in range refolds on the next frame, forever.
+## from N anchors, and a fixpoint cap has nothing to guard against.
+##
+## That holds only while taking a fold apart never hands back a pair that is still
+## armable. A fold does give back the world's own anchors (`restore`), so the condition
+## is kept case by case rather than by returning nothing — the cases are written where
+## the decision is made, in `FoldWorld._give_back_to_world`.
+##
+## ## Channels
+##
+## An anchor may wait on a named channel instead of on proximity (`Anchor.arms`). A
+## channel is LIVE when it is **latched** — a trip plate was stepped on; stored, because
+## history cannot be derived — or **weighted** — a weight plate is down right now;
+## handed in every frame by the world, which derives it (`Weights`). Two sets rather than
+## one so that lifting a weight cannot drop a latch of the same name.
 ##
 ## Pure kernel: anchors, a `Space` to resolve them in, and time in. No view types.
 
@@ -67,16 +78,16 @@ const SPAN_EPSILON := 0.01
 ## Anchors standing in the world, in the order they were placed.
 var anchors: Array = []
 
-## Channels something has LATCHED on. A trip plate latches one, and it stays live until
-## the fold it made is taken apart again (`unlatch`). Stored, because "was this plate
-## ever stepped on" is history and history cannot be derived.
-var live_channels: Dictionary = {}
+## Channels that are LATCHED. A trip plate latches one, and it stays live until the
+## fold it made is taken apart again (`unlatch_channel`). Stored, because "was this plate ever
+## stepped on" is history and history cannot be derived.
+var latched_channels: Dictionary = {}
 
 ## Channels being WEIGHTED live right now, by something resting on a plate (`Weights`). Not history
 ## at all: the world overwrites these every frame from where the body and the hands
 ## are, so this is a cache of a derivation and never the authority on it.
 ##
-## Kept apart from `live_channels` so that letting go of a plate cannot un-latch a
+## Kept apart from `latched_channels` so that letting go of a plate cannot un-latch a
 ## channel a trip plate latched under the same name, and vice versa.
 var weighted_channels: Dictionary = {}
 
@@ -97,7 +108,7 @@ func is_empty() -> bool:
 func clear() -> void:
 	anchors.clear()
 	_fuses.clear()
-	live_channels.clear()
+	latched_channels.clear()
 	weighted_channels.clear()
 	_next_id = 0
 
@@ -144,16 +155,16 @@ func hands_out() -> int:
 	return n
 
 
-## Make a channel live, so anchors waiting on it can pair. Idempotent.
-func light_channel(channel: String) -> void:
+## Latch a channel, so anchors waiting on it can pair. Idempotent.
+func latch_channel(channel: String) -> void:
 	if channel != "":
-		live_channels[channel] = true
+		latched_channels[channel] = true
 
 
 ## Drop a latch. What taking a trip plate's fold apart does: the plate is back to
 ## not-yet-stepped-on, and its anchors wait for it again.
-func unlatch(channel: String) -> void:
-	live_channels.erase(channel)
+func unlatch_channel(channel: String) -> void:
+	latched_channels.erase(channel)
 
 
 ## Say whether a channel has a plate down, this frame. See `weighted_channels`.
@@ -168,14 +179,14 @@ func weigh_channel(channel: String, down: bool) -> void:
 
 ## Is a channel live — latched, or weighted?
 func is_live(channel: String) -> bool:
-	return live_channels.has(channel) or weighted_channels.has(channel)
+	return latched_channels.has(channel) or weighted_channels.has(channel)
 
 
 ## Every live channel, as the set `Anchor.armable` reads.
 func live_set() -> Dictionary:
 	if weighted_channels.is_empty():
-		return live_channels
-	var out := live_channels.duplicate()
+		return latched_channels
+	var out := latched_channels.duplicate()
 	out.merge(weighted_channels)
 	return out
 

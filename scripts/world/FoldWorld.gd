@@ -42,6 +42,15 @@ extends Node2D
 ##     resolved through BaseFrame against whatever is on screen. Fold a lamp
 ##     away and it leaves the region and lights the fold's subspace
 ##     instead (see LightSource). Fold something else and it rides the flap.
+##   - THE WORLD FOLDS TOO, and only by folding. Its own anchors are bolted into
+##     the sheet; a PLATE makes a channel live and they arm on it. A trip plate
+##     latches (an event); a weight plate keeps its channel live while you or
+##     one of your hands rests on it (a state, derived every frame — `Weights`),
+##     and its fold lets go when the weight comes off. A fold gives back what
+##     made it: your hands to you, the world's bolts to the world.
+##   - SIGILS are found by reaching them, once. A ROOM RESET rebuilds the region
+##     you are in from the authored world and refunds the hands spent there;
+##     it needs no snapshot because a region is a function of what was authored.
 ##
 ## ONE KEY drives all of it. Tap = push anchors in; hold and then LET GO = pull them
 ## back out (retrieve a pending anchor, unfold the fold you are standing at, or exit
@@ -370,13 +379,6 @@ var pieces_by_pos: Dictionary:
 var wall_polys: Array:
 	get: return space.wall_polys
 	set(v): space.wall_polys = v
-var goal_polys: Array:
-	get: return space.goal_polys
-	set(v): space.goal_polys = v
-var _on_goal := false
-## The goal pieces of the current space, kept from the rebuild so the sigil check does
-## not walk the whole piece list every frame.
-var _goal_pieces: Array = []
 
 ## How this space repeats. Flat in a region, a cylinder inside a fold, a torus
 ## inside two crossing ones. The single source of truth for the wrap — copies,
@@ -573,7 +575,7 @@ func _setup_all() -> void:
 		var pieces := _build_region(id)
 		var rbase: BaseGrid = regions[id]["base"]
 		for tile in rbase.tiles:
-			if tile.type == TileTypes.GOAL:
+			if TileTypes.is_sigil(tile.type):
 				sigils_total += 1
 		for channel in regions[id]["plates"]:
 			_plate_channels[channel] = true
@@ -796,11 +798,8 @@ func rebuild() -> void:
 		current_pieces = FoldReplay.apply_one_fold(current_pieces, fold, CS)
 	pieces_by_pos = BaseFrame.index_by_pos(current_pieces)
 	wall_polys = WorldCore.solid_polys_of(current_pieces)
-	goal_polys = WorldCore.polys_of_type(current_pieces, TileTypes.GOAL)
-	_goal_pieces = []
-	for piece in current_pieces:
-		if piece.type == TileTypes.GOAL:
-			_goal_pieces.append(piece)
+	space.sigil_pieces = current_pieces.filter(
+		func(piece) -> bool: return TileTypes.is_sigil(piece.type))
 	_build_terrain()
 	_build_colliders()
 	_refresh_lights()
@@ -2474,7 +2473,7 @@ func _give_back_to_world(fold: Fold) -> void:
 		field.restore(anchor)
 	fold.bolts = []
 	if fold.channel != "":
-		field.unlatch(fold.channel)
+		field.unlatch_channel(fold.channel)
 
 
 ## Inner fold crossing the glue that locks the exit, or null.
@@ -3065,7 +3064,7 @@ func _physics_process(delta: float) -> void:
 
 	_wrap_body()
 	if lattice.is_flat() and player.global_position.y > (base.grid_size.y + 6) * CS:
-		player.teleport(_respawn_point(), false)
+		_respawn()
 		AudioManager.play_sfx(Sounds.RESPAWN)
 		_show_flash("You fell out of the world — respawned.")
 	# What the body is IN, told to the body: it knows how to swim, not what water is.
@@ -3084,7 +3083,7 @@ func _physics_process(delta: float) -> void:
 	# Before the pickup check: a ball that lands this frame should be collectable this
 	# frame, and one still in flight is caught in the air by `_check_pickups` itself.
 	_step_hand_balls(delta)
-	_check_goal()
+	_check_sigils()
 	_check_pickups()
 	_check_triggers()
 	# A burst plate can start an unfold TRANSITION, so the same guard follows it as
@@ -3433,7 +3432,7 @@ func _fire_fold_trigger(tile: BaseTile) -> void:
 		# plate with neither is half-configured and does nothing.
 		if channel == "" or field.is_live(channel):
 			return
-		field.light_channel(channel)
+		field.latch_channel(channel)
 		AudioManager.play_sfx(Sounds.TRIGGER)
 		_show_flash("The ground answers.")
 		return
@@ -3473,7 +3472,7 @@ func _plant_pair(cells: Array, channel: String) -> bool:
 		field.add(anchor)
 	planted[0].partner = planted[1].id
 	planted[1].partner = planted[0].id
-	field.light_channel(channel)
+	field.latch_channel(channel)
 	return true
 
 
@@ -3537,21 +3536,19 @@ func hand_ball_points() -> Array:
 	return hand_field.points_in(space)
 
 
-## Sigils: a goal tile is collected by reaching it, once.
+## Sigils: found by reaching one, once.
 ##
 ## Reaching is the body TOUCHING the tile, not standing centred in it — the generous
 ## reading, because the puzzle was getting there and the last pixel of it is not one.
-## What is collected is the base tile, so a sigil cut in two by a crease is still one
+## What is found is the base tile, so a sigil cut in two by a crease is still one
 ## sigil, and one folded away is simply not here to be touched.
-func _check_goal() -> void:
-	var touching := false
+func _check_sigils() -> void:
 	var found: Dictionary = sigils_found.get(region_id, {})
-	for piece in _goal_pieces:
+	for piece in space.sigil_pieces:
+		if found.has(piece.base_id):
+			continue
 		if not WorldCore.circle_overlaps_polygon(
 				player.global_position, PlayerBody.RADIUS, piece.polygon):
-			continue
-		touching = true
-		if found.has(piece.base_id):
 			continue
 		found[piece.base_id] = true
 		sigils_found[region_id] = found
@@ -3559,7 +3556,6 @@ func _check_goal() -> void:
 		var n := sigils_count()
 		_show_flash("Every sigil found — %d of %d." % [n, sigils_total]
 			if n >= sigils_total else "Sigil — %d of %d." % [n, sigils_total])
-	_on_goal = touching
 
 
 ## How many sigils have been found, everywhere.
@@ -3577,24 +3573,28 @@ func found_sigil_polys() -> Array:
 	var found: Dictionary = sigils_found.get(region_id, {})
 	if found.is_empty():
 		return out
-	for piece in _goal_pieces:
+	for piece in space.sigil_pieces:
 		if found.has(piece.base_id):
 			out.append(piece.polygon)
 	return out
 
 
-## Where a fall puts you back: the door you came into this region through, if it is
-## still somewhere you can stand, else the region's own spawn.
-func _respawn_point() -> Vector2:
+## Put the body back where a fall, or a room reset, puts it: the door you came into
+## this region through, if it is still somewhere you can stand, else the region's spawn.
+##
+## The way in rather than the authored spawn, because a room entered from its far side
+## should not hand you back to its near one. Arriving ON a door is not walking into it,
+## so the door is latched exactly as it is for any other arrival.
+func _respawn() -> void:
 	var id := String(_entry_door.get(region_id, ""))
 	if id != "" and doors.has(id) and context.is_empty():
 		var wp = door_point_here(id)
 		if wp != null and not WorldCore.circle_overlaps_solids(
 				Vector2(wp), PlayerBody.RADIUS, wall_polys):
-			# Arriving ON a door is not walking into it.
 			_door_latch[id] = true
-			return Vector2(wp)
-	return _spawn
+			player.teleport(Vector2(wp), false)
+			return
+	player.teleport(_spawn, false)
 
 
 ## Put everything back — the world AND your hands.
@@ -3678,7 +3678,7 @@ func _reset_region() -> void:
 			returning.append(int(hand_balls[i]["kind"]))
 			hand_balls.remove_at(i)
 	for channel in _region_channels(id):
-		field.unlatch(channel)
+		field.unlatch_channel(channel)
 		field.weigh_channel(channel, false)
 		_plate_lift.erase(channel)
 
@@ -3690,7 +3690,7 @@ func _reset_region() -> void:
 	_load_region(id)
 	context.clear()
 	_apply_context()
-	player.teleport(_respawn_point(), false)
+	_respawn()
 	# After the rebuild and the move, for the reason `_take_back` waits: a hand that
 	# does not fit in a slot is DROPPED, at your feet, in the geometry that is current.
 	for kind in returning:

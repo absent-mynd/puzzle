@@ -51,9 +51,13 @@ var pieces: Array = []
 ## `pieces` indexed by plane position, for point lookups.
 var pieces_by_pos: Dictionary = {}
 
-## Collision geometry, and the goal tiles, both derived from `pieces`.
+## Collision geometry, derived from `pieces`.
 var wall_polys: Array = []
-var goal_polys: Array = []
+
+## The pieces of this space that are sigils (`TileTypes.is_sigil`), kept from the
+## derivation so that "is the body touching one" is not a walk of the whole piece list.
+## Pieces rather than polygons, because what gets found is the base tile.
+var sigil_pieces: Array = []
 
 # --- How the space repeats ---
 

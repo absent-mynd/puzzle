@@ -759,7 +759,7 @@ func test_a_finished_trigger_is_reported_no_further():
 	var doc := _trigger_doc()
 	doc.set_tile_param("west", Vector2i(2, 2), "channel", "vault")
 	doc.set_tile_param("west", Vector2i(2, 2), "anchors", [Vector2i(4, 1), Vector2i(6, 1)])
-	assert_false(_has(_messages(doc, "warn"), "trigger"),
+	assert_false(_has(_messages(doc, "warn"), "trip plate"),
 		"a finished plate is quiet, but got: %s" % [_messages(doc, "warn")])
 
 

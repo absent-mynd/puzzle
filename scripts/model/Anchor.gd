@@ -38,12 +38,14 @@ const NEVER := "never"
 
 ## Yours. A burst in reach pops it and you get the hand back. Counted by the ledger.
 const LOOSE := 0
-## Driven in by the world. A burst does nothing to it, and it is not a hand — it does
-## not come back, it is not counted, and unfolding a fold it made pays nothing out.
+## Driven in by the world. A burst does nothing to it, and it is not a hand — it never
+## comes to you, it is not counted, and unfolding a fold it made pays you nothing.
 ##
-## The resistance is not flavour. A bolted anchor is authored world state, and there is
-## no way to put one back: letting a burst pop one would let the player quietly delete
-## a puzzle for the rest of the session, in exchange for nothing.
+## The resistance is not flavour. A bolted anchor is authored world state: letting a
+## burst pop one would let the player quietly delete a puzzle for the rest of the
+## session, in exchange for nothing. What a fold does with one is the opposite — it
+## looks after it (`Fold.bolts`) and puts it back where it stood when the fold comes
+## apart, so the world's half of a fold is as reusable as yours.
 const BOLTED := 1
 
 ## Assigned by `AnchorField.add`. The fuse of a pair is keyed by the two ids, so an

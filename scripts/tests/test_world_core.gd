@@ -658,12 +658,6 @@ func test_solid_polys_follow_the_registry() -> void:
 		"wall, unanchorable wall and pin are solid; floor, water, goal and air are not")
 
 
-func test_polys_of_type_selects_one_type() -> void:
-	var bg := WorldCore.parse_map(["G.G."], CS)
-	var pieces := FoldReplay.derive_pieces(bg, [])
-	assert_eq(WorldCore.polys_of_type(pieces, TileTypes.GOAL).size(), 2, "both goals selected")
-
-
 func test_can_anchor_at_rejects_unanchorable_tiles() -> void:
 	var bg := WorldCore.parse_map(["#_X."], CS)
 	var index := BaseFrame.index_by_pos(FoldReplay.derive_pieces(bg, []))

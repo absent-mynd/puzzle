@@ -368,7 +368,7 @@ func test_the_world_never_asks_for_a_sound_that_is_not_there() -> void:
 	world.do_fold(Vector2i(10, 12), Vector2i(18, 12))
 	world.try_exit()
 	world._check_pickups()
-	world._check_goal()
+	world._check_sigils()
 	world._reset()
 
 	assert_eq(AudioManager._warned, {},

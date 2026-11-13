@@ -132,15 +132,6 @@ static func solid_polys_of(pieces: Array) -> Array:
 	return out
 
 
-## Collision polygons of pieces of one specific type.
-static func polys_of_type(pieces: Array, type: int) -> Array:
-	var out: Array = []
-	for piece in pieces:
-		if piece.type == type:
-			out.append(piece.polygon)
-	return out
-
-
 # ---------------------------------------------------------------------------
 # Seam segments & unfold blocking
 # ---------------------------------------------------------------------------
