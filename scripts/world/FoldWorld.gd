@@ -1757,19 +1757,29 @@ func fire_pair(pair: Dictionary) -> void:
 	var b: Anchor = pair["b"]
 	var ca = anchor_cell(a)
 	var cb = anchor_cell(b)
+	# A pair with no hand of yours in it is the WORLD trying to fold, and a refusal
+	# there is not news: nothing you did was turned down, nothing of yours drops, and
+	# the pair will simply try again in a fuse's time for as long as it is armed. Said
+	# out loud it is a line of text every second and a half about a fold you did not
+	# ask for — the bridge under your own standing fold was the case that showed it.
+	# `_scatter_pair` is already silent for these; this is the same rule for the words.
+	var quiet: bool = not (a.is_hand() or b.is_hand())
 	if ca == null or cb == null:
-		_show_flash("A hand lies beyond this fold.")
+		if not quiet:
+			_show_flash("A hand lies beyond this fold.")
 		_scatter_pair(pair)
 		return
 	if not WorldCore.anchors_valid(ca, cb):
-		_show_flash("Both hands came down on one spot.")
+		if not quiet:
+			_show_flash("Both hands came down on one spot.")
 		_scatter_pair(pair)
 		return
 	# The surface rules are asked HERE, not at placement: a tile that refuses to be
 	# gripped is a fact about the fold, and the fold is what is happening now.
 	if not WorldCore.can_anchor_at(pieces_by_pos, ca) \
 			or not WorldCore.can_anchor_at(pieces_by_pos, cb):
-		_show_flash("That surface would not hold a fold.")
+		if not quiet:
+			_show_flash("That surface would not hold a fold.")
 		_scatter_pair(pair)
 		return
 	# What the fold takes CUSTODY of is what was actually spent on it: your hands, and
@@ -1786,7 +1796,7 @@ func fire_pair(pair: Dictionary) -> void:
 			pinned.append((anchor as Anchor).hand)
 		elif not (anchor as Anchor).transient:
 			bolts.append(anchor)
-	if do_fold(ca, cb, pinned, _channel_of(pair), bolts):
+	if do_fold(ca, cb, pinned, _channel_of(pair), bolts, quiet):
 		# The fold is holding the SAME hands that were pinned — they went from your
 		# slots to the anchors to the fold without ever being duplicated. The anchors
 		# are spent, so they leave the field and every pair they were in goes with them.
@@ -2002,7 +2012,7 @@ func _hands_for_fold(pinned) -> Array[int]:
 ##     refused here; there is no longer anything to refuse, because there is no
 ##     longer a second code path to be missing.
 func do_fold(a1: Vector2i, a2: Vector2i, pinned = null, channel := "",
-		bolts: Array = []) -> bool:
+		bolts: Array = [], quiet := false) -> bool:
 	var fold := Fold.create(next_fold_id, a1, a2, CS, channel)
 	fold.bolts = bolts
 	var pre: Array = current_pieces
@@ -2016,10 +2026,12 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned = null, channel := "",
 	var cut := FoldReplay.fold_and_capture(pre, fold, CS)
 	var dropped: Array = cut["dropped"]
 	if dropped.is_empty():
-		_show_flash("Nothing there to fold.")
+		if not quiet:
+			_show_flash("Nothing there to fold.")
 		return false
 	if WorldCore.fold_blocked_by_tile(pre, fold, CS):
-		_show_flash("Something in that span refuses to fold.")
+		if not quiet:
+			_show_flash("Something in that span refuses to fold.")
 		return false
 
 	var from_piece = BaseFrame.piece_containing(pieces_by_pos, player.global_position, CS)
@@ -2054,7 +2066,8 @@ func do_fold(a1: Vector2i, a2: Vector2i, pinned = null, channel := "",
 	var landed := WorldCore.depenetrate(dest, PlayerBody.RADIUS,
 		WorldCore.solid_polys_of(new_pieces))
 	if landed == Vector2.INF:
-		_show_flash("Fold blocked — nowhere for you to land.")
+		if not quiet:
+			_show_flash("Fold blocked — nowhere for you to land.")
 		return false
 	_commit_fold(fold, dropped, pinned)
 	# Called with the OLD frame still current, because that is what a ball's position is

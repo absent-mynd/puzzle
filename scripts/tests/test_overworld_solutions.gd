@@ -572,6 +572,33 @@ func test_no_room_folds_itself_before_you_arrive() -> void:
 		world.free()
 
 
+func test_the_bridge_waits_quietly_under_a_fold_of_your_own() -> void:
+	# Cross on your own fold and trip the bridge WITHOUT taking yours apart. The world's
+	# pair is armed and cannot go: its two ends have been folded onto one spot. It must
+	# not say so every fuse, and it must go the moment the way is clear.
+	_open()
+	_walk(Vector2i(34, 19))
+	_pin(Vector2i(35, 19))
+	_fuse()
+	assert_eq(world.folds.size(), 1, "your fold closes the pit")
+	_walk(_now(Vector2i(51, 19)), "across on it, onto the trip plate")
+	_frames()
+	assert_true(world.field.is_live("bridge"), "the plate latches")
+	world.hud.flash("")
+	for _i in range(4):
+		world._tick_fuse(10.0)
+	assert_eq(world.folds.size(), 1, "the bridge cannot fold through yours")
+	assert_eq(world.hud.flash_text().find("one spot"), -1,
+		"...and does not announce a refusal nobody asked for")
+
+	_walk(_now(Vector2i(45, 19)), "back to your seam")
+	world.hold_action()
+	assert_eq(world.folds.size(), 0, "yours comes apart")
+	_fuse()
+	assert_eq(world.folds.size(), 1, "and the bridge, which was waiting, goes")
+	assert_eq(world.folds[0].channel, "bridge")
+
+
 func test_the_atrium_cannot_be_walked() -> void:
 	_open()
 	assert_eq(world.region_id, "atrium", "the world starts in its hub")
