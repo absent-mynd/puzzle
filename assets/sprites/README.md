@@ -31,7 +31,7 @@ Rows, top to bottom — the `K_*` constants in `scripts/world/TileAtlas.gd`:
 | 2 | `K_WALL_TOP` | a wall whose base neighbour above is air — the sky-facing edge |
 | 3 | `K_WATER` | |
 | 4 | `K_GOAL` | walkable: paint the motif over paper |
-| 5 | `K_TRIGGER` | pressure plate — the motif belongs at the **bottom** of the cell, since the player stands on the tile below |
+| 5 | `K_TRIGGER` | trip plate — the motif belongs at the **bottom** of the cell, since the player stands on the tile below |
 | 6 | `K_PIN` | fold-proof: it should read as a solid fact |
 | 7 | `K_UFLOOR` | air a hand will not hold in (walkable). It fills VOLUMES — the air over a pit — so paint it as air: a texture through the whole cell, nothing that reads as a surface |
 | 8 | `K_UWALL` | unanchorable wall (solid) |

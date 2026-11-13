@@ -312,7 +312,7 @@ static func _paint_goal(img: Image, o: Vector2i, v: int) -> void:
 			img.set_pixel(o.x + x, o.y + y, c)
 
 
-## A pressure plate sits on the FLOOR of its cell: the player stands on the tile
+## A trip plate sits on the FLOOR of its cell: the player stands on the tile
 ## below, so the motif hugs the bottom edge.
 static func _paint_plate(img: Image, o: Vector2i, v: int) -> void:
 	_paint_paper(img, o, v)

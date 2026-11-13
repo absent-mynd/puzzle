@@ -98,9 +98,9 @@ understand how the pieces meet. Its header comment is the map.
 | …the world get its bolts back? | `FoldWorld._give_back_to_world()` — and why that cannot refold forever |
 | …a hand become a weight? | `FoldWorld.place_hand()` — `Anchor.NEVER` on a tile `TileTypes.is_weighable` |
 | …the body know it is in water? | `FoldWorld._physics_process` sets `PlayerBody.in_water`; the swim is `PlayerBody.swim_step` |
-| …a sigil get found? | `FoldWorld._check_goal()` — and `found_sigil_polys()` for the dimming |
+| …a sigil get found? | `FoldWorld._check_sigils()` over `Space.sigil_pieces` — and `found_sigil_polys()` for the dimming |
 | …`R` put a room back? | `FoldWorld._reset_region()` → `_build_region()` — a rebuild and a refund, no snapshot |
-| …a fall know where to put you? | `FoldWorld._respawn_point()` — the door you came in by |
+| …a fall know where to put you? | `FoldWorld._respawn()` — the door you came in by |
 | …I know a shipped room can be done? | `scripts/tests/test_overworld_solutions.gd`, on `scripts/tests/support/world_probe.gd` |
 | …a tile get its art? | `FoldWorld._make_tile()` → `TileAtlas.uv_for` |
 | …the editor play the world it is editing? | `WorldEditor.playtest()` → `Shell._on_play_requested` → `FoldWorld.data_override` |

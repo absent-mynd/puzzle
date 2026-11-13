@@ -105,7 +105,7 @@ func material_for_key(key: String) -> ShaderMaterial:
 ##
 ## The split follows the registry's walkability, not the type list: what stops
 ## you is foreground, what you move through is background. Asking `TileTypes`
-## also means a walkable tile that carries a motif (a goal, a pressure plate)
+## also means a walkable tile that carries a motif (a sigil, a plate)
 ## does not brighten its whole cell relative to the air around it.
 func material_for(type: int) -> ShaderMaterial:
 	return material_for_key(BG if TileTypes.is_walkable(type) else FG)

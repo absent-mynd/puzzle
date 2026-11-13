@@ -166,8 +166,8 @@ Holding past the apex buys nothing: the hold window *is* the rise. And holding
 through a landing does not bounce you — a jump needs a fresh press, so the hold
 you are spending always belongs to the jump you are in.
 
-Those bounds are **level design, not feel**. The pinned pillar is two tiles because
-it is meant to be jumped; the pressure plate's wall is three because it is meant to
+Those bounds are **level design, not feel**. The nailed pillar in `span` is two tiles
+because it is meant to be jumped; a ledge is three or more because it is meant to
 need a fold. `PlayerBody.jump_height_for_hold` integrates the real step so the test
 suite can pin them — if you tune a gravity constant, that test is what tells you
 whether you moved the world.
@@ -217,123 +217,6 @@ An armed pair **outside the region you are in pauses**. Leave a fold ticking in
 one room, walk to the next, and it waits; come back and it resumes. Leaving one armed
 behind you is a thing you can choose to do.
 
-### The burst
-
-Releasing a held F fires a small sphere of influence around your body
-(`BURST_RADIUS`, about a tile and a third — tune it in `FoldWorld`). It is **not
-aimed**: where you stand is the whole input. Everything of yours inside it comes
-loose at once —
-
-- unpaired hands you placed come back;
-- armed pairs you can reach either half of are **disarmed** — the halves inside
-  the sphere come back, and any half outside it stays pinned exactly where it
-  was, waiting for a partner again;
-- folds whose seam is in reach come apart, if nothing newer is blocking them —
-  and a seam is wherever the folds made since have carried it, which is not
-  always where you made it: fold beside an older seam and it slides in with the
-  flap it is on, fold *over* one and it goes into the new fold's subspace with
-  the sheet it was cut into, where you have to go in after it;
-- inside a fold, the glue anchor in reach is the way out;
-- and **any hand with nowhere to go pops into the world at your feet.**
-
-That last clause is what makes the burst safe to fire blind. Nothing is refused
-for want of a slot and nothing is destroyed: a hand you cannot catch is a hand
-on the ground, the same object an authored one is. A ring shows how far the
-burst reached, after the fact — it confirms, it does not aim.
-
-**It fires on the release, and the reach is measured there.** Charging is a
-state you carry: hold F on safe ground, walk to the seam, let go, and the sphere
-is drawn around where you *released*. The one irreversible half of the verb is
-never on a timer you cannot stop — right up to the moment you lift your finger,
-nothing has happened.
-
-The charge is worn **on your body**, not on the cell you are pointing at: the
-player shades from its amber toward the teal of an openable seam, quietly at first
-(a tap barely moves it) and then in one step to fully teal when the burst is
-loaded. That step is the thing to learn to read — teal body means letting go
-pops.
-
-A burst releases the folds that were unfoldable **when it fired**. A stack of
-two folds under one diamond clears one layer per press, because releasing the
-newer one is what unblocks the older, and one press undoing work you never
-asked it to reach would be a surprise.
-
-### Burst plates — the world firing one for you
-
-A **burst plate** (`B`, teal, walkable) fires exactly that sphere when you step
-on it, centred on the *plate* rather than on you, at a radius the plate carries
-in its own tile data — **in cells**, defaulting to your own reach. It is the one
-thing in the game that reaches a seam you cannot stand next to, which is what a
-wide one is for: it is a remote unfold the *world* owns, and there is still no
-key for one.
-
-It is your gesture with two things taken away. You do not choose when — stepping
-on it is the whole input — and you do not choose where. Everything else is
-identical, because it is the same code: hands come back to your slots, an armed
-pair with one half inside is disarmed and the far half stays pinned, folds in
-reach come apart newest-first, a hand with nowhere to go lands on the ground.
-
-Two consequences worth knowing:
-
-- **It fires on entering, not on standing.** Walk off and back on and it goes
-  off again — a plate has no channel to spend, unlike a `TRIGGER_FOLD`.
-- **It works inside a fold**, at any depth. A burst takes folds *out* of the
-  space you are in rather than splicing new ones into it, so a plate that was
-  swallowed by a fold still works in there — and one whose reach covers the glue
-  is a way out.
-
-The shipped world has one, at the end of `press`, with a reach that covers the
-room: it hands back every hand you spent getting there, all at once.
-
-### Weight plates — the world folding for as long as something rests there
-
-A **weight plate** (`H`, in a plain hand's orange) keeps a channel live for exactly
-as long as something is resting on it. The world's own anchors arm on that channel,
-their fuse folds them like any other pair, and **the fold stands while the plate is
-down and lets go when the weight comes off.**
-
-What can rest on one is the short list of things in this world: **you, and your
-hands.** Stand on it and the door is open for as long as you stand there, which is
-no use if the door is where you were going. Set a hand on it and walk away.
-
-- **A hand on a plate is a weight, not an anchor.** It reaches for nothing: no span
-  ring, no pair, however close your next hand lands. It is one of your two hands all
-  the same — a hand on a plate is a hand not in a fold.
-- **Pinned or lying loose, a hand is as heavy.** One that fell there counts. One
-  falling past does not.
-- **A plate forgives a hop.** You weigh one by being in its cell, and a hop leaves by
-  the top of it; the plate does not notice. A real jump, or a step off, it does.
-- **You can see what a plate will do before you press it.** The pair it drives is
-  standing in the sheet already, bolted, tied by a faint broken line.
-- **Taking the fold apart by hand buys you one fuse.** The weight is still on the
-  plate, so the bolts come back armed and it folds itself again.
-- **The world lets go newest-first.** If you have made a fold of your own since, the
-  plate's fold stays standing under it even with the weight gone, until yours comes
-  out. That is how you wedge a door: at the price of the two hands in your fold
-  instead of the one on the plate.
-- **A plate in one room can keep a fold in another.** The hand you left is still on
-  it wherever you are. The last room is entered that way.
-
-A trip plate (`T`) is the same thing in the other tense: an event rather than a
-state. It latches its channel when you step on it, and taking its fold apart puts
-it back to not-yet-stepped-on.
-
-### Sockets — half a fold the world holds out
-
-An anchor the world bolted into the sheet (drawn with a pale ring) is not yours: a
-burst does not answer for it and it is not a hand. One that arms on **proximity** is
-a **socket** — pin ONE hand of your own inside its reach and the two fold together.
-
-- The fold holds the one hand you spent, and gives that one back.
-- **The socket goes back where it stood when the fold comes apart**, so it is there
-  the next time. A fold gives back what made it: your hands to you, the world's
-  bolts to the world.
-- Its kind is its reach and its half of the fuse, exactly as a hand's is. A patient
-  socket will meet a plain hand ten cells away.
-
-Sockets are how you fold somewhere you cannot stand — the far rim of a pit, the
-inside of a sealed room — and how a fold costs one hand instead of two.
-
 ## Water
 
 **Water is the mirror of air.** In air your hands hold and your body falls; in water
@@ -350,31 +233,6 @@ your body rises and your hands slip.
 So a flooded room is rich in movement and poor in folds, and a dry one is the
 reverse. Neither number changed anything about folding: `TileTypes` says water is a
 medium you `swim` in and one that `blocks_anchor`, and both follow from that.
-
-## Sigils
-
-A goal tile is a **sigil**: reach it and it is found, once, and the status line
-counts them. Touching is enough. A sigil folded away is not there to be touched —
-which is the whole of two of the rooms.
-
-Sigils survive a room reset and not a world reset. A reset undoes configuration; it
-does not undo having been somewhere.
-
-## Resetting a room
-
-`R` puts **the room you are in** back the way it shipped and hands you back every
-hand you had spent in it — pinned, on a plate, held by a fold, still in the air. You
-wake at the door you came in by (which is also where a fall puts you).
-
-Nothing is restored from a snapshot, because nothing was saved: a room is a function
-of the authored world, so putting it back is building it again, and the only thing
-that is not a function of the authored world is where your hands are. So:
-
-- **Loose hands stay where they lie.** A hand you carried off exists somewhere else
-  now, and putting another one down would mint one.
-- **Other rooms are untouched.** A fold you left standing next door still stands.
-
-`Shift+R` is the other one: the whole world, hands and sigils and all.
 
 ## Hands
 
@@ -515,6 +373,47 @@ riding** (each piece knows its base identity and offset), not approximate
 crease math. Folds and unfolds animate: flaps slide, the strip collapses
 onto — or springs from — the seam.
 
+### The burst
+
+Releasing a held F fires a small sphere of influence around your body
+(`BURST_RADIUS`, about a tile and a third — tune it in `FoldWorld`). It is **not
+aimed**: where you stand is the whole input. Everything of yours inside it comes
+loose at once —
+
+- unpaired hands you placed come back;
+- armed pairs you can reach either half of are **disarmed** — the halves inside
+  the sphere come back, and any half outside it stays pinned exactly where it
+  was, waiting for a partner again;
+- folds whose seam is in reach come apart, if nothing newer is blocking them —
+  and a seam is wherever the folds made since have carried it, which is not
+  always where you made it: fold beside an older seam and it slides in with the
+  flap it is on, fold *over* one and it goes into the new fold's subspace with
+  the sheet it was cut into, where you have to go in after it;
+- inside a fold, the glue anchor in reach is the way out;
+- and **any hand with nowhere to go pops into the world at your feet.**
+
+That last clause is what makes the burst safe to fire blind. Nothing is refused
+for want of a slot and nothing is destroyed: a hand you cannot catch is a hand
+on the ground, the same object an authored one is. A ring shows how far the
+burst reached, after the fact — it confirms, it does not aim.
+
+**It fires on the release, and the reach is measured there.** Charging is a
+state you carry: hold F on safe ground, walk to the seam, let go, and the sphere
+is drawn around where you *released*. The one irreversible half of the verb is
+never on a timer you cannot stop — right up to the moment you lift your finger,
+nothing has happened.
+
+The charge is worn **on your body**, not on the cell you are pointing at: the
+player shades from its amber toward the teal of an openable seam, quietly at first
+(a tap barely moves it) and then in one step to fully teal when the burst is
+loaded. That step is the thing to learn to read — teal body means letting go
+pops.
+
+A burst releases the folds that were unfoldable **when it fired**. A stack of
+two folds under one diamond clears one layer per press, because releasing the
+newer one is what unblocks the older, and one press undoing work you never
+asked it to reach would be a surprise.
+
 ## Folding yourself deeper
 
 Being inside a fold does not stop you folding. Stand in the strip of a fold you
@@ -556,64 +455,110 @@ the fuse burns is what the fold will actually take.
 A hand committed to a fold three layers down is counted by the same ledger as one
 at the surface, and the four places a hand can be still sum to the same number.
 
-## The camera
+## What the world does
 
-The frame is not a fixed lens — it opens and closes with what the moment is
-about, and it only ever opens (resting is the tightest it sits, so it never
-closes in on you unasked):
+The world folds too, and only by folding. It has anchors of its own, **bolted** into
+the sheet (drawn with a pale ring): a burst does not answer for one, and it is never
+a hand. Three things make them fold, and a fourth undoes it:
 
-- **Speed.** Running widens it a little, falling hard widens it a lot. A long
-  drop is the one move where the frame you have is certainly not the frame you
-  need.
-- **The fold you are composing.** Pin an anchor and walk away, and the view
-  opens to keep it on screen. The camera is showing you how big the fold has
-  got — that span *is* the decision you are about to make.
-- **The strip you are inside.** In a subspace the fundamental domain is framed
-  glue to glue, so a wide strip reads as the cylinder it is rather than a corridor
-  with no visible walls — and on a torus that is all four walls, out of the same
-  call.
-- **A fold rearranging the world.** The transition steps the camera back so you
-  watch the space move, then settles.
+| | What it is | What makes the world fold |
+|---|---|---|
+| **Socket** | a bolted anchor that reaches | one hand of yours coming within its span |
+| **Trip plate** (`T`) | an event | stepping on it, once |
+| **Weight plate** (`H`) | a state | something resting on it, for as long as it does |
+| **Burst plate** (`B`) | — | nothing: it lets go, of everything in its reach |
 
-Zoom eases much more slowly than the follow does — a frame that resizes as
-briskly as it pans reads as breathing rather than attention. `PlayerBody` owns
-the camera, `WorldCore.camera_zoom_for` decides the target, and
-`FoldWorld._camera_focus` is the list of things it would be a mistake to leave
-off screen. Hard relocations (respawn, doors) cut the zoom along with the
-position — easing it would read as the new room inflating.
+A plate does not fold anything itself. It makes a **channel** live, and the bolted
+pair that arms on that channel lights a fuse like any other pair — so a fold the
+world makes has a fuse you can see coming, can take you in with it, is refused by a
+nail, and has a seam somewhere. **You can see what a plate will do before you press
+it**: the pair it drives is standing in the sheet already, tied by a faint broken
+line.
 
-**And the frame leads where you are going.** Zoom decides how *much* to show;
-lookahead decides *where to centre it*. Sitting the body dead centre spends half
-the frame on ground you have already crossed, which is the wrong half. So the
-view sits ahead of you, and the asymmetries are the design:
+**A fold gives back what made it** — your hands to you, the world's bolts to where
+they stood. So everything below can be used twice.
 
-- **A fall leads much further than a rise.** A fall is committed and its landing
-  is the thing you need to see; the top of a jump is about to reverse, and
-  leading hard there would swing the frame back a moment later.
-- **Holding a look key leads on its own.** The same W/S that aim an anchor lean
-  the frame, so pressing up to point up shows you what you are pointing at —
-  wanting to see up there is a thing you can ask for without moving.
-- **The lead is flat along every axis the space repeats on.** A repeating space
-  already shows every copy there is that way, so leading along it slides the view
-  across identical copies for nothing. One axis inside a fold — and on a torus,
-  both, so the lead is the body's own motion and nothing else.
+### Sockets — half a fold the world holds out
 
-The lead eases even more lazily than the zoom, because it *flips sign* the
-instant you turn around: eased, a reversal reads as the view swinging round to
-your new heading instead of whipping across the body. It is capped, and a hard
-relocation cuts it along with the lens. `WorldCore.camera_lookahead_for` is the
-pure decision; the body supplies its own velocity-as-a-fraction-of-its-limits
-(`motion_fraction`) and the held look keys (`look_dir`).
+A bolted anchor that arms on **proximity** is a **socket**: pin ONE hand of your own
+inside its reach and the two fold together.
 
-One ordering matters: the lead is decided *before* the zoom, because the lead
-moves the camera and the zoom's focus distances are measured from where the
-camera ends up. The other way round, a hard lead would quietly crop the very
-things the focus set exists to keep on screen.
+- The fold holds the one hand you spent, and gives that one back.
+- Its kind is its reach and its half of the fuse, exactly as a hand's is. A patient
+  socket will meet a plain hand ten cells away.
+- Two sockets within each other's reach are a pair too, and fold before you arrive.
+  That is a thing to know when drawing a room, not a thing to do in one.
 
-**Zoom here is a *logical* zoom, and the Camera2D's own zoom never changes.**
-Opening the frame resizes the pixel render target instead of moving the lens —
-otherwise the tileset would be resampled and the pixel art would go soft. See
-*Art & light → The pixel pass* for why, before changing anything about zoom.
+Sockets are how you fold somewhere you cannot stand — the far rim of a pit, the
+inside of a sealed room — and how a fold costs one hand instead of two.
+
+### Trip plates — the world folding once
+
+A **trip plate** (`T`, pink) latches its channel when you step on it, and the latch
+stays: walk away and the fold it made goes on standing, with no hand of yours in it.
+It is how the world opens a shortcut from its far side. Take that fold apart with a
+burst and the plate is back to not-yet-stepped-on, its pair standing ready.
+
+(A trip plate may instead carry two cells of its own and drive a pair in when it is
+stepped on. The testbed has those; the form above is the one to author, because the
+player can see it coming.)
+
+### Weight plates — the world folding for as long as something rests there
+
+A **weight plate** (`H`, in a plain hand's orange) keeps its channel live for exactly
+as long as something is resting on it: **the fold stands while the plate is down and
+lets go when the weight comes off.**
+
+What can rest on one is the short list of things in this world: **you, and your
+hands.** Stand on it and the door is open for as long as you stand there, which is
+no use if the door is where you were going. Set a hand on it and walk away.
+
+- **A hand on a plate is a weight, not an anchor.** It reaches for nothing: no span
+  ring, no pair, however close your next hand lands. It is one of your two hands all
+  the same — a hand on a plate is a hand not in a fold.
+- **Pinned or lying loose, a hand is as heavy.** One that fell there counts. One
+  falling past does not.
+- **A plate forgives a hop.** You weigh one by being in its cell, and a hop leaves by
+  the top of it; the plate does not notice. A real jump, or a step off, it does.
+- **Taking the fold apart by hand buys you one fuse.** The weight is still on the
+  plate, so the bolts come back armed and it folds itself again.
+- **The world lets go newest-first.** If you have made a fold of your own since, the
+  plate's fold stays standing under it even with the weight gone, until yours comes
+  out. That is how you wedge a door: at the price of the two hands in your fold
+  instead of the one on the plate.
+- **A plate in one room can keep a fold in another.** The hand you left is still on
+  it wherever you are. The last room is entered that way.
+- **A hand with no slot to come home to falls back onto the plate.** Pop a weight
+  with both your slots full and it drops where it was pinned, which is still on the
+  plate — so the fold stays. `press` ends on exactly this.
+
+### Burst plates — the world firing one for you
+
+A **burst plate** (`B`, teal, walkable) fires exactly that sphere when you step
+on it, centred on the *plate* rather than on you, at a radius the plate carries
+in its own tile data — **in cells**, defaulting to your own reach. It is the one
+thing in the game that reaches a seam you cannot stand next to, which is what a
+wide one is for: it is a remote unfold the *world* owns, and there is still no
+key for one.
+
+It is your gesture with two things taken away. You do not choose when — stepping
+on it is the whole input — and you do not choose where. Everything else is
+identical, because it is the same code: hands come back to your slots, an armed
+pair with one half inside is disarmed and the far half stays pinned, folds in
+reach come apart newest-first, a hand with nowhere to go lands on the ground.
+
+Two consequences worth knowing:
+
+- **It fires on entering, not on standing.** Walk off and back on and it goes
+  off again — a plate has no channel to spend, unlike a `TRIGGER_FOLD`.
+- **It works inside a fold**, at any depth. A burst takes folds *out* of the
+  space you are in rather than splicing new ones into it, so a plate that was
+  swallowed by a fold still works in there — and one whose reach covers the glue
+  is a way out.
+
+The shipped world has two, both at the far end of `press`: a small one on the pit's
+rim that reaches its seam and nothing else, and one past the sigil with a reach the
+size of the room.
 
 ## Regions & doors
 
@@ -635,6 +580,31 @@ Doors exit subspaces **without unfolding them** — inner folds and all
 persist for the next visit. The glue anchor (white diamond) remains the
 unfolding exit. Pending anchors are inert outside their region but stay
 pinned and resolve again when you return.
+
+## Sigils
+
+A goal tile is a **sigil**: reach it and it is found, once, and the status line
+counts them. Touching is enough. A sigil folded away is not there to be touched —
+which is the whole of two of the rooms.
+
+Sigils survive a room reset and not a world reset. A reset undoes configuration; it
+does not undo having been somewhere.
+
+## Resetting a room
+
+`R` puts **the room you are in** back the way it shipped and hands you back every
+hand you had spent in it — pinned, on a plate, held by a fold, still in the air. You
+wake at the door you came in by (which is also where a fall puts you).
+
+Nothing is restored from a snapshot, because nothing was saved: a room is a function
+of the authored world, so putting it back is building it again, and the only thing
+that is not a function of the authored world is where your hands are. So:
+
+- **Loose hands stay where they lie.** A hand you carried off exists somewhere else
+  now, and putting another one down would mint one.
+- **Other rooms are untouched.** A fold you left standing next door still stands.
+
+`Shift+R` is the other one: the whole world, hands and sigils and all.
 
 ## The world, room by room
 
@@ -762,6 +732,65 @@ than in the shipped world:
 - **Pre-placed folds**, and trip plates that carry their own pair. `prefold` and
   `triggers`.
 - **The swift hand.** Nothing here is in a hurry.
+
+## The camera
+
+The frame is not a fixed lens — it opens and closes with what the moment is
+about, and it only ever opens (resting is the tightest it sits, so it never
+closes in on you unasked):
+
+- **Speed.** Running widens it a little, falling hard widens it a lot. A long
+  drop is the one move where the frame you have is certainly not the frame you
+  need.
+- **The fold you are composing.** Pin an anchor and walk away, and the view
+  opens to keep it on screen. The camera is showing you how big the fold has
+  got — that span *is* the decision you are about to make.
+- **The strip you are inside.** In a subspace the fundamental domain is framed
+  glue to glue, so a wide strip reads as the cylinder it is rather than a corridor
+  with no visible walls — and on a torus that is all four walls, out of the same
+  call.
+- **A fold rearranging the world.** The transition steps the camera back so you
+  watch the space move, then settles.
+
+Zoom eases much more slowly than the follow does — a frame that resizes as
+briskly as it pans reads as breathing rather than attention. `PlayerBody` owns
+the camera, `WorldCore.camera_zoom_for` decides the target, and
+`FoldWorld._camera_focus` is the list of things it would be a mistake to leave
+off screen. Hard relocations (respawn, doors) cut the zoom along with the
+position — easing it would read as the new room inflating.
+
+**And the frame leads where you are going.** Zoom decides how *much* to show;
+lookahead decides *where to centre it*. Sitting the body dead centre spends half
+the frame on ground you have already crossed, which is the wrong half. So the
+view sits ahead of you, and the asymmetries are the design:
+
+- **A fall leads much further than a rise.** A fall is committed and its landing
+  is the thing you need to see; the top of a jump is about to reverse, and
+  leading hard there would swing the frame back a moment later.
+- **Holding a look key leads on its own.** The same W/S that aim an anchor lean
+  the frame, so pressing up to point up shows you what you are pointing at —
+  wanting to see up there is a thing you can ask for without moving.
+- **The lead is flat along every axis the space repeats on.** A repeating space
+  already shows every copy there is that way, so leading along it slides the view
+  across identical copies for nothing. One axis inside a fold — and on a torus,
+  both, so the lead is the body's own motion and nothing else.
+
+The lead eases even more lazily than the zoom, because it *flips sign* the
+instant you turn around: eased, a reversal reads as the view swinging round to
+your new heading instead of whipping across the body. It is capped, and a hard
+relocation cuts it along with the lens. `WorldCore.camera_lookahead_for` is the
+pure decision; the body supplies its own velocity-as-a-fraction-of-its-limits
+(`motion_fraction`) and the held look keys (`look_dir`).
+
+One ordering matters: the lead is decided *before* the zoom, because the lead
+moves the camera and the zoom's focus distances are measured from where the
+camera ends up. The other way round, a hard lead would quietly crop the very
+things the focus set exists to keep on screen.
+
+**Zoom here is a *logical* zoom, and the Camera2D's own zoom never changes.**
+Opening the frame resizes the pixel render target instead of moving the lens —
+otherwise the tileset would be resampled and the pixel art would go soft. See
+*Art & light → The pixel pass* for why, before changing anything about zoom.
 
 ## Sound
 

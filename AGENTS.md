@@ -291,8 +291,7 @@ Two consequences worth keeping:
 - **Reach is a square, and its radius is level design.** `WorldCore.within_arm_reach`
   is a box of `ARM_REACH` cells around your own, diagonals and your own feet
   included. A one-tile shell keeps you out of what it encloses only because that
-  radius is 1 (the sealed chamber is exactly that shell), so raising it is a design
-  conversation, not tuning.
+  radius is 1, so raising it is a design conversation, not tuning.
 - **The stop reaches the DECORATIONS, through one clock.** `WorldClock` is world
   time: `FoldWorld._process` advances it only while the world runs, and everything
   that drifts, throbs or flickers without being pushed reads it — the hands' idle
@@ -399,16 +398,12 @@ what you must not quietly change:
   design change; do it in `HandTypes` and nowhere else. Which hand goes down next is
   the player's to choose (`swap_hands`), because a kind you cannot choose to spend is
   a kind that does not matter.
-- **A hand on a weight plate is a WEIGHT.** It arms on nothing (`Anchor.NEVER`), so it
-  never pairs, never draws a span, and never drags the next hand you pin into a fold
-  with it. It is still one of your hands: counted where anchors are counted, popped
-  by a burst in reach. Do not teach the pairing rule about plates — the placement
-  says it once, with the field that already means it.
-- **A fold gives back what made it.** Your hands to you; the world's bolts to the
-  world, where they stood (`Fold.bolts`). That is what makes a **socket** — a bolted
-  anchor arming on proximity — something you can use twice. Why it cannot refold
-  forever is in `FoldWorld._give_back_to_world`, and is the reason to read before
-  changing what comes back.
+- **A hand on a weight plate is a WEIGHT.** It arms on nothing (`Anchor.NEVER`), and
+  is still one of your hands. Do not teach the pairing rule about plates:
+  `place_hand` says it once, with the field that already means it.
+- **A fold gives back what made it** — hands to you, bolts to the world
+  (`Fold.bolts`). Read `FoldWorld._give_back_to_world` before changing what comes
+  back: it is where the reason this cannot refold forever is kept.
 - **`ARM_REACH` and `span` are different distances.** Your arm is how far you can PIN
   (a square of nine cells). A span is how far the anchor then reaches for a PARTNER.
   Both were called reach once; that is why one of them is not now.
@@ -419,11 +414,10 @@ what you must not quietly change:
   exactly your own arm. The room reset is not that key either: it gives up the
   room's whole configuration to get your hands back, which is the price a recall
   would not charge.
-- **The world lets go newest-first.** A plate's fold comes apart by itself only when
-  nothing made after it still stands in its space (`FoldWorld._tick_plates`). A
-  burst obeys the narrower rule — blocked only by a fold that CROSSES the seam —
-  because a player may choose to pull an older fold out from under a newer one, and
-  a plate must not do it behind their back.
+- **The world lets go newest-first** — a plate's fold comes apart by itself only when
+  nothing made after it still stands in its space. That is deliberately stricter than
+  the rule a burst obeys; `FoldWorld._tick_plates` says why, and ARCHITECTURE
+  Decision 12 argues it.
 - **The floating hands are style.** Nothing reads their drawn positions back; do not
   make them load-bearing without saying so.
 
