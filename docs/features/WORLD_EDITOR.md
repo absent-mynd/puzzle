@@ -126,9 +126,14 @@ TRIGGER_FOLD: {
         {"key": "channel", "type": "string", "default": "", "label": "channel",
          "hint": "names the fold this plate makes..."},
         {"key": "anchors", "type": "cells", "default": [], "count": 2,
-         "required": true, "label": "fold anchors", "hint": "..."},
+         "required": true, "unless": "channel", "label": "fold anchors", "hint": "..."},
     ]},
 ```
+
+`unless` is a rule between two fields, declared like any other fact about them: this
+parameter is not missing while that one is set. A trip plate with a channel and no
+cells of its own is finished — it latches the channel for anchors already standing in
+the sheet.
 
 | `type` | stored as | edited as |
 |---|---|---|

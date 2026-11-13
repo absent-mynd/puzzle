@@ -23,7 +23,7 @@ One `test_<subject>.gd` per subject, matching the source file it covers — so `
 answers "what is covered" and there is no hand-maintained index here to fall behind
 the directory. (There was one. It listed half the scripts.)
 
-Four are different, and all deliberately:
+Five are different, and all deliberately:
 
 `test_fold_world.gd` is the important one. It instantiates the real world scene and
 drives the actual beats — riding a flap, being pinched into a fold, folding inside a
@@ -47,6 +47,15 @@ body only where `support/world_probe.gd` — a coarse model of walking, jumping 
 swimming, read off `PlayerBody`'s own constants — says it can go, so a path it
 takes is one a player can take. If you edit a room, this is what tells you whether
 it can still be done, and whether it can now be walked around.
+
+`test_overworld_keys.gd` is the only test that plays with its hands. It runs
+`threshold` on real key events under real physics — no `place_hand`, no `teleport` —
+because "a hand could be put there" and "the gesture a player makes puts it there"
+are different claims and the second is the one a player meets. It also runs the two
+moves the model cannot see at all: swimming out of water onto a ledge, and walking
+through the glue of a fold. It runs the clock four
+times faster with the same step size, so it is the simulation a player gets without
+the wait.
 
 ## Conventions
 

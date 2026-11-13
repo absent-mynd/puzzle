@@ -1,6 +1,6 @@
 extends GutTest
 
-## The first room, played on the keys.
+## The shipped world, played on the keys.
 ##
 ## `test_overworld_solutions.gd` proves every room CAN be done, by putting hands where
 ## an arm could put them and the body where a model says it could walk. That is a claim
@@ -13,10 +13,15 @@ extends GutTest
 ## cursor could not reach the cell, or the top of a jump were not a place a hand can be
 ## raised, or the unfold did not carry you, this is what would say so.
 ##
-## One room, because it is slow by this suite's standards and because one is what it
-## takes: `threshold` is the room that teaches the verb, and it uses every part of the
-## gesture — a pin beside you, a pin from the top of a jump, the fuse, the ride, the
-## charged release.
+## `threshold` is played whole, because it is the room that teaches the verb and it
+## uses every part of the gesture — a pin beside you, a pin from the top of a jump, the
+## fuse, the ride, the charged release.
+##
+## Two more rooms are played for the one move in each that the model only ASSERTS.
+## `WorldProbe` treats water as free movement and has no idea a space can wrap, so
+## "swim out of the waterfall onto the cliff" and "walk back through the glue into the
+## chamber" were claims nobody had run. Those tests set the fold up directly — that
+## part is already proved — and then put down the API and pick up the keys.
 ##
 ## Time is run four times faster and the step kept the same size (`Engine.time_scale`
 ## with `physics_ticks_per_second` scaled to match), so the simulation is the one a
@@ -34,10 +39,33 @@ func before_each() -> void:
 	_ticks = Engine.physics_ticks_per_second
 	Engine.physics_ticks_per_second = _ticks * SPEED
 	Engine.time_scale = float(SPEED)
+
+
+func _open(region: String) -> void:
 	world = load(SCENE).instantiate()
 	world.world_override = WorldData.SHIPPED_WORLD
-	world.spawn_override = {"region": "threshold"}
+	world.spawn_override = {"region": region}
 	add_child_autofree(world)
+
+
+## Where a BASE cell of this region is now, as a cell.
+func _now(base_cell: Vector2i) -> Vector2i:
+	var tile = world.base.tile_at(base_cell)
+	var wp = BaseFrame.world_point_from_base(world.current_pieces, tile.base_id,
+		world.cell_center(base_cell))
+	assert_not_null(wp, "base cell %s is in this space" % base_cell)
+	return Vector2i((Vector2(wp) / CS).floor()) if wp != null else base_cell
+
+
+## Hold the fold key until the burst is loaded, then let go.
+func _burst() -> void:
+	_send(KEY_F, true)
+	for _i in range(600):
+		await get_tree().process_frame
+		if world.hold_loaded():
+			break
+	assert_true(world.hold_loaded(), "holding loads the burst")
+	_send(KEY_F, false)
 
 
 func after_each() -> void:
@@ -84,6 +112,7 @@ func _until(done: Callable, limit := 900) -> bool:
 
 
 func test_threshold_played_on_the_keys() -> void:
+	_open("threshold")
 	await _steps(20)
 	assert_true(world.player.is_on_floor(), "you start standing")
 
@@ -160,3 +189,86 @@ func test_threshold_played_on_the_keys() -> void:
 	await _steps(30)
 	assert_eq(world.hands_held(), 2, "both hands come home")
 	assert_eq(world.player_cell(), Vector2i(12, 7), "and the unfold has carried you up the ledge")
+
+
+func test_cistern_the_swim_out_onto_the_cliff() -> void:
+	_open("cistern")
+	world.anim_enabled = false
+	await _steps(5)
+	# The fold, set up directly: a hand in the air beside the water, at the lip's height.
+	world.player.teleport(world.cell_center(Vector2i(9, 5)), false)
+	assert_true(world.place_hand(Vector2i(10, 5)))
+	world._physics_process(1.0 / 60.0)
+	world._tick_fuse(10.0)
+	assert_eq(world.folds.size(), 1, "the dry gap is folded away")
+
+	# From down in the waterfall: up past the lip on the jump key, then over.
+	var deep: Vector2i = _now(Vector2i(9, 9))
+	var lip: Vector2i = _now(Vector2i(18, 5))
+	world.player.teleport(world.cell_center(deep), false)
+	await _steps(3)
+	assert_true(world.player.in_water, "you start in the water")
+	_hold(KEY_SPACE, true)
+	assert_true(await _until(func() -> bool:
+		return world.player.global_position.y < (float(lip.y) + 0.2) * CS, 600),
+		"the jump key carries you up the waterfall, past the height of the lip")
+	_hold(KEY_D, true)
+	var on_the_cliff := func() -> bool:
+		return world.player.is_on_floor() and not world.player.in_water \
+			and world.player_cell().x >= lip.x and world.player_cell().y == lip.y
+	assert_true(await _until(on_the_cliff, 600), "and holding right puts you on the cliff")
+	_hold(KEY_D, false)
+	_hold(KEY_SPACE, false)
+
+	# Pinned at the top, so it comes apart from the top.
+	_hold(KEY_A, true)
+	await _until(func() -> bool:
+		return world.player.global_position.x <= (float(lip.x) + 0.75) * CS, 300)
+	_hold(KEY_A, false)
+	await _steps(20)
+	await _burst()
+	assert_true(await _until(func() -> bool: return world.folds.is_empty(), 300),
+		"a burst from the cliff's edge reaches the seam")
+	await _steps(20)
+	assert_eq(world.hands_held(), 2)
+	assert_true(world.player.is_on_floor(), "and leaves you standing")
+	assert_eq(world.player_cell().y, 5, "...on top of the cliff")
+
+
+func test_annex_the_walk_back_through_the_glue() -> void:
+	_open("annex")
+	world.anim_enabled = false
+	await _steps(5)
+	# Folded in, set up directly: a hand behind you, and you against the chamber wall.
+	world.player.teleport(world.cell_center(Vector2i(12, 11)) + Vector2(0, 12), false)
+	assert_true(world.place_hand(Vector2i(11, 11)))
+	world.player.teleport(world.cell_center(Vector2i(13, 11)) + Vector2(0, 12), false)
+	world._physics_process(1.0 / 60.0)
+	world._tick_fuse(10.0)
+	assert_eq(world.mode, world.Mode.SUBSPACE, "standing in the strip, you are folded in")
+	await _steps(5)
+
+	# Now just walk the WRONG way — away from the wall, back the way you came.
+	var started: float = world.player.global_position.x
+	_hold(KEY_A, true)
+	assert_true(await _until(func() -> bool: return world.sigils_count() == 1, 900),
+		"walking away from the chamber wall brings you to the sigil inside it")
+	_hold(KEY_A, false)
+	assert_gt(world.player.global_position.x, started,
+		"you walked left and ended up to the RIGHT of where you began: through the glue")
+	assert_eq(world.mode, world.Mode.SUBSPACE, "still inside the fold")
+
+	# Back toward the glue you came through, and surface beside it.
+	await _steps(20)
+	_hold(KEY_D, true)
+	await _until(func() -> bool: return world.player.global_position.x >= 20.7 * CS, 600)
+	_hold(KEY_D, false)
+	await _steps(20)
+	assert_true(world.glue_within_burst(), "the way out is in reach")
+	await _burst()
+	assert_true(await _until(func() -> bool: return world.mode == world.Mode.WORLD, 300),
+		"the fold opens")
+	await _steps(20)
+	assert_eq(world.hands_held(), 2, "your hand comes back")
+	assert_between(world.player_cell().x, 16, 21, "and you are inside the sealed chamber")
+	assert_true(world.player.is_on_floor())

@@ -617,9 +617,9 @@ otherwise the tileset would be resampled and the pixel art would go soft. See
 
 ## Regions & doors
 
-The world is **six regions** in a line, each its own sheet with its own
-persistent fold state — a region is a room, and a fold in one cuts nothing in
-another. **Doors are warp points** (green rings) at base-tile centers — they
+The world is **seven regions** — a hub and six rooms — each its own sheet with
+its own persistent fold state. A region is a room, and a fold in one cuts nothing
+in another. **Doors are warp points** (green rings) at base-tile centers — they
 ride folds with their tile, and walking into one warps you to its partner,
 wherever that partner currently *is*:
 
@@ -638,13 +638,28 @@ pinned and resolve again when you return.
 
 ## The world, room by room
 
-Six rooms in a line, one sigil in each. Every room is one idea, and each idea is
-either a new place a hand can be useful or a new consequence of the sheet moving —
-there is nothing in the world that is not one of those two.
+A hub and six rooms, seven sigils. Every room is one idea, and each idea is either a
+new place a hand can be useful or a new consequence of the sheet moving — there is
+nothing in the world that is not one of those two.
 
-`scripts/tests/test_overworld_solutions.gd` **plays all six, door to door**, and is
-the authority on how each is done and on what does not work. What is here is what
-each room is *for*.
+`scripts/tests/test_overworld_solutions.gd` **plays all of it, door to door**, and is
+the authority on how each is done and on what does not work.
+`scripts/tests/test_overworld_keys.gd` plays the first room with real key presses.
+What is here is what each is *for*.
+
+**The `atrium` is the hub, and its locks are the rooms' lessons used once.** Every
+room is entered from it and hands you back to it. Two doors stand on its floor. Two
+more are on a ledge four up, which is `threshold`'s lift. The last is across a pit,
+which is `span`'s socket — and on the far side a **trip plate** latches a fold that
+closes that pit for good, with no hand of yours in it: a shortcut opened from the far
+side. High at the far end is a loft with a seventh sigil, under a socket that a
+plain hand on the floor falls one cell short of. Nothing in the atrium needs a key.
+It needs having been somewhere.
+
+Rooms return you through **chutes**: a booth under the ceiling with a door and a hole
+in its floor, walled off from the booths beside it. You arrive, step off, and land
+in the hall. From below a chute is ten rows up, so no room can be entered by its
+exit — which matters, because most of the sigils sit near one.
 
 1. **`threshold` — a fold is a lift.** A ledge four cells up, and nothing to climb.
    The first fold is a *vertical* one because both of its anchors can be pinned from
@@ -677,10 +692,14 @@ each room is *for*.
    **weight plate**, and a pit past them. A hand on the first plate is a hand you
    leave behind; the slot it emptied takes the long hand lying past the gate. Now
    the question is the room: any hand is a weight, but only the patient one reaches
-   across that pit, and the next hand down is the one you just picked up. `Q`. Past
-   the sigil a **burst plate** with a reach the size of the room lets everything go
-   at once — three hands for two slots, so one lands at your feet, and which two you
-   walk out with is yours to arrange.
+   across that pit, and the next hand down is the one you just picked up. `Q`. On the
+   far rim a small **burst plate** takes the pit apart behind you, so the long hand
+   is the first one home. Past the sigil a second, with a reach the size of the room,
+   lets the rest go — and there are two plain hands coming for one empty slot. The
+   one with nowhere to go falls where it was pinned, which is *back onto its plate*:
+   one gate lets go and the other stays open on the hand you could not carry.
+   Nobody wrote that. It is "a hand is a weight" meeting "nothing is refused for
+   want of room".
 
 5. **`annex` — the far end is behind you.** A chamber sealed on every side, with a
    sigil, a door and a socket inside it. No fold opens it: pair a hand with the
@@ -697,7 +716,10 @@ each room is *for*.
    socket in it, and a hole in the hall's floor that in flat space is a fall out of
    the world. Pin the floor under your feet, under the socket, and be folded in. In
    there the bottom of the strip is its top — **the hole in the floor is the attic's
-   skylight.** Gravity does the rest, and it is the one room where it has to.
+   skylight.** Gravity does the rest, and it is the one room where it has to. The way
+   out is a perch over the path to the gate: you walk under it going in and hop onto
+   it coming out, and it does not need the gate open — so the hand on the keystone
+   can always be gone back for.
 
 ### What a room is made of
 
@@ -715,7 +737,14 @@ Worth knowing before editing one, because it is not obvious until a puzzle leaks
   over the pit is `_` — air you fall through and cannot pin in.
 - **Everything in a strip's columns goes with it.** This is the whole of `span` and
   `annex`, and it is the first thing to check when a fold solves a room too easily:
-  what else was in its way?
+  what else was in its way? It is also why nothing stands over the atrium's pit: a
+  hub is one sheet, so closing that pit takes its eight columns out of the whole hall.
+- **Two sockets within each other's reach are a pair.** They fold at boot, before
+  anyone arrives, and every coordinate in the room then means something else. The
+  atrium did this the first time it was drawn. Keep sockets further apart than their
+  two spans; `test_no_room_folds_itself_before_you_arrive` is the guard.
+- **An exit is a way in unless it is a chute.** Doors are symmetric. A sigil near a
+  room's exit is a sigil anyone standing at the other end of that door can have.
 - **Jumps are measured, not guessed.** `WorldProbe` (in `scripts/tests/support/`)
   reads the jump off `PlayerBody`'s own constants. Keep gaps a player must clear to
   three cells and gaps they must not to six; in between is a jump the model cannot
@@ -724,13 +753,14 @@ Worth knowing before editing one, because it is not obvious until a puzzle leaks
 ### What the shipped world does not ask of you
 
 All of this works, is tested, and is in the **testbed** (`./run.sh testbed`) rather
-than in the six rooms:
+than in the shipped world:
 
 - **Diagonal creases.** Pin at two heights and the strip is slanted. `plain` has the
   sealed chamber only a slanted fold bites into.
 - **Folding yourself in twice.** Across the grain you get a torus — see §"Folding
   yourself deeper", and `mash_c`, which is the room for it.
-- **Trip plates** (`T`) and **pre-placed folds**. `triggers` and `prefold`.
+- **Pre-placed folds**, and trip plates that carry their own pair. `prefold` and
+  `triggers`.
 - **The swift hand.** Nothing here is in a hurry.
 
 ## Sound

@@ -419,8 +419,11 @@ positions, are `STATUS.md` §"Known issues".)
   cheaper to add, not unnecessary. The six-room world is one data point: a region is
   a room, so a crease already stops at the room's edge, and two of the rooms
   (`span`, `annex`) are *about* a strip taking whatever else stood in its columns.
-  That is an argument for the crease being a whole line inside a room. It says
-  nothing yet about a region big enough to hold two unrelated things.
+  That is an argument for the crease being a whole line inside a room. The atrium is
+  the first region big enough to hold unrelated things, and it was built by keeping
+  them out of each other's columns: nothing stands over its pit, and its loft sits
+  past where the pit's strip ends. That worked, and it is the designer doing by hand
+  what a barrier would do — which is evidence too.
 - **How deep nesting stays legible** is untested by play. It works to arbitrary depth
   and the tint deepens with each layer, but three folds in is a claim about the game,
   not just about the code.

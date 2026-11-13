@@ -59,6 +59,7 @@ A run fails if any of these is true:
 | The kernel referenced the view | `scripts/tests/test_layering.gd` |
 | A shipped world is malformed | `scripts/tests/test_shipped_worlds.gd` |
 | The shipped world cannot be finished — or can be walked around | `scripts/tests/test_overworld_solutions.gd` |
+| The keys a player presses no longer do the first room | `scripts/tests/test_overworld_keys.gd` |
 | Something in `scripts/world/` animates off the wall clock | `scripts/tests/test_world_clock.gd` |
 
 The middle three exist because GUT derives its exit code from the assertion-failure

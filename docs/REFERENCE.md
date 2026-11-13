@@ -177,8 +177,9 @@ and so on. The exception is `test_fold_world.gd`, which is **scene-driven** — 
 instantiates the real world scene and drives the actual beats (riding, pinching,
 subspace folds, door traversal). If you change `FoldWorld`, that is the file that
 will catch you. `test_world_mechanics.gd` is its sibling for plates, sockets, water,
-sigils and the room reset, and `test_overworld_solutions.gd` plays the shipped world
-from its first room to its last.
+sigils and the room reset, `test_overworld_solutions.gd` plays the shipped world
+from its first room to its last, and `test_overworld_keys.gd` plays the first room
+again — and the two moves no model covers — with nothing but key events.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for how to run tests (including the sandbox
 `HOME` invocation).

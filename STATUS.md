@@ -1,11 +1,11 @@
 # Project Status — Space Folding
 
-**Last Updated:** 2026-11-10
+**Last Updated:** 2026-11-13
 **Current Phase:** Consolidated onto the gravity metroidvania direction. A designed
-world of **six rooms, each one idea, played door to door by the test suite**: real
-subspaces, fold/unfold with animation, folding as a **finite carried resource** that
-now has a second use (a hand on a weight plate keeps one of the world's folds
-standing) — rendered as pixel art with fold-aware dynamic lighting, framed by a
+world — **a hub and six rooms, each one idea, played door to door by the test suite**
+— with real subspaces, fold/unfold with animation, and folding as a **finite carried
+resource** that has a second use (a hand on a weight plate keeps one of the world's
+folds standing). Rendered as pixel art with fold-aware dynamic lighting, framed by a
 camera that zooms and leads with the moment. The world is **authored in an editor**,
 and the editor and the game are **one app**: `F5` plays what you are editing.
 **Tests:** `./run_tests.sh` prints the count and the time, and is the authority on both.
@@ -36,7 +36,7 @@ What exists and works today:
 | **Sigils** — goal tiles found once and counted | ✅ In the world; ❌ not saved across sessions |
 | **Room reset** (`R`) — rebuild the room, refund the hands; `Shift+R` for the world | ✅ Playable |
 | **Hand swap** (`Q`) — choose which hand goes down next | ✅ Playable, ⚙️ untested by feel |
-| Fold-on-enter triggers — a plate pins a bolted pair, the fuse folds it | ✅ **At any depth**, in the world |
+| Trip plates (`T`) — a plate latches a channel, or pins a bolted pair of its own; the fuse folds it | ✅ **At any depth**, **in the world** (the atrium's bridge) |
 | **Burst plates** (`B`) — a tile that fires your burst at a radius it chooses | ✅ Wired at every depth, tested, **in the world** (the end of `press`) |
 | Hands: two slots, typed, conserved (`HandStock`/`HandTypes`) | ✅ Playable, **in the world** |
 | **Anchors as one system** (`Anchor`/`AnchorField`) — yours, the world's, a plate's | ✅ In the world |
@@ -49,7 +49,7 @@ What exists and works today:
 | Auto-commit fuse, pulsing on the placed hands | ✅ Playable, ⚙️ untuned |
 | Hands floating beside the body (style only) | ✅ Playable |
 | Occupant model (entities riding tiles) | ⚙️ Ported and tested, **not yet used in-world** |
-| **The shipped world** (`worlds/overworld.json`) | ✅ Six rooms, one sigil each; every room solved and every wrong turn refused by `test_overworld_solutions`; ⚙️ **never played by a person** |
+| **The shipped world** (`worlds/overworld.json`) | ✅ A hub and six rooms, seven sigils; every room solved and every wrong turn refused by `test_overworld_solutions`; the first room, and the two moves no model covers, played on real key events by `test_overworld_keys`; ⚙️ **never played by a person** |
 | **Testbed world** (`worlds/testbed.json`, `--world=testbed`) | ✅ 14 regions of one-of-everything, for poking at mechanics |
 | **World editor** — paint, canvases, doors, folds, per-tile params | ✅ Usable (`./run_editor.sh`) |
 | **One app** (`Shell`) — launcher, editor and a run of the game as three screens | ✅ Usable (`./run.sh`) |
@@ -106,23 +106,23 @@ For the reasoning behind the *shape* of the code rather than its history, see
 
 Roughly in priority order — nothing here is committed to yet:
 
-1. **Play the six rooms.** Every one of them is proved possible and proved
-   unwalkable by a model, and none has been played by a person. The model says a
-   room CAN be done; it has no opinion on whether the idea lands, whether the wrong
-   turns are tempting or merely annoying, or how the `threshold` lift reads to
-   someone who has never pinned a hand. Start there: it is the room that teaches
-   the verb.
+1. **Play it.** Every room is proved possible and proved unwalkable by a model, the
+   first is proved playable on the keys, and none has been played by a person. The
+   tests say a room CAN be done and that the gesture does it; they have no opinion
+   on whether the idea lands, whether the wrong turns are tempting or merely
+   annoying, or how the `threshold` lift reads to someone who has never pinned a
+   hand. Start there: it is the room that teaches the verb.
 2. **Tune by feel what was set by arithmetic.** Spans (plain 4 / swift 3 / patient
    6), fuses, the swim (`PlayerBody.SWIM_*`), and how long a weight plate waits before
    it lets go (`FoldWorld.PLATE_GRACE`). The rooms are cut against the spans, so
    `test_overworld_solutions` moves with them.
-3. **A way back.** The annex's chamber is one-way: once you surface inside it, the
-   rooms before it are behind a wall no fold of yours opens. A second socket on the
-   west side would make it a valve you can work from both ends, and the fuse race
-   between a plain and a patient socket is the obvious way to say which one answers.
+3. **Play the rest on the keys.** `test_overworld_keys` plays `threshold` whole, and
+   the one move in `cistern` and in `annex` that the model could only assert (the
+   swim out onto the cliff; the walk back through the glue). `span`, `press`, the
+   `vault` and the atrium's three locks are still the model's word for it.
 4. **Rooms for what the world does not ask.** Diagonal creases, folding in twice
-   (the torus), trip plates, pre-placed folds and the swift hand all work and are
-   only in the testbed. Each wants a room where it is the only way.
+   (the torus), pre-placed folds and the swift hand all work and are only in the
+   testbed. Each wants a room where it is the only way.
 5. **The camera, now that a pair is bounded.** The lens holds the player and any
    ARMED pair, which is finite by construction — but a lone anchor is deliberately
    not framed, and how a frame full of span circles reads is untested by play. The
@@ -131,7 +131,8 @@ Roughly in priority order — nothing here is committed to yet:
 6. **Draw the tileset by hand.** The generated sheet is real but plain; the layout
    and drop-in path are done, so this is an art job, not an engineering one.
 7. **Settle fold extent.** See ARCHITECTURE §"What is deliberately still open". The
-   six rooms are an argument for a crease being a whole line *inside a room*.
+   rooms are an argument for a crease being a whole line *inside a room*; the atrium
+   is one sheet holding unrelated things, and had to be drawn around its own strips.
 8. **Save / checkpoints.** A room reset now answers stranding, so what a save is
    FOR has narrowed to what should outlive a session: sigils, fold state, and where
    your hands are.
@@ -168,11 +169,11 @@ Roughly in priority order — nothing here is committed to yet:
 - Audio is not positional: a fold across the room sounds like one at your feet.
 - The shipped sounds are generated placeholders (`tools/gen_audio.py`), not art.
 - **The shipped world has been solved by the suite and played by nobody.** See
-  "Next up" 1. A room the model calls possible may still be one a person cannot read.
-- **The annex is one-way.** Surface inside its chamber and the first four rooms are
-  out of reach for the rest of the run; so is the plain hand you left in `press`.
-  Nothing after it needs either, which is why it shipped, and it is still a door
-  that only opens one way in a genre that is about going back.
+  "Next up" 1. A room the tests call possible may still be one a person cannot read.
+- **A hub is one sheet.** Close the atrium's pit and its eight columns leave the
+  whole hall; fold the loft down and nine rows do, the ledge and its two doors among
+  them. Nothing breaks — a door folded away simply is not there until the fold comes
+  out — and it is the open question about fold extent, on screen.
 - **There are solutions the suite does not know about.** It proves the intended one
   works and that walking does not. It cannot prove no OTHER fold does — a diagonal
   with a socket moves the sheet up as well as along, and nobody has enumerated those.
@@ -182,9 +183,8 @@ Roughly in priority order — nothing here is committed to yet:
   creases stay where they were while the sheet moves beneath them. A burst can do
   this; a weight plate will not (it lets go newest-first, for this reason). See
   ARCHITECTURE Decision 12.
-- Trip plates (`T`), pre-placed folds, `X`, diagonal creases, the torus, the swift
-  hand and occupants are covered by tests and the testbed, and are not in the six
-  rooms.
+- Pre-placed folds, `X`, diagonal creases, the torus, the swift hand and occupants
+  are covered by tests and the testbed, and are not in the shipped world.
 - **The editor cannot set a world anchor's arming rule.** The `W` tool places, pairs,
   removes and draws them, and `validate()` reports the ones the game would refuse in
   silence — but every anchor it places takes the tool's current setting, so a channel
