@@ -90,6 +90,11 @@ const TRIGGER_WEIGHT := 9
 ##   {"key": String, "type": String, "default": Variant, "label": String,
 ##    "hint": String, and per-type extras}
 ##
+## `unless` names another key of the same tile: this parameter is not MISSING while
+## that one is set. It is how a trip plate says its own anchors are optional once it has
+## a channel — a rule between two fields, declared here like every other fact about
+## them, so `TileParams` can honour it without learning what a trip plate is.
+##
 ## `type` is a plain string, not a constant from elsewhere, for the same reason
 ## `on_enter` is — the registry stays a pure const data table with no outbound
 ## references. `TileParams` owns what those names MEAN, validates against them,
@@ -106,8 +111,8 @@ const _REGISTRY := {
 		"params": [
 			{"key": "channel", "type": "string", "default": "", "label": "channel",
 			 "hint": "names the fold this plate makes. Two plates on one channel are one fold: whichever fires first makes it, and the other finds it already standing."},
-			{"key": "anchors", "type": "cells", "default": [], "count": 2, "required": true, "label": "fold anchors",
-			 "hint": "the two cells the fired fold is pinned between, in BASE coordinates — they ride earlier folds like anything else."},
+			{"key": "anchors", "type": "cells", "default": [], "count": 2, "required": true, "unless": "channel", "label": "fold anchors",
+			 "hint": "the two cells the fired fold is pinned between, in BASE coordinates — they ride earlier folds like anything else. Leave both unset on a plate that has a channel and it only LATCHES the channel, for anchors already standing in the sheet — the form to prefer, because the player can see those before stepping on anything."},
 		]},
 	TRIGGER_BURST: {"name": "burst plate", "walkable": true, "merge_rank": 1, "blocks_fold": false, "blocks_anchor": false, "on_enter": "burst",
 		"params": [

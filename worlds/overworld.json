@@ -2,15 +2,142 @@
 	"world_id": "overworld",
 	"world_name": "Overworld",
 	"cell_size": 64.0,
-	"start_region": "threshold",
+	"start_region": "atrium",
 	"starting_hands": [
 		"plain",
 		"plain"
 	],
 	"metadata": {
-		"note": "Six rooms in a line, one sigil in each. threshold: a vertical fold, and riding the unfold up. span: a pit closed with one hand and a socket, then taken apart from the far side. cistern: water you can climb and cannot pin in. press: weight plates, three hands, and which goes where. annex: a sealed chamber entered through the inside of a fold. vault: the same idea turned on its side, with one hand, because the other is on the keystone back in the annex. What each room is for is in scripts/world/README.md; scripts/tests/test_overworld_solutions.gd plays every one and is the authority on whether they can be done."
+		"note": "A hub and six rooms, seven sigils. The atrium is the hub: every room is entered from it and hands you back through a chute under its ceiling, and each of its own locks is one room's lesson used once \u2014 the ledge is threshold's lift, the pit is span's socket, the loft wants press's long hand. threshold: a vertical fold, and riding the unfold up. span: a pit closed with one hand and a socket, then taken apart from the far side. cistern: water you can climb and cannot pin in. press: weight plates, three hands, and which goes where. annex: a sealed chamber entered through the inside of a fold. vault: the same idea turned on its side, with one hand, because the other is on the keystone back in the annex. What each is for is in scripts/world/README.md; scripts/tests/test_overworld_solutions.gd plays all of it and is the authority on whether it can be done."
 	},
 	"regions": {
+		"atrium": {
+			"rows": [
+				".#..#..#..#..#..#...................________........................",
+				".#..#..#..#..#..#...................________........................",
+				".#..#..#..#..#..#...................________........................",
+				".#..#..#..#..#..#...................________........................",
+				".#..#..#..#..#..#...................________........................",
+				".#..#..#..#..#..#...................________........................",
+				".#..#..#..#..#..#...................________........................",
+				".#..#..#..#..#..#...................________........................",
+				".#..#..#..#..#..#...................________........................",
+				".#..#..#..#..#..#...................________...................G....",
+				".##.##.##.##.##.#...................________..............#########.",
+				"....................................________........................",
+				"....................................________........................",
+				"....................................________........................",
+				"....................................________........................",
+				"....................................________........................",
+				"....................#########.......________........................",
+				"....................................________........................",
+				"....................................________........................",
+				"....................................________.......T................",
+				"####################################........########################",
+				"####################################........########################",
+				"####################################........########################",
+				"####################################........########################"
+			],
+			"spawn": {
+				"x": 2.5,
+				"y": 19.5
+			},
+			"tile_data": {
+				"51,19": {
+					"channel": "bridge"
+				}
+			},
+			"folds": [],
+			"hands": [],
+			"anchors": [
+				{
+					"cell": {
+						"x": 44,
+						"y": 19
+					},
+					"kind": "patient"
+				},
+				{
+					"cell": {
+						"x": 35,
+						"y": 18
+					},
+					"kind": "plain",
+					"arms": "bridge",
+					"id": "b1",
+					"pair": "b2"
+				},
+				{
+					"cell": {
+						"x": 44,
+						"y": 18
+					},
+					"kind": "plain",
+					"arms": "bridge",
+					"id": "b2",
+					"pair": "b1"
+				},
+				{
+					"cell": {
+						"x": 58,
+						"y": 10
+					},
+					"kind": "plain"
+				}
+			],
+			"lights": [
+				{
+					"id": "at_hall",
+					"cell": {
+						"x": 8,
+						"y": 17
+					},
+					"color": "#ffd08a",
+					"radius": 5.0,
+					"energy": 1.0,
+					"flicker": 0.1
+				},
+				{
+					"id": "at_ledge",
+					"cell": {
+						"x": 24,
+						"y": 14
+					},
+					"color": "#ffe0a0",
+					"radius": 5.0,
+					"energy": 1.0,
+					"flicker": 0.12
+				},
+				{
+					"id": "at_far",
+					"cell": {
+						"x": 49,
+						"y": 17
+					},
+					"color": "#ffb85c",
+					"radius": 5.0,
+					"energy": 1.1,
+					"flicker": 0.2
+				},
+				{
+					"id": "at_loft",
+					"cell": {
+						"x": 62,
+						"y": 8
+					},
+					"color": "#b89cff",
+					"radius": 5.0,
+					"energy": 1.1,
+					"flicker": 0.15
+				}
+			],
+			"editor": {
+				"pos": {
+					"x": 0.0,
+					"y": -2000.0
+				}
+			}
+		},
 		"threshold": {
 			"rows": [
 				"..............................",
@@ -225,7 +352,7 @@
 				"............##..........##...________..........",
 				"............##..........##...________..........",
 				"............##..........##...________..........",
-				".....H......##.....H....##...________...G.B....",
+				".....H......##.....H....##...________.B.G.B....",
 				"#############################........##########",
 				"#############################........##########",
 				"#############################........##########",
@@ -241,6 +368,9 @@
 				},
 				"19,11": {
 					"channel": "weir"
+				},
+				"38,11": {
+					"radius": 1.5
 				},
 				"42,11": {
 					"radius": 60.0
@@ -429,7 +559,7 @@
 				"........##....##..#########.......",
 				"........##........................",
 				"........##........................",
-				"........##........................",
+				"....#...##........................",
 				"........##........................",
 				"######################..##########",
 				"######################..##########",
@@ -437,7 +567,7 @@
 				"######################..##########"
 			],
 			"spawn": {
-				"x": 3.5,
+				"x": 2.5,
 				"y": 11.5
 			},
 			"tile_data": {},
@@ -516,11 +646,27 @@
 		}
 	},
 	"doors": {
-		"TH_OUT": {
+		"A_TH": {
+			"region": "atrium",
+			"cell": {
+				"x": 5,
+				"y": 19
+			},
+			"pair": "TH_IN"
+		},
+		"TH_IN": {
 			"region": "threshold",
 			"cell": {
-				"x": 26,
-				"y": 7
+				"x": 2,
+				"y": 11
+			},
+			"pair": "A_TH"
+		},
+		"A_SP": {
+			"region": "atrium",
+			"cell": {
+				"x": 11,
+				"y": 19
 			},
 			"pair": "SP_IN"
 		},
@@ -530,13 +676,13 @@
 				"x": 2,
 				"y": 11
 			},
-			"pair": "TH_OUT"
+			"pair": "A_SP"
 		},
-		"SP_OUT": {
-			"region": "span",
+		"A_CI": {
+			"region": "atrium",
 			"cell": {
-				"x": 36,
-				"y": 11
+				"x": 22,
+				"y": 15
 			},
 			"pair": "CI_IN"
 		},
@@ -546,13 +692,13 @@
 				"x": 2,
 				"y": 11
 			},
-			"pair": "SP_OUT"
+			"pair": "A_CI"
 		},
-		"CI_OUT": {
-			"region": "cistern",
+		"A_PR": {
+			"region": "atrium",
 			"cell": {
 				"x": 26,
-				"y": 5
+				"y": 15
 			},
 			"pair": "PR_IN"
 		},
@@ -562,13 +708,13 @@
 				"x": 2,
 				"y": 11
 			},
-			"pair": "CI_OUT"
+			"pair": "A_PR"
 		},
-		"PR_OUT": {
-			"region": "press",
+		"A_AN": {
+			"region": "atrium",
 			"cell": {
-				"x": 44,
-				"y": 11
+				"x": 48,
+				"y": 19
 			},
 			"pair": "AN_IN"
 		},
@@ -577,6 +723,70 @@
 			"cell": {
 				"x": 2,
 				"y": 11
+			},
+			"pair": "A_AN"
+		},
+		"TH_OUT": {
+			"region": "threshold",
+			"cell": {
+				"x": 26,
+				"y": 7
+			},
+			"pair": "C_TH"
+		},
+		"C_TH": {
+			"region": "atrium",
+			"cell": {
+				"x": 2,
+				"y": 9
+			},
+			"pair": "TH_OUT"
+		},
+		"SP_OUT": {
+			"region": "span",
+			"cell": {
+				"x": 36,
+				"y": 11
+			},
+			"pair": "C_SP"
+		},
+		"C_SP": {
+			"region": "atrium",
+			"cell": {
+				"x": 5,
+				"y": 9
+			},
+			"pair": "SP_OUT"
+		},
+		"CI_OUT": {
+			"region": "cistern",
+			"cell": {
+				"x": 26,
+				"y": 5
+			},
+			"pair": "C_CI"
+		},
+		"C_CI": {
+			"region": "atrium",
+			"cell": {
+				"x": 8,
+				"y": 9
+			},
+			"pair": "CI_OUT"
+		},
+		"PR_OUT": {
+			"region": "press",
+			"cell": {
+				"x": 44,
+				"y": 11
+			},
+			"pair": "C_PR"
+		},
+		"C_PR": {
+			"region": "atrium",
+			"cell": {
+				"x": 11,
+				"y": 9
 			},
 			"pair": "PR_OUT"
 		},
@@ -591,10 +801,26 @@
 		"VA_IN": {
 			"region": "vault",
 			"cell": {
-				"x": 2,
+				"x": 1,
 				"y": 11
 			},
 			"pair": "AN_OUT"
+		},
+		"VA_BACK": {
+			"region": "vault",
+			"cell": {
+				"x": 4,
+				"y": 9
+			},
+			"pair": "C_VA"
+		},
+		"C_VA": {
+			"region": "atrium",
+			"cell": {
+				"x": 14,
+				"y": 9
+			},
+			"pair": "VA_BACK"
 		}
 	}
 }

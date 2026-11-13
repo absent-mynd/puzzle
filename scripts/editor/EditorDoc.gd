@@ -1043,9 +1043,15 @@ func _channel_issues() -> Array:
 			if channel == "":
 				continue
 			driven[channel] = true
+			# A trip plate that carries its own two cells conjures its pair when it is
+			# stepped on and needs nobody listening. One with only a channel does.
+			var own_pair := false
+			if not TileParams.spec_of(type, "anchors").is_empty():
+				for own in TileParams.get_value(type, data, "anchors"):
+					if own != TileParams.UNSET:
+						own_pair = true
 			plates.append({"region": id, "cell": cell, "type": type, "channel": channel,
-				"own_pair": TileParams.spec_of(type, "anchors").size() > 0
-					and TileParams.is_complete(type, data, size_of(id))})
+				"own_pair": own_pair})
 		for anchor in world.regions[id].get("anchors", []):
 			if anchor.arms != Anchor.PROXIMITY and anchor.arms != Anchor.NEVER:
 				heard[anchor.arms] = true

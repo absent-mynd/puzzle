@@ -212,13 +212,29 @@ static func issues(type: int, data: Dictionary, grid_size: Vector2i = Vector2i.Z
 					missing += 1
 				elif grid_size != Vector2i.ZERO and not _in_bounds(cell, grid_size):
 					out.append("%s: %s is outside the region" % [label, cell])
-			if missing > 0:
+			# Half chosen is always unfinished. NONE chosen is unfinished too — unless the
+			# schema says another parameter stands in for these (`unless`).
+			if missing > 0 and not (missing == wanted and _excused(type, spec, full)):
 				out.append("%s: %d of %d not chosen" % [label, missing, wanted])
 			if _has_duplicate(value):
 				out.append("%s: the same cell twice — a fold needs two distinct anchors" % label)
 		elif bool(spec.get("required", false)) and _same(value, default_of(spec)):
 			out.append("%s is not set" % label)
 	return out
+
+
+## Is a parameter left at its default EXCUSED by another one being set? The schema
+## says so with `unless` (see `TileTypes`): a trip plate's own anchors are optional once
+## it has a channel, because then it latches that channel for anchors the world already
+## has standing. A rule between two fields, read off the registry like everything else
+## here — this file still names no tile type.
+static func _excused(type: int, spec: Dictionary, full: Dictionary) -> bool:
+	var other := String(spec.get("unless", ""))
+	if other == "":
+		return false
+	var other_spec := spec_of(type, other)
+	return not other_spec.is_empty() and full.has(other) \
+		and not _same(full[other], default_of(other_spec))
 
 
 ## Does this tile have everything it needs to actually do something?

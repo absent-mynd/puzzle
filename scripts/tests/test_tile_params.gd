@@ -224,6 +224,22 @@ func test_an_unconfigured_trigger_says_what_is_missing():
 	assert_true(_has(issues, "2 of 2 not chosen"), "and it says which slots: %s" % [issues])
 
 
+func test_a_trip_plate_with_only_a_channel_is_finished():
+	# No anchors of its own, but a channel: it latches that channel for anchors already
+	# standing in the sheet. The schema says the one excuses the other (`unless`).
+	assert_eq(TileParams.issues(TileTypes.TRIGGER_FOLD, {"channel": "bridge"},
+		Vector2i(10, 10)), [], "a channel stands in for the pair")
+	assert_true(TileParams.is_complete(TileTypes.TRIGGER_FOLD, {"channel": "bridge"},
+		Vector2i(10, 10)))
+
+
+func test_a_channel_does_not_excuse_half_a_pair():
+	var issues := TileParams.issues(TileTypes.TRIGGER_FOLD,
+		{"channel": "bridge", "anchors": [[1, 1]]}, Vector2i(10, 10))
+	assert_true(_has(issues, "1 of 2 not chosen"),
+		"one cell chosen is a pair somebody started, channel or no: %s" % [issues])
+
+
 func test_a_half_configured_trigger_counts_correctly():
 	var issues := TileParams.issues(TileTypes.TRIGGER_FOLD,
 		{"anchors": [[1, 1]]}, Vector2i(10, 10))

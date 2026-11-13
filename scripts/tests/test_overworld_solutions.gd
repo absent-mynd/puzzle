@@ -59,11 +59,13 @@ func before_each() -> void:
 	_probed_pieces = null
 
 
-func _open(region := "") -> void:
+func _open(region := "", cell = null) -> void:
 	world = load(SCENE).instantiate()
 	world.world_override = WorldData.SHIPPED_WORLD
 	if region != "":
 		world.spawn_override = {"region": region}
+		if cell != null:
+			world.spawn_override["cell"] = cell
 	add_child_autofree(world)
 	world.anim_enabled = false
 
@@ -308,16 +310,33 @@ func _solve_press() -> void:
 	assert_eq(world.folds.size(), 3, "press: the pit closes")
 	assert_eq(world.hands_held(), 0, "...and every hand you have is holding something")
 
+	# The plate on the far rim reaches the pit's seam and nothing else: the pit opens
+	# behind you, and the hand that comes home first is the long one.
+	var far_rim: Vector2i = _now(Vector2i(38, 11))
+	_walk(far_rim, "across the closed pit, onto the first burst plate")
+	_frames(30)
+	assert_eq(world.folds.size(), 2, "press: the pit opens behind you")
+	assert_eq(world.next_hand_type(), HandTypes.PATIENT, "...and gives back the patient hand")
+	assert_eq(world.player_cell(), _now(Vector2i(38, 11)), "...leaving you on the far rim")
+
 	_sigil(Vector2i(40, 11), "press")
 
-	# The plate past the sigil lets everything go at once: three hands for two slots.
+	# The plate past the sigil lets the rest go at once: two plain hands for one slot.
 	var before: int = world.hands_total()
-	_walk(_now(Vector2i(42, 11)), "onto the burst plate")
+	var loose: int = world.hands_loose()
+	_walk(_now(Vector2i(42, 11)), "onto the second burst plate")
 	_frames(90)
-	assert_eq(world.folds.size(), 0, "press: every fold has come apart")
-	assert_eq(world.hands_held(), 2, "...two hands are back in your slots")
-	assert_eq(world.hands_total(), before, "...and the third is on the ground, not gone")
-	assert_eq(world.hands_loose(), 1)
+	assert_eq(world.hands_held(), 2, "press: two hands are in your slots")
+	assert_eq(world.next_hand_type(), HandTypes.PATIENT, "...and the long one is still one of them")
+	assert_eq(world.hands_total(), before, "...the third is on the ground, not gone")
+	assert_eq(world.hands_loose(), loose + 1)
+	# A hand with no slot to come home to falls where it was pinned — which, for a hand
+	# that was pinned to a plate, is back onto the plate. So the first gate lets go and
+	# the second stays open on the hand you could not carry. Nobody wrote that rule; it
+	# is "a hand is a weight" and "nothing is refused for want of room" meeting.
+	assert_eq(world.folds.size(), 1, "press: one gate lets go")
+	assert_eq(world.folds[0].channel, "weir", "...and the other is still weighed down")
+	assert_true(world.field.is_live("weir"))
 
 
 func test_press_wants_the_long_hand_at_the_pit() -> void:
@@ -401,6 +420,9 @@ func test_annex_riding_the_fold_gets_you_nothing() -> void:
 ## through.
 func _annex_to_vault() -> void:
 	_walk(Vector2i(18, 11), "to the keystone")
+	# Any hand is a weight, so leave the plain one: the long one is worth carrying.
+	if world.next_hand_type() != HandTypes.PLAIN:
+		assert_true(world.swap_hands(), "the plain hand can be brought to the front")
 	_pin(Vector2i(17, 11), "a hand on the keystone")
 	_frames()
 	assert_true(world.field.is_live("keystone"), "the keystone is held")
@@ -451,12 +473,140 @@ func _solve_vault() -> void:
 	assert_eq(world.mode, world.Mode.WORLD, "vault: the fold opens")
 	assert_eq(world.hands_held(), 1, "...and gives back the hand it held")
 
+	# Back under the gate, up onto the perch, and out through a chute.
+	_through("VA_BACK")
+	assert_eq(world.region_id, "atrium", "vault: the way out is the atrium")
+
 
 func test_the_vault_gate_is_shut_without_the_keystone() -> void:
 	_open("vault")
 	_frames(30)
 	assert_eq(world.armed_pairs().size(), 0, "nothing holds the keystone, so nothing arms")
 	_unreachable(Vector2i(12, 11), "the hall")
+	# ...and the way out does not need it: a hand fetched off the keystone can always
+	# be carried home.
+	_through("VA_BACK")
+	assert_eq(world.region_id, "atrium", "shut gate or not, the perch is the way out")
+
+
+# ---------------------------------------------------------------------------
+# atrium — every lock is a lesson used once
+# ---------------------------------------------------------------------------
+
+## Onto the ledge by threshold's lift, and off the fold with both hands back.
+func _atrium_lift() -> void:
+	var folds: int = world.folds.size()
+	_unreachable(_now(Vector2i(22, 15)), "the atrium's ledge")
+	_walk(_now(Vector2i(19, 19)), "to the foot of the atrium's ledge")
+	_pin(_now(Vector2i(20, 19)), "the low anchor")
+	_pin_jumping(_now(Vector2i(20, 16)), "the high anchor, on the ledge's end")
+	_fuse()
+	assert_eq(world.folds.size(), folds + 1, "atrium: the ledge comes down")
+	_walk(_now(Vector2i(20, 15)), "onto the ledge's end")
+	world.hold_action()
+	assert_eq(world.folds.size(), folds, "atrium: and carries you up")
+	assert_eq(world.hands_held(), 2)
+	assert_eq(world.player_cell(), _now(Vector2i(20, 15)))
+
+
+## Over the pit by span's socket, taken apart behind you — then the trip plate on the
+## far side folds it shut for good, with no hand of yours in it.
+func _atrium_cross() -> void:
+	_unreachable(_now(Vector2i(48, 19)), "the atrium's far side")
+	_walk(Vector2i(34, 19), "to the atrium's pit")
+	_pin(Vector2i(35, 19), "one hand on the rim")
+	_frames()
+	assert_eq(world.armed_pairs().size(), 1, "atrium: it reaches the socket across the pit")
+	_fuse()
+	assert_eq(world.folds.size(), 1, "atrium: the pit closes")
+	_walk(_now(Vector2i(45, 19)), "across")
+	world.hold_action()
+	assert_eq(world.folds.size(), 0, "atrium: and opens again behind you")
+	assert_eq(world.hands_held(), 2)
+
+	_walk(Vector2i(51, 19), "onto the trip plate")
+	_frames()
+	assert_true(world.field.is_live("bridge"), "atrium: the plate latches the bridge")
+	_fuse()
+	assert_eq(world.folds.size(), 1, "atrium: the world folds the pit itself")
+	assert_eq(world.folds[0].held_hands.size(), 0, "...and it cost you nothing")
+	assert_eq(world.hands_held(), 2)
+	# A latch is not a weight: walk away and it stays.
+	_walk(_now(Vector2i(47, 19)), "off the plate")
+	_frames(60)
+	assert_eq(world.folds.size(), 1, "atrium: the bridge stays when you step off")
+
+
+## The loft, ten rows up. Its socket is a plain one, so the hand that reaches it from
+## the floor has to be the long one — and then it is threshold's lift again, one-handed.
+func _atrium_loft() -> void:
+	var folds: int = world.folds.size()
+	var under: Vector2i = _now(Vector2i(58, 19))
+	_unreachable(_now(Vector2i(63, 9)), "the loft")
+	_walk(under, "across the bridge, under the loft")
+	assert_eq(world.next_hand_type(), HandTypes.PATIENT, "you came back with the long hand")
+	_pin(under, "the floor you are standing on")
+	_frames()
+	assert_eq(world.armed_pairs().size(), 1, "atrium: nine cells up, and the long hand reaches")
+	_fuse()
+	assert_eq(world.folds.size(), folds + 1, "atrium: the loft comes down")
+	assert_eq(world.mode, world.Mode.WORLD)
+	_sigil(Vector2i(63, 9), "atrium")
+	_walk(_now(Vector2i(58, 9)), "back to the loft's end")
+	world.hold_action()
+	assert_eq(world.folds.size(), folds, "atrium: and the unfold gives the hand back")
+	assert_eq(world.hands_held(), 1)
+
+
+func test_no_room_folds_itself_before_you_arrive() -> void:
+	# Two sockets within each other's reach are a pair, and a pair folds. Authored that
+	# way by accident, a room rearranges itself at boot and every coordinate in it means
+	# something else — which is exactly what the atrium did the first time it was drawn.
+	var wd := WorldData.load_from(WorldData.SHIPPED_WORLD)
+	for id in wd.regions:
+		_open(String(id))
+		_frames(2)
+		assert_eq(world.armed_pairs().size(), 0, "%s: nothing is armed on arrival" % id)
+		assert_eq(world.folds.size(), wd.fold_pairs(id).size(),
+			"%s: and nothing has folded that was not authored folded" % id)
+		world.free()
+
+
+func test_the_atrium_cannot_be_walked() -> void:
+	_open()
+	assert_eq(world.region_id, "atrium", "the world starts in its hub")
+	_unreachable(Vector2i(22, 15), "the ledge and the two doors on it")
+	_unreachable(Vector2i(48, 19), "the far side")
+	_unreachable(Vector2i(63, 9), "the loft")
+	for chute_x in [2, 5, 8, 11, 14]:
+		_unreachable(Vector2i(chute_x, 9), "a chute, from below")
+
+
+func test_a_chute_only_goes_down() -> void:
+	# You arrive in a booth with a hole in its floor. The booths either side are behind
+	# walls, so a room you have finished is not a way into the ones you have not.
+	_open()
+	_put(Vector2i(5, 9))
+	for other_x in [2, 8, 11, 14]:
+		_unreachable(Vector2i(other_x, 9), "the next booth along")
+	_walk(Vector2i(6, 19), "down the chute to the hall")
+
+
+func test_the_loft_wants_the_long_hand() -> void:
+	_open("atrium", Vector2i(57, 19))
+	_walk(Vector2i(58, 19))
+	_pin(Vector2i(58, 19), "a plain hand on the floor under the socket")
+	_frames()
+	assert_eq(world.armed_pairs().size(), 0, "two plain reaches are a cell short of nine")
+	world.hold_action()
+	assert_eq(world.hands_held(), 2)
+
+	# From the top of a jump a plain hand DOES reach — and the fold it makes brings the
+	# loft down three rows of the ten.
+	_pin_jumping(Vector2i(58, 16), "a plain hand as high as a jump allows")
+	_fuse()
+	assert_eq(world.folds.size(), 1, "it folds")
+	_unreachable(_now(Vector2i(63, 9)), "the loft, three rows lower")
 
 
 # ---------------------------------------------------------------------------
@@ -465,21 +615,38 @@ func test_the_vault_gate_is_shut_without_the_keystone() -> void:
 
 func test_the_whole_world_can_be_finished() -> void:
 	_open()
-	assert_eq(world.region_id, "threshold")
-	assert_eq(world.sigils_total, 6, "six rooms, six sigils")
+	assert_eq(world.region_id, "atrium")
+	assert_eq(world.sigils_total, 7, "six rooms and the atrium's own")
 	var hands: int = world.hands_total()
 
+	# The two rooms on the floor first: they teach what the atrium's locks ask for.
+	_through("A_TH")
 	_solve_threshold()
 	_through("TH_OUT")
+	assert_eq(world.region_id, "atrium", "a room hands you back to the hub")
+	_through("A_SP")
 	_solve_span()
 	_through("SP_OUT")
+
+	# The ledge is threshold's lift. Twice, because each room drops you back in the hall.
+	_atrium_lift()
+	_through("A_CI")
 	_solve_cistern()
 	_through("CI_OUT")
+	_atrium_lift()
+	_through("A_PR")
 	_solve_press()
 	_through("PR_OUT")
+
+	# The pit is span's socket; the far side is where the last two rooms are.
+	_atrium_cross()
+	_through("A_AN")
 	_solve_annex()
 	_annex_to_vault()
 	await _solve_vault()
 
-	assert_eq(world.sigils_count(), 6, "every sigil found")
+	# ...and the loft is what the long hand from press was for.
+	_atrium_loft()
+
+	assert_eq(world.sigils_count(), 7, "every sigil found")
 	assert_eq(world.hands_total(), hands, "and not one hand made or lost on the way")
